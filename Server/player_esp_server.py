@@ -1,97 +1,41 @@
-import asyncio
-import websockets
 import json
 import time
-from collections import defaultdict
+from typing import Dict
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 # 存储玩家数据和连接
-players = {}
-connections = {}
+players: Dict[str, dict] = {}
+connections: Dict[str, WebSocket] = {}
 
 # 存储实体数据
-entities = {}
+entities: Dict[str, dict] = {}
 
 # 存储玩家数据的时间限制（秒）
 PLAYER_TIMEOUT = 5
 ENTITY_TIMEOUT = 5
 
-async def handle_player(websocket):
-    player_id = None
-    try:
-        async for message in websocket:
-            try:
-                data = json.loads(message)
-            except json.JSONDecodeError as e:
-                print(f"Error decoding JSON message: {e}")
-                continue
+app = FastAPI()
 
-            print(data)
-            
-            if data["type"] == "register":
-                player_id = data["id"]
-                connections[player_id] = websocket
-                print(f"Player {player_id} registered")
-                
-            elif data["type"] == "update" and player_id:
-                # 更新玩家位置数据
-                players[player_id] = {
-                    "x": data["x"],
-                    "y": data["y"], 
-                    "z": data["z"],
-                    "dimension": data["dimension"],
-                    "timestamp": time.time()
-                }
-                # 广播给所有其他玩家
-                await broadcast_positions()
-                
-            elif data["type"] == "entities_update" and player_id:
-                # 更新实体位置数据
-                player_entities = data["entities"]
-                # 清除该玩家之前的所有实体
-                entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_id]
-                for eid in entities_to_remove:
-                    del entities[eid]
-                
-                # 添加新的实体数据
-                for entity_id, entity_data in player_entities.items():
-                    entity_data["playerId"] = player_id
-                    entity_data["timestamp"] = time.time()
-                    entities[entity_id] = entity_data
-                    
-                # 广播给所有其他玩家
-                await broadcast_positions()
-                
-    except websockets.exceptions.ConnectionClosed:
-        pass
-    except Exception as e:
-        print(f"Error handling player message: {e}")
-    finally:
-        # 清理断开的连接
-        if player_id:
-            if player_id in connections:
-                del connections[player_id]
-            if player_id in players:
-                del players[player_id]
-            # 清理该玩家的实体
-            entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_id]
-            for eid in entities_to_remove:
-                del entities[eid]
-            print(f"Player {player_id} disconnected")
-            # 通知其他玩家该玩家已离线
-            await broadcast_positions()
+# 挂载静态页面目录到 /admin
+app.mount("/admin", StaticFiles(directory="Server/static", html=True), name="admin")
+
 
 async def broadcast_positions():
     # 清理过期数据
     current_time = time.time()
     expired_players = [
-        pid for pid, pdata in players.items() 
+        pid for pid, pdata in players.items()
         if current_time - pdata["timestamp"] > PLAYER_TIMEOUT
     ]
     for pid in expired_players:
-        del players[pid]
+        if pid in players:
+            del players[pid]
         if pid in connections:
             del connections[pid]
-    
+
     # 清理过期实体数据
     expired_entities = [
         eid for eid, edata in entities.items()
@@ -99,7 +43,7 @@ async def broadcast_positions():
     ]
     for eid in expired_entities:
         del entities[eid]
-    
+
     # 准备要发送的数据
     message_data = {
         "type": "positions",
@@ -107,43 +51,115 @@ async def broadcast_positions():
         "entities": entities
     }
 
-    # 使用dumps的参数确保生成完整的JSON
     try:
-        message = json.dumps(message_data, separators=(',', ':'))
+        message = json.dumps(message_data, separators=(",", ":"))
     except Exception as e:
         print(f"Error serializing message data: {e}")
         return
 
-    print(message)
-    print('===========---==================')
-    
-    # 发送给所有连接的客户端
+    # print(message)
+    # print('===========---==================')
+
     disconnected = []
-    for player_id, websocket in connections.items():
+    for player_uuid, ws in connections.items():
         try:
-            # 确保消息完整发送
-            await websocket.send(message)
-        except websockets.exceptions.ConnectionClosed:
-            disconnected.append(player_id)
+            await ws.send_text(message)
         except Exception as e:
-            print(f"Error sending message to player {player_id}: {e}")
-            disconnected.append(player_id)
-    
-    # 清理断开的连接
-    for player_id in disconnected:
-        if player_id in connections:
-            del connections[player_id]
-        if player_id in players:
-            del players[player_id]
-        # 清理该玩家的实体
-        entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_id]
+            print(f"Error sending message to player {player_uuid}: {e}")
+            disconnected.append(player_uuid)
+
+    for player_uuid in disconnected:
+        if player_uuid in connections:
+            del connections[player_uuid]
+        if player_uuid in players:
+            del players[player_uuid]
+        entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_uuid]
         for eid in entities_to_remove:
             del entities[eid]
 
-async def main():
-    print("Starting Player ESP Server on port 8765...")
-    server = await websockets.serve(handle_player, "localhost", 8765)
-    await server.wait_closed()
+
+@app.websocket("/")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    player_uuid = None
+    try:
+        while True:
+            message = await websocket.receive_text()
+            try:
+                data = json.loads(message)
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON message: {e}")
+                continue
+
+            print(data)
+
+            if data.get("type") == "register":
+                player_uuid = data.get("playerUUID")
+                if player_uuid is not None:
+                    connections[player_uuid] = websocket
+                    print(f"Player {player_uuid} registered")
+
+            elif data.get("type") == "players_update" and player_uuid:
+                players[player_uuid] = {
+                    "x": data["x"],
+                    "y": data["y"],
+                    "z": data["z"],
+                    "dimension": data["dimension"],
+                    "timestamp": time.time(),
+                    "playerName" : data.get("name"),
+                    "playerUUID": player_uuid
+                }
+                await broadcast_positions()
+
+            elif data.get("type") == "entities_update" and player_uuid:
+                player_entities = data.get("entities", {})
+                entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == player_uuid]
+                for eid in entities_to_remove:
+                    del entities[eid]
+
+                for entity_id, entity_data in player_entities.items():
+                    entity_data["submitPlayerId"] = player_uuid
+                    entity_data["timestamp"] = time.time()
+                    entities[entity_id] = entity_data
+
+                await broadcast_positions()
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Error handling player message: {e}")
+    finally:
+        if player_uuid:
+            if player_uuid in connections:
+                del connections[player_uuid]
+            if player_uuid in players:
+                del players[player_uuid]
+            entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_uuid]
+            for eid in entities_to_remove:
+                del entities[eid]
+            print(f"Player {player_uuid} disconnected")
+            await broadcast_positions()
+
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/snapshot")
+async def snapshot():
+    # 提供只读数据给后台页面
+    current_time = time.time()
+    # 返回副本，避免并发修改导致的迭代问题
+    return JSONResponse({
+        "server_time": current_time,
+        "players": players,
+        "entities": entities,
+        "connections": list(connections.keys()),
+        "connections_count": len(connections)
+    })
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8765)

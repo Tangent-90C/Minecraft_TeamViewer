@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>TeamViewer 后台</title>
+	<style>
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; margin: 24px; color: #1f2937; }
+		h1 { font-size: 20px; margin-bottom: 16px; }
+		.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+		.card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); background: #fff; }
+		.card h2 { font-size: 16px; margin: 0 0 12px; color: #111827; }
+		pre { background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px; border-radius: 6px; overflow: auto; }
+		.small { color: #6b7280; font-size: 12px; }
+		.kv { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; align-items: start; }
+		.kv div { padding: 2px 0; }
+		.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; }
+	</style>
+</head>
+<body>
+	<h1>TeamViewer 后台</h1>
+	<div class="grid">
+		<div class="card">
+			<h2>连接</h2>
+			<div class="kv">
+				<div>连接数</div>
+				<div><span id="conn-count" class="badge">0</span></div>
+				<div>连接列表</div>
+				<div><pre id="conn-list">[]</pre></div>
+			</div>
+			<div class="small" id="server-time">server_time: -</div>
+		</div>
+		<div class="card">
+			<h2>玩家 players</h2>
+			<pre id="players">{}</pre>
+		</div>
+		<div class="card">
+			<h2>实体 entities</h2>
+			<pre id="entities">{}</pre>
+		</div>
+	</div>
+
+	<script>
+		async function fetchSnapshot() {
+			try {
+				const res = await fetch('/snapshot', { cache: 'no-store' });
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				const data = await res.json();
+
+				document.getElementById('conn-count').textContent = data.connections_count ?? 0;
+				document.getElementById('conn-list').textContent = JSON.stringify(data.connections ?? [], null, 2);
+				document.getElementById('players').textContent = JSON.stringify(data.players ?? {}, null, 2);
+				document.getElementById('entities').textContent = JSON.stringify(data.entities ?? {}, null, 2);
+				document.getElementById('server-time').textContent = 'server_time: ' + (data.server_time ?? '-');
+			} catch (e) {
+				console.error(e);
+			}
+		}
+
+		fetchSnapshot();
+		setInterval(fetchSnapshot, 1000);
+	</script>
+</body>
+</html>
+
