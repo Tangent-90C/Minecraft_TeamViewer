@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "multipleplayeresp",
+  "version": "1.0.0",
+  "name": "MultiPlayer ESP",
+  "description": "Standalone version of the Wurst Client's MultiPlayerESP hack",
+  "authors": [
+    "YourName"
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/mod/multipleplayeresp",
+    "sources": "https://github.com/yourname/multipleplayeresp"
+  },
+  "license": "GPL-3.0-or-later",
+  "icon": "assets/multipleplayeresp/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "main": [
+      "net.wurstclient.multipleplayeresp.StandaloneMultiPlayerESP"
+    ]
+  },
+  "mixins": [
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "1.21.4",
+    "java": ">=17"
+  },
+  "custom": {
+    "modmenu": {
+      "links": {
+      }
+    }
+  }
+}

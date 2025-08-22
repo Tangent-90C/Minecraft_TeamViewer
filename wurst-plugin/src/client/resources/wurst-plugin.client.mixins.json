@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "niubi.professor_chen.wurstPlugin.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "WurstClientMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

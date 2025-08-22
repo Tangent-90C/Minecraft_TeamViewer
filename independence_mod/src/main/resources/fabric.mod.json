@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "teamviewer",
+  "version": "${version}",
+
+  "name": "TeamViewer",
+  "description": "",
+  "authors": [],
+  "contact": {},
+
+  "license": "MIT",
+  "icon": "assets/teamviewer/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": ["person.professor_chen.teamviewer.client.TeamviewerDataGenerator"],
+    "client": ["person.professor_chen.teamviewer.client.TeamviewerClient"]
+  },
+
+  "mixins": [
+    "teamviewer.mixins.json"
+    ,{
+      "config": "teamviewer.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}

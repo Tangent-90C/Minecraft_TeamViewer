@@ -1,0 +1,21 @@
+{
+  "key.multipleplayeresp.toggle": "切换玩家ESP",
+  "key.multipleplayeresp.config": "打开玩家ESP配置",
+  "category.multipleplayeresp.general": "多人玩家ESP",
+  
+  "screen.multipleplayeresp.config.title": "多人玩家ESP配置",
+  "screen.multipleplayeresp.config.ip": "服务器IP地址",
+  "screen.multipleplayeresp.config.port": "服务器端口",
+  "screen.multipleplayeresp.config.render_distance": "渲染距离",
+  "screen.multipleplayeresp.config.color_settings": "颜色设置",
+  "screen.multipleplayeresp.config.done": "完成",
+  "screen.multipleplayeresp.config.cancel": "取消",
+  "screen.multipleplayeresp.config.connect": "连接",
+  "screen.multipleplayeresp.config.reconnect": "重新连接",
+  
+  "screen.multipleplayeresp.color_config.title": "颜色配置",
+  "screen.multipleplayeresp.color_config.box_color": "方框颜色 (ARGB格式)",
+  "screen.multipleplayeresp.color_config.line_color": "线条颜色 (ARGB格式)",
+  "screen.multipleplayeresp.color_config.done": "完成",
+  "screen.multipleplayeresp.color_config.cancel": "取消"
+}

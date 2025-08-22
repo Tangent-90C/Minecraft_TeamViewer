@@ -1,0 +1,21 @@
+{
+  "key.multipleplayeresp.toggle": "Toggle Player ESP",
+  "key.multipleplayeresp.config": "Open Player ESP Config",
+  "category.multipleplayeresp.general": "MultiPlayer ESP",
+  
+  "screen.multipleplayeresp.config.title": "MultiPlayer ESP Configuration",
+  "screen.multipleplayeresp.config.ip": "Server IP Address",
+  "screen.multipleplayeresp.config.port": "Server Port",
+  "screen.multipleplayeresp.config.render_distance": "Render Distance",
+  "screen.multipleplayeresp.config.color_settings": "Color Settings",
+  "screen.multipleplayeresp.config.done": "Done",
+  "screen.multipleplayeresp.config.cancel": "Cancel",
+  "screen.multipleplayeresp.config.connect": "Connect",
+  "screen.multipleplayeresp.config.reconnect": "Reconnect",
+  
+  "screen.multipleplayeresp.color_config.title": "Color Configuration",
+  "screen.multipleplayeresp.color_config.box_color": "Box Color (ARGB format)",
+  "screen.multipleplayeresp.color_config.line_color": "Line Color (ARGB format)",
+  "screen.multipleplayeresp.color_config.done": "Done",
+  "screen.multipleplayeresp.color_config.cancel": "Cancel"
+}

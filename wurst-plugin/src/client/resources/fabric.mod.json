@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "wurst-plugin",
+  "version": "1.0.0",
+  "name": "Wurst Plugin",
+  "description": "A plugin for Wurst Client",
+  "authors": [
+    "Professor_Chen"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/wurst-plugin/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+    ]
+  },
+  "mixins": [
+    "wurst-plugin.client.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.17.2",
+    "fabric": "*",
+    "minecraft": "1.21.4"
+  }
+}
