@@ -69,7 +69,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 // 发送注册消息
                 JsonObject registerMsg = new JsonObject();
                 registerMsg.addProperty("type", "register");
-                registerMsg.addProperty("id", playerId);
+                registerMsg.addProperty("playerUUID", playerId);
                 sendMessage(registerMsg.toString());
 
                 // 开始定期发送位置更新
@@ -153,12 +153,36 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                     try {
                         JsonObject playerData = players.getAsJsonObject(playerId);
 
+                        String playerName = "";
+                        if (playerData.has("name")) {
+                            playerName = playerData.get("name").getAsString();
+                        }
+                        
+                        float health = 0.0f;
+                        if (playerData.has("health")) {
+                            health = playerData.get("health").getAsFloat();
+                        }
+                        
+                        float maxHealth = 0.0f;
+                        if (playerData.has("maxHealth")) {
+                            maxHealth = playerData.get("maxHealth").getAsFloat();
+                        }
+                        
+                        int armor = 0;
+                        if (playerData.has("armor")) {
+                            armor = playerData.get("armor").getAsInt();
+                        }
+
                         RemotePlayer remotePlayer = new RemotePlayer(playerId,
                                 playerData.get("x").getAsDouble(),
                                 playerData.get("y").getAsDouble(),
                                 playerData.get("z").getAsDouble(),
                                 playerData.get("dimension").getAsString(),
-                                (long) (playerData.get("timestamp").getAsDouble() * 1000)); // 转换为毫秒
+                                (long) (playerData.get("timestamp").getAsDouble() * 1000),
+                                playerName,
+                                health,
+                                maxHealth,
+                                armor); // 转换为毫秒
 
                         // 只添加最近更新的玩家（5秒内）
                         if (currentTime - remotePlayer.timestamp < 5000) {
@@ -235,13 +259,24 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 && mc.world != null) {
             try {
                 JsonObject updateMsg = new JsonObject();
-                updateMsg.addProperty("type", "update");
-                updateMsg.addProperty("id", playerId);
+                updateMsg.addProperty("type", "players_update");
+                updateMsg.addProperty("playerUUID", playerId);
                 updateMsg.addProperty("x", mc.player.getX());
                 updateMsg.addProperty("y", mc.player.getY());
                 updateMsg.addProperty("z", mc.player.getZ());
                 updateMsg.addProperty("dimension",
                         mc.world.getRegistryKey().getValue().toString());
+                
+                // 添加玩家名称，包括格式（颜色等）
+                updateMsg.addProperty("name", GSON.toJson(mc.player.getName()));
+                
+                // 添加玩家血量和最大血量
+                updateMsg.addProperty("health", mc.player.getHealth());
+                updateMsg.addProperty("maxHealth", mc.player.getMaxHealth());
+                
+                // 添加玩家护甲值
+                updateMsg.addProperty("armor", mc.player.getArmor());
+                
                 updateMsg.addProperty("timestamp", System.currentTimeMillis());
 
                 sendMessage(updateMsg.toString());
@@ -259,7 +294,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             try {
                 JsonObject entitiesMsg = new JsonObject();
                 entitiesMsg.addProperty("type", "entities_update");
-                entitiesMsg.addProperty("playerId", playerId);
+                entitiesMsg.addProperty("submitPlayerId", playerId);
                 entitiesMsg.addProperty("dimension",
                         mc.world.getRegistryKey().getValue().toString());
                 entitiesMsg.addProperty("timestamp",
@@ -327,6 +362,10 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
         public final double x, y, z;
         public final String dimension;
         public final long timestamp;
+        public final String name; // 添加名称字段
+        public final float health; // 当前血量
+        public final float maxHealth; // 最大血量
+        public final int armor; // 护甲值
 
         public RemotePlayer(String id, double x, double y, double z,
                             String dimension, long timestamp) {
@@ -336,6 +375,41 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             this.z = z;
             this.dimension = dimension;
             this.timestamp = timestamp;
+            this.name = ""; // 默认空名称
+            this.health = 0.0f; // 默认血量
+            this.maxHealth = 0.0f; // 默认最大血量
+            this.armor = 0; // 默认护甲值
+        }
+        
+        // 添加新的构造函数以支持名称
+        public RemotePlayer(String id, double x, double y, double z,
+                            String dimension, long timestamp, String name) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.dimension = dimension;
+            this.timestamp = timestamp;
+            this.name = name;
+            this.health = 0.0f; // 默认血量
+            this.maxHealth = 0.0f; // 默认最大血量
+            this.armor = 0; // 默认护甲值
+        }
+        
+        // 添加新的构造函数以支持血量、最大血量和护甲值
+        public RemotePlayer(String id, double x, double y, double z,
+                            String dimension, long timestamp, String name,
+                            float health, float maxHealth, int armor) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.dimension = dimension;
+            this.timestamp = timestamp;
+            this.name = name;
+            this.health = health;
+            this.maxHealth = maxHealth;
+            this.armor = armor;
         }
 
         public double distanceTo(PlayerEntity player) {
