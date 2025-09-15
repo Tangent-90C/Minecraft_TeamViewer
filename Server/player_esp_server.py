@@ -107,7 +107,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     "dimension": data["dimension"],
                     "timestamp": time.time(),
                     "playerName" : data.get("name"),
-                    "playerUUID": player_uuid
+                    "playerUUID": player_uuid,
+                    "health": data.get("health", 0),
+                    "maxHealth": data.get("maxHealth", 0),
+                    "armor": data.get("armor", 0),
+                    "width": data.get("width", 0.6),     # 默认玩家宽度
+                    "height": data.get("height", 1.8)    # 默认玩家高度
                 }
                 await broadcast_positions()
 

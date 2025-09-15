@@ -4,8 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.wurstclient.settings.CheckboxSetting;
-import net.wurstclient.settings.TextFieldSetting;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -16,27 +14,17 @@ import java.nio.file.Path;
 public class MultiPlayerESPConfig {
     private static MultiPlayerESPConfig instance;
     
-    private final CheckboxSetting networkSync = new CheckboxSetting(
-            "Network sync", "Shows players from other clients on the same server.\n"
-            + "Requires the PlayerESP server to be running.",
-            false);
-    
-    private final CheckboxSetting enableWurstMixin = new CheckboxSetting(
-            "Enable Wurst Mixin", "Whether to inject the MultiPlayerESP hack into Wurst client.\n"
-            + "Requires restart to take effect.",
-            true);
-
-    private final TextFieldSetting serverIP = new TextFieldSetting("Server IP",
-            "The IP address of the PlayerESP server.", "localhost");
-
-    private final TextFieldSetting serverPort = new TextFieldSetting(
-            "Server Port", "The port of the PlayerESP server.", "8765");
+    private boolean networkSync = false;
+    private boolean enableWurstMixin = true;
+    private String serverIP = "localhost";
+    private String serverPort = "8765";
     
     private static final String CONFIG_FILE = "config/multiplayer_esp_config.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     private MultiPlayerESPConfig() {
         // 私有构造函数，确保单例模式
+        // 先加载配置，再保存（如果需要）
         loadConfig();
     }
     
@@ -48,57 +36,40 @@ public class MultiPlayerESPConfig {
     }
     
     // Getter方法
-    public CheckboxSetting getNetworkSync() {
+    public boolean isNetworkSync() {
         return networkSync;
     }
     
-    public CheckboxSetting getEnableWurstMixin() {
+    public boolean isWurstMixinEnabled() {
         return enableWurstMixin;
     }
     
-    public TextFieldSetting getServerIP() {
+    public String getServerIP() {
         return serverIP;
     }
     
-    public TextFieldSetting getServerPort() {
+    public String getServerPort() {
         return serverPort;
     }
     
-    // 便捷方法，用于直接获取值
-    public boolean isNetworkSyncEnabled() {
-        return networkSync.isChecked();
-    }
-    
-    public boolean isWurstMixinEnabled() {
-        return enableWurstMixin.isChecked();
-    }
-    
-    public String getServerIPValue() {
-        return serverIP.getValue();
-    }
-    
-    public String getServerPortValue() {
-        return serverPort.getValue();
-    }
-    
-    // 便捷方法，用于直接设置值
+    // Setter方法
     public void setNetworkSync(boolean enabled) {
-        networkSync.setChecked(enabled);
+        this.networkSync = enabled;
         saveConfig();
     }
     
     public void setEnableWurstMixin(boolean enabled) {
-        enableWurstMixin.setChecked(enabled);
+        this.enableWurstMixin = enabled;
         saveConfig();
     }
     
     public void setServerIP(String ip) {
-        serverIP.setValue(ip);
+        this.serverIP = ip;
         saveConfig();
     }
     
     public void setServerPort(String port) {
-        serverPort.setValue(port);
+        this.serverPort = port;
         saveConfig();
     }
     
@@ -109,10 +80,10 @@ public class MultiPlayerESPConfig {
             Files.createDirectories(configPath.getParent());
             
             JsonObject json = new JsonObject();
-            json.addProperty("networkSync", networkSync.isChecked());
-            json.addProperty("enableWurstMixin", enableWurstMixin.isChecked());
-            json.addProperty("serverIP", serverIP.getValue());
-            json.addProperty("serverPort", serverPort.getValue());
+            json.addProperty("networkSync", networkSync);
+            json.addProperty("enableWurstMixin", enableWurstMixin);
+            json.addProperty("serverIP", serverIP);
+            json.addProperty("serverPort", serverPort);
             
             try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
                 writer.write(GSON.toJson(json));
@@ -135,19 +106,19 @@ public class MultiPlayerESPConfig {
                 JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
                 
                 if (json.has("networkSync")) {
-                    networkSync.setChecked(json.get("networkSync").getAsBoolean());
+                    networkSync = json.get("networkSync").getAsBoolean();
                 }
                 
                 if (json.has("enableWurstMixin")) {
-                    enableWurstMixin.setChecked(json.get("enableWurstMixin").getAsBoolean());
+                    enableWurstMixin = json.get("enableWurstMixin").getAsBoolean();
                 }
                 
                 if (json.has("serverIP")) {
-                    serverIP.setValue(json.get("serverIP").getAsString());
+                    serverIP = json.get("serverIP").getAsString();
                 }
                 
                 if (json.has("serverPort")) {
-                    serverPort.setValue(json.get("serverPort").getAsString());
+                    serverPort = json.get("serverPort").getAsString();
                 }
             }
         } catch (Exception e) {

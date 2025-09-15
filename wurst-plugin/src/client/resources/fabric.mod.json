@@ -11,14 +11,14 @@
   "license": "MIT",
   "icon": "assets/wurst-plugin/icon.png",
   "environment": "client",
+  "mixins": [
+    "wurst-plugin.client.mixins.json"
+  ],
   "entrypoints": {
     "client": [
       "niubi.professor_chen.wurstPlugin.WurstPluginClient"
     ]
   },
-  "mixins": [
-    "wurst-plugin.client.mixins.json"
-  ],
   "depends": {
     "fabricloader": ">=0.16.14",
     "fabric": "*",

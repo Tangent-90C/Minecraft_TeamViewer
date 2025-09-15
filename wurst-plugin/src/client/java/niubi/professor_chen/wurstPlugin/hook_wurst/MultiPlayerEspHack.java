@@ -1,30 +1,29 @@
 package niubi.professor_chen.wurstPlugin.hook_wurst;
 
-import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.wurstclient.Category;
 import net.wurstclient.SearchTags;
+import net.wurstclient.WurstClient;
 import net.wurstclient.events.CameraTransformViewBobbingListener;
 import net.wurstclient.events.RenderListener;
 import net.wurstclient.events.UpdateListener;
 import net.wurstclient.hack.Hack;
-import net.wurstclient.hack.HackList;
 import net.wurstclient.settings.CheckboxSetting;
 import net.wurstclient.settings.EspBoxSizeSetting;
 import net.wurstclient.settings.EspStyleSetting;
 import net.wurstclient.settings.TextFieldSetting;
 import net.wurstclient.settings.filterlists.EntityFilterList;
 import net.wurstclient.settings.filters.*;
-import net.wurstclient.util.EntityUtils;
+import net.wurstclient.util.ChatUtils;
 import net.wurstclient.util.FakePlayerEntity;
 import net.wurstclient.util.RenderUtils;
-import niubi.professor_chen.wurstPlugin.network.PlayerESPNetworkManager;
 import niubi.professor_chen.wurstPlugin.config.MultiPlayerESPConfig;
-import niubi.professor_chen.wurstPlugin.mixin.WurstClientMixin;
 
 import java.util.ArrayList;
 import java.util.stream.Collectors;
@@ -74,7 +73,22 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
 
     // 使用独立的配置管理类
     private final MultiPlayerESPConfig config = MultiPlayerESPConfig.getInstance();
+    
+    // 创建本地设置项以在Wurst界面中显示
+    private final CheckboxSetting networkSyncSetting = new CheckboxSetting(
+            "Network sync", "Shows players from other clients on the same server.\n"
+            + "Requires the PlayerESP server to be running.",
+            config.isNetworkSync());
+    
+    private final TextFieldSetting serverIPSetting = new TextFieldSetting("Server IP",
+            "The IP address of the PlayerESP server.", config.getServerIP());
 
+    private final TextFieldSetting serverPortSetting = new TextFieldSetting(
+            "Server Port", "The port of the PlayerESP server.", config.getServerPort());
+
+    private final MinecraftClient mc = MinecraftClient.getInstance();
+    private final WurstClient wurst = WurstClient.INSTANCE;
+    
     private final ArrayList<PlayerEntity> players = new ArrayList<>();
     private final ArrayList<LivingEntity> mobs = new ArrayList<>();
     private PlayerESPNetworkManager networkManager;
@@ -88,9 +102,9 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
         addSetting(style);
         addSetting(boxSize);
         addSetting(showMobs);
-        addSetting(config.getNetworkSync());
-        addSetting(config.getServerIP());
-        addSetting(config.getServerPort());
+        addSetting(networkSyncSetting);
+        addSetting(serverIPSetting);
+        addSetting(serverPortSetting);
         entityFilters.forEach(this::addSetting);
         mobFilters.forEach(this::addSetting);
     }
@@ -101,24 +115,31 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
     }
 
     @Override
-    protected void onEnable() {
-        EVENTS.add(UpdateListener.class, this);
-        EVENTS.add(CameraTransformViewBobbingListener.class, this);
-        EVENTS.add(RenderListener.class, this);
-
-        if (config.isNetworkSyncEnabled()) {
-            networkManager = new PlayerESPNetworkManager(config.getServerIPValue(),
-                    config.getServerPortValue());
+    public void onEnable() {
+        networkSyncSetting.setChecked(config.isNetworkSync());
+        serverIPSetting.setValue(config.getServerIP());
+        serverPortSetting.setValue(config.getServerPort());
+        
+        // 启用Hack时连接到服务器
+        if (config.isNetworkSync() && networkManager == null) {
+            networkManager = new PlayerESPNetworkManager(config.getServerIP(),
+                    config.getServerPort());
             networkManager.connect();
         }
+
+        wurst.getEventManager().add(UpdateListener.class, this);
+        wurst.getEventManager().add(CameraTransformViewBobbingListener.class, this);
+        wurst.getEventManager().add(RenderListener.class, this);
+        
+        lastDebugTime = System.currentTimeMillis();
     }
 
     @Override
-    protected void onDisable() {
+    public void onDisable() {
         // 移除所有事件监听
-        EVENTS.remove(UpdateListener.class, this);
-        EVENTS.remove(CameraTransformViewBobbingListener.class, this);
-        EVENTS.remove(RenderListener.class, this);
+        wurst.getEventManager().remove(UpdateListener.class, this);
+        wurst.getEventManager().remove(CameraTransformViewBobbingListener.class, this);
+        wurst.getEventManager().remove(RenderListener.class, this);
         
         // 清理网络管理器
         if (networkManager != null) {
@@ -133,41 +154,66 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
 
     @Override
     public void onUpdate() {
-        players.clear();
-
-        Stream<AbstractClientPlayerEntity> stream = MC.world.getPlayers()
-                .parallelStream().filter(e -> !e.isRemoved() && e.getHealth() > 0)
-                .filter(e -> e != MC.player)
-                .filter(e -> !(e instanceof FakePlayerEntity))
-                .filter(e -> Math.abs(e.getY() - MC.player.getY()) <= 1e6);
-
-        stream = entityFilters.applyTo(stream);
-
-        players.addAll(stream.collect(Collectors.toList()));
-
-        if (showMobs.isChecked()) {
-            mobs.clear();
-
-            Stream<LivingEntity> mobStream = StreamSupport
-                    .stream(MC.world.getEntities().spliterator(), false)
-                    .filter(LivingEntity.class::isInstance)
-                    .map(e -> (LivingEntity) e)
-                    .filter(e -> !(e instanceof PlayerEntity))
-                    .filter(e -> !e.isRemoved() && e.getHealth() > 0);
-
-            mobStream = mobFilters.applyTo(mobStream);
-
-            mobs.addAll(mobStream.collect(Collectors.toList()));
-        }
-
-        if (config.isNetworkSyncEnabled() && networkManager != null
-                && networkManager.isConnected()) {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastDebugTime > DEBUG_INTERVAL) {
-                lastDebugTime = currentTime;
-                // 网络状态调试信息已移除
+        // 更新配置
+        if (networkSyncSetting.isChecked() != config.isNetworkSync() ||
+            !serverIPSetting.getValue().equals(config.getServerIP()) ||
+            !serverPortSetting.getValue().equals(config.getServerPort())) {
+            
+            // 更新配置文件
+            config.setNetworkSync(networkSyncSetting.isChecked());
+            config.setServerIP(serverIPSetting.getValue());
+            config.setServerPort(serverPortSetting.getValue());
+            
+            // 如果启用了网络同步且设置发生了变化，重新连接
+            if (networkSyncSetting.isChecked() && networkManager != null) {
+                networkManager.shutdown();
+                networkManager = new PlayerESPNetworkManager(serverIPSetting.getValue(),
+                        serverPortSetting.getValue());
+                networkManager.connect();
+            } else if (!networkSyncSetting.isChecked() && networkManager != null) {
+                networkManager.shutdown();
+                networkManager = null;
             }
         }
+        
+        // 每秒发送一次调试信息
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastDebugTime > DEBUG_INTERVAL) {
+            if (config.isNetworkSync() && networkManager != null
+                    && networkManager.isConnected()) {
+                ChatUtils.message(
+                        "[MultiPlayerESP] Connected to server. Tracking "
+                                + networkManager.getRemotePlayers().size() + " remote players and "
+                                + networkManager.getRemoteEntities().size() + " entities.");
+            }
+            lastDebugTime = currentTime;
+        }
+
+        Stream<AbstractClientPlayerEntity> stream = StreamSupport
+                .stream(mc.world.getPlayers().spliterator(), false)
+                .filter(e -> !e.isRemoved() && e.getPos().isInRange(mc.player.getPos(), 128))
+                .filter(e -> e != mc.player)
+                .filter(e -> !(e instanceof FakePlayerEntity))
+                .filter(e -> e.getVehicle() == null);
+
+        players.clear();
+        entityFilters.applyTo(stream).collect(Collectors.toCollection(() -> players));
+
+        if (!showMobs.isChecked()) {
+            mobs.clear();
+            return;
+        }
+
+        Stream<LivingEntity> stream2 = StreamSupport
+                .stream(mc.world.getEntities().spliterator(), false)
+                .filter(e -> !e.isRemoved()).filter(e -> e instanceof LivingEntity)
+                .map(e -> (LivingEntity) e)
+                .filter(e -> e.getPos().isInRange(mc.player.getPos(), 128))
+                .filter(e -> e != mc.player)
+                .filter(e -> !(e instanceof FakePlayerEntity));
+
+        mobs.clear();
+        mobFilters.applyTo(stream2).collect(Collectors.toCollection(() -> mobs));
     }
 
     @Override
@@ -179,54 +225,46 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
 
     @Override
     public void onRender(MatrixStack matrixStack, float partialTicks) {
-
         if (style.hasBoxes()) {
             double extraSize = boxSize.getExtraSize() / 2;
 
-            ArrayList<RenderUtils.ColoredBox> boxes = new ArrayList<>(players.size());
-            for (PlayerEntity e : players) {
-                Box box = EntityUtils.getLerpedBox(e, partialTicks)
-                        .offset(0, extraSize, 0).expand(extraSize);
-                boxes.add(new RenderUtils.ColoredBox(box, getColor(e)));
-            }
-
-            if (showMobs.isChecked()) {
-                for (LivingEntity e : mobs) {
-                    Box box = EntityUtils.getLerpedBox(e, partialTicks)
-                            .offset(0, extraSize, 0).expand(extraSize);
-                    boxes.add(new RenderUtils.ColoredBox(box, getMobColor(e)));
-                }
-            }
-
-            // 添加来自网络的玩家框
-            if (config.isNetworkSyncEnabled() && networkManager != null
+            ArrayList<RenderUtils.ColoredBox> boxes = new ArrayList<>();
+            
+            // 只添加来自网络的玩家框
+            if (config.isNetworkSync() && networkManager != null
                     && networkManager.isConnected()) {
                 for (PlayerESPNetworkManager.RemotePlayer remotePlayer : networkManager
                         .getRemotePlayers().values()) {
                     // 检查是否在同一维度
-                    if (MC.world.getRegistryKey().getValue().toString()
+                    if (mc.world.getRegistryKey().getValue().toString()
                             .equals(remotePlayer.dimension)) {
-                        Box box = new Box(remotePlayer.x - 0.3, remotePlayer.y,
-                                remotePlayer.z - 0.3, remotePlayer.x + 0.3,
-                                remotePlayer.y + 1.8, remotePlayer.z + 0.3)
+                        // 使用接收到的碰撞箱尺寸创建Box
+                        double halfWidth = remotePlayer.width / 2.0;
+                        Box box = new Box(remotePlayer.x - halfWidth, remotePlayer.y,
+                                remotePlayer.z - halfWidth, remotePlayer.x + halfWidth,
+                                remotePlayer.y + remotePlayer.height, remotePlayer.z + halfWidth)
                                 .offset(0, extraSize, 0).expand(extraSize);
 
                         boxes.add(new RenderUtils.ColoredBox(box, 0x80FFFFFF)); // 白色，半透明
                     }
                 }
 
-                // 添加来自网络的实体框
-                for (PlayerESPNetworkManager.RemoteEntity remoteEntity : networkManager
-                        .getRemoteEntities().values()) {
-                    // 检查是否在同一维度
-                    if (MC.world.getRegistryKey().getValue().toString()
-                            .equals(remoteEntity.dimension)) {
-                        Box box = new Box(remoteEntity.x - 0.3, remoteEntity.y,
-                                remoteEntity.z - 0.3, remoteEntity.x + 0.3,
-                                remoteEntity.y + 1.8, remoteEntity.z + 0.3)
-                                .offset(0, extraSize, 0).expand(extraSize);
+                // 添加来自网络的实体框 (仅当showMobs为true时)
+                if (showMobs.isChecked()) {
+                    for (PlayerESPNetworkManager.RemoteEntity remoteEntity : networkManager
+                            .getRemoteEntities().values()) {
+                        // 检查是否在同一维度
+                        if (mc.world.getRegistryKey().getValue().toString()
+                                .equals(remoteEntity.dimension)) {
+                            // 使用接收到的碰撞箱尺寸创建Box
+                            double halfWidth = remoteEntity.width / 2.0;
+                            Box box = new Box(remoteEntity.x - halfWidth, remoteEntity.y,
+                                    remoteEntity.z - halfWidth, remoteEntity.x + halfWidth,
+                                    remoteEntity.y + remoteEntity.height, remoteEntity.z + halfWidth)
+                                    .offset(0, extraSize, 0).expand(extraSize);
 
-                        boxes.add(new RenderUtils.ColoredBox(box, 0x80FFFF00)); // 黄色，半透明
+                            boxes.add(new RenderUtils.ColoredBox(box, 0x80FFFF00)); // 黄色，半透明
+                        }
                     }
                 }
             }
@@ -235,46 +273,33 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
         }
 
         if (style.hasLines()) {
-            ArrayList<RenderUtils.ColoredPoint> ends =
-                    new ArrayList<>(players.size());
-            for (PlayerEntity e : players) {
-                Vec3d point =
-                        EntityUtils.getLerpedBox(e, partialTicks).getCenter();
-                ends.add(new RenderUtils.ColoredPoint(point, getColor(e)));
-            }
-
-            if (showMobs.isChecked()) {
-                for (LivingEntity e : mobs) {
-                    Vec3d point =
-                            EntityUtils.getLerpedBox(e, partialTicks).getCenter();
-                    ends.add(
-                            new RenderUtils.ColoredPoint(point, getMobColor(e)));
-                }
-            }
-
-            // 添加来自网络的玩家追踪线
-            if (config.isNetworkSyncEnabled() && networkManager != null
+            ArrayList<RenderUtils.ColoredPoint> ends = new ArrayList<>();
+            
+            // 只添加来自网络的玩家追踪线
+            if (config.isNetworkSync() && networkManager != null
                     && networkManager.isConnected()) {
                 for (PlayerESPNetworkManager.RemotePlayer remotePlayer : networkManager
                         .getRemotePlayers().values()) {
                     // 检查是否在同一维度
-                    if (MC.world.getRegistryKey().getValue().toString()
+                    if (mc.world.getRegistryKey().getValue().toString()
                             .equals(remotePlayer.dimension)) {
                         Vec3d point = new Vec3d(remotePlayer.x,
-                                remotePlayer.y + 0.9, remotePlayer.z);
+                                remotePlayer.y + remotePlayer.height * 0.5, remotePlayer.z);
                         ends.add(new RenderUtils.ColoredPoint(point, 0x80FFFFFF)); // 白色，半透明
                     }
                 }
 
-                // 添加来自网络的实体追踪线
-                for (PlayerESPNetworkManager.RemoteEntity remoteEntity : networkManager
-                        .getRemoteEntities().values()) {
-                    // 检查是否在同一维度
-                    if (MC.world.getRegistryKey().getValue().toString()
-                            .equals(remoteEntity.dimension)) {
-                        Vec3d point = new Vec3d(remoteEntity.x,
-                                remoteEntity.y + 0.9, remoteEntity.z);
-                        ends.add(new RenderUtils.ColoredPoint(point, 0x80FFFF00)); // 黄色，半透明
+                // 添加来自网络的实体追踪线 (仅当showMobs为true时)
+                if (showMobs.isChecked()) {
+                    for (PlayerESPNetworkManager.RemoteEntity remoteEntity : networkManager
+                            .getRemoteEntities().values()) {
+                        // 检查是否在同一维度
+                        if (mc.world.getRegistryKey().getValue().toString()
+                                .equals(remoteEntity.dimension)) {
+                            Vec3d point = new Vec3d(remoteEntity.x,
+                                    remoteEntity.y + remoteEntity.height * 0.5, remoteEntity.z);
+                            ends.add(new RenderUtils.ColoredPoint(point, 0x80FFFF00)); // 黄色，半透明
+                        }
                     }
                 }
             }
@@ -282,6 +307,7 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
             RenderUtils.drawTracers(matrixStack, partialTicks, ends, false);
         }
     }
+
 
     private int getColor(PlayerEntity e) {
         if (e.isSneaking())

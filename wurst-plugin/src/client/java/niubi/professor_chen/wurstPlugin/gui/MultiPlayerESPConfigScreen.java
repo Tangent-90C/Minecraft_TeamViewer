@@ -30,7 +30,7 @@ public class MultiPlayerESPConfigScreen extends Screen {
         networkSyncCheckbox = CheckboxWidget.builder(Text.literal("Network Sync"), this.textRenderer)
                 .pos(this.width / 2 - 100, 50)
                 .build();
-        if (config.isNetworkSyncEnabled() && !networkSyncCheckbox.isChecked()) {
+        if (config.isNetworkSync() && !networkSyncCheckbox.isChecked()) {
             networkSyncCheckbox.onPress();
         }
         this.addDrawableChild(networkSyncCheckbox);
@@ -41,17 +41,20 @@ public class MultiPlayerESPConfigScreen extends Screen {
                 .build();
         if (config.isWurstMixinEnabled() && !enableWurstMixinCheckbox.isChecked()) {
             enableWurstMixinCheckbox.onPress();
+        } else if (!config.isWurstMixinEnabled() && enableWurstMixinCheckbox.isChecked()) {
+            // 如果配置是false但复选框是选中状态，则取消选中
+            enableWurstMixinCheckbox.onPress();
         }
         this.addDrawableChild(enableWurstMixinCheckbox);
         
         // 添加服务器IP文本框
         serverIPField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 100, 200, 20, Text.literal("Server IP"));
-        serverIPField.setText(config.getServerIPValue());
+        serverIPField.setText(config.getServerIP());
         this.addDrawableChild(serverIPField);
         
         // 添加服务器端口文本框
         serverPortField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 130, 200, 20, Text.literal("Server Port"));
-        serverPortField.setText(config.getServerPortValue());
+        serverPortField.setText(config.getServerPort());
         this.addDrawableChild(serverPortField);
         
         // 添加完成按钮

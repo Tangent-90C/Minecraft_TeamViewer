@@ -26,7 +26,9 @@ public class WurstClientMixin {
     @Inject(method = "<init>", at = @At(value = "TAIL"), remap = false)
     private void onInitialize(CallbackInfo ci) {
         // 检查是否启用了Wurst Mixin
-        if (MultiPlayerESPConfig.getInstance().isWurstMixinEnabled()) {
+        // 确保在初始化时正确加载配置
+        MultiPlayerESPConfig config = MultiPlayerESPConfig.getInstance();
+        if (config.isWurstMixinEnabled()) {
             HackList self = (HackList) (Object) this;
             MultiPlayerEspHack multiPlayerEspHack = new MultiPlayerEspHack();
 
