@@ -3,13 +3,6 @@ package niubi.professor_chen.wurstPlugin.network;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.math.Vec3d;
-import net.wurstclient.WurstClient;
-import net.wurstclient.util.ChatUtils;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,17 +13,15 @@ import java.util.UUID;
 import java.util.concurrent.*;
 
 /**
- * PlayerESPNetworkManager handles the WebSocket connection to a server that
+ * PlayerESPNetworkHandler handles the WebSocket connection to a server that
  * shares player positions between clients.
+ * This is the base network component without Wurst dependencies.
  */
-public class PlayerESPNetworkManager implements WebSocket.Listener {
+public class PlayerESPNetworkHandler implements WebSocket.Listener {
     private static final Gson GSON = new Gson();
 
-    private final WurstClient wurst = WurstClient.INSTANCE;
-    private final MinecraftClient mc = MinecraftClient.getInstance();
-
     private WebSocket webSocket;
-    private final ScheduledExecutorService scheduler =
+    private ScheduledExecutorService scheduler =
             Executors.newScheduledThreadPool(1);
     private final String playerId;
     private boolean connected = false;
@@ -47,7 +38,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
     private StringBuilder messageBuffer = new StringBuilder();
     private boolean isBuffering = false;
 
-    public PlayerESPNetworkManager(String serverIP, String serverPort) {
+    public PlayerESPNetworkHandler(String serverIP, String serverPort) {
         this.playerId = UUID.randomUUID().toString();
         this.serverIP = serverIP;
         this.serverPort = serverPort;
@@ -63,7 +54,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             wsFuture.thenAccept(ws -> {
                 this.webSocket = ws;
                 this.connected = true;
-                ChatUtils.message("Connected to PlayerESP server at " + serverIP
+                System.out.println("Connected to PlayerESP server at " + serverIP
                         + ":" + serverPort);
 
                 // 发送注册消息
@@ -76,13 +67,13 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 scheduler.scheduleAtFixedRate(this::sendPositionUpdate, 0, 1,
                         TimeUnit.SECONDS);
             }).exceptionally(throwable -> {
-                ChatUtils.error(
+                System.err.println(
                         "Failed to connect to PlayerESP server at " + serverIP + ":"
                                 + serverPort + ": " + throwable.getMessage());
                 return null;
             });
         } catch (Exception e) {
-            ChatUtils.error(
+            System.err.println(
                     "Failed to connect to PlayerESP server: " + e.getMessage());
         }
     }
@@ -112,7 +103,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 isBuffering = true;
             }
         } catch (Exception e) {
-            ChatUtils.error("PlayerESP Network - Error buffering message: "
+            System.err.println("PlayerESP Network - Error buffering message: "
                     + e.getMessage());
             messageBuffer.setLength(0); // 出错时清空缓冲区
             isBuffering = false;
@@ -172,6 +163,16 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                         if (playerData.has("armor")) {
                             armor = playerData.get("armor").getAsInt();
                         }
+                        
+                        // 获取碰撞箱尺寸信息
+                        double width = 0.6;
+                        double height = 1.8;
+                        if (playerData.has("width")) {
+                            width = playerData.get("width").getAsDouble();
+                        }
+                        if (playerData.has("height")) {
+                            height = playerData.get("height").getAsDouble();
+                        }
 
                         RemotePlayer remotePlayer = new RemotePlayer(playerId,
                                 playerData.get("x").getAsDouble(),
@@ -182,7 +183,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                                 playerName,
                                 health,
                                 maxHealth,
-                                armor); // 转换为毫秒
+                                armor,
+                                width,
+                                height); // 转换为毫秒
 
                         // 只添加最近更新的玩家（5秒内）
                         if (currentTime - remotePlayer.timestamp < 5000) {
@@ -190,7 +193,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                             playerCount++;
                         }
                     } catch (Exception e) {
-                        ChatUtils.error("PlayerESP Network - Error parsing player data for " + playerId + ": " + e.getMessage());
+                        System.err.println("PlayerESP Network - Error parsing player data for " + playerId + ": " + e.getMessage());
                     }
                 }
 
@@ -200,13 +203,25 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                         if (entityData.has("x") && entityData.has("y") && entityData.has("z") &&
                                 entityData.has("dimension") && entityData.has("entityType") && entityData.has("timestamp")) {
 
+                            // 获取碰撞箱尺寸信息
+                            double width = 0.6;
+                            double height = 1.8;
+                            if (entityData.has("width")) {
+                                width = entityData.get("width").getAsDouble();
+                            }
+                            if (entityData.has("height")) {
+                                height = entityData.get("height").getAsDouble();
+                            }
+
                             RemoteEntity remoteEntity = new RemoteEntity(entityId,
                                     entityData.get("x").getAsDouble(),
                                     entityData.get("y").getAsDouble(),
                                     entityData.get("z").getAsDouble(),
                                     entityData.get("dimension").getAsString(),
                                     entityData.get("entityType").getAsString(),
-                                    (long) (entityData.get("timestamp").getAsDouble() * 1000)); // 转换为毫秒
+                                    (long) (entityData.get("timestamp").getAsDouble() * 1000),
+                                    width,
+                                    height); // 转换为毫秒
 
                             // 只添加最近更新的实体（5秒内）
                             if (currentTime - remoteEntity.timestamp < 5000) {
@@ -214,18 +229,18 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                                 entityCount++;
                             }
                         } else {
-                            ChatUtils.error("PlayerESP Network - Incomplete entity data for " + entityId);
+                            System.err.println("PlayerESP Network - Incomplete entity data for " + entityId);
                         }
                     } catch (Exception e) {
-                        ChatUtils.error("PlayerESP Network - Error parsing entity data for " + entityId + ": " + e.getMessage());
+                        System.err.println("PlayerESP Network - Error parsing entity data for " + entityId + ": " + e.getMessage());
                     }
                 }
 
                 // 显示处理后的数据统计
-                // ChatUtils.message("PlayerESP Network - Processed: " + playerCount + " players, " + entityCount + " entities");
+                // System.out.println("PlayerESP Network - Processed: " + playerCount + " players, " + entityCount + " entities");
             }
         } catch (Exception e) {
-            ChatUtils.error(
+            System.err.println(
                     "PlayerESP Network - Error parsing message: " + e.getMessage());
             e.printStackTrace(); // 打印完整的堆栈跟踪
         }
@@ -243,41 +258,34 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
     public CompletionStage<?> onClose(WebSocket webSocket, int statusCode,
                                       String reason) {
         this.connected = false;
-        ChatUtils.message("Disconnected from PlayerESP server.");
+        System.out.println("Disconnected from PlayerESP server.");
         scheduler.shutdown();
         return CompletableFuture.completedStage(null);
     }
 
     @Override
     public void onError(WebSocket webSocket, Throwable error) {
-        ChatUtils.error("PlayerESP network error: " + error.getMessage());
+        System.err.println("PlayerESP network error: " + error.getMessage());
         this.connected = false;
     }
 
     private void sendPositionUpdate() {
-        if (connected && webSocket != null && mc.player != null
-                && mc.world != null) {
+        if (connected && webSocket != null) {
             try {
                 JsonObject updateMsg = new JsonObject();
                 updateMsg.addProperty("type", "players_update");
                 updateMsg.addProperty("playerUUID", playerId);
-                updateMsg.addProperty("x", mc.player.getX());
-                updateMsg.addProperty("y", mc.player.getY());
-                updateMsg.addProperty("z", mc.player.getZ());
-                updateMsg.addProperty("dimension",
-                        mc.world.getRegistryKey().getValue().toString());
-                
-                // 添加玩家名称，包括格式（颜色等）
-                updateMsg.addProperty("name", GSON.toJson(mc.player.getName()));
-                
-                // 添加玩家血量和最大血量
-                updateMsg.addProperty("health", mc.player.getHealth());
-                updateMsg.addProperty("maxHealth", mc.player.getMaxHealth());
-                
-                // 添加玩家护甲值
-                updateMsg.addProperty("armor", mc.player.getArmor());
-                
-                updateMsg.addProperty("timestamp", System.currentTimeMillis());
+                updateMsg.addProperty("x", 0.0);
+                updateMsg.addProperty("y", 0.0);
+                updateMsg.addProperty("z", 0.0);
+                updateMsg.addProperty("dimension", "minecraft:overworld");
+                updateMsg.addProperty("name", "");
+                updateMsg.addProperty("health", 0.0f);
+                updateMsg.addProperty("maxHealth", 0.0f);
+                updateMsg.addProperty("armor", 0);
+                updateMsg.addProperty("width", 0.6);
+                updateMsg.addProperty("height", 1.8);
+                updateMsg.addProperty("timestamp", Long.valueOf(System.currentTimeMillis()));
 
                 sendMessage(updateMsg.toString());
 
@@ -290,40 +298,18 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
     }
 
     private void sendEntitiesUpdate() {
-        if (connected && webSocket != null && mc.world != null) {
+        if (connected && webSocket != null) {
             try {
                 JsonObject entitiesMsg = new JsonObject();
                 entitiesMsg.addProperty("type", "entities_update");
                 entitiesMsg.addProperty("submitPlayerId", playerId);
-                entitiesMsg.addProperty("dimension",
-                        mc.world.getRegistryKey().getValue().toString());
+                entitiesMsg.addProperty("dimension", "minecraft:overworld");
                 entitiesMsg.addProperty("timestamp",
-                        System.currentTimeMillis());
+                        Long.valueOf(System.currentTimeMillis()));
 
                 // 收集附近的生物实体
                 JsonObject entitiesData = new JsonObject();
-                for (net.minecraft.entity.Entity entity : mc.world.getEntities()) {
-                    if (entity instanceof LivingEntity
-                            && !(entity instanceof PlayerEntity)) {
-                        // 只发送相对靠近玩家的生物实体（128格以内）
-                        if (entity.distanceTo(mc.player) <= 128) {
-                            String entityId = entity.getUuid().toString();
-                            JsonObject entityInfo = new JsonObject();
-                            entityInfo.addProperty("x", entity.getX());
-                            entityInfo.addProperty("y", entity.getY());
-                            entityInfo.addProperty("z", entity.getZ());
-                            entityInfo.addProperty("dimension", mc.world
-                                    .getRegistryKey().getValue().toString());
-                            entityInfo.addProperty("entityType",
-                                    Registries.ENTITY_TYPE.getId(entity.getType())
-                                            .toString());
-                            entityInfo.addProperty("timestamp",
-                                    System.currentTimeMillis());
-
-                            entitiesData.add(entityId, entityInfo);
-                        }
-                    }
-                }
+                // 添加实体数据的逻辑需要在适配器中实现
 
                 entitiesMsg.add("entities", entitiesData);
                 sendMessage(entitiesMsg.toString());
@@ -333,7 +319,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
         }
     }
 
-    private void sendMessage(String message) {
+    protected void sendMessage(String message) {
         if (connected && webSocket != null) {
             try {
                 webSocket.sendText(message, true);
@@ -356,8 +342,72 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
     public boolean isConnected() {
         return connected;
     }
+    
+    // 获取服务器IP
+    public String getServerIP() {
+        return serverIP;
+    }
+    
+    // 获取服务器端口
+    public String getServerPort() {
+        return serverPort;
+    }
+    
+    // 获取玩家ID
+    public String getPlayerId() {
+        return playerId;
+    }
+    
+    // Properly shutdown the network manager
+    public void shutdown() {
+        connected = false;
+        
+        // Clear maps first to stop any processing
+        remotePlayers.clear();
+        remoteEntities.clear();
+        
+        // Clear message buffer
+        if (messageBuffer != null) {
+            messageBuffer.setLength(0);
+            messageBuffer = null;
+        }
+        
+        // Properly shutdown the scheduler
+        if (scheduler != null) {
+            try {
+                // Attempt to shutdown the scheduler
+                scheduler.shutdownNow();
+                
+                // Wait for termination
+                if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                    // Force shutdown if not terminated
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                // Re-interrupt the thread
+                Thread.currentThread().interrupt();
+            } finally {
+                scheduler = null;
+            }
+        }
+        
+        // Properly close the WebSocket connection
+        if (webSocket != null) {
+            try {
+                // Send close message and wait for response
+                webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Client shutdown");
+                
+                // Wait a bit for close to complete
+                Thread.sleep(100);
+            } catch (Exception e) {
+                // Ignore exceptions during shutdown
+            } finally {
+                webSocket = null;
+            }
+        }
+    }
 
-    public class RemotePlayer {
+    public static class RemotePlayer {
         public final String id;
         public final double x, y, z;
         public final String dimension;
@@ -366,6 +416,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
         public final float health; // 当前血量
         public final float maxHealth; // 最大血量
         public final int armor; // 护甲值
+        public final double width; // 碰撞箱宽度
+        public final double height; // 碰撞箱高度
 
         public RemotePlayer(String id, double x, double y, double z,
                             String dimension, long timestamp) {
@@ -379,6 +431,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             this.health = 0.0f; // 默认血量
             this.maxHealth = 0.0f; // 默认最大血量
             this.armor = 0; // 默认护甲值
+            this.width = 0.6; // 默认宽度
+            this.height = 1.8; // 默认高度
         }
         
         // 添加新的构造函数以支持名称
@@ -394,6 +448,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             this.health = 0.0f; // 默认血量
             this.maxHealth = 0.0f; // 默认最大血量
             this.armor = 0; // 默认护甲值
+            this.width = 0.6; // 默认宽度
+            this.height = 1.8; // 默认高度
         }
         
         // 添加新的构造函数以支持血量、最大血量和护甲值
@@ -410,21 +466,38 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             this.health = health;
             this.maxHealth = maxHealth;
             this.armor = armor;
+            this.width = 0.6; // 默认宽度
+            this.height = 1.8; // 默认高度
         }
-
-        public double distanceTo(PlayerEntity player) {
-            Vec3d playerPos = player.getPos();
-            return Math.sqrt(Math.pow(playerPos.x - x, 2)
-                    + Math.pow(playerPos.y - y, 2) + Math.pow(playerPos.z - z, 2));
+        
+        // 添加新的构造函数以支持碰撞箱尺寸
+        public RemotePlayer(String id, double x, double y, double z,
+                            String dimension, long timestamp, String name,
+                            float health, float maxHealth, int armor,
+                            double width, double height) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.dimension = dimension;
+            this.timestamp = timestamp;
+            this.name = name;
+            this.health = health;
+            this.maxHealth = maxHealth;
+            this.armor = armor;
+            this.width = width;
+            this.height = height;
         }
     }
 
-    public class RemoteEntity {
+    public static class RemoteEntity {
         public final String id;
         public final double x, y, z;
         public final String dimension;
         public final String entityType;
         public final long timestamp;
+        public final double width; // 碰撞箱宽度
+        public final double height; // 碰撞箱高度
 
         public RemoteEntity(String id, double x, double y, double z,
                             String dimension, String entityType, long timestamp) {
@@ -435,6 +508,23 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
             this.dimension = dimension;
             this.entityType = entityType;
             this.timestamp = timestamp;
+            this.width = 0.6; // 默认宽度
+            this.height = 1.8; // 默认高度
+        }
+        
+        // 添加新的构造函数以支持碰撞箱尺寸
+        public RemoteEntity(String id, double x, double y, double z,
+                            String dimension, String entityType, long timestamp,
+                            double width, double height) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.dimension = dimension;
+            this.entityType = entityType;
+            this.timestamp = timestamp;
+            this.width = width;
+            this.height = height;
         }
     }
 }
