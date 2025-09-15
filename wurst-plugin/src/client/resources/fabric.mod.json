@@ -13,14 +13,16 @@
   "environment": "client",
   "entrypoints": {
     "client": [
+      "niubi.professor_chen.wurstPlugin.WurstPluginClient"
     ]
   },
   "mixins": [
     "wurst-plugin.client.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.17.2",
+    "fabricloader": ">=0.16.14",
     "fabric": "*",
+    "fabric-key-binding-api-v1": "*",
     "minecraft": "1.21.4"
   }
 }
