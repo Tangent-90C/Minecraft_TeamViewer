@@ -14,7 +14,7 @@ loom {
     splitEnvironmentSourceSets()
 
     mods {
-        "untitled" {
+        "wurst-plugin" {
             sourceSet sourceSets.main
             sourceSet sourceSets.client
         }

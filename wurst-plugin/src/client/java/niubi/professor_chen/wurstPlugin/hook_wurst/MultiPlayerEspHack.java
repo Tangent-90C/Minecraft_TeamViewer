@@ -12,6 +12,7 @@ import net.wurstclient.events.CameraTransformViewBobbingListener;
 import net.wurstclient.events.RenderListener;
 import net.wurstclient.events.UpdateListener;
 import net.wurstclient.hack.Hack;
+import net.wurstclient.hack.HackList;
 import net.wurstclient.settings.CheckboxSetting;
 import net.wurstclient.settings.EspBoxSizeSetting;
 import net.wurstclient.settings.EspStyleSetting;
@@ -22,12 +23,13 @@ import net.wurstclient.util.EntityUtils;
 import net.wurstclient.util.FakePlayerEntity;
 import net.wurstclient.util.RenderUtils;
 import niubi.professor_chen.wurstPlugin.network.PlayerESPNetworkManager;
+import niubi.professor_chen.wurstPlugin.config.MultiPlayerESPConfig;
+import niubi.professor_chen.wurstPlugin.mixin.WurstClientMixin;
 
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-
 
 @SearchTags({"player esp", "PlayerTracers", "player tracers", "multi"})
 public final class MultiPlayerEspHack extends Hack implements UpdateListener,
@@ -70,16 +72,8 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
                     FilterNamedSetting.genericVision(false),
                     FilterArmorStandsSetting.genericVision(true));
 
-    private final CheckboxSetting networkSync = new CheckboxSetting(
-            "Network sync", "Shows players from other clients on the same server.\n"
-            + "Requires the PlayerESP server to be running.",
-            false);
-
-    private final TextFieldSetting serverIP = new TextFieldSetting("Server IP",
-            "The IP address of the PlayerESP server.", "localhost");
-
-    private final TextFieldSetting serverPort = new TextFieldSetting(
-            "Server Port", "The port of the PlayerESP server.", "8765");
+    // 使用独立的配置管理类
+    private final MultiPlayerESPConfig config = MultiPlayerESPConfig.getInstance();
 
     private final ArrayList<PlayerEntity> players = new ArrayList<>();
     private final ArrayList<LivingEntity> mobs = new ArrayList<>();
@@ -94,13 +88,17 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
         addSetting(style);
         addSetting(boxSize);
         addSetting(showMobs);
-        addSetting(networkSync);
-        addSetting(serverIP);
-        addSetting(serverPort);
+        addSetting(config.getNetworkSync());
+        addSetting(config.getServerIP());
+        addSetting(config.getServerPort());
         entityFilters.forEach(this::addSetting);
         mobFilters.forEach(this::addSetting);
     }
 
+    // 提供公共方法访问配置
+    public MultiPlayerESPConfig getConfig() {
+        return config;
+    }
 
     @Override
     protected void onEnable() {
@@ -108,22 +106,29 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
         EVENTS.add(CameraTransformViewBobbingListener.class, this);
         EVENTS.add(RenderListener.class, this);
 
-        if (networkSync.isChecked()) {
-            networkManager = new PlayerESPNetworkManager(serverIP.getValue(),
-                    serverPort.getValue());
+        if (config.isNetworkSyncEnabled()) {
+            networkManager = new PlayerESPNetworkManager(config.getServerIPValue(),
+                    config.getServerPortValue());
             networkManager.connect();
         }
     }
 
     @Override
     protected void onDisable() {
+        // 移除所有事件监听
         EVENTS.remove(UpdateListener.class, this);
         EVENTS.remove(CameraTransformViewBobbingListener.class, this);
         EVENTS.remove(RenderListener.class, this);
-
+        
+        // 清理网络管理器
         if (networkManager != null) {
+            networkManager.shutdown();
             networkManager = null;
         }
+        
+        // 清理玩家和生物列表
+        players.clear();
+        mobs.clear();
     }
 
     @Override
@@ -155,7 +160,7 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
             mobs.addAll(mobStream.collect(Collectors.toList()));
         }
 
-        if (networkSync.isChecked() && networkManager != null
+        if (config.isNetworkSyncEnabled() && networkManager != null
                 && networkManager.isConnected()) {
             long currentTime = System.currentTimeMillis();
             if (currentTime - lastDebugTime > DEBUG_INTERVAL) {
@@ -194,7 +199,7 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
             }
 
             // 添加来自网络的玩家框
-            if (networkSync.isChecked() && networkManager != null
+            if (config.isNetworkSyncEnabled() && networkManager != null
                     && networkManager.isConnected()) {
                 for (PlayerESPNetworkManager.RemotePlayer remotePlayer : networkManager
                         .getRemotePlayers().values()) {
@@ -248,7 +253,7 @@ public final class MultiPlayerEspHack extends Hack implements UpdateListener,
             }
 
             // 添加来自网络的玩家追踪线
-            if (networkSync.isChecked() && networkManager != null
+            if (config.isNetworkSyncEnabled() && networkManager != null
                     && networkManager.isConnected()) {
                 for (PlayerESPNetworkManager.RemotePlayer remotePlayer : networkManager
                         .getRemotePlayers().values()) {

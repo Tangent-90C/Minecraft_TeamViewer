@@ -5,6 +5,7 @@ import net.wurstclient.events.UpdateListener;
 import net.wurstclient.hack.Hack;
 import net.wurstclient.hack.HackList;
 import niubi.professor_chen.wurstPlugin.hook_wurst.MultiPlayerEspHack;
+import niubi.professor_chen.wurstPlugin.config.MultiPlayerESPConfig;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -24,14 +25,24 @@ public class WurstClientMixin {
 
     @Inject(method = "<init>", at = @At(value = "TAIL"), remap = false)
     private void onInitialize(CallbackInfo ci) {
-        HackList self = (HackList) (Object) this;
-        MultiPlayerEspHack multiPlayerEspHack = new MultiPlayerEspHack();
+        // 检查是否启用了Wurst Mixin
+        if (MultiPlayerESPConfig.getInstance().isWurstMixinEnabled()) {
+            HackList self = (HackList) (Object) this;
+            MultiPlayerEspHack multiPlayerEspHack = new MultiPlayerEspHack();
 
-        Hack hack = (Hack) multiPlayerEspHack;
-        hax.put(hack.getName(), hack);
+            Hack hack = (Hack) multiPlayerEspHack;
+            hax.put(hack.getName(), hack);
 
-        eventManager.remove(UpdateListener.class, self);
-        eventManager.add(UpdateListener.class, self);
+            eventManager.remove(UpdateListener.class, self);
+            eventManager.add(UpdateListener.class, self);
+        }
+    }
+    
+    // 添加一个方法用于在运行时动态移除hack
+    public void removeMultiPlayerEspHack() {
+        if (hax.containsKey("MultiPlayerESP")) {
+            hax.remove("MultiPlayerESP");
+        }
     }
 
 }

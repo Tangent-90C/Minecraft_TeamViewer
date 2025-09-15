@@ -30,7 +30,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
     private final MinecraftClient mc = MinecraftClient.getInstance();
 
     private WebSocket webSocket;
-    private final ScheduledExecutorService scheduler =
+    private ScheduledExecutorService scheduler =
             Executors.newScheduledThreadPool(1);
     private final String playerId;
     private boolean connected = false;
@@ -261,9 +261,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 JsonObject updateMsg = new JsonObject();
                 updateMsg.addProperty("type", "players_update");
                 updateMsg.addProperty("playerUUID", playerId);
-                updateMsg.addProperty("x", mc.player.getX());
-                updateMsg.addProperty("y", mc.player.getY());
-                updateMsg.addProperty("z", mc.player.getZ());
+                updateMsg.addProperty("x", Double.valueOf(mc.player.getX()));
+                updateMsg.addProperty("y", Double.valueOf(mc.player.getY()));
+                updateMsg.addProperty("z", Double.valueOf(mc.player.getZ()));
                 updateMsg.addProperty("dimension",
                         mc.world.getRegistryKey().getValue().toString());
                 
@@ -271,13 +271,13 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 updateMsg.addProperty("name", GSON.toJson(mc.player.getName()));
                 
                 // 添加玩家血量和最大血量
-                updateMsg.addProperty("health", mc.player.getHealth());
-                updateMsg.addProperty("maxHealth", mc.player.getMaxHealth());
+                updateMsg.addProperty("health", Float.valueOf(mc.player.getHealth()));
+                updateMsg.addProperty("maxHealth", Float.valueOf(mc.player.getMaxHealth()));
                 
                 // 添加玩家护甲值
-                updateMsg.addProperty("armor", mc.player.getArmor());
+                updateMsg.addProperty("armor", Integer.valueOf(mc.player.getArmor()));
                 
-                updateMsg.addProperty("timestamp", System.currentTimeMillis());
+                updateMsg.addProperty("timestamp", Long.valueOf(System.currentTimeMillis()));
 
                 sendMessage(updateMsg.toString());
 
@@ -298,7 +298,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                 entitiesMsg.addProperty("dimension",
                         mc.world.getRegistryKey().getValue().toString());
                 entitiesMsg.addProperty("timestamp",
-                        System.currentTimeMillis());
+                        Long.valueOf(System.currentTimeMillis()));
 
                 // 收集附近的生物实体
                 JsonObject entitiesData = new JsonObject();
@@ -309,16 +309,16 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
                         if (entity.distanceTo(mc.player) <= 128) {
                             String entityId = entity.getUuid().toString();
                             JsonObject entityInfo = new JsonObject();
-                            entityInfo.addProperty("x", entity.getX());
-                            entityInfo.addProperty("y", entity.getY());
-                            entityInfo.addProperty("z", entity.getZ());
+                            entityInfo.addProperty("x", Double.valueOf(entity.getX()));
+                            entityInfo.addProperty("y", Double.valueOf(entity.getY()));
+                            entityInfo.addProperty("z", Double.valueOf(entity.getZ()));
                             entityInfo.addProperty("dimension", mc.world
                                     .getRegistryKey().getValue().toString());
                             entityInfo.addProperty("entityType",
                                     Registries.ENTITY_TYPE.getId(entity.getType())
                                             .toString());
                             entityInfo.addProperty("timestamp",
-                                    System.currentTimeMillis());
+                                    Long.valueOf(System.currentTimeMillis()));
 
                             entitiesData.add(entityId, entityInfo);
                         }
@@ -355,6 +355,55 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 
     public boolean isConnected() {
         return connected;
+    }
+    
+    // Properly shutdown the network manager
+    public void shutdown() {
+        connected = false;
+        
+        // Clear maps first to stop any processing
+        remotePlayers.clear();
+        remoteEntities.clear();
+        
+        // Clear message buffer
+        if (messageBuffer != null) {
+            messageBuffer.setLength(0);
+            messageBuffer = null;
+        }
+        
+        // Properly shutdown the scheduler
+        if (scheduler != null) {
+            try {
+                // Attempt to shutdown the scheduler
+                scheduler.shutdownNow();
+                
+                // Wait for termination
+                if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                    // Force shutdown if not terminated
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                // Re-interrupt the thread
+                Thread.currentThread().interrupt();
+            } finally {
+                scheduler = null;
+            }
+        }
+        
+        // Properly close the WebSocket connection
+        if (webSocket != null) {
+            try {
+                // Send close message and wait for response
+                webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Client shutdown");
+                
+                // Wait a bit for close to complete
+                Thread.sleep(100);
+            } catch (Exception e) {
+                // Ignore exceptions during shutdown
+            } finally {
+                webSocket = null;
+            }
+        }
     }
 
     public class RemotePlayer {
