@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -43,6 +44,10 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	// 用于处理分段消息的缓冲区
 	private StringBuilder messageBuffer = new StringBuilder();
 	private boolean isProcessingMessage = false;
+	
+	// 二进制消息缓冲区
+	private ByteArrayOutputStream binaryBuffer = new ByteArrayOutputStream();
+	private byte pendingFlag = -1; // 待处理的压缩标志位
 	
 	// 压缩相关状态
 	private boolean compressionEnabled = false;
@@ -74,6 +79,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
 						isProcessingMessage = false;
+						binaryBuffer.reset();
+						pendingFlag = -1;
 						compressionEnabled = false;
 						handshakeCompleted = false;
 						LOGGER.info("Connected to PlayerESP server at " + config.getServerURL());
@@ -96,6 +103,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
+		binaryBuffer.reset();
+		pendingFlag = -1;
 		compressionEnabled = false;
 		handshakeCompleted = false;
 		reconnectExecutor.shutdown();
@@ -311,6 +320,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
+		binaryBuffer.reset();
+		pendingFlag = -1;
 		compressionEnabled = false;
 		handshakeCompleted = false;
 		LOGGER.info("Disconnected from PlayerESP server. Status: " + statusCode + ", Reason: " + reason);
@@ -325,6 +336,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
+		binaryBuffer.reset();
+		pendingFlag = -1;
 		compressionEnabled = false;
 		handshakeCompleted = false;
 		scheduleReconnect();
@@ -399,32 +412,80 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	/**
 	 * 处理二进制消息（压缩数据）
+	 * 支持分段传输和压缩标志位处理
 	 */
 	public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
 		try {
 			byte[] bytes = new byte[data.remaining()];
 			data.get(bytes);
 			
-			// 第一个字节是标志位：0x01表示压缩，0x00表示未压缩
-			if (bytes.length > 0) {
-				byte flag = bytes[0];
-				byte[] payload = new byte[bytes.length - 1];
-				System.arraycopy(bytes, 1, payload, 0, payload.length);
+			if (bytes.length == 0) {
+				return WebSocket.Listener.super.onBinary(webSocket, data, last);
+			}
+			
+			// 处理分段消息
+			if (!last) {
+				// 不是最后一段，缓存数据
+				binaryBuffer.write(bytes);
+				LOGGER.debug("Buffering binary segment, current buffer size: " + binaryBuffer.size());
+				return WebSocket.Listener.super.onBinary(webSocket, data, last);
+			}
+			
+			// 这是最后一段，处理完整消息
+			byte[] completeData;
+			if (binaryBuffer.size() > 0) {
+				// 有缓存的数据，合并处理
+				binaryBuffer.write(bytes);
+				completeData = binaryBuffer.toByteArray();
+				binaryBuffer.reset();
+				LOGGER.debug("Processing complete binary message from segments, total size: " + completeData.length);
+			} else {
+				// 单段消息
+				completeData = bytes;
+				LOGGER.debug("Processing single segment binary message, size: " + completeData.length);
+			}
+			
+			// 解析压缩标志位和数据
+			if (completeData.length > 0) {
+				byte flag = completeData[0];
+				byte[] payload = new byte[completeData.length - 1];
+				System.arraycopy(completeData, 1, payload, 0, payload.length);
 				
 				String message;
 				if (flag == 0x01) {
 					// 压缩数据
-					message = decompressGzip(payload);
-					LOGGER.debug("Received compressed message, size: " + payload.length + " -> " + message.length());
-				} else {
+					try {
+						message = decompressGzip(payload);
+						LOGGER.debug("Decompressed message: " + payload.length + " bytes -> " + message.length() + " chars");
+					} catch (IOException e) {
+						LOGGER.error("Failed to decompress GZIP data: " + e.getMessage() + ", raw data size: " + payload.length);
+						// 打印原始数据用于调试（根据用户偏好）
+						if (LOGGER.isDebugEnabled()) {
+							StringBuilder hexDump = new StringBuilder();
+							for (int i = 0; i < Math.min(payload.length, 100); i++) {
+								hexDump.append(String.format("%02X ", payload[i]));
+							}
+							LOGGER.debug("Raw payload (first 100 bytes): " + hexDump.toString());
+						}
+						return WebSocket.Listener.super.onBinary(webSocket, data, last);
+					}
+				} else if (flag == 0x00) {
 					// 未压缩数据
 					message = new String(payload, "UTF-8");
+					LOGGER.debug("Received uncompressed message, size: " + payload.length + " -> " + message.length());
+				} else {
+					// 无效标志位，尝试兼容处理
+					LOGGER.warn("Invalid compression flag: 0x" + String.format("%02X", flag) + ", treating as uncompressed data");
+					message = new String(completeData, "UTF-8");
 				}
 				
 				processCompleteMessage(message);
 			}
 		} catch (Exception e) {
-			LOGGER.error("Error processing binary message: " + e.getMessage());
+			LOGGER.error("Error processing binary message: " + e.getMessage(), e);
+			// 重置缓冲区状态
+			binaryBuffer.reset();
+			pendingFlag = -1;
 		}
 		
 		return WebSocket.Listener.super.onBinary(webSocket, data, last);
