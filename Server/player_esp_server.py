@@ -78,7 +78,7 @@ async def broadcast_positions():
             del entities[eid]
 
 
-@app.websocket("/")
+@app.websocket("/playeresp")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     player_uuid = None

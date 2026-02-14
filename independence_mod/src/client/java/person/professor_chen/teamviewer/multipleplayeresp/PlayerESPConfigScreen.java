@@ -16,7 +16,7 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget doneButton;
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
-    
+    private ButtonWidget disconnectButton;
     // 保存原始值，用于取消时恢复
     private final String originalIP;
     private final int originalPort;
@@ -104,7 +104,7 @@ public class PlayerESPConfigScreen extends Screen {
     
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context, mouseX, mouseY, delta);
+        // 1.21.8: 每帧只能 blur 一次，由 super.render() 内部统一调用 renderBackground，此处不再重复调用
         super.render(context, mouseX, mouseY, delta);
         
         // 绘制标签
