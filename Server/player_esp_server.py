@@ -145,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         players[pid] = {
                             "timestamp": current_time,
                             "submitPlayerId": submitPlayerId,
-                            "data": validated_data.dict()
+                            "data": validated_data.model_dump()
                         }
                     except Exception as e:
                         print(f"Error validating player data for {pid}: {e}")
@@ -171,7 +171,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         entities[entity_id] = {
                             "timestamp": current_time,
                             "submitPlayerId": submitPlayerId,
-                            "data": validated_data.dict()
+                            "data": validated_data.model_dump()
                         }
                     except Exception as e:
                         print(f"Error validating entity data for {entity_id}: {e}")
