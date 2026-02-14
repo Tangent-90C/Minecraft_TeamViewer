@@ -53,6 +53,8 @@ class EntityData(BaseModel):
 # 存储玩家数据和连接
 players: Dict[str, dict] = {}
 connections: Dict[str, WebSocket] = {}
+# 后台页面连接
+admin_connections: Dict[str, WebSocket] = {}
 
 # 存储每个连接的配置（是否启用压缩）
 connection_config: Dict[str, dict] = {}  # {player_uuid: {"enable_compression": bool}}
@@ -137,6 +139,55 @@ async def broadcast_positions():
         for eid in entities_to_remove:
             del entities[eid]
 
+    await broadcast_snapshot()
+
+
+async def broadcast_snapshot():
+    current_time = time.time()
+    snapshot_data = {
+        "server_time": current_time,
+        "players": players,
+        "entities": entities,
+        "connections": list(connections.keys()),
+        "connections_count": len(connections)
+    }
+
+    try:
+        message = json.dumps(snapshot_data, separators=(",", ":"))
+    except Exception as e:
+        print(f"Error serializing snapshot data: {e}")
+        return
+
+    disconnected = []
+    for admin_id, ws in admin_connections.items():
+        try:
+            await ws.send_text(message)
+        except Exception as e:
+            print(f"Error sending snapshot to admin {admin_id}: {e}")
+            disconnected.append(admin_id)
+
+    for admin_id in disconnected:
+        if admin_id in admin_connections:
+            del admin_connections[admin_id]
+
+
+@app.websocket("/adminws")
+async def admin_ws(websocket: WebSocket):
+    await websocket.accept()
+    admin_id = str(id(websocket))
+    admin_connections[admin_id] = websocket
+    try:
+        await broadcast_snapshot()
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Admin websocket error: {e}")
+    finally:
+        if admin_id in admin_connections:
+            del admin_connections[admin_id]
+
 
 @app.websocket("/playeresp")
 async def websocket_endpoint(websocket: WebSocket):
@@ -170,6 +221,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "ready": True,
                         "compressionEnabled": enable_compression
                     }))
+                    await broadcast_snapshot()
                 continue
 
             if data.get("type") == "players_update":

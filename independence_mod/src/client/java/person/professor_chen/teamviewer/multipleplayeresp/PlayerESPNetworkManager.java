@@ -13,9 +13,12 @@ import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPInputStream;
 
 public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
@@ -39,6 +43,10 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	// 用于处理分段消息的缓冲区
 	private StringBuilder messageBuffer = new StringBuilder();
 	private boolean isProcessingMessage = false;
+	
+	// 压缩相关状态
+	private boolean compressionEnabled = false;
+	private boolean handshakeCompleted = false;
 	
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions) {
 		this.playerPositions = playerPositions;
@@ -66,7 +74,11 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
 						isProcessingMessage = false;
+						compressionEnabled = false;
+						handshakeCompleted = false;
 						LOGGER.info("Connected to PlayerESP server at " + config.getServerURL());
+						// 发送握手消息
+						sendHandshake();
 					}
 				});
 	}
@@ -84,6 +96,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
+		compressionEnabled = false;
+		handshakeCompleted = false;
 		reconnectExecutor.shutdown();
 	}
 	
@@ -203,6 +217,12 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				return;
 			}
 			
+			// 处理握手确认消息
+			if (json.has("type") && "handshake_ack".equals(json.get("type").getAsString())) {
+				handleHandshakeAck(json);
+				return;
+			}
+			
 			// 解析服务器发送的位置信息
 			if (json.has("type") && "positions".equals(json.get("type").getAsString())) {
 				// 处理players对象（注意是对象而不是数组）
@@ -285,6 +305,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
+		compressionEnabled = false;
+		handshakeCompleted = false;
 		LOGGER.info("Disconnected from PlayerESP server. Status: " + statusCode + ", Reason: " + reason);
 		scheduleReconnect();
 		return WebSocket.Listener.super.onClose(webSocket, statusCode, reason);
@@ -297,6 +319,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
+		compressionEnabled = false;
+		handshakeCompleted = false;
 		scheduleReconnect();
 	}
 	
@@ -314,5 +338,89 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	public boolean isConnected() {
 		return isConnected;
+	}
+	
+	/**
+	 * 发送握手消息，声明客户端是否支持压缩
+	 */
+	private void sendHandshake() {
+		if (webSocket == null || !isConnected) return;
+		
+		try {
+			JsonObject handshake = new JsonObject();
+			handshake.addProperty("type", "handshake");
+			// 使用本地玩家UUID作为submitPlayerId
+			MinecraftClient client = MinecraftClient.getInstance();
+			if (client.player != null) {
+				handshake.addProperty("submitPlayerId", client.player.getUuid().toString());
+			}
+			handshake.addProperty("enableCompression", config != null && config.isEnableCompression());
+			
+			webSocket.sendText(gson.toJson(handshake), true);
+			LOGGER.info("Sent handshake message, compression: " + (config != null && config.isEnableCompression()));
+		} catch (Exception e) {
+			LOGGER.error("Failed to send handshake message: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * 处理握手确认消息
+	 */
+	private void handleHandshakeAck(JsonObject json) {
+		if (json.has("ready") && json.get("ready").getAsBoolean()) {
+			compressionEnabled = json.has("compressionEnabled") && json.get("compressionEnabled").getAsBoolean();
+			handshakeCompleted = true;
+			LOGGER.info("Handshake completed. Compression enabled: " + compressionEnabled);
+		}
+	}
+	
+	/**
+	 * 解压GZIP数据
+	 */
+	private String decompressGzip(byte[] compressedData) throws IOException {
+		ByteArrayInputStream bis = new ByteArrayInputStream(compressedData);
+		GZIPInputStream gis = new GZIPInputStream(bis);
+		StringBuilder sb = new StringBuilder();
+		byte[] buffer = new byte[1024];
+		int len;
+		while ((len = gis.read(buffer)) > 0) {
+			sb.append(new String(buffer, 0, len, "UTF-8"));
+		}
+		gis.close();
+		bis.close();
+		return sb.toString();
+	}
+	
+	/**
+	 * 处理二进制消息（压缩数据）
+	 */
+	public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
+		try {
+			byte[] bytes = new byte[data.remaining()];
+			data.get(bytes);
+			
+			// 第一个字节是标志位：0x01表示压缩，0x00表示未压缩
+			if (bytes.length > 0) {
+				byte flag = bytes[0];
+				byte[] payload = new byte[bytes.length - 1];
+				System.arraycopy(bytes, 1, payload, 0, payload.length);
+				
+				String message;
+				if (flag == 0x01) {
+					// 压缩数据
+					message = decompressGzip(payload);
+					LOGGER.debug("Received compressed message, size: " + payload.length + " -> " + message.length());
+				} else {
+					// 未压缩数据
+					message = new String(payload, "UTF-8");
+				}
+				
+				processCompleteMessage(message);
+			}
+		} catch (Exception e) {
+			LOGGER.error("Error processing binary message: " + e.getMessage());
+		}
+		
+		return WebSocket.Listener.super.onBinary(webSocket, data, last);
 	}
 }

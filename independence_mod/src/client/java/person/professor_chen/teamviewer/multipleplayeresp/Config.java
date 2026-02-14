@@ -18,6 +18,7 @@ public class Config {
     private boolean showBoxes = true;
     private int boxColor = 0x80FF0000; // 50%不透明红色
     private int lineColor = 0xFFFF0000; // 不透明红色
+    private boolean enableCompression = true; // 是否启用WebSocket压缩
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -89,5 +90,13 @@ public class Config {
     
     public void setLineColor(int lineColor) {
         this.lineColor = lineColor;
+    }
+    
+    public boolean isEnableCompression() {
+        return enableCompression;
+    }
+    
+    public void setEnableCompression(boolean enableCompression) {
+        this.enableCompression = enableCompression;
     }
 }
