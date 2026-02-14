@@ -5,8 +5,11 @@
   
   "screen.multipleplayeresp.config.title": "MultiPlayer ESP Configuration",
   "screen.multipleplayeresp.config.ip": "Server IP Address",
+  "screen.multipleplayeresp.config.ip_hint": "e.g. 127.0.0.1",
   "screen.multipleplayeresp.config.port": "Server Port",
+  "screen.multipleplayeresp.config.port_hint": "e.g. 8080",
   "screen.multipleplayeresp.config.render_distance": "Render Distance",
+  "screen.multipleplayeresp.config.render_distance_hint": "e.g. 64",
   "screen.multipleplayeresp.config.color_settings": "Color Settings",
   "screen.multipleplayeresp.config.done": "Done",
   "screen.multipleplayeresp.config.cancel": "Cancel",

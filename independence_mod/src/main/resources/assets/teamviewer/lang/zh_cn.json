@@ -5,8 +5,11 @@
   
   "screen.multipleplayeresp.config.title": "多人玩家ESP配置",
   "screen.multipleplayeresp.config.ip": "服务器IP地址",
+  "screen.multipleplayeresp.config.ip_hint": "例如: 127.0.0.1",
   "screen.multipleplayeresp.config.port": "服务器端口",
+  "screen.multipleplayeresp.config.port_hint": "例如: 8080",
   "screen.multipleplayeresp.config.render_distance": "渲染距离",
+  "screen.multipleplayeresp.config.render_distance_hint": "例如: 64",
   "screen.multipleplayeresp.config.color_settings": "颜色设置",
   "screen.multipleplayeresp.config.done": "完成",
   "screen.multipleplayeresp.config.cancel": "取消",

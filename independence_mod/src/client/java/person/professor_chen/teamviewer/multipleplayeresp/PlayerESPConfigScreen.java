@@ -3,6 +3,7 @@ package person.professor_chen.teamviewer.multipleplayeresp;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
@@ -44,6 +45,7 @@ public class PlayerESPConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.ip")
         );
         this.ipField.setText(PlayerESPNetworkManager.getServerIP());
+        this.ipField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.ip_hint"));
         this.addDrawableChild(this.ipField);
         
         // 端口输入框
@@ -57,6 +59,7 @@ public class PlayerESPConfigScreen extends Screen {
         );
         this.portField.setText(String.valueOf(PlayerESPNetworkManager.getServerPort()));
         this.portField.setMaxLength(5); // 端口号最大5位数字
+        this.portField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.port_hint"));
         this.addDrawableChild(this.portField);
         
         // 渲染距离输入框
@@ -70,6 +73,7 @@ public class PlayerESPConfigScreen extends Screen {
         );
         this.renderDistanceField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getRenderDistance()));
         this.renderDistanceField.setMaxLength(3); // 渲染距离最大3位数字
+        this.renderDistanceField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.render_distance_hint"));
         this.addDrawableChild(this.renderDistanceField);
         
         // 颜色配置按钮
@@ -98,6 +102,24 @@ public class PlayerESPConfigScreen extends Screen {
         ).dimensions(this.width / 2 - 100, this.height / 4 + 200, 200, 20).build();
         this.addDrawableChild(this.connectButton);
         
+        // 输入框上方的标签（最后添加以确保渲染在最上层）
+        int left = this.width / 2 - 100;
+        this.addDrawableChild(
+            new TextWidget(left, this.height / 4 + 8, 200, 12, Text.translatable("screen.multipleplayeresp.config.ip"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        this.addDrawableChild(
+            new TextWidget(left, this.height / 4 + 48, 200, 12, Text.translatable("screen.multipleplayeresp.config.port"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        this.addDrawableChild(
+            new TextWidget(left, this.height / 4 + 88, 200, 12, Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        
         // 更新连接按钮文本
         updateConnectButton();
     }
@@ -116,29 +138,6 @@ public class PlayerESPConfigScreen extends Screen {
             0xFFFFFF
         );
         
-        context.drawTextWithShadow(
-            this.textRenderer,
-            Text.translatable("screen.multipleplayeresp.config.ip"),
-            this.width / 2 - 100,
-            this.height / 4 + 10,
-            0xA0A0A0
-        );
-        
-        context.drawTextWithShadow(
-            this.textRenderer,
-            Text.translatable("screen.multipleplayeresp.config.port"),
-            this.width / 2 - 100,
-            this.height / 4 + 50,
-            0xA0A0A0
-        );
-        
-        context.drawTextWithShadow(
-            this.textRenderer,
-            Text.translatable("screen.multipleplayeresp.config.render_distance"),
-            this.width / 2 - 100,
-            this.height / 4 + 90,
-            0xA0A0A0
-        );
     }
     
     @Override
