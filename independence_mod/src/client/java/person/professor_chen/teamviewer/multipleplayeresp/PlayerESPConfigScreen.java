@@ -11,23 +11,20 @@ import person.professor_chen.teamviewer.multipleplayeresp.StandaloneMultiPlayerE
 
 public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
-    private TextFieldWidget ipField;
-    private TextFieldWidget portField;
+    private TextFieldWidget urlField;
     private TextFieldWidget renderDistanceField;
     private ButtonWidget doneButton;
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget disconnectButton;
     // 保存原始值，用于取消时恢复
-    private final String originalIP;
-    private final int originalPort;
+    private final String originalURL;
     private final int originalRenderDistance;
     
     public PlayerESPConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.config.title"));
         this.parent = parent;
-        this.originalIP = PlayerESPNetworkManager.getServerIP();
-        this.originalPort = PlayerESPNetworkManager.getServerPort();
+        this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
     }
     
@@ -35,38 +32,24 @@ public class PlayerESPConfigScreen extends Screen {
     protected void init() {
         super.init();
         
-        // IP地址输入框
-        this.ipField = new TextFieldWidget(
+        // 服务器URL输入框
+        this.urlField = new TextFieldWidget(
             this.textRenderer,
             this.width / 2 - 100,
             this.height / 4 + 20,
             200,
             20,
-            Text.translatable("screen.multipleplayeresp.config.ip")
+            Text.translatable("screen.multipleplayeresp.config.url")
         );
-        this.ipField.setText(PlayerESPNetworkManager.getServerIP());
-        this.ipField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.ip_hint"));
-        this.addDrawableChild(this.ipField);
-        
-        // 端口输入框
-        this.portField = new TextFieldWidget(
-            this.textRenderer,
-            this.width / 2 - 100,
-            this.height / 4 + 60,
-            200,
-            20,
-            Text.translatable("screen.multipleplayeresp.config.port")
-        );
-        this.portField.setText(String.valueOf(PlayerESPNetworkManager.getServerPort()));
-        this.portField.setMaxLength(5); // 端口号最大5位数字
-        this.portField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.port_hint"));
-        this.addDrawableChild(this.portField);
+        this.urlField.setText(PlayerESPNetworkManager.getServerURL());
+        this.urlField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.url_hint"));
+        this.addDrawableChild(this.urlField);
         
         // 渲染距离输入框
         this.renderDistanceField = new TextFieldWidget(
             this.textRenderer,
             this.width / 2 - 100,
-            this.height / 4 + 100,
+            this.height / 4 + 60,
             200,
             20,
             Text.translatable("screen.multipleplayeresp.config.render_distance")
@@ -80,42 +63,37 @@ public class PlayerESPConfigScreen extends Screen {
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.color_settings"),
             button -> openColorConfig()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 140, 200, 20).build());
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 100, 200, 20).build());
         
         // 完成按钮
         this.doneButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.done"),
             button -> saveAndClose()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 170, 98, 20).build();
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 130, 98, 20).build();
         this.addDrawableChild(this.doneButton);
         
         // 取消按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.cancel"),
             button -> close()
-        ).dimensions(this.width / 2 + 2, this.height / 4 + 170, 98, 20).build());
+        ).dimensions(this.width / 2 + 2, this.height / 4 + 130, 98, 20).build());
         
         // 连接按钮
         this.connectButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.connect"),
             button -> connectToServer()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 200, 200, 20).build();
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 160, 200, 20).build();
         this.addDrawableChild(this.connectButton);
         
         // 输入框上方的标签（最后添加以确保渲染在最上层）
         int left = this.width / 2 - 100;
         this.addDrawableChild(
-            new TextWidget(left, this.height / 4 + 8, 200, 12, Text.translatable("screen.multipleplayeresp.config.ip"), this.textRenderer)
+            new TextWidget(left, this.height / 4 + 8, 200, 12, Text.translatable("screen.multipleplayeresp.config.url"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
         this.addDrawableChild(
-            new TextWidget(left, this.height / 4 + 48, 200, 12, Text.translatable("screen.multipleplayeresp.config.port"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
-        this.addDrawableChild(
-            new TextWidget(left, this.height / 4 + 88, 200, 12, Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
+            new TextWidget(left, this.height / 4 + 48, 200, 12, Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
@@ -143,8 +121,7 @@ public class PlayerESPConfigScreen extends Screen {
     @Override
     public void close() {
         // 恢复原始值
-        PlayerESPNetworkManager.setServerIP(this.originalIP);
-        PlayerESPNetworkManager.setServerPort(this.originalPort);
+        PlayerESPNetworkManager.setServerURL(this.originalURL);
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
         
         MinecraftClient.getInstance().setScreen(this.parent);
@@ -153,17 +130,9 @@ public class PlayerESPConfigScreen extends Screen {
     private void saveAndClose() {
         // 保存设置
         try {
-            String ip = this.ipField.getText().trim();
-            if (!ip.isEmpty()) {
-                PlayerESPNetworkManager.setServerIP(ip);
-            }
-            
-            String portStr = this.portField.getText().trim();
-            if (!portStr.isEmpty()) {
-                int port = Integer.parseInt(portStr);
-                if (port > 0 && port <= 65535) {
-                    PlayerESPNetworkManager.setServerPort(port);
-                }
+            String url = this.urlField.getText().trim();
+            if (!url.isEmpty()) {
+                PlayerESPNetworkManager.setServerURL(url);
             }
             
             String renderDistanceStr = this.renderDistanceField.getText().trim();

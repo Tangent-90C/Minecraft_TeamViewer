@@ -52,13 +52,13 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		if (config == null) return;
 		
 		HttpClient client = HttpClient.newHttpClient();
-		String uri = "ws://" + config.getServerIP() + ":" + config.getServerPort() + "/playeresp";
+		String uri = config.getServerURL();
 		
 		client.newWebSocketBuilder()
 				.buildAsync(URI.create(uri), this)
 				.whenComplete((webSocket, throwable) -> {
 					if (throwable != null) {
-						LOGGER.error("Failed to connect to PlayerESP server at " + config.getServerIP() + ":" + config.getServerPort() + ": " + throwable.getMessage());
+						LOGGER.error("Failed to connect to PlayerESP server at " + config.getServerURL() + ": " + throwable.getMessage());
 						scheduleReconnect();
 					} else {
 						this.webSocket = webSocket;
@@ -66,7 +66,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
 						isProcessingMessage = false;
-						LOGGER.info("Connected to PlayerESP server at " + config.getServerIP() + ":" + config.getServerPort());
+						LOGGER.info("Connected to PlayerESP server at " + config.getServerURL());
 					}
 				});
 	}
@@ -301,24 +301,13 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	}
 	
 	// Getter and Setter methods
-	public static String getServerIP() {
-		return config != null ? config.getServerIP() : "localhost";
+	public static String getServerURL() {
+		return config != null ? config.getServerURL() : "ws://localhost:8080/playeresp";
 	}
 	
-	public static void setServerIP(String serverIP) {
+	public static void setServerURL(String serverURL) {
 		if (config != null) {
-			config.setServerIP(serverIP);
-			config.save();
-		}
-	}
-	
-	public static int getServerPort() {
-		return config != null ? config.getServerPort() : 8080;
-	}
-	
-	public static void setServerPort(int serverPort) {
-		if (config != null) {
-			config.setServerPort(serverPort);
+			config.setServerURL(serverURL);
 			config.save();
 		}
 	}

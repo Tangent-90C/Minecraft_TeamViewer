@@ -12,8 +12,7 @@ public class Config {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
     
-    private String serverIP = "localhost";
-    private int serverPort = 8080;
+    private String serverURL = "ws://localhost:8080/playeresp";
     private int renderDistance = 64;
     private boolean showLines = true;
     private boolean showBoxes = true;
@@ -44,20 +43,12 @@ public class Config {
     }
     
     // Getters and setters
-    public String getServerIP() {
-        return serverIP;
+    public String getServerURL() {
+        return serverURL;
     }
     
-    public void setServerIP(String serverIP) {
-        this.serverIP = serverIP;
-    }
-    
-    public int getServerPort() {
-        return serverPort;
-    }
-    
-    public void setServerPort(int serverPort) {
-        this.serverPort = serverPort;
+    public void setServerURL(String serverURL) {
+        this.serverURL = serverURL;
     }
     
     public int getRenderDistance() {
