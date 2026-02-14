@@ -306,7 +306,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 						}
 					}
 					
-					LOGGER.info("PlayerESP Network - Processed: " + playerCount + " players, " + entityCount + " entities");
+					LOGGER.debug("PlayerESP Network - Processed: " + playerCount + " players, " + entityCount + " entities");
 				}
 			}
 		} catch (Exception e) {
