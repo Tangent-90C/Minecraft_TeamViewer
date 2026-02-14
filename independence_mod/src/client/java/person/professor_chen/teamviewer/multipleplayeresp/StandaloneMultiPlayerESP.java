@@ -9,12 +9,14 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.entity.Entity;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,10 +49,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	// 用于控制位置更新频率
 	private static int tickCounter = 0;
 	private static final int UPDATE_INTERVAL = 20; // 每20tick更新一次位置（约每秒1次）
-	
-	// 用于控制注册尝试
-	private static int registrationAttemptCounter = 0;
-	private static final int REGISTRATION_INTERVAL = 100; // 每100tick尝试注册一次
 	
 	@Override
 	public void onInitializeClient() {
@@ -126,7 +124,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		
 		// 重置计数器
 		tickCounter = 0;
-		registrationAttemptCounter = 0;
 	}
 	
 	private void openConfigScreen() {
@@ -152,27 +149,58 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			return;
 		}
 		
-		// 增加计数器
 		tickCounter++;
-		registrationAttemptCounter++;
 		
-		// 尝试注册玩家
-		if (!networkManager.isRegistered() && registrationAttemptCounter >= REGISTRATION_INTERVAL) {
-			registrationAttemptCounter = 0;
-			networkManager.sendRegistration(client.player.getUuid());
-		}
-		
-		// 发送位置更新
-		if (networkManager.isRegistered() && tickCounter >= UPDATE_INTERVAL) {
+		// 连接成功后按间隔发送玩家更新与实体更新（submitPlayerId 为本地玩家 UUID）
+		if (networkManager.isConnected() && tickCounter >= UPDATE_INTERVAL) {
 			tickCounter = 0;
-			
-			// 获取玩家位置
-			Vec3d pos = client.player.getPos();
-			UUID playerId = client.player.getUuid();
-			String dimension = client.player.getWorld().getRegistryKey().getValue().toString();
-			
-			// 发送位置更新到服务器
-			networkManager.sendPositionUpdate(playerId, pos, dimension);
+			UUID submitPlayerId = client.player.getUuid();
+
+			// 批量收集所有玩家（含本地）并上传，格式：playerId -> { x, y, z, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
+			Map<UUID, Map<String, Object>> players = new HashMap<>();
+			if (client.world != null) {
+				for (AbstractClientPlayerEntity p : client.world.getPlayers()) {
+					UUID pid = p.getUuid();
+					Vec3d pos = p.getPos();
+					Map<String, Object> data = new HashMap<>();
+					data.put("x", pos.x);
+					data.put("y", pos.y);
+					data.put("z", pos.z);
+					data.put("dimension", p.getWorld().getRegistryKey().getValue().toString());
+					data.put("playerName", p.getName().getString());
+					data.put("playerUUID", pid.toString());
+					data.put("health", p.getHealth());
+					data.put("maxHealth", p.getMaxHealth());
+					data.put("armor", 0);
+					data.put("width", p.getWidth());
+					data.put("height", p.getHeight());
+					players.put(pid, data);
+				}
+			}
+			networkManager.sendPlayersUpdate(submitPlayerId, players);
+
+			// 收集并上报当前世界中的实体（带 submitPlayerId）
+			if (client.world != null) {
+				Map<String, Map<String, Object>> entities = new HashMap<>();
+				for (Entity entity : client.world.getEntities()) {
+					if (entity == client.player) continue;
+					String entityId = entity.getUuid().toString();
+					Vec3d ePos = entity.getPos();
+					String eDim = entity.getWorld().getRegistryKey().getValue().toString();
+					String entityType = entity.getType().getRegistryEntry().registryKey().getValue().toString();
+					Map<String, Object> data = new HashMap<>();
+					data.put("x", ePos.x);
+					data.put("y", ePos.y);
+					data.put("z", ePos.z);
+					data.put("dimension", eDim);
+					data.put("entityType", entityType);
+					data.put("entityName", entity.hasCustomName() ? entity.getDisplayName().getString() : null);
+					data.put("width", entity.getWidth());
+					data.put("height", entity.getHeight());
+					entities.put(entityId, data);
+				}
+				networkManager.sendEntitiesUpdate(submitPlayerId, entities);
+			}
 		}
 	}
 	

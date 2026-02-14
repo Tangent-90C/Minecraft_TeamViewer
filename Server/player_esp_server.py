@@ -1,10 +1,47 @@
 import json
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, validator
+
+# 玩家数据模型
+class PlayerData(BaseModel):
+    """玩家业务数据模型"""
+    x: float = Field(..., description="X坐标")
+    y: float = Field(..., description="Y坐标")
+    z: float = Field(..., description="Z坐标")
+    dimension: str = Field(..., description="维度ID")
+    playerName: Optional[str] = Field(None, description="玩家名称")
+    playerUUID: Optional[str] = Field(None, description="玩家UUID")
+    health: float = Field(default=0, ge=0, description="当前生命值")
+    maxHealth: float = Field(default=20, ge=0, description="最大生命值")
+    armor: float = Field(default=0, ge=0, description="护甲值")
+    width: float = Field(default=0.6, gt=0, description="碰撞箱宽度")
+    height: float = Field(default=1.8, gt=0, description="碰撞箱高度")
+
+    class Config:
+        # 允许额外字段，但会被忽略
+        extra = "ignore"
+
+
+class EntityData(BaseModel):
+    """实体数据模型"""
+    x: float = Field(..., description="X坐标")
+    y: float = Field(..., description="Y坐标")
+    z: float = Field(..., description="Z坐标")
+    dimension: str = Field(..., description="维度ID")
+    entityType: Optional[str] = Field(None, description="实体类型")
+    entityName: Optional[str] = Field(None, description="实体名称")
+    width: float = Field(default=0.6, gt=0, description="碰撞箱宽度")
+    height: float = Field(default=1.8, gt=0, description="碰撞箱高度")
+
+    class Config:
+        # 允许额外字段，但会被忽略
+        extra = "ignore"
+
 
 # 存储玩家数据和连接
 players: Dict[str, dict] = {}
@@ -81,7 +118,6 @@ async def broadcast_positions():
 @app.websocket("/playeresp")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    player_uuid = None
     try:
         while True:
             message = await websocket.receive_text()
@@ -90,8 +126,8 @@ async def websocket_endpoint(websocket: WebSocket):
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON message: {e}")
                 continue
-
-            print(data)
+            
+            submitPlayerId = data.get("submitPlayerId")
 
             if data.get("type") == "register":
                 player_uuid = data.get("playerUUID")
@@ -99,35 +135,45 @@ async def websocket_endpoint(websocket: WebSocket):
                     connections[player_uuid] = websocket
                     print(f"Player {player_uuid} registered")
 
-            elif data.get("type") == "players_update" and player_uuid:
-                players[player_uuid] = {
-                    "x": data["x"],
-                    "y": data["y"],
-                    "z": data["z"],
-                    "dimension": data["dimension"],
-                    "timestamp": time.time(),
-                    "playerName" : data.get("name"),
-                    "playerUUID": player_uuid,
-                    "health": data.get("health", 0),
-                    "maxHealth": data.get("maxHealth", 0),
-                    "armor": data.get("armor", 0),
-                    "width": data.get("width", 0.6),     # 默认玩家宽度
-                    "height": data.get("height", 1.8)    # 默认玩家高度
-                }
+            elif data.get("type") == "players_update":
+                # 支持批量更新多个玩家（推荐）
+                current_time = time.time()
+                for pid, player_data in data["players"].items():
+                    try:
+                        # 使用Pydantic模型验证和规范化数据
+                        validated_data = PlayerData(**player_data)
+                        players[pid] = {
+                            "timestamp": current_time,
+                            "submitPlayerId": submitPlayerId,
+                            "data": validated_data.dict()
+                        }
+                    except Exception as e:
+                        print(f"Error validating player data for {pid}: {e}")
+                        continue
                 await broadcast_positions()
 
-            elif data.get("type") == "entities_update" and player_uuid:
+            elif data.get("type") == "entities_update":
                 player_entities = data.get("entities", {})
-                entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == player_uuid]
+                entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == submitPlayerId]
                 for eid in entities_to_remove:
                     del entities[eid]
 
+                current_time = time.time()
                 for entity_id, entity_data in player_entities.items():
-                    entity_data["submitPlayerId"] = player_uuid
-                    entity_data["timestamp"] = time.time()
-                    entities[entity_id] = entity_data
+                    try:
+                        # 使用Pydantic模型验证和规范化数据
+                        validated_data = EntityData(**entity_data)
+                        entities[entity_id] = {
+                            "timestamp": current_time,
+                            "submitPlayerId": submitPlayerId,
+                            "data": validated_data.dict()
+                        }
+                    except Exception as e:
+                        print(f"Error validating entity data for {entity_id}: {e}")
+                        continue
 
                 await broadcast_positions()
+                
 
     except WebSocketDisconnect:
         pass

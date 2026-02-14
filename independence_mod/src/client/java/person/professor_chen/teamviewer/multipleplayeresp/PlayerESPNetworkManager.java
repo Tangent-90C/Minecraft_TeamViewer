@@ -1,6 +1,12 @@
 package person.professor_chen.teamviewer.multipleplayeresp;
 
-import com.google.gson.*;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.util.math.Vec3d;
@@ -28,7 +34,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private WebSocket webSocket;
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
 	private boolean isConnected = false;
-	private boolean isRegistered = false;
 	private final Gson gson = new Gson();
 	
 	// 用于处理分段消息的缓冲区
@@ -58,7 +63,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 					} else {
 						this.webSocket = webSocket;
 						isConnected = true;
-						isRegistered = false; // 重置注册状态
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
 						isProcessingMessage = false;
@@ -77,7 +81,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			webSocket = null;
 		}
 		isConnected = false;
-		isRegistered = false;
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
@@ -94,47 +97,75 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		}
 	}
 	
-	// 发送注册消息
-	public void sendRegistration(UUID playerId) {
-		if (webSocket != null && isConnected && !isRegistered) {
-			try {
-				String registrationMessage = String.format(
-					"{\"type\":\"register\",\"id\":\"%s\"}",
-					playerId.toString()
-				);
-				webSocket.sendText(registrationMessage, true);
-				isRegistered = true;
-				LOGGER.info("Registered player " + playerId + " with server");
-			} catch (Exception e) {
-				LOGGER.error("Failed to send registration to PlayerESP server: " + e.getMessage());
+	/**
+	 * 批量发送玩家更新到云端（type: players_update）
+	 * 云端期望：submitPlayerId（提交者UUID），players 为 playerId -> { x, y, z, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
+	 */
+	public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
+		if (webSocket == null || !isConnected) return;
+		if (players == null || players.isEmpty()) return;
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "players_update");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonObject playersJson = new JsonObject();
+			for (Map.Entry<UUID, Map<String, Object>> e : players.entrySet()) {
+				playersJson.add(e.getKey().toString(), mapToJsonObject(e.getValue()));
 			}
+			obj.add("players", playersJson);
+			webSocket.sendText(gson.toJson(obj), true);
+		} catch (Exception e) {
+			LOGGER.error("Failed to send players_update to PlayerESP server: " + e.getMessage());
 		}
 	}
-	
-	// 发送位置更新消息
-	public void sendPositionUpdate(UUID playerId, Vec3d position, String dimension) {
-		if (webSocket != null && isConnected && isRegistered) {
-			try {
-				String updateMessage = String.format(
-					"{\"type\":\"update\",\"id\":\"%s\",\"x\":%f,\"y\":%f,\"z\":%f,\"dimension\":\"%s\"}",
-					playerId.toString(),
-					position.x,
-					position.y,
-					position.z,
-					dimension
-				);
-				webSocket.sendText(updateMessage, true);
-			} catch (Exception e) {
-				LOGGER.error("Failed to send position update to PlayerESP server: " + e.getMessage());
+
+	/**
+	 * 发送实体更新到云端（type: entities_update）
+	 * 云端期望：submitPlayerId（提交者UUID），entities 为 entity_id -> { x, y, z, dimension, entityType, entityName, width, height, ... }
+	 */
+	public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
+		if (webSocket == null || !isConnected) return;
+		if (entities == null || entities.isEmpty()) return;
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "entities_update");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonObject entitiesJson = new JsonObject();
+			for (Map.Entry<String, Map<String, Object>> e : entities.entrySet()) {
+				entitiesJson.add(e.getKey(), mapToJsonObject(e.getValue()));
 			}
+			obj.add("entities", entitiesJson);
+			webSocket.sendText(gson.toJson(obj), true);
+		} catch (Exception e) {
+			LOGGER.error("Failed to send entities_update to PlayerESP server: " + e.getMessage());
 		}
+	}
+
+	private static JsonElement mapToJsonElement(Object value) {
+		if (value == null) return JsonNull.INSTANCE;
+		if (value instanceof Number) return new JsonPrimitive((Number) value);
+		if (value instanceof Boolean) return new JsonPrimitive((Boolean) value);
+		if (value instanceof String) return new JsonPrimitive((String) value);
+		if (value instanceof Map) {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> m = (Map<String, Object>) value;
+			return mapToJsonObject(m);
+		}
+		return new JsonPrimitive(value.toString());
+	}
+
+	private static JsonObject mapToJsonObject(Map<String, Object> map) {
+		JsonObject o = new JsonObject();
+		for (Map.Entry<String, Object> e : map.entrySet()) {
+			o.add(e.getKey(), mapToJsonElement(e.getValue()));
+		}
+		return o;
 	}
 	
 	@Override
 	public void onOpen(WebSocket webSocket) {
 		WebSocket.Listener.super.onOpen(webSocket);
 		isConnected = true;
-		isRegistered = false;
 		LOGGER.info("WebSocket connection opened to PlayerESP server");
 	}
 	
@@ -169,13 +200,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				json = JsonParser.parseString(message).getAsJsonObject();
 			} catch (JsonSyntaxException e) {
 				LOGGER.error("Failed to parse JSON message: " + e.getMessage() + ", message: " + message);
-				return;
-			}
-			
-			// 检查是否是注册确认消息
-			if (json.has("type") && "registration_confirmed".equals(json.get("type").getAsString())) {
-				isRegistered = true;
-				LOGGER.info("Registration confirmed by server");
 				return;
 			}
 			
@@ -258,7 +282,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	@Override
 	public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
 		isConnected = false;
-		isRegistered = false;
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
@@ -271,7 +294,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	public void onError(WebSocket webSocket, Throwable error) {
 		LOGGER.error("PlayerESP network error: " + error.getMessage());
 		isConnected = false;
-		isRegistered = false;
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
@@ -303,9 +325,5 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	public boolean isConnected() {
 		return isConnected;
-	}
-	
-	public boolean isRegistered() {
-		return isRegistered;
 	}
 }
