@@ -235,16 +235,19 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 							String playerIdStr = entry.getKey();
 							JsonObject playerData = entry.getValue().getAsJsonObject();
 							
+							// 直接获取data字段中的数据
+							JsonObject actualPlayerData = playerData.getAsJsonObject("data");
+							
 							// 检查必要字段是否存在
-							if (!playerData.has("x") || !playerData.has("y") || !playerData.has("z")) {
-								LOGGER.warn("Player data missing required fields: " + playerIdStr);
+							if (!actualPlayerData.has("x") || !actualPlayerData.has("y") || !actualPlayerData.has("z")) {
+								LOGGER.warn("Player data missing required fields: " + playerIdStr + ", data: " + playerData.toString());
 								continue;
 							}
 							
 							UUID playerId = UUID.fromString(playerIdStr);
-							double x = playerData.get("x").getAsDouble();
-							double y = playerData.get("y").getAsDouble();
-							double z = playerData.get("z").getAsDouble();
+							double x = actualPlayerData.get("x").getAsDouble();
+							double y = actualPlayerData.get("y").getAsDouble();
+							double z = actualPlayerData.get("z").getAsDouble();
 							newPositions.put(playerId, new Vec3d(x, y, z));
 						} catch (Exception e) {
 							LOGGER.error("PlayerESP Network - Error parsing player data: " + e.getMessage());
@@ -266,16 +269,19 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 							String entityId = entry.getKey();
 							JsonObject entityData = entry.getValue().getAsJsonObject();
 							
+							// 直接获取data字段中的数据
+							JsonObject actualData = entityData.getAsJsonObject("data");
+							
 							// 检查必要字段是否存在
-							if (!entityData.has("x") || !entityData.has("y") || !entityData.has("z")) {
-								LOGGER.warn("Entity data missing required fields: " + entityId);
+							if (!actualData.has("x") || !actualData.has("y") || !actualData.has("z")) {
+								LOGGER.warn("Entity data missing required fields: " + entityId + ", data: " + entityData.toString());
 								continue;
 							}
 							
-							String entityType = entityData.has("entityType") ? entityData.get("entityType").getAsString() : null;
-							double x = entityData.has("x") ? entityData.get("x").getAsDouble() : 0;
-							double y = entityData.has("y") ? entityData.get("y").getAsDouble() : 0;
-							double z = entityData.has("z") ? entityData.get("z").getAsDouble() : 0;
+							String entityType = actualData.has("entityType") ? actualData.get("entityType").getAsString() : null;
+							double x = actualData.has("x") ? actualData.get("x").getAsDouble() : 0;
+							double y = actualData.has("y") ? actualData.get("y").getAsDouble() : 0;
+							double z = actualData.has("z") ? actualData.get("z").getAsDouble() : 0;
 							
 							if (entityId != null && entityType != null) {
 								if ("player".equals(entityType)) {
