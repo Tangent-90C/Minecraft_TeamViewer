@@ -99,7 +99,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	/**
 	 * 批量发送玩家更新到云端（type: players_update）
-	 * 云端期望：submitPlayerId（提交者UUID），players 为 playerId -> { x, y, z, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
+	 * 云端期望：submitPlayerId（提交者UUID），players 为 playerId -> { x, y, z, vx, vy, vz, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
 	 */
 	public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
 		if (webSocket == null || !isConnected) return;
@@ -121,7 +121,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 
 	/**
 	 * 发送实体更新到云端（type: entities_update）
-	 * 云端期望：submitPlayerId（提交者UUID），entities 为 entity_id -> { x, y, z, dimension, entityType, entityName, width, height, ... }
+	 * 云端期望：submitPlayerId（提交者UUID），entities 为 entity_id -> { x, y, z, vx, vy, vz, dimension, entityType, entityName, width, height, ... }
 	 */
 	public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
 		if (webSocket == null || !isConnected) return;

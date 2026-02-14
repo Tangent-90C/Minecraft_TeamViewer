@@ -13,6 +13,9 @@ class PlayerData(BaseModel):
     x: float = Field(..., description="X坐标")
     y: float = Field(..., description="Y坐标")
     z: float = Field(..., description="Z坐标")
+    vx: float = Field(default=0, description="X方向速度")
+    vy: float = Field(default=0, description="Y方向速度")
+    vz: float = Field(default=0, description="Z方向速度")
     dimension: str = Field(..., description="维度ID")
     playerName: Optional[str] = Field(None, description="玩家名称")
     playerUUID: Optional[str] = Field(None, description="玩家UUID")
@@ -32,6 +35,9 @@ class EntityData(BaseModel):
     x: float = Field(..., description="X坐标")
     y: float = Field(..., description="Y坐标")
     z: float = Field(..., description="Z坐标")
+    vx: float = Field(default=0, description="X方向速度")
+    vy: float = Field(default=0, description="Y方向速度")
+    vz: float = Field(default=0, description="Z方向速度")
     dimension: str = Field(..., description="维度ID")
     entityType: Optional[str] = Field(None, description="实体类型")
     entityName: Optional[str] = Field(None, description="实体名称")
@@ -70,8 +76,6 @@ async def broadcast_positions():
     for pid in expired_players:
         if pid in players:
             del players[pid]
-        if pid in connections:
-            del connections[pid]
 
     # 清理过期实体数据
     expired_entities = [
@@ -108,9 +112,7 @@ async def broadcast_positions():
     for player_uuid in disconnected:
         if player_uuid in connections:
             del connections[player_uuid]
-        if player_uuid in players:
-            del players[player_uuid]
-        entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_uuid]
+        entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == player_uuid]
         for eid in entities_to_remove:
             del entities[eid]
 
@@ -129,13 +131,11 @@ async def websocket_endpoint(websocket: WebSocket):
             
             submitPlayerId = data.get("submitPlayerId")
 
-            if data.get("type") == "register":
-                player_uuid = data.get("playerUUID")
-                if player_uuid is not None:
-                    connections[player_uuid] = websocket
-                    print(f"Player {player_uuid} registered")
-
-            elif data.get("type") == "players_update":
+            if data.get("type") == "players_update":
+                # 自动记录连接
+                if submitPlayerId and submitPlayerId not in connections:
+                    connections[submitPlayerId] = websocket
+                    print(f"Client {submitPlayerId} connected")
                 # 支持批量更新多个玩家（推荐）
                 current_time = time.time()
                 for pid, player_data in data["players"].items():
@@ -153,6 +153,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcast_positions()
 
             elif data.get("type") == "entities_update":
+                # 自动记录连接
+                if submitPlayerId and submitPlayerId not in connections:
+                    connections[submitPlayerId] = websocket
+                    print(f"Client {submitPlayerId} connected")
+                
                 player_entities = data.get("entities", {})
                 entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == submitPlayerId]
                 for eid in entities_to_remove:
@@ -180,15 +185,16 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"Error handling player message: {e}")
     finally:
-        if player_uuid:
-            if player_uuid in connections:
-                del connections[player_uuid]
-            if player_uuid in players:
-                del players[player_uuid]
-            entities_to_remove = [eid for eid, edata in entities.items() if edata.get("playerId") == player_uuid]
+        if submitPlayerId:
+            if submitPlayerId in connections:
+                del connections[submitPlayerId]
+            players_to_remove = [pid for pid, pdata in players.items() if pdata.get("submitPlayerId") == submitPlayerId]
+            for pid in players_to_remove:
+                del players[pid]
+            entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == submitPlayerId]
             for eid in entities_to_remove:
                 del entities[eid]
-            print(f"Player {player_uuid} disconnected")
+            print(f"Client {submitPlayerId} disconnected")
             await broadcast_positions()
 
 

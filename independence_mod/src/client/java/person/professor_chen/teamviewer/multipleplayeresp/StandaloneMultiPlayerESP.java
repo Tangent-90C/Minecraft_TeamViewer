@@ -156,16 +156,20 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			tickCounter = 0;
 			UUID submitPlayerId = client.player.getUuid();
 
-			// 批量收集所有玩家（含本地）并上传，格式：playerId -> { x, y, z, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
+			// 批量收集所有玩家（含本地）并上传，格式：playerId -> { x, y, z, vx, vy, vz, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
 			Map<UUID, Map<String, Object>> players = new HashMap<>();
 			if (client.world != null) {
 				for (AbstractClientPlayerEntity p : client.world.getPlayers()) {
 					UUID pid = p.getUuid();
 					Vec3d pos = p.getPos();
+					Vec3d vel = p.getVelocity();
 					Map<String, Object> data = new HashMap<>();
 					data.put("x", pos.x);
 					data.put("y", pos.y);
 					data.put("z", pos.z);
+					data.put("vx", vel.x);
+					data.put("vy", vel.y);
+					data.put("vz", vel.z);
 					data.put("dimension", p.getWorld().getRegistryKey().getValue().toString());
 					data.put("playerName", p.getName().getString());
 					data.put("playerUUID", pid.toString());
@@ -186,12 +190,16 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 					if (entity == client.player) continue;
 					String entityId = entity.getUuid().toString();
 					Vec3d ePos = entity.getPos();
+					Vec3d eVel = entity.getVelocity();
 					String eDim = entity.getWorld().getRegistryKey().getValue().toString();
 					String entityType = entity.getType().getRegistryEntry().registryKey().getValue().toString();
 					Map<String, Object> data = new HashMap<>();
 					data.put("x", ePos.x);
 					data.put("y", ePos.y);
 					data.put("z", ePos.z);
+					data.put("vx", eVel.x);
+					data.put("vy", eVel.y);
+					data.put("vz", eVel.z);
 					data.put("dimension", eDim);
 					data.put("entityType", entityType);
 					data.put("entityName", entity.hasCustomName() ? entity.getDisplayName().getString() : null);
