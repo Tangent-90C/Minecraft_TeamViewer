@@ -21,17 +21,26 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 
 public class PlayerESPNetworkManager implements WebSocket.Listener {
+	/**
+	 * 连接状态监听器接口
+	 */
+	public interface ConnectionStatusListener {
+		void onConnectionStatusChanged(boolean connected);
+	}
+	
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
 	private static Config config;
 	
@@ -40,6 +49,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
 	private boolean isConnected = false;
 	private final Gson gson = new Gson();
+	
+	// 连接状态监听器列表
+	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
 	
 	// 用于处理分段消息的缓冲区
 	private StringBuilder messageBuffer = new StringBuilder();
@@ -76,6 +88,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 					} else {
 						this.webSocket = webSocket;
 						isConnected = true;
+						notifyConnectionStatusChanged(true);
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
 						isProcessingMessage = false;
@@ -100,6 +113,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			webSocket = null;
 		}
 		isConnected = false;
+		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
@@ -190,6 +204,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		WebSocket.Listener.super.onOpen(webSocket);
 		isConnected = true;
 		LOGGER.info("WebSocket connection opened to PlayerESP server");
+		notifyConnectionStatusChanged(true);
 	}
 	
 	@Override
@@ -317,6 +332,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	@Override
 	public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
 		isConnected = false;
+		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
@@ -333,6 +349,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	public void onError(WebSocket webSocket, Throwable error) {
 		LOGGER.error("PlayerESP network error: " + error.getMessage());
 		isConnected = false;
+		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
 		isProcessingMessage = false;
@@ -357,6 +374,18 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	public boolean isConnected() {
 		return isConnected;
+	}
+	
+	public boolean getCurrentConnectionStatus() {
+		return isConnected;
+	}
+	
+	public String getConnectionStatusText() {
+		if (isConnected) {
+			return "Connected"; // 将在UI层进行本地化
+		} else {
+			return "Disconnected"; // 将在UI层进行本地化
+		}
 	}
 	
 	/**
@@ -414,6 +443,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	 * 处理二进制消息（压缩数据）
 	 * 支持分段传输和压缩标志位处理
 	 */
+	@Override
 	public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
 		try {
 			byte[] bytes = new byte[data.remaining()];
@@ -489,5 +519,34 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		}
 		
 		return WebSocket.Listener.super.onBinary(webSocket, data, last);
+	}
+	
+	/**
+	 * 注册连接状态监听器
+	 */
+	public void addConnectionStatusListener(ConnectionStatusListener listener) {
+		if (listener != null && !statusListeners.contains(listener)) {
+			statusListeners.add(listener);
+		}
+	}
+	
+	/**
+	 * 移除连接状态监听器
+	 */
+	public void removeConnectionStatusListener(ConnectionStatusListener listener) {
+		statusListeners.remove(listener);
+	}
+	
+	/**
+	 * 通知所有监听器连接状态变化
+	 */
+	private void notifyConnectionStatusChanged(boolean connected) {
+		for (ConnectionStatusListener listener : statusListeners) {
+			try {
+				listener.onConnectionStatusChanged(connected);
+			} catch (Exception e) {
+				LOGGER.error("Error notifying connection status listener: " + e.getMessage());
+			}
+		}
 	}
 }

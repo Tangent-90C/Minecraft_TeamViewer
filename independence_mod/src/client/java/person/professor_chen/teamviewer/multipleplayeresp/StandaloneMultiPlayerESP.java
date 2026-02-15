@@ -278,4 +278,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	public static Map<UUID, Vec3d> getServerPlayerPositions() {
 		return serverPlayerPositions;
 	}
+	
+	public static PlayerESPNetworkManager getNetworkManager() {
+		return networkManager;
+	}
 }

@@ -15,10 +15,14 @@
   "screen.multipleplayeresp.config.cancel": "取消",
   "screen.multipleplayeresp.config.connect": "连接",
   "screen.multipleplayeresp.config.reconnect": "重新连接",
+  "screen.multipleplayeresp.config.connection_status": "连接状态: %s",
   
   "screen.multipleplayeresp.color_config.title": "颜色配置",
   "screen.multipleplayeresp.color_config.box_color": "方框颜色 (ARGB格式)",
   "screen.multipleplayeresp.color_config.line_color": "线条颜色 (ARGB格式)",
   "screen.multipleplayeresp.color_config.done": "完成",
-  "screen.multipleplayeresp.color_config.cancel": "取消"
+  "screen.multipleplayeresp.color_config.cancel": "取消",
+  
+  "connection.status.connected": "已连接",
+  "connection.status.disconnected": "未连接"
 }

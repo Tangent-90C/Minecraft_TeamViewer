@@ -15,10 +15,14 @@
   "screen.multipleplayeresp.config.cancel": "Cancel",
   "screen.multipleplayeresp.config.connect": "Connect",
   "screen.multipleplayeresp.config.reconnect": "Reconnect",
+  "screen.multipleplayeresp.config.connection_status": "Connection Status: %s",
   
   "screen.multipleplayeresp.color_config.title": "Color Configuration",
   "screen.multipleplayeresp.color_config.box_color": "Box Color (ARGB format)",
   "screen.multipleplayeresp.color_config.line_color": "Line Color (ARGB format)",
   "screen.multipleplayeresp.color_config.done": "Done",
-  "screen.multipleplayeresp.color_config.cancel": "Cancel"
+  "screen.multipleplayeresp.color_config.cancel": "Cancel",
+  
+  "connection.status.connected": "Connected",
+  "connection.status.disconnected": "Disconnected"
 }

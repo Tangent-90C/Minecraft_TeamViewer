@@ -8,6 +8,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
 import person.professor_chen.teamviewer.multipleplayeresp.StandaloneMultiPlayerESP;
+import person.professor_chen.teamviewer.multipleplayeresp.PlayerESPNetworkManager.ConnectionStatusListener;
 
 public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
@@ -18,6 +19,9 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget disconnectButton;
+    // 连接状态显示
+    private TextWidget connectionStatusWidget;
+    private String currentConnectionStatus = "Unknown";
     // 保存原始值，用于取消时恢复
     private final String originalURL;
     private final int originalRenderDistance;
@@ -29,7 +33,20 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
         this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
+        // 初始化连接状态
+        updateConnectionStatus();
     }
+    
+    // 连接状态监听器实例
+    private final ConnectionStatusListener connectionListener = new ConnectionStatusListener() {
+        @Override
+        public void onConnectionStatusChanged(boolean connected) {
+            MinecraftClient.getInstance().execute(() -> {
+                updateConnectionStatus();
+                updateConnectionStatusWidget();
+            });
+        }
+    };
     
     @Override
     protected void init() {
@@ -122,6 +139,12 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 更新连接按钮文本
         updateConnectButton();
+        
+        // 添加连接状态显示组件
+        addConnectionStatusWidget();
+        
+        // 注册连接状态监听器
+        StandaloneMultiPlayerESP.getNetworkManager().addConnectionStatusListener(connectionListener);
     }
     
     @Override
@@ -142,6 +165,9 @@ public class PlayerESPConfigScreen extends Screen {
     
     @Override
     public void close() {
+        // 移除连接状态监听器
+        StandaloneMultiPlayerESP.getNetworkManager().removeConnectionStatusListener(connectionListener);
+        
         // 恢复原始值
         PlayerESPNetworkManager.setServerURL(this.originalURL);
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
@@ -205,6 +231,59 @@ public class PlayerESPConfigScreen extends Screen {
     
     private void openColorConfig() {
         MinecraftClient.getInstance().setScreen(new PlayerESPColorConfigScreen(this));
+    }
+    
+    /**
+     * 更新连接状态文本
+     */
+    private void updateConnectionStatus() {
+        if (StandaloneMultiPlayerESP.getNetworkManager().isConnected()) {
+            this.currentConnectionStatus = "Connected";
+        } else {
+            this.currentConnectionStatus = "Disconnected";
+        }
+    }
+    
+    /**
+     * 添加连接状态显示组件
+     */
+    private void addConnectionStatusWidget() {
+        int left = this.width / 2 - 100;
+        int top = this.height / 4 + 230; // 在连接按钮下方
+        
+        this.connectionStatusWidget = new TextWidget(
+            left, 
+            top, 
+            200, 
+            20, 
+            Text.translatable("screen.multipleplayeresp.config.connection_status", 
+                Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase())), 
+            this.textRenderer
+        );
+        
+        // 设置文本对齐和颜色
+        this.connectionStatusWidget.alignCenter();
+        updateConnectionStatusWidget();
+        
+        this.addDrawableChild(this.connectionStatusWidget);
+    }
+    
+    /**
+     * 更新连接状态显示组件的颜色和文本
+     */
+    private void updateConnectionStatusWidget() {
+        if (this.connectionStatusWidget != null) {
+            // 根据连接状态设置颜色
+            int color = this.currentConnectionStatus.equals("Connected") ? 0x00FF00 : 0xFF0000; // 绿色或红色
+            
+            this.connectionStatusWidget.setTextColor(color);
+            
+            // 更新文本
+            this.connectionStatusWidget.setMessage(
+                Text.translatable("screen.multipleplayeresp.config.connection_status", 
+                    Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase()))
+            );
+        }
     }
     
     @Override
