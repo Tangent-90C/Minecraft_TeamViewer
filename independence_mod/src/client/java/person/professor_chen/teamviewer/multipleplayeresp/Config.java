@@ -109,10 +109,6 @@ public class Config {
         // 限制最小值为1，最大值为1000tick（50秒）
         if (updateInterval < 1) {
             this.updateInterval = 1;
-        } else if (updateInterval > 1000) {
-            this.updateInterval = 1000;
-        } else {
-            this.updateInterval = updateInterval;
-        }
+        } else this.updateInterval = Math.min(updateInterval, 1000);
     }
 }

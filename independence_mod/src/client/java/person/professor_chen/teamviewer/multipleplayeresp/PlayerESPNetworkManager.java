@@ -8,7 +8,6 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,13 +23,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPInputStream;
 
 public class PlayerESPNetworkManager implements WebSocket.Listener {
@@ -49,24 +47,23 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
 	private boolean isConnected = false;
 	private final Gson gson = new Gson();
+	private final HttpClient httpClient;
 	
 	// 连接状态监听器列表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
 	
 	// 用于处理分段消息的缓冲区
 	private StringBuilder messageBuffer = new StringBuilder();
-	private boolean isProcessingMessage = false;
 	
 	// 二进制消息缓冲区
-	private ByteArrayOutputStream binaryBuffer = new ByteArrayOutputStream();
-	private byte pendingFlag = -1; // 待处理的压缩标志位
+	private final ByteArrayOutputStream binaryBuffer = new ByteArrayOutputStream();
 	
 	// 压缩相关状态
 	private boolean compressionEnabled = false;
-	private boolean handshakeCompleted = false;
 	
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions) {
 		this.playerPositions = playerPositions;
+		this.httpClient = HttpClient.newHttpClient();
 	}
 	
 	public static void setConfig(Config config) {
@@ -76,14 +73,13 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	public void connect() {
 		if (config == null) return;
 		
-		HttpClient client = HttpClient.newHttpClient();
 		String uri = config.getServerURL();
 		
-		client.newWebSocketBuilder()
+		httpClient.newWebSocketBuilder()
 				.buildAsync(URI.create(uri), this)
 				.whenComplete((webSocket, throwable) -> {
 					if (throwable != null) {
-						LOGGER.error("Failed to connect to PlayerESP server at " + config.getServerURL() + ": " + throwable.getMessage());
+                        LOGGER.error("Failed to connect to PlayerESP server at {}: {}", config.getServerURL(), throwable.getMessage());
 						scheduleReconnect();
 					} else {
 						this.webSocket = webSocket;
@@ -91,12 +87,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 						notifyConnectionStatusChanged(true);
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
-						isProcessingMessage = false;
 						binaryBuffer.reset();
-						pendingFlag = -1;
 						compressionEnabled = false;
-						handshakeCompleted = false;
-						LOGGER.info("Connected to PlayerESP server at " + config.getServerURL());
+                        LOGGER.info("Connected to PlayerESP server at {}", config.getServerURL());
 						// 发送握手消息
 						sendHandshake();
 					}
@@ -116,24 +109,11 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
-		isProcessingMessage = false;
 		binaryBuffer.reset();
-		pendingFlag = -1;
 		compressionEnabled = false;
-		handshakeCompleted = false;
 		reconnectExecutor.shutdown();
 	}
-	
-	public void sendMessage(String message) {
-		if (webSocket != null && isConnected) {
-			try {
-				webSocket.sendText(message, true);
-			} catch (Exception e) {
-				LOGGER.error("Failed to send message to PlayerESP server: " + e.getMessage());
-			}
-		}
-	}
-	
+
 	/**
 	 * 批量发送玩家更新到云端（type: players_update）
 	 * 云端期望：submitPlayerId（提交者UUID），players 为 playerId -> { x, y, z, vx, vy, vz, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
@@ -152,7 +132,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			obj.add("players", playersJson);
 			webSocket.sendText(gson.toJson(obj), true);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send players_update to PlayerESP server: " + e.getMessage());
+            LOGGER.error("Failed to send players_update to PlayerESP server: {}", e.getMessage());
 		}
 	}
 
@@ -174,27 +154,19 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			obj.add("entities", entitiesJson);
 			webSocket.sendText(gson.toJson(obj), true);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send entities_update to PlayerESP server: " + e.getMessage());
+            LOGGER.error("Failed to send entities_update to PlayerESP server: {}", e.getMessage());
 		}
-	}
-
-	private static JsonElement mapToJsonElement(Object value) {
-		if (value == null) return JsonNull.INSTANCE;
-		if (value instanceof Number) return new JsonPrimitive((Number) value);
-		if (value instanceof Boolean) return new JsonPrimitive((Boolean) value);
-		if (value instanceof String) return new JsonPrimitive((String) value);
-		if (value instanceof Map) {
-			@SuppressWarnings("unchecked")
-			Map<String, Object> m = (Map<String, Object>) value;
-			return mapToJsonObject(m);
-		}
-		return new JsonPrimitive(value.toString());
 	}
 
 	private static JsonObject mapToJsonObject(Map<String, Object> map) {
 		JsonObject o = new JsonObject();
 		for (Map.Entry<String, Object> e : map.entrySet()) {
-			o.add(e.getKey(), mapToJsonElement(e.getValue()));
+			if (e.getValue() == null) {
+				o.add(e.getKey(), JsonNull.INSTANCE);
+			}
+			else {
+				o.add(e.getKey(), new JsonPrimitive(e.getValue().toString()));
+			}
 		}
 		return o;
 	}
@@ -237,7 +209,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			try {
 				json = JsonParser.parseString(message).getAsJsonObject();
 			} catch (JsonSyntaxException e) {
-				LOGGER.error("Failed to parse JSON message: " + e.getMessage() + ", message: " + message);
+                LOGGER.error("Failed to parse JSON message: {}, message: {}", e.getMessage(), message);
 				return;
 			}
 			
@@ -264,7 +236,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 							
 							// 检查必要字段是否存在
 							if (!actualPlayerData.has("x") || !actualPlayerData.has("y") || !actualPlayerData.has("z")) {
-								LOGGER.warn("Player data missing required fields: " + playerIdStr + ", data: " + playerData.toString());
+                                LOGGER.warn("Player data missing required fields: {}, data: {}", playerIdStr, playerData);
 								continue;
 							}
 							
@@ -274,7 +246,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 							double z = actualPlayerData.get("z").getAsDouble();
 							newPositions.put(playerId, new Vec3d(x, y, z));
 						} catch (Exception e) {
-							LOGGER.error("PlayerESP Network - Error parsing player data: " + e.getMessage());
+                            LOGGER.error("PlayerESP Network - Error parsing player data: {}", e.getMessage());
 						}
 					}
 					
@@ -298,14 +270,14 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 							
 							// 检查必要字段是否存在
 							if (!actualData.has("x") || !actualData.has("y") || !actualData.has("z")) {
-								LOGGER.warn("Entity data missing required fields: " + entityId + ", data: " + entityData.toString());
+                                LOGGER.warn("Entity data missing required fields: {}, data: {}", entityId, entityData);
 								continue;
 							}
 							
 							String entityType = actualData.has("entityType") ? actualData.get("entityType").getAsString() : null;
-							double x = actualData.has("x") ? actualData.get("x").getAsDouble() : 0;
-							double y = actualData.has("y") ? actualData.get("y").getAsDouble() : 0;
-							double z = actualData.has("z") ? actualData.get("z").getAsDouble() : 0;
+//							double x = actualData.has("x") ? actualData.get("x").getAsDouble() : 0;
+//							double y = actualData.has("y") ? actualData.get("y").getAsDouble() : 0;
+//							double z = actualData.has("z") ? actualData.get("z").getAsDouble() : 0;
 							
 							if (entityId != null && entityType != null) {
 								if ("player".equals(entityType)) {
@@ -314,18 +286,18 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 								}
 								entityCount++;
 							} else {
-								LOGGER.error("PlayerESP Network - Incomplete entity data for " + entityId);
+                                LOGGER.error("PlayerESP Network - Incomplete entity data for {}", entityId);
 							}
 						} catch (Exception e) {
-							LOGGER.error("PlayerESP Network - Error parsing entity data: " + e.getMessage());
+                            LOGGER.error("PlayerESP Network - Error parsing entity data: {}", e.getMessage());
 						}
 					}
-					
-					LOGGER.debug("PlayerESP Network - Processed: " + playerCount + " players, " + entityCount + " entities");
+
+                    LOGGER.debug("PlayerESP Network - Processed: {} players, {} entities", playerCount, entityCount);
 				}
 			}
 		} catch (Exception e) {
-			LOGGER.error("PlayerESP Network - Error processing complete message: " + e.getMessage() + ", message: " + message);
+            LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(), message);
 		}
 	}
 	
@@ -335,28 +307,22 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
-		isProcessingMessage = false;
 		binaryBuffer.reset();
-		pendingFlag = -1;
 		compressionEnabled = false;
-		handshakeCompleted = false;
-		LOGGER.info("Disconnected from PlayerESP server. Status: " + statusCode + ", Reason: " + reason);
+        LOGGER.info("Disconnected from PlayerESP server. Status: {}, Reason: {}", statusCode, reason);
 		scheduleReconnect();
 		return WebSocket.Listener.super.onClose(webSocket, statusCode, reason);
 	}
 	
 	@Override
 	public void onError(WebSocket webSocket, Throwable error) {
-		LOGGER.error("PlayerESP network error: " + error.getMessage());
+        LOGGER.
+				error("PlayerESP network error: {}", error.getMessage());
 		isConnected = false;
 		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
-		messageBuffer = new StringBuilder();
-		isProcessingMessage = false;
 		binaryBuffer.reset();
-		pendingFlag = -1;
 		compressionEnabled = false;
-		handshakeCompleted = false;
 		scheduleReconnect();
 	}
 	
@@ -376,18 +342,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		return isConnected;
 	}
 	
-	public boolean getCurrentConnectionStatus() {
-		return isConnected;
-	}
-	
-	public String getConnectionStatusText() {
-		if (isConnected) {
-			return "Connected"; // 将在UI层进行本地化
-		} else {
-			return "Disconnected"; // 将在UI层进行本地化
-		}
-	}
-	
 	/**
 	 * 发送握手消息，声明客户端是否支持压缩
 	 */
@@ -405,9 +359,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			handshake.addProperty("enableCompression", config != null && config.isEnableCompression());
 			
 			webSocket.sendText(gson.toJson(handshake), true);
-			LOGGER.info("Sent handshake message, compression: " + (config != null && config.isEnableCompression()));
+            LOGGER.info("Sent handshake message, compression: {}", config != null && config.isEnableCompression());
 		} catch (Exception e) {
-			LOGGER.error("Failed to send handshake message: " + e.getMessage());
+            LOGGER.error("Failed to send handshake message: {}", e.getMessage());
 		}
 	}
 	
@@ -417,8 +371,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private void handleHandshakeAck(JsonObject json) {
 		if (json.has("ready") && json.get("ready").getAsBoolean()) {
 			compressionEnabled = json.has("compressionEnabled") && json.get("compressionEnabled").getAsBoolean();
-			handshakeCompleted = true;
-			LOGGER.info("Handshake completed. Compression enabled: " + compressionEnabled);
+            LOGGER.info("Handshake completed. Compression enabled: {}", compressionEnabled);
 		}
 	}
 	
@@ -432,7 +385,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		byte[] buffer = new byte[1024];
 		int len;
 		while ((len = gis.read(buffer)) > 0) {
-			sb.append(new String(buffer, 0, len, "UTF-8"));
+			sb.append(new String(buffer, 0, len, StandardCharsets.UTF_8));
 		}
 		gis.close();
 		bis.close();
@@ -457,8 +410,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			if (!last) {
 				// 不是最后一段，缓存数据
 				binaryBuffer.write(bytes);
-				LOGGER.debug("Buffering binary segment, current buffer size: " + binaryBuffer.size());
-				return WebSocket.Listener.super.onBinary(webSocket, data, last);
+                LOGGER.debug("Buffering binary segment, current buffer size: {}", binaryBuffer.size());
+				return WebSocket.Listener.super.onBinary(webSocket, data, false);
 			}
 			
 			// 这是最后一段，处理完整消息
@@ -468,11 +421,11 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				binaryBuffer.write(bytes);
 				completeData = binaryBuffer.toByteArray();
 				binaryBuffer.reset();
-				LOGGER.debug("Processing complete binary message from segments, total size: " + completeData.length);
+                LOGGER.debug("Processing complete binary message from segments, total size: {}", completeData.length);
 			} else {
 				// 单段消息
 				completeData = bytes;
-				LOGGER.debug("Processing single segment binary message, size: " + completeData.length);
+                LOGGER.debug("Processing single segment binary message, size: {}", completeData.length);
 			}
 			
 			// 解析压缩标志位和数据
@@ -486,36 +439,36 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 					// 压缩数据
 					try {
 						message = decompressGzip(payload);
-						LOGGER.debug("Decompressed message: " + payload.length + " bytes -> " + message.length() + " chars");
+                        LOGGER.debug("Decompressed message: {} bytes -> {} chars", payload.length, message.length());
 					} catch (IOException e) {
-						LOGGER.error("Failed to decompress GZIP data: " + e.getMessage() + ", raw data size: " + payload.length);
+                        LOGGER.error("Failed to decompress GZIP data: {}, raw data size: {}", e.getMessage(), payload.length);
 						// 打印原始数据用于调试（根据用户偏好）
 						if (LOGGER.isDebugEnabled()) {
 							StringBuilder hexDump = new StringBuilder();
 							for (int i = 0; i < Math.min(payload.length, 100); i++) {
 								hexDump.append(String.format("%02X ", payload[i]));
 							}
-							LOGGER.debug("Raw payload (first 100 bytes): " + hexDump.toString());
+                            LOGGER.debug("Raw payload (first 100 bytes): {}", hexDump);
 						}
-						return WebSocket.Listener.super.onBinary(webSocket, data, last);
+						return WebSocket.Listener.super.onBinary(webSocket, data, true);
 					}
 				} else if (flag == 0x00) {
 					// 未压缩数据
-					message = new String(payload, "UTF-8");
-					LOGGER.debug("Received uncompressed message, size: " + payload.length + " -> " + message.length());
+					message = new String(payload, StandardCharsets.UTF_8);
+                    LOGGER.
+							debug("Received uncompressed message, size: {} -> {}", payload.length, message.length());
 				} else {
 					// 无效标志位，尝试兼容处理
-					LOGGER.warn("Invalid compression flag: 0x" + String.format("%02X", flag) + ", treating as uncompressed data");
-					message = new String(completeData, "UTF-8");
+                    LOGGER.warn("Invalid compression flag: 0x{}, treating as uncompressed data", String.format("%02X", flag));
+					message = new String(completeData, StandardCharsets.UTF_8);
 				}
 				
 				processCompleteMessage(message);
 			}
 		} catch (Exception e) {
-			LOGGER.error("Error processing binary message: " + e.getMessage(), e);
+            LOGGER.error("Error processing binary message: {}", e.getMessage(), e);
 			// 重置缓冲区状态
 			binaryBuffer.reset();
-			pendingFlag = -1;
 		}
 		
 		return WebSocket.Listener.super.onBinary(webSocket, data, last);
@@ -545,7 +498,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			try {
 				listener.onConnectionStatusChanged(connected);
 			} catch (Exception e) {
-				LOGGER.error("Error notifying connection status listener: " + e.getMessage());
+                LOGGER.error("Error notifying connection status listener: {}", e.getMessage());
 			}
 		}
 	}
