@@ -19,6 +19,7 @@ public class Config {
     private int boxColor = 0x80FF0000; // 50%不透明红色
     private int lineColor = 0xFFFF0000; // 不透明红色
     private boolean enableCompression = true; // 是否启用WebSocket压缩
+    private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -98,5 +99,20 @@ public class Config {
     
     public void setEnableCompression(boolean enableCompression) {
         this.enableCompression = enableCompression;
+    }
+    
+    public int getUpdateInterval() {
+        return updateInterval;
+    }
+    
+    public void setUpdateInterval(int updateInterval) {
+        // 限制最小值为1，最大值为1000tick（50秒）
+        if (updateInterval < 1) {
+            this.updateInterval = 1;
+        } else if (updateInterval > 1000) {
+            this.updateInterval = 1000;
+        } else {
+            this.updateInterval = updateInterval;
+        }
     }
 }

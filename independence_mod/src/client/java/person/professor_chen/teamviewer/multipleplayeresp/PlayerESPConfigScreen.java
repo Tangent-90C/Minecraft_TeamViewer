@@ -13,6 +13,7 @@ public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
     private TextFieldWidget renderDistanceField;
+    private TextFieldWidget updateIntervalField;
     private ButtonWidget doneButton;
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
@@ -20,12 +21,14 @@ public class PlayerESPConfigScreen extends Screen {
     // 保存原始值，用于取消时恢复
     private final String originalURL;
     private final int originalRenderDistance;
+    private final int originalUpdateInterval;
     
     public PlayerESPConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.config.title"));
         this.parent = parent;
         this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
+        this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
     }
     
     @Override
@@ -59,30 +62,44 @@ public class PlayerESPConfigScreen extends Screen {
         this.renderDistanceField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.render_distance_hint"));
         this.addDrawableChild(this.renderDistanceField);
         
+        // 上报频率输入框
+        this.updateIntervalField = new TextFieldWidget(
+            this.textRenderer,
+            this.width / 2 - 100,
+            this.height / 4 + 100,
+            200,
+            20,
+            Text.translatable("screen.multipleplayeresp.config.update_interval")
+        );
+        this.updateIntervalField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getUpdateInterval()));
+        this.updateIntervalField.setMaxLength(4); // 上报频率最大4位数字
+        this.updateIntervalField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.update_interval_hint"));
+        this.addDrawableChild(this.updateIntervalField);
+        
         // 颜色配置按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.color_settings"),
             button -> openColorConfig()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 100, 200, 20).build());
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 140, 200, 20).build());
         
         // 完成按钮
         this.doneButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.done"),
             button -> saveAndClose()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 130, 98, 20).build();
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 170, 98, 20).build();
         this.addDrawableChild(this.doneButton);
         
         // 取消按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.cancel"),
             button -> close()
-        ).dimensions(this.width / 2 + 2, this.height / 4 + 130, 98, 20).build());
+        ).dimensions(this.width / 2 + 2, this.height / 4 + 170, 98, 20).build());
         
         // 连接按钮
         this.connectButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.connect"),
             button -> connectToServer()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 160, 200, 20).build();
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 200, 200, 20).build();
         this.addDrawableChild(this.connectButton);
         
         // 输入框上方的标签（最后添加以确保渲染在最上层）
@@ -94,6 +111,11 @@ public class PlayerESPConfigScreen extends Screen {
         );
         this.addDrawableChild(
             new TextWidget(left, this.height / 4 + 48, 200, 12, Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        this.addDrawableChild(
+            new TextWidget(left, this.height / 4 + 88, 200, 12, Text.translatable("screen.multipleplayeresp.config.update_interval"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
@@ -123,6 +145,7 @@ public class PlayerESPConfigScreen extends Screen {
         // 恢复原始值
         PlayerESPNetworkManager.setServerURL(this.originalURL);
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
+        StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
@@ -140,6 +163,14 @@ public class PlayerESPConfigScreen extends Screen {
                 int renderDistance = Integer.parseInt(renderDistanceStr);
                 if (renderDistance > 0) {
                     StandaloneMultiPlayerESP.getConfig().setRenderDistance(renderDistance);
+                }
+            }
+            
+            String updateIntervalStr = this.updateIntervalField.getText().trim();
+            if (!updateIntervalStr.isEmpty()) {
+                int updateInterval = Integer.parseInt(updateIntervalStr);
+                if (updateInterval > 0) {
+                    StandaloneMultiPlayerESP.getConfig().setUpdateInterval(updateInterval);
                 }
             }
         } catch (NumberFormatException e) {

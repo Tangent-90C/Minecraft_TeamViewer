@@ -8,6 +8,8 @@
   "screen.multipleplayeresp.config.url_hint": "例如: ws://127.0.0.1:8080/playeresp",
   "screen.multipleplayeresp.config.render_distance": "渲染距离",
   "screen.multipleplayeresp.config.render_distance_hint": "例如: 64",
+  "screen.multipleplayeresp.config.update_interval": "上报频率(tick)",
+  "screen.multipleplayeresp.config.update_interval_hint": "更新间隔tick数(1-1000)",
   "screen.multipleplayeresp.config.color_settings": "颜色设置",
   "screen.multipleplayeresp.config.done": "完成",
   "screen.multipleplayeresp.config.cancel": "取消",

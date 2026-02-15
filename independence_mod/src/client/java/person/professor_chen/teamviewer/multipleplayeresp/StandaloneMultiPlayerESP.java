@@ -48,7 +48,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	
 	// 用于控制位置更新频率
 	private static int tickCounter = 0;
-	private static final int UPDATE_INTERVAL = 20; // 每20tick更新一次位置（约每秒1次）
 	
 	@Override
 	public void onInitializeClient() {
@@ -152,7 +151,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		tickCounter++;
 		
 		// 连接成功后按间隔发送玩家更新与实体更新（submitPlayerId 为本地玩家 UUID）
-		if (networkManager.isConnected() && tickCounter >= UPDATE_INTERVAL) {
+		if (networkManager.isConnected() && tickCounter >= config.getUpdateInterval()) {
 			tickCounter = 0;
 			UUID submitPlayerId = client.player.getUuid();
 
