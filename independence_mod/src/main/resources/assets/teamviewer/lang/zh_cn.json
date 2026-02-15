@@ -24,8 +24,12 @@
   "screen.multipleplayeresp.config.done": "完成",
   "screen.multipleplayeresp.config.cancel": "取消",
   "screen.multipleplayeresp.config.connect": "连接",
+  "screen.multipleplayeresp.config.disconnect": "断开",
   "screen.multipleplayeresp.config.reconnect": "重新连接",
   "screen.multipleplayeresp.config.connection_status": "连接状态: %s",
+  "screen.multipleplayeresp.config.connection_failed": "连接失败: %s",
+  "screen.multipleplayeresp.config.connection_failed_short": "连接失败（鼠标悬浮查看原因）",
+  "screen.multipleplayeresp.config.unknown_error": "未知错误",
   
   "screen.multipleplayeresp.color_config.title": "颜色配置",
   "screen.multipleplayeresp.color_config.box_color": "方框颜色 (ARGB格式)",
@@ -35,5 +39,6 @@
   "screen.multipleplayeresp.display_config.title": "显示配置",
   
   "connection.status.connected": "已连接",
+  "connection.status.failed": "连接失败",
   "connection.status.disconnected": "未连接"
 }

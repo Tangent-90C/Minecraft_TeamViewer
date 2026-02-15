@@ -7,6 +7,8 @@ import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
+import java.util.ArrayList;
+import java.util.List;
 import person.professor_chen.teamviewer.multipleplayeresp.PlayerESPNetworkManager.ConnectionStatusListener;
 
 public class PlayerESPConfigScreen extends Screen {
@@ -20,6 +22,8 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget showLinesButton; // 追踪线开关按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
+    private int connectionStatusX;
+    private int connectionStatusY;
     private String currentConnectionStatus = "Unknown";
     // 保存原始值，用于取消时恢复
     private final String originalURL;
@@ -199,11 +203,18 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 连接按钮
         int connectY = getNextButtonY();
+        int connectButtonWidth = (COMPONENT_WIDTH - 2) / 2;
         this.connectButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.connect"),
             button -> connectToServer()
-        ).dimensions(componentX, connectY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(componentX, connectY, connectButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.connectButton);
+
+        this.disconnectButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.disconnect"),
+            button -> disconnectFromServer()
+        ).dimensions(componentX + connectButtonWidth + 2, connectY, connectButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.disconnectButton);
         
         // 更新连接按钮文本
         updateConnectButton();
@@ -234,6 +245,19 @@ public class PlayerESPConfigScreen extends Screen {
             startY - 30,
             0xFFFFFF
         );
+
+        if ("Failed".equals(this.currentConnectionStatus) && isMouseOverConnectionStatus(mouseX, mouseY)) {
+            String reason = StandaloneMultiPlayerESP.getNetworkManager().getLastConnectionError();
+            if (reason == null || reason.isBlank()) {
+                reason = Text.translatable("screen.multipleplayeresp.config.unknown_error").getString();
+            }
+            context.drawTooltip(
+                this.textRenderer,
+                splitTooltipLines(reason, 48),
+                mouseX,
+                mouseY
+            );
+        }
         
     }
     
@@ -306,6 +330,19 @@ public class PlayerESPConfigScreen extends Screen {
         } else {
             this.connectButton.setMessage(Text.translatable("screen.multipleplayeresp.config.connect"));
         }
+
+        if (this.disconnectButton != null) {
+            this.disconnectButton.active = StandaloneMultiPlayerESP.isEspEnabled()
+                || StandaloneMultiPlayerESP.getNetworkManager().isConnected();
+        }
+    }
+
+    private void disconnectFromServer() {
+        StandaloneMultiPlayerESP.setEspEnabled(false);
+        StandaloneMultiPlayerESP.getNetworkManager().disconnect();
+        updateConnectionStatus();
+        updateConnectionStatusWidget();
+        updateConnectButton();
     }
     
     private void openDisplaySettings() {
@@ -366,8 +403,11 @@ public class PlayerESPConfigScreen extends Screen {
      * 更新连接状态文本
      */
     private void updateConnectionStatus() {
-        if (StandaloneMultiPlayerESP.getNetworkManager().isConnected()) {
+        PlayerESPNetworkManager networkManager = StandaloneMultiPlayerESP.getNetworkManager();
+        if (networkManager.isConnected()) {
             this.currentConnectionStatus = "Connected";
+        } else if (!networkManager.getLastConnectionError().isBlank()) {
+            this.currentConnectionStatus = "Failed";
         } else {
             this.currentConnectionStatus = "Disconnected";
         }
@@ -379,6 +419,8 @@ public class PlayerESPConfigScreen extends Screen {
     private void addConnectionStatusWidget() {
         int componentX = getComponentX();
         int statusY = getNextY();
+        this.connectionStatusX = componentX;
+        this.connectionStatusY = statusY;
         
         this.connectionStatusWidget = new TextWidget(
             componentX, 
@@ -403,16 +445,65 @@ public class PlayerESPConfigScreen extends Screen {
     private void updateConnectionStatusWidget() {
         if (this.connectionStatusWidget != null) {
             // 根据连接状态设置颜色
-            int color = this.currentConnectionStatus.equals("Connected") ? 0x00FF00 : 0xFF0000; // 绿色或红色
+            int color;
+            if (this.currentConnectionStatus.equals("Connected")) {
+                color = 0x00FF00;
+            } else if (this.currentConnectionStatus.equals("Failed")) {
+                color = 0xFFAA00;
+            } else {
+                color = 0xFF0000;
+            }
             
             this.connectionStatusWidget.setTextColor(color);
             
             // 更新文本
-            this.connectionStatusWidget.setMessage(
-                Text.translatable("screen.multipleplayeresp.config.connection_status", 
-                    Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase()))
-            );
+            if (this.currentConnectionStatus.equals("Failed")) {
+                this.connectionStatusWidget.setMessage(
+                    Text.translatable("screen.multipleplayeresp.config.connection_failed_short")
+                );
+            } else {
+                this.connectionStatusWidget.setMessage(
+                    Text.translatable("screen.multipleplayeresp.config.connection_status",
+                        Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase()))
+                );
+            }
         }
+    }
+
+    private boolean isMouseOverConnectionStatus(int mouseX, int mouseY) {
+        return this.connectionStatusWidget != null
+            && mouseX >= this.connectionStatusX
+            && mouseX < this.connectionStatusX + COMPONENT_WIDTH
+            && mouseY >= this.connectionStatusY
+            && mouseY < this.connectionStatusY + COMPONENT_HEIGHT;
+    }
+
+    private List<Text> splitTooltipLines(String content, int maxCharsPerLine) {
+        List<Text> lines = new ArrayList<>();
+        if (content == null || content.isBlank()) {
+            lines.add(Text.translatable("screen.multipleplayeresp.config.unknown_error"));
+            return lines;
+        }
+
+        String[] rawLines = content.split("\\R");
+        for (String rawLine : rawLines) {
+            if (rawLine.length() <= maxCharsPerLine) {
+                lines.add(Text.of(rawLine));
+                continue;
+            }
+
+            int start = 0;
+            while (start < rawLine.length()) {
+                int end = Math.min(start + maxCharsPerLine, rawLine.length());
+                lines.add(Text.of(rawLine.substring(start, end)));
+                start = end;
+            }
+        }
+
+        if (lines.isEmpty()) {
+            lines.add(Text.of(content));
+        }
+        return lines;
     }
     
     @Override

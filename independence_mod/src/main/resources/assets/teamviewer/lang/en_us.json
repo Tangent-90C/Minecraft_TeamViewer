@@ -24,8 +24,12 @@
   "screen.multipleplayeresp.config.done": "Done",
   "screen.multipleplayeresp.config.cancel": "Cancel",
   "screen.multipleplayeresp.config.connect": "Connect",
+  "screen.multipleplayeresp.config.disconnect": "Disconnect",
   "screen.multipleplayeresp.config.reconnect": "Reconnect",
   "screen.multipleplayeresp.config.connection_status": "Connection Status: %s",
+  "screen.multipleplayeresp.config.connection_failed": "Connection failed: %s",
+  "screen.multipleplayeresp.config.connection_failed_short": "Connection failed (hover for details)",
+  "screen.multipleplayeresp.config.unknown_error": "Unknown error",
   
   "screen.multipleplayeresp.color_config.title": "Color Configuration",
   "screen.multipleplayeresp.color_config.box_color": "Box Color (ARGB format)",
@@ -35,5 +39,6 @@
   "screen.multipleplayeresp.display_config.title": "Display Configuration",
   
   "connection.status.connected": "Connected",
+  "connection.status.failed": "Failed",
   "connection.status.disconnected": "Disconnected"
 }

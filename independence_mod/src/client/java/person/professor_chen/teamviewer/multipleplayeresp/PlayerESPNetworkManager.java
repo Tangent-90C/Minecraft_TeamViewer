@@ -60,6 +60,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	// 压缩相关状态
 	private boolean compressionEnabled = false;
+	private volatile String lastConnectionError = "";
 	
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions) {
 		this.playerPositions = playerPositions;
@@ -79,11 +80,15 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				.buildAsync(URI.create(uri), this)
 				.whenComplete((webSocket, throwable) -> {
 					if (throwable != null) {
+                        this.isConnected = false;
+                        this.lastConnectionError = formatThrowableReason(throwable);
                         LOGGER.error("Failed to connect to PlayerESP server at {}: {}", config.getServerURL(), throwable.getMessage());
+						notifyConnectionStatusChanged(false);
 						scheduleReconnect();
 					} else {
 						this.webSocket = webSocket;
 						isConnected = true;
+						lastConnectionError = "";
 						notifyConnectionStatusChanged(true);
 						// 重置消息缓冲区
 						messageBuffer = new StringBuilder();
@@ -106,6 +111,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			webSocket = null;
 		}
 		isConnected = false;
+		lastConnectionError = "";
 		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
@@ -175,6 +181,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	public void onOpen(WebSocket webSocket) {
 		WebSocket.Listener.super.onOpen(webSocket);
 		isConnected = true;
+		lastConnectionError = "";
 		LOGGER.info("WebSocket connection opened to PlayerESP server");
 		notifyConnectionStatusChanged(true);
 	}
@@ -304,6 +311,11 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	@Override
 	public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
 		isConnected = false;
+		if (statusCode != WebSocket.NORMAL_CLOSURE) {
+			lastConnectionError = "WebSocket closed (" + statusCode + "): " + (reason == null || reason.isBlank() ? "unknown reason" : reason);
+		} else {
+			lastConnectionError = "";
+		}
 		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		messageBuffer = new StringBuilder();
@@ -319,6 +331,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
         LOGGER.
 				error("PlayerESP network error: {}", error.getMessage());
 		isConnected = false;
+		lastConnectionError = formatThrowableReason(error);
 		notifyConnectionStatusChanged(false);
 		// 清空消息缓冲区
 		binaryBuffer.reset();
@@ -339,6 +352,42 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	
 	public boolean isConnected() {
 		return isConnected;
+	}
+
+	public String getLastConnectionError() {
+		return lastConnectionError;
+	}
+
+	private String formatThrowableReason(Throwable throwable) {
+		if (throwable == null) {
+			return "Unknown error";
+		}
+
+		StringBuilder details = new StringBuilder();
+		Throwable current = throwable;
+		int depth = 0;
+		while (current != null && depth < 6) {
+			String message = current.getMessage();
+			String type = current.getClass().getSimpleName();
+			if (message != null && !message.isBlank()) {
+				if (details.length() > 0) {
+					details.append(" | caused by: ");
+				}
+				details.append(type).append(": ").append(message.trim());
+			}
+			current = current.getCause();
+			depth++;
+		}
+
+		if (details.length() > 0) {
+			return details.toString();
+		}
+
+		String fallback = throwable.toString();
+		if (fallback != null && !fallback.isBlank()) {
+			return fallback;
+		}
+		return throwable.getClass().getSimpleName();
 	}
 	
 	/**
