@@ -7,7 +7,6 @@ import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
-import person.professor_chen.teamviewer.multipleplayeresp.StandaloneMultiPlayerESP;
 import person.professor_chen.teamviewer.multipleplayeresp.PlayerESPNetworkManager.ConnectionStatusListener;
 
 public class PlayerESPConfigScreen extends Screen {
@@ -15,7 +14,6 @@ public class PlayerESPConfigScreen extends Screen {
     private TextFieldWidget urlField;
     private TextFieldWidget renderDistanceField;
     private TextFieldWidget updateIntervalField;
-    private ButtonWidget doneButton;
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget disconnectButton;
@@ -38,15 +36,10 @@ public class PlayerESPConfigScreen extends Screen {
     }
     
     // 连接状态监听器实例
-    private final ConnectionStatusListener connectionListener = new ConnectionStatusListener() {
-        @Override
-        public void onConnectionStatusChanged(boolean connected) {
-            MinecraftClient.getInstance().execute(() -> {
-                updateConnectionStatus();
-                updateConnectionStatusWidget();
-            });
-        }
-    };
+    private final ConnectionStatusListener connectionListener = connected -> MinecraftClient.getInstance().execute(() -> {
+        updateConnectionStatus();
+        updateConnectionStatusWidget();
+    });
     
     @Override
     protected void init() {
@@ -100,11 +93,11 @@ public class PlayerESPConfigScreen extends Screen {
         ).dimensions(this.width / 2 - 100, this.height / 4 + 140, 200, 20).build());
         
         // 完成按钮
-        this.doneButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.done"),
-            button -> saveAndClose()
+        ButtonWidget doneButton = ButtonWidget.builder(
+                Text.translatable("screen.multipleplayeresp.config.done"),
+                button -> saveAndClose()
         ).dimensions(this.width / 2 - 100, this.height / 4 + 170, 98, 20).build();
-        this.addDrawableChild(this.doneButton);
+        this.addDrawableChild(doneButton);
         
         // 取消按钮
         this.addDrawableChild(ButtonWidget.builder(
@@ -176,7 +169,7 @@ public class PlayerESPConfigScreen extends Screen {
         MinecraftClient.getInstance().setScreen(this.parent);
     }
     
-    private void saveAndClose() {
+    private void saveSettings() {
         // 保存设置
         try {
             String url = this.urlField.getText().trim();
@@ -199,16 +192,24 @@ public class PlayerESPConfigScreen extends Screen {
                     StandaloneMultiPlayerESP.getConfig().setUpdateInterval(updateInterval);
                 }
             }
+            
+            // 保存配置到文件
+            StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
             // 如果输入格式不正确，忽略错误并使用原始值
         }
+    }
+    
+    private void saveAndClose() {
+        // 保存设置
+        saveSettings();
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
     
     private void connectToServer() {
-        // 先保存设置
-        saveAndClose();
+        // 先保存设置（但不关闭屏幕）
+        saveSettings();
         
         // 尝试连接到服务器
         if (StandaloneMultiPlayerESP.isEspEnabled()) {

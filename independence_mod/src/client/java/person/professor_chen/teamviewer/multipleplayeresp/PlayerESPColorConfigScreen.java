@@ -124,6 +124,9 @@ public class PlayerESPColorConfigScreen extends Screen {
                 int lineColor = (int) Long.parseLong(lineColorStr, 16);
                 StandaloneMultiPlayerESP.getConfig().setLineColor(lineColor);
             }
+            
+            // 保存配置到文件
+            StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
             // 如果输入格式不正确，忽略错误并使用原始值
         }

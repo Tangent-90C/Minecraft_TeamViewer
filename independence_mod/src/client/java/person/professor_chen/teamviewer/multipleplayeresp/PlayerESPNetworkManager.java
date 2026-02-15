@@ -334,7 +334,6 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	public static void setServerURL(String serverURL) {
 		if (config != null) {
 			config.setServerURL(serverURL);
-			config.save();
 		}
 	}
 	
