@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  mc-server:
+    # 自动构建配置
+    build: .  # 构建上下文为当前目录（mc-project/）
+    # 可选：指定镜像名，避免每次构建生成随机名
+    image: mc-teamviewer:0.1.0
+    # 端口映射（主机8765 → 容器8765）
+    ports:
+      - "8765:8765"
+    # 可选：挂载目录（方便修改代码无需重新构建，开发环境用）
+    volumes:
+      - ./mc_server:/app
+    # 可选：环境变量
+    # environment:
+    #   - PORT=8765
+    restart: unless-stopped  # 容器退出时重启策略

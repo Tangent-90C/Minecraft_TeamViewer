@@ -14,7 +14,8 @@
   "environment": "*",
   "entrypoints": {
     "fabric-datagen": ["person.professor_chen.teamviewer.client.TeamviewerDataGenerator"],
-    "client": ["person.professor_chen.teamviewer.client.TeamviewerClient"]
+    "client": ["person.professor_chen.teamviewer.client.TeamviewerClient"],
+    "modmenu": ["person.professor_chen.teamviewer.client.TeamviewerModMenuApi"]
   },
 
   "mixins": [
@@ -29,5 +30,8 @@
     "fabricloader": ">=${loader_version}",
     "fabric": "*",
     "minecraft": "${minecraft_version}"
+  },
+  "suggests": {
+    "modmenu": "*"
   }
 }
