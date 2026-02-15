@@ -8,6 +8,7 @@
   "screen.multipleplayeresp.config.url_hint": "例如: ws://127.0.0.1:8080/playeresp",
   "screen.multipleplayeresp.config.render_distance": "渲染距离",
   "screen.multipleplayeresp.config.render_distance_hint": "例如: 64",
+  "screen.multipleplayeresp.config.render_distance.tooltip": "只渲染该距离内的玩家",
   "screen.multipleplayeresp.config.update_interval": "上报频率(tick)",
   "screen.multipleplayeresp.config.update_interval_hint": "更新间隔tick数(1-1000)",
   "screen.multipleplayeresp.config.show_boxes": "显示方框",
@@ -19,6 +20,7 @@
   "screen.multipleplayeresp.config.tracer_top_offset": "顶部模式上抬偏移",
   "screen.multipleplayeresp.config.tracer_top_offset_hint": "例如: 0.42 (范围 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "颜色设置",
+  "screen.multipleplayeresp.config.display_settings": "显示设置",
   "screen.multipleplayeresp.config.done": "完成",
   "screen.multipleplayeresp.config.cancel": "取消",
   "screen.multipleplayeresp.config.connect": "连接",
@@ -30,6 +32,7 @@
   "screen.multipleplayeresp.color_config.line_color": "线条颜色 (ARGB格式)",
   "screen.multipleplayeresp.color_config.done": "完成",
   "screen.multipleplayeresp.color_config.cancel": "取消",
+  "screen.multipleplayeresp.display_config.title": "显示配置",
   
   "connection.status.connected": "已连接",
   "connection.status.disconnected": "未连接"

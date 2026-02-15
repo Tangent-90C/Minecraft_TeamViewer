@@ -8,6 +8,7 @@
   "screen.multipleplayeresp.config.url_hint": "e.g. ws://127.0.0.1:8080/playeresp",
   "screen.multipleplayeresp.config.render_distance": "Render Distance",
   "screen.multipleplayeresp.config.render_distance_hint": "e.g. 64",
+  "screen.multipleplayeresp.config.render_distance.tooltip": "Only players within this distance are rendered",
   "screen.multipleplayeresp.config.update_interval": "Update Interval(tick)",
   "screen.multipleplayeresp.config.update_interval_hint": "Ticks between updates (1-1000)",
   "screen.multipleplayeresp.config.show_boxes": "Show Boxes",
@@ -19,6 +20,7 @@
   "screen.multipleplayeresp.config.tracer_top_offset": "Top Mode Offset",
   "screen.multipleplayeresp.config.tracer_top_offset_hint": "e.g. 0.42 (range 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "Color Settings",
+  "screen.multipleplayeresp.config.display_settings": "Display Settings",
   "screen.multipleplayeresp.config.done": "Done",
   "screen.multipleplayeresp.config.cancel": "Cancel",
   "screen.multipleplayeresp.config.connect": "Connect",
@@ -30,6 +32,7 @@
   "screen.multipleplayeresp.color_config.line_color": "Line Color (ARGB format)",
   "screen.multipleplayeresp.color_config.done": "Done",
   "screen.multipleplayeresp.color_config.cancel": "Cancel",
+  "screen.multipleplayeresp.display_config.title": "Display Configuration",
   
   "connection.status.connected": "Connected",
   "connection.status.disconnected": "Disconnected"

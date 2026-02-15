@@ -12,15 +12,12 @@ import person.professor_chen.teamviewer.multipleplayeresp.PlayerESPNetworkManage
 public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
-    private TextFieldWidget renderDistanceField;
     private TextFieldWidget updateIntervalField;
-    private TextFieldWidget tracerTopOffsetField;
     private ButtonWidget connectButton;
-    private ButtonWidget colorSettingsButton;
+    private ButtonWidget displaySettingsButton;
     private ButtonWidget disconnectButton;
     private ButtonWidget showBoxesButton; // 方框开关按钮
     private ButtonWidget showLinesButton; // 追踪线开关按钮
-    private ButtonWidget tracerStartModeButton; // 追踪线起点模式按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private String currentConnectionStatus = "Unknown";
@@ -64,13 +61,10 @@ public class PlayerESPConfigScreen extends Screen {
         int totalHeight = 0;
         totalHeight += COMPONENT_SPACING; // 标题间距
         totalHeight += COMPONENT_SPACING; // URL输入框组
-        totalHeight += COMPONENT_SPACING; // 渲染距离输入框组
         totalHeight += COMPONENT_SPACING; // 上报频率输入框组
         totalHeight += BUTTON_SPACING;    // 方框按钮
         totalHeight += BUTTON_SPACING;    // 追踪线按钮
-        totalHeight += BUTTON_SPACING;    // 追踪线起点模式按钮
-        totalHeight += COMPONENT_SPACING; // 顶部模式偏移输入框组
-        totalHeight += BUTTON_SPACING;    // 颜色配置按钮
+        totalHeight += BUTTON_SPACING;    // 显示设置按钮
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
         totalHeight += COMPONENT_SPACING; // 连接状态显示
@@ -144,29 +138,6 @@ public class PlayerESPConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
         
-        // 渲染距离输入框
-        int renderDistanceY = getNextY();
-        this.renderDistanceField = new TextFieldWidget(
-            this.textRenderer,
-            componentX,
-            renderDistanceY,
-            COMPONENT_WIDTH,
-            COMPONENT_HEIGHT,
-            Text.translatable("screen.multipleplayeresp.config.render_distance")
-        );
-        this.renderDistanceField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getRenderDistance()));
-        this.renderDistanceField.setMaxLength(3); // 渲染距离最大3位数字
-        this.renderDistanceField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.render_distance_hint"));
-        this.addDrawableChild(this.renderDistanceField);
-        
-        // 渲染距离标签
-        this.addDrawableChild(
-            new TextWidget(componentX, renderDistanceY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
-                Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
-        
         // 上报频率输入框
         int updateIntervalY = getNextY();
         this.updateIntervalField = new TextFieldWidget(
@@ -206,43 +177,13 @@ public class PlayerESPConfigScreen extends Screen {
         ).dimensions(componentX, showLinesY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showLinesButton);
 
-        // 追踪线起点模式按钮
-        int tracerStartModeY = getNextButtonY();
-        this.tracerStartModeButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.tracer_start_mode"),
-            button -> toggleTracerStartMode()
-        ).dimensions(componentX, tracerStartModeY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.tracerStartModeButton);
-
-        // 顶部模式上抬偏移输入框
-        int tracerTopOffsetY = getNextY();
-        this.tracerTopOffsetField = new TextFieldWidget(
-            this.textRenderer,
-            componentX,
-            tracerTopOffsetY,
-            COMPONENT_WIDTH,
-            COMPONENT_HEIGHT,
-            Text.translatable("screen.multipleplayeresp.config.tracer_top_offset")
-        );
-        this.tracerTopOffsetField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getTracerTopOffset()));
-        this.tracerTopOffsetField.setMaxLength(6);
-        this.tracerTopOffsetField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.tracer_top_offset_hint"));
-        this.addDrawableChild(this.tracerTopOffsetField);
-
-        // 顶部模式上抬偏移标签
-        this.addDrawableChild(
-            new TextWidget(componentX, tracerTopOffsetY - LABEL_SPACING, COMPONENT_WIDTH, 12,
-                Text.translatable("screen.multipleplayeresp.config.tracer_top_offset"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
-        
-        // 颜色配置按钮
-        int colorConfigY = getNextButtonY();
-        this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.color_settings"),
-            button -> openColorConfig()
-        ).dimensions(componentX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+        // 显示设置二级菜单按钮
+        int displaySettingsY = getNextButtonY();
+        this.displaySettingsButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.display_settings"),
+            button -> openDisplaySettings()
+        ).dimensions(componentX, displaySettingsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.displaySettingsButton);
         
         // 完成和取消按钮（并排显示）
         int buttonsY = getNextButtonY();
@@ -274,9 +215,6 @@ public class PlayerESPConfigScreen extends Screen {
 
         // 更新追踪线按钮状态
         updateShowLinesButton();
-
-        // 更新追踪线起点模式按钮状态
-        updateTracerStartModeButton();
         
         // 添加连接状态显示组件
         addConnectionStatusWidget();
@@ -326,26 +264,12 @@ public class PlayerESPConfigScreen extends Screen {
                 PlayerESPNetworkManager.setServerURL(url);
             }
             
-            String renderDistanceStr = this.renderDistanceField.getText().trim();
-            if (!renderDistanceStr.isEmpty()) {
-                int renderDistance = Integer.parseInt(renderDistanceStr);
-                if (renderDistance > 0) {
-                    StandaloneMultiPlayerESP.getConfig().setRenderDistance(renderDistance);
-                }
-            }
-            
             String updateIntervalStr = this.updateIntervalField.getText().trim();
             if (!updateIntervalStr.isEmpty()) {
                 int updateInterval = Integer.parseInt(updateIntervalStr);
                 if (updateInterval > 0) {
                     StandaloneMultiPlayerESP.getConfig().setUpdateInterval(updateInterval);
                 }
-            }
-
-            String tracerTopOffsetStr = this.tracerTopOffsetField.getText().trim();
-            if (!tracerTopOffsetStr.isEmpty()) {
-                double tracerTopOffset = Double.parseDouble(tracerTopOffsetStr);
-                StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(tracerTopOffset);
             }
             
             // 显示方框/追踪线设置已经在开关按钮中实时保存
@@ -386,8 +310,8 @@ public class PlayerESPConfigScreen extends Screen {
         }
     }
     
-    private void openColorConfig() {
-        MinecraftClient.getInstance().setScreen(new PlayerESPColorConfigScreen(this));
+    private void openDisplaySettings() {
+        MinecraftClient.getInstance().setScreen(new PlayerESPDisplayConfigScreen(this));
     }
     
     /**
@@ -408,19 +332,6 @@ public class PlayerESPConfigScreen extends Screen {
         updateShowLinesButton();
     }
 
-    /**
-     * 切换追踪线起点模式
-     */
-    private void toggleTracerStartMode() {
-        Config config = StandaloneMultiPlayerESP.getConfig();
-        if (config.isTracerStartTop()) {
-            config.setTracerStartMode(Config.TRACER_START_CROSSHAIR);
-        } else {
-            config.setTracerStartMode(Config.TRACER_START_TOP);
-        }
-        updateTracerStartModeButton();
-    }
-    
     /**
      * 更新方框按钮显示状态
      */
@@ -453,22 +364,6 @@ public class PlayerESPConfigScreen extends Screen {
         }
     }
 
-    /**
-     * 更新追踪线起点模式按钮显示状态
-     */
-    private void updateTracerStartModeButton() {
-        if (this.tracerStartModeButton != null) {
-            Config config = StandaloneMultiPlayerESP.getConfig();
-            String modeKey = config.isTracerStartTop()
-                ? "screen.multipleplayeresp.config.tracer_start_mode.top"
-                : "screen.multipleplayeresp.config.tracer_start_mode.crosshair";
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.tracer_start_mode").getString()
-                + ": "
-                + Text.translatable(modeKey).getString();
-            this.tracerStartModeButton.setMessage(Text.of(buttonText));
-        }
-    }
-    
     /**
      * 更新连接状态文本
      */
@@ -534,8 +429,5 @@ public class PlayerESPConfigScreen extends Screen {
 
         // 更新追踪线按钮状态
         updateShowLinesButton();
-
-        // 更新追踪线起点模式按钮状态
-        updateTracerStartModeButton();
     }
 }
