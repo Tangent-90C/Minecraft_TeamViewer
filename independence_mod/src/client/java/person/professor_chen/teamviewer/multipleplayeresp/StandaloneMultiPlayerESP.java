@@ -221,6 +221,10 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		
 		// 渲染玩家位置框
 		for (Map.Entry<UUID, Vec3d> entry : positions.entrySet()) {
+			if (entry.getKey().equals(client.player.getUuid())) {
+				continue; // 跳过自己
+			}
+
 			Vec3d playerPos = entry.getValue();
 			
 			// 检查距离
