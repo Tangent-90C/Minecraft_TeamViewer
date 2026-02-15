@@ -33,7 +33,7 @@ public final class XaeroWorldMapBridge {
 
 	public static void tick(Map<UUID, RemotePlayerInfo> remotePlayersSource, boolean enabled) {
 		if (remotePlayersSource != null) {
-			remotePlayers = remotePlayersSource;
+			remotePlayers = remotePlayersSource.isEmpty() ? Collections.emptyMap() : Map.copyOf(remotePlayersSource);
 		}
 		espEnabled = enabled;
 

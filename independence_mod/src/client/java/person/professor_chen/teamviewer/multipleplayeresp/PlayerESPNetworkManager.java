@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -283,10 +284,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 						}
 					}
 
-					playerPositions.clear();
-					playerPositions.putAll(newPositions);
-					remotePlayers.clear();
-					remotePlayers.putAll(newRemotePlayers);
+					reconcilePlayerPositions(newPositions);
+					reconcileRemotePlayers(newRemotePlayers);
 				}
 
 				// 处理entities对象（注意是对象而不是数组）
@@ -585,6 +584,32 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				listener.onConnectionStatusChanged(connected);
 			} catch (Exception e) {
 				LOGGER.error("Error notifying connection status listener: {}", e.getMessage());
+			}
+		}
+	}
+
+	private void reconcilePlayerPositions(Map<UUID, Vec3d> latestPositions) {
+		playerPositions.entrySet().removeIf(entry -> !latestPositions.containsKey(entry.getKey()));
+
+		for (Map.Entry<UUID, Vec3d> entry : latestPositions.entrySet()) {
+			UUID playerId = entry.getKey();
+			Vec3d latest = entry.getValue();
+			Vec3d existing = playerPositions.get(playerId);
+			if (!Objects.equals(existing, latest)) {
+				playerPositions.put(playerId, latest);
+			}
+		}
+	}
+
+	private void reconcileRemotePlayers(Map<UUID, RemotePlayerInfo> latestRemotePlayers) {
+		remotePlayers.entrySet().removeIf(entry -> !latestRemotePlayers.containsKey(entry.getKey()));
+
+		for (Map.Entry<UUID, RemotePlayerInfo> entry : latestRemotePlayers.entrySet()) {
+			UUID playerId = entry.getKey();
+			RemotePlayerInfo latest = entry.getValue();
+			RemotePlayerInfo existing = remotePlayers.get(playerId);
+			if (!Objects.equals(existing, latest)) {
+				remotePlayers.put(playerId, latest);
 			}
 		}
 	}
