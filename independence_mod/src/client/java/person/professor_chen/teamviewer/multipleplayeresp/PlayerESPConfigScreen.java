@@ -17,6 +17,7 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget disconnectButton;
+    private ButtonWidget playerESPButton; // PlayerESP开关按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private String currentConnectionStatus = "Unknown";
@@ -24,6 +25,7 @@ public class PlayerESPConfigScreen extends Screen {
     private final String originalURL;
     private final int originalRenderDistance;
     private final int originalUpdateInterval;
+    private final boolean originalEnablePlayerESP;
     
     public PlayerESPConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.config.title"));
@@ -31,6 +33,7 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
         this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
+        this.originalEnablePlayerESP = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -86,30 +89,37 @@ public class PlayerESPConfigScreen extends Screen {
         this.updateIntervalField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.update_interval_hint"));
         this.addDrawableChild(this.updateIntervalField);
         
+        // PlayerESP开关按钮
+        this.playerESPButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.enable_player_esp"),
+            button -> togglePlayerESP()
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 140, 200, 20).build();
+        this.addDrawableChild(this.playerESPButton);
+        
         // 颜色配置按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.color_settings"),
             button -> openColorConfig()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 140, 200, 20).build());
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 170, 200, 20).build());
         
         // 完成按钮
         ButtonWidget doneButton = ButtonWidget.builder(
                 Text.translatable("screen.multipleplayeresp.config.done"),
                 button -> saveAndClose()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 170, 98, 20).build();
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 200, 98, 20).build();
         this.addDrawableChild(doneButton);
         
         // 取消按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.cancel"),
             button -> close()
-        ).dimensions(this.width / 2 + 2, this.height / 4 + 170, 98, 20).build());
+        ).dimensions(this.width / 2 + 2, this.height / 4 + 200, 98, 20).build());
         
         // 连接按钮
         this.connectButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.connect"),
             button -> connectToServer()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 200, 200, 20).build();
+        ).dimensions(this.width / 2 - 100, this.height / 4 + 230, 200, 20).build();
         this.addDrawableChild(this.connectButton);
         
         // 输入框上方的标签（最后添加以确保渲染在最上层）
@@ -132,6 +142,9 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 更新连接按钮文本
         updateConnectButton();
+        
+        // 更新PlayerESP按钮状态
+        updatePlayerESPButton();
         
         // 添加连接状态显示组件
         addConnectionStatusWidget();
@@ -165,6 +178,7 @@ public class PlayerESPConfigScreen extends Screen {
         PlayerESPNetworkManager.setServerURL(this.originalURL);
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
         StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
+        StandaloneMultiPlayerESP.getConfig().setEnablePlayerESP(this.originalEnablePlayerESP);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
@@ -193,6 +207,7 @@ public class PlayerESPConfigScreen extends Screen {
                 }
             }
             
+            // PlayerESP设置已经在togglePlayerESP方法中实时保存
             // 保存配置到文件
             StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
@@ -235,6 +250,31 @@ public class PlayerESPConfigScreen extends Screen {
     }
     
     /**
+     * 切换PlayerESP开关状态
+     */
+    private void togglePlayerESP() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
+        StandaloneMultiPlayerESP.getConfig().setEnablePlayerESP(!currentStatus);
+        updatePlayerESPButton();
+    }
+    
+    /**
+     * 更新PlayerESP按钮显示状态
+     */
+    private void updatePlayerESPButton() {
+        if (this.playerESPButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.enable_player_esp").getString();
+            if (isEnabled) {
+                buttonText += " [ON]";
+            } else {
+                buttonText += " [OFF]";
+            }
+            this.playerESPButton.setMessage(Text.of(buttonText));
+        }
+    }
+    
+    /**
      * 更新连接状态文本
      */
     private void updateConnectionStatus() {
@@ -250,7 +290,7 @@ public class PlayerESPConfigScreen extends Screen {
      */
     private void addConnectionStatusWidget() {
         int left = this.width / 2 - 100;
-        int top = this.height / 4 + 230; // 在连接按钮下方
+        int top = this.height / 4 + 260; // 在连接按钮下方
         
         this.connectionStatusWidget = new TextWidget(
             left, 
@@ -293,5 +333,8 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 更新连接按钮状态
         updateConnectButton();
+        
+        // 更新PlayerESP按钮状态
+        updatePlayerESPButton();
     }
 }

@@ -215,6 +215,11 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) return;
 		
+		// 检查PlayerESP是否启用
+		if (!config.isEnablePlayerESP()) {
+			return; // PlayerESP未启用，不渲染任何内容
+		}
+		
 		Vec3d cameraPos = context.camera().getPos();
 		Map<UUID, Vec3d> positions = useServerPositions ? serverPlayerPositions : playerPositions;
 		

@@ -10,6 +10,7 @@
   "screen.multipleplayeresp.config.render_distance_hint": "例如: 64",
   "screen.multipleplayeresp.config.update_interval": "上报频率(tick)",
   "screen.multipleplayeresp.config.update_interval_hint": "更新间隔tick数(1-1000)",
+  "screen.multipleplayeresp.config.enable_player_esp": "启用PlayerESP",
   "screen.multipleplayeresp.config.color_settings": "颜色设置",
   "screen.multipleplayeresp.config.done": "完成",
   "screen.multipleplayeresp.config.cancel": "取消",

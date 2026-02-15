@@ -20,6 +20,7 @@ public class Config {
     private int lineColor = 0xFFFF0000; // 不透明红色
     private boolean enableCompression = true; // 是否启用WebSocket压缩
     private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
+    private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -110,5 +111,13 @@ public class Config {
         if (updateInterval < 1) {
             this.updateInterval = 1;
         } else this.updateInterval = Math.min(updateInterval, 1000);
+    }
+    
+    public boolean isEnablePlayerESP() {
+        return enablePlayerESP;
+    }
+    
+    public void setEnablePlayerESP(boolean enablePlayerESP) {
+        this.enablePlayerESP = enablePlayerESP;
     }
 }
