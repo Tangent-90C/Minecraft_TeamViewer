@@ -15,6 +15,8 @@
   "screen.multipleplayeresp.config.enable_player_esp": "启用PlayerESP",
   "screen.multipleplayeresp.config.show_tracking_lines": "显示追踪线",
   "screen.multipleplayeresp.config.upload_entities": "上传实体信息",
+  "screen.multipleplayeresp.config.upload_shared_waypoints": "上报共享路标",
+  "screen.multipleplayeresp.config.show_shared_waypoints": "显示共享路标",
   "screen.multipleplayeresp.config.tracer_start_mode": "追踪线起点",
   "screen.multipleplayeresp.config.tracer_start_mode.crosshair": "玩家准心",
   "screen.multipleplayeresp.config.tracer_start_mode.top": "屏幕上方",

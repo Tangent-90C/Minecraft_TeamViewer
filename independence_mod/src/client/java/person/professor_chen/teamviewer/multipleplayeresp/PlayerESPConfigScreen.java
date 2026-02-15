@@ -21,6 +21,8 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget showBoxesButton; // 方框开关按钮
     private ButtonWidget showLinesButton; // 追踪线开关按钮
     private ButtonWidget uploadEntitiesButton; // 上传实体信息开关按钮
+    private ButtonWidget uploadSharedWaypointsButton; // 上报共享路标开关按钮
+    private ButtonWidget showSharedWaypointsButton; // 显示共享路标开关按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private int connectionStatusX;
@@ -33,6 +35,8 @@ public class PlayerESPConfigScreen extends Screen {
     private final boolean originalShowBoxes;
     private final boolean originalShowLines;
     private final boolean originalUploadEntities;
+    private final boolean originalUploadSharedWaypoints;
+    private final boolean originalShowSharedWaypoints;
     private final String originalTracerStartMode;
     private final double originalTracerTopOffset;
     
@@ -55,6 +59,8 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
         this.originalUploadEntities = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
+        this.originalUploadSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
+        this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
         this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
         // 初始化连接状态
@@ -72,6 +78,7 @@ public class PlayerESPConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING; // 上报频率输入框组
         totalHeight += BUTTON_SPACING;    // 方框/追踪线按钮行
         totalHeight += BUTTON_SPACING;    // 上传实体信息/显示设置按钮行
+        totalHeight += BUTTON_SPACING;    // 路标共享设置按钮行
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
         totalHeight += COMPONENT_SPACING; // 连接状态显示
@@ -198,6 +205,20 @@ public class PlayerESPConfigScreen extends Screen {
             button -> openDisplaySettings()
         ).dimensions(componentX + secondaryButtonWidth + 2, uploadEntitiesY, secondaryButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.displaySettingsButton);
+
+        int waypointSharingY = getNextButtonY();
+        int waypointButtonWidth = (COMPONENT_WIDTH - 2) / 2;
+        this.uploadSharedWaypointsButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.upload_shared_waypoints"),
+            button -> toggleUploadSharedWaypoints()
+        ).dimensions(componentX, waypointSharingY, waypointButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.uploadSharedWaypointsButton);
+
+        this.showSharedWaypointsButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints"),
+            button -> toggleShowSharedWaypoints()
+        ).dimensions(componentX + waypointButtonWidth + 2, waypointSharingY, waypointButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showSharedWaypointsButton);
         
         // 完成和取消按钮（并排显示）
         int buttonsY = getNextButtonY();
@@ -239,6 +260,10 @@ public class PlayerESPConfigScreen extends Screen {
 
         // 更新上传实体信息按钮状态
         updateUploadEntitiesButton();
+
+        // 更新共享路标按钮状态
+        updateUploadSharedWaypointsButton();
+        updateShowSharedWaypointsButton();
         
         // 添加连接状态显示组件
         addConnectionStatusWidget();
@@ -288,6 +313,8 @@ public class PlayerESPConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
         StandaloneMultiPlayerESP.getConfig().setUploadEntities(this.originalUploadEntities);
+        StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(this.originalUploadSharedWaypoints);
+        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
         StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
         
@@ -392,6 +419,18 @@ public class PlayerESPConfigScreen extends Screen {
         updateUploadEntitiesButton();
     }
 
+    private void toggleUploadSharedWaypoints() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
+        StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(!currentStatus);
+        updateUploadSharedWaypointsButton();
+    }
+
+    private void toggleShowSharedWaypoints() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
+        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(!currentStatus);
+        updateShowSharedWaypointsButton();
+    }
+
     /**
      * 更新方框按钮显示状态
      */
@@ -437,6 +476,24 @@ public class PlayerESPConfigScreen extends Screen {
                 buttonText += " [OFF]";
             }
             this.uploadEntitiesButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void updateUploadSharedWaypointsButton() {
+        if (this.uploadSharedWaypointsButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.upload_shared_waypoints").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.uploadSharedWaypointsButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void updateShowSharedWaypointsButton() {
+        if (this.showSharedWaypointsButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.showSharedWaypointsButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -562,5 +619,9 @@ public class PlayerESPConfigScreen extends Screen {
 
         // 更新上传实体信息按钮状态
         updateUploadEntitiesButton();
+
+        // 更新共享路标按钮状态
+        updateUploadSharedWaypointsButton();
+        updateShowSharedWaypointsButton();
     }
 }

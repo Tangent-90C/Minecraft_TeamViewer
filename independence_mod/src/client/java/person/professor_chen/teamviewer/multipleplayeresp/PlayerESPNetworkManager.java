@@ -1,6 +1,7 @@
 package person.professor_chen.teamviewer.multipleplayeresp;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -44,6 +45,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 
 	public interface WaypointUpdateListener {
 		void onWaypointsReceived(Map<String, SharedWaypointInfo> waypoints);
+
+		default void onWaypointsDeleted(List<String> waypointIds) {
+		}
 	}
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
@@ -206,6 +210,34 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		}
 	}
 
+	/**
+	 * 发送 waypoint 删除通知到云端（type: waypoints_delete）
+	 */
+	public void sendWaypointsDelete(UUID submitPlayerId, List<String> waypointIds) {
+		if (webSocket == null || !isConnected)
+			return;
+		if (waypointIds == null || waypointIds.isEmpty())
+			return;
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "waypoints_delete");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonArray ids = new JsonArray();
+			for (String waypointId : waypointIds) {
+				if (waypointId != null && !waypointId.isBlank()) {
+					ids.add(waypointId);
+				}
+			}
+			if (ids.isEmpty()) {
+				return;
+			}
+			obj.add("waypointIds", ids);
+			webSocket.sendText(gson.toJson(obj), true);
+		} catch (Exception e) {
+			LOGGER.error("Failed to send waypoints_delete to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
 	private static JsonObject mapToJsonObject(Map<String, Object> map) {
 		JsonObject o = new JsonObject();
 		for (Map.Entry<String, Object> e : map.entrySet()) {
@@ -273,6 +305,14 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypoints(json);
 				if (!receivedWaypoints.isEmpty()) {
 					notifyWaypointsReceived(receivedWaypoints);
+				}
+				return;
+			}
+
+			if ("waypoints_delete".equals(messageType)) {
+				List<String> waypointIds = parseWaypointDeleteIds(json);
+				if (!waypointIds.isEmpty()) {
+					notifyWaypointsDeleted(waypointIds);
 				}
 				return;
 			}
@@ -654,6 +694,16 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		}
 	}
 
+	private void notifyWaypointsDeleted(List<String> waypointIds) {
+		for (WaypointUpdateListener listener : waypointListeners) {
+			try {
+				listener.onWaypointsDeleted(waypointIds);
+			} catch (Exception e) {
+				LOGGER.error("Error notifying waypoint delete listener: {}", e.getMessage());
+			}
+		}
+	}
+
 	private Map<String, SharedWaypointInfo> parseWaypoints(JsonObject json) {
 		if (!json.has("waypoints") || !json.get("waypoints").isJsonObject()) {
 			return Map.of();
@@ -706,6 +756,24 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				result.put(waypointId, waypoint);
 			} catch (Exception e) {
 				LOGGER.error("Failed to parse shared waypoint {}: {}", entry.getKey(), e.getMessage());
+			}
+		}
+
+		return result;
+	}
+
+	private List<String> parseWaypointDeleteIds(JsonObject json) {
+		if (!json.has("waypointIds") || !json.get("waypointIds").isJsonArray()) {
+			return List.of();
+		}
+
+		List<String> result = new java.util.ArrayList<>();
+		for (JsonElement idElement : json.getAsJsonArray("waypointIds")) {
+			if (idElement != null && idElement.isJsonPrimitive()) {
+				String id = idElement.getAsString();
+				if (id != null && !id.isBlank()) {
+					result.add(id);
+				}
 			}
 		}
 

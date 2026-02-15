@@ -15,6 +15,8 @@
   "screen.multipleplayeresp.config.enable_player_esp": "Enable PlayerESP",
   "screen.multipleplayeresp.config.show_tracking_lines": "Show Tracking Lines",
   "screen.multipleplayeresp.config.upload_entities": "Upload Entity Data",
+  "screen.multipleplayeresp.config.upload_shared_waypoints": "Upload Shared Waypoints",
+  "screen.multipleplayeresp.config.show_shared_waypoints": "Show Shared Waypoints",
   "screen.multipleplayeresp.config.tracer_start_mode": "Tracer Start",
   "screen.multipleplayeresp.config.tracer_start_mode.crosshair": "Crosshair",
   "screen.multipleplayeresp.config.tracer_start_mode.top": "Top of Screen",

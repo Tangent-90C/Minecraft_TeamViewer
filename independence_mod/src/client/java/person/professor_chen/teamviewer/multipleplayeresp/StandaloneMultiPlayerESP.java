@@ -96,7 +96,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 			// 同步远程玩家到Xaero世界地图
 			XaeroWorldMapBridge.tick(remotePlayers, espEnabled);
-			XaeroWaypointShareBridge.tick(networkManager, espEnabled);
+			XaeroWaypointShareBridge.tick(networkManager, espEnabled, config);
 			
 			// 发送玩家位置到服务器
 			if (espEnabled && networkManager != null) {

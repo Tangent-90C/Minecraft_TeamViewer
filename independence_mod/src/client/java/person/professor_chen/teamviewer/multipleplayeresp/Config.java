@@ -27,6 +27,8 @@ public class Config {
     private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
     private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
     private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
+    private boolean uploadSharedWaypoints = true; // 是否上报共享路标
+    private boolean showSharedWaypoints = true; // 是否显示共享路标
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -174,5 +176,21 @@ public class Config {
 
     public void setUploadEntities(boolean uploadEntities) {
         this.uploadEntities = uploadEntities;
+    }
+
+    public boolean isUploadSharedWaypoints() {
+        return uploadSharedWaypoints;
+    }
+
+    public void setUploadSharedWaypoints(boolean uploadSharedWaypoints) {
+        this.uploadSharedWaypoints = uploadSharedWaypoints;
+    }
+
+    public boolean isShowSharedWaypoints() {
+        return showSharedWaypoints;
+    }
+
+    public void setShowSharedWaypoints(boolean showSharedWaypoints) {
+        this.showSharedWaypoints = showSharedWaypoints;
     }
 }
