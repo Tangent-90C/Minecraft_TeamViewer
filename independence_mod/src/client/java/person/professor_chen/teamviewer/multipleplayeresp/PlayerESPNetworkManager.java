@@ -42,6 +42,10 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		void onConnectionStatusChanged(boolean connected);
 	}
 
+	public interface WaypointUpdateListener {
+		void onWaypointsReceived(Map<String, SharedWaypointInfo> waypoints);
+	}
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
 	private static Config config;
 
@@ -55,6 +59,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 
 	// 连接状态监听器列表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
+	private final List<WaypointUpdateListener> waypointListeners = new CopyOnWriteArrayList<>();
 
 	// 用于处理分段消息的缓冲区
 	private StringBuilder messageBuffer = new StringBuilder();
@@ -177,6 +182,30 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		}
 	}
 
+	/**
+	 * 发送 waypoint 更新到云端（type: waypoints_update）
+	 * waypoints 为 waypointId -> { x, y, z, dimension, name, symbol, color, ownerId, ownerName, createdAt }
+	 */
+	public void sendWaypointsUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> waypoints) {
+		if (webSocket == null || !isConnected)
+			return;
+		if (waypoints == null || waypoints.isEmpty())
+			return;
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "waypoints_update");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonObject waypointsJson = new JsonObject();
+			for (Map.Entry<String, Map<String, Object>> e : waypoints.entrySet()) {
+				waypointsJson.add(e.getKey(), mapToJsonObject(e.getValue()));
+			}
+			obj.add("waypoints", waypointsJson);
+			webSocket.sendText(gson.toJson(obj), true);
+		} catch (Exception e) {
+			LOGGER.error("Failed to send waypoints_update to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
 	private static JsonObject mapToJsonObject(Map<String, Object> map) {
 		JsonObject o = new JsonObject();
 		for (Map.Entry<String, Object> e : map.entrySet()) {
@@ -238,8 +267,18 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				return;
 			}
 
+			String messageType = json.has("type") ? json.get("type").getAsString() : "";
+
+			if ("waypoints_update".equals(messageType)) {
+				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypoints(json);
+				if (!receivedWaypoints.isEmpty()) {
+					notifyWaypointsReceived(receivedWaypoints);
+				}
+				return;
+			}
+
 			// 解析服务器发送的位置信息
-			if (json.has("type") && "positions".equals(json.get("type").getAsString())) {
+			if ("positions".equals(messageType)) {
 				// 处理players对象（注意是对象而不是数组）
 				if (json.has("players") && json.get("players").isJsonObject()) {
 					JsonObject players = json.getAsJsonObject("players");
@@ -327,6 +366,13 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 					}
 
 					LOGGER.debug("PlayerESP Network - Processed: {} players, {} entities", playerCount, entityCount);
+				}
+
+				if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+					Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypoints(json);
+					if (!receivedWaypoints.isEmpty()) {
+						notifyWaypointsReceived(receivedWaypoints);
+					}
 				}
 			}
 		} catch (Exception e) {
@@ -575,6 +621,16 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 		statusListeners.remove(listener);
 	}
 
+	public void addWaypointUpdateListener(WaypointUpdateListener listener) {
+		if (listener != null && !waypointListeners.contains(listener)) {
+			waypointListeners.add(listener);
+		}
+	}
+
+	public void removeWaypointUpdateListener(WaypointUpdateListener listener) {
+		waypointListeners.remove(listener);
+	}
+
 	/**
 	 * 通知所有监听器连接状态变化
 	 */
@@ -586,6 +642,74 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				LOGGER.error("Error notifying connection status listener: {}", e.getMessage());
 			}
 		}
+	}
+
+	private void notifyWaypointsReceived(Map<String, SharedWaypointInfo> waypoints) {
+		for (WaypointUpdateListener listener : waypointListeners) {
+			try {
+				listener.onWaypointsReceived(waypoints);
+			} catch (Exception e) {
+				LOGGER.error("Error notifying waypoint listener: {}", e.getMessage());
+			}
+		}
+	}
+
+	private Map<String, SharedWaypointInfo> parseWaypoints(JsonObject json) {
+		if (!json.has("waypoints") || !json.get("waypoints").isJsonObject()) {
+			return Map.of();
+		}
+
+		JsonObject waypointsJson = json.getAsJsonObject("waypoints");
+		Map<String, SharedWaypointInfo> result = new HashMap<>();
+
+		for (Map.Entry<String, JsonElement> entry : waypointsJson.entrySet()) {
+			try {
+				String waypointId = entry.getKey();
+				if (!entry.getValue().isJsonObject()) {
+					continue;
+				}
+
+				JsonObject node = entry.getValue().getAsJsonObject();
+				JsonObject data = node.has("data") && node.get("data").isJsonObject()
+						? node.getAsJsonObject("data")
+						: node;
+
+				if (!data.has("x") || !data.has("y") || !data.has("z")) {
+					continue;
+				}
+
+				UUID ownerId = null;
+				if (data.has("ownerId") && !data.get("ownerId").isJsonNull()) {
+					ownerId = UUID.fromString(data.get("ownerId").getAsString());
+				}
+
+				String name = data.has("name") ? data.get("name").getAsString() : "Waypoint";
+				String symbol = data.has("symbol") ? data.get("symbol").getAsString() : "W";
+				String ownerName = data.has("ownerName") ? data.get("ownerName").getAsString() : "Unknown";
+				String dimension = data.has("dimension") ? data.get("dimension").getAsString() : null;
+				int color = data.has("color") ? data.get("color").getAsInt() : 0x55FF55;
+				long createdAt = data.has("createdAt") ? data.get("createdAt").getAsLong()
+						: System.currentTimeMillis();
+
+				SharedWaypointInfo waypoint = new SharedWaypointInfo(
+						waypointId,
+						ownerId,
+						ownerName,
+						name,
+						symbol,
+						data.get("x").getAsInt(),
+						data.get("y").getAsInt(),
+						data.get("z").getAsInt(),
+						dimension,
+						color,
+						createdAt);
+				result.put(waypointId, waypoint);
+			} catch (Exception e) {
+				LOGGER.error("Failed to parse shared waypoint {}: {}", entry.getKey(), e.getMessage());
+			}
+		}
+
+		return result;
 	}
 
 	private void reconcilePlayerPositions(Map<UUID, Vec3d> latestPositions) {

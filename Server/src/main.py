@@ -50,6 +50,24 @@ class EntityData(BaseModel):
     )
 
 
+class WaypointData(BaseModel):
+    """共享路标数据模型"""
+    x: float = Field(..., description="X坐标")
+    y: float = Field(..., description="Y坐标")
+    z: float = Field(..., description="Z坐标")
+    dimension: str = Field(..., description="维度ID")
+    name: str = Field(..., description="路标名称")
+    symbol: Optional[str] = Field("W", description="路标符号")
+    color: int = Field(default=5635925, description="路标颜色")
+    ownerId: Optional[str] = Field(None, description="创建者UUID")
+    ownerName: Optional[str] = Field(None, description="创建者名称")
+    createdAt: Optional[int] = Field(None, description="创建时间戳(ms)")
+
+    model_config = ConfigDict(
+        extra="ignore"
+    )
+
+
 # 存储玩家数据和连接
 players: Dict[str, dict] = {}
 connections: Dict[str, WebSocket] = {}
@@ -61,6 +79,9 @@ connection_config: Dict[str, dict] = {}  # {player_uuid: {"enable_compression": 
 
 # 存储实体数据
 entities: Dict[str, dict] = {}
+
+# 存储共享路标数据
+waypoints: Dict[str, dict] = {}
 
 # 存储玩家数据的时间限制（秒）
 PLAYER_TIMEOUT = 5
@@ -95,9 +116,10 @@ async def broadcast_positions():
     message_data = {
         "type": "positions",
         "players": dict(players),
-        "entities": dict(entities)
+        "entities": dict(entities),
+        "waypoints": dict(waypoints)
     }
-
+    
     try:
         message = json.dumps(message_data, separators=(",", ":"))
     except Exception as e:
@@ -148,6 +170,7 @@ async def broadcast_snapshot():
         "server_time": current_time,
         "players": dict(players),
         "entities": dict(entities),
+        "waypoints": dict(waypoints),
         "connections": list(connections.keys()),
         "connections_count": len(connections)
     }
@@ -277,6 +300,32 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
 
                 await broadcast_positions()
+
+            elif data.get("type") == "waypoints_update":
+                print(f"Received waypoints update from {submitPlayerId}: {data.get('waypoints', {})}")
+                # 自动记录连接（兼容旧客户端）
+                if submitPlayerId and submitPlayerId not in connections:
+                    connections[submitPlayerId] = websocket
+                    connection_config[submitPlayerId] = {
+                        "enable_compression": data.get("enableCompression", False)
+                    }
+                    print(f"Client {submitPlayerId} connected (legacy)")
+
+                current_time = time.time()
+                player_waypoints = data.get("waypoints", {})
+                for waypoint_id, waypoint_data in player_waypoints.items():
+                    try:
+                        validated_data = WaypointData(**waypoint_data)
+                        waypoints[waypoint_id] = {
+                            "timestamp": current_time,
+                            "submitPlayerId": submitPlayerId,
+                            "data": validated_data.model_dump()
+                        }
+                    except Exception as e:
+                        print(f"Error validating waypoint data for {waypoint_id}: {e}")
+                        continue
+
+                await broadcast_positions()
                 
 
     except WebSocketDisconnect:
@@ -295,6 +344,9 @@ async def websocket_endpoint(websocket: WebSocket):
             entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == submitPlayerId]
             for eid in entities_to_remove:
                 del entities[eid]
+            waypoints_to_remove = [wid for wid, wdata in list(waypoints.items()) if wdata.get("submitPlayerId") == submitPlayerId]
+            for wid in waypoints_to_remove:
+                del waypoints[wid]
             print(f"Client {submitPlayerId} disconnected")
             await broadcast_positions()
 
@@ -313,6 +365,7 @@ async def snapshot():
         "server_time": current_time,
         "players": dict(players),
         "entities": dict(entities),
+        "waypoints": dict(waypoints),
         "connections": list(connections.keys()),
         "connections_count": len(connections)
     })
