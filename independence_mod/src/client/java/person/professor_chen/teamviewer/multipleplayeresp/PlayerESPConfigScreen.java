@@ -40,6 +40,7 @@ public class PlayerESPConfigScreen extends Screen {
     private static final int COMPONENT_SPACING = 30;
     private static final int LABEL_SPACING = 12;
     private static final int BUTTON_SPACING = 25;
+    private static final int URL_MAX_LENGTH = 2048;
     private int startY;
     private int currentY;
     
@@ -129,6 +130,7 @@ public class PlayerESPConfigScreen extends Screen {
             COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.url")
         );
+        this.urlField.setMaxLength(URL_MAX_LENGTH);
         this.urlField.setText(PlayerESPNetworkManager.getServerURL());
         this.urlField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.url_hint"));
         this.addDrawableChild(this.urlField);

@@ -4,9 +4,9 @@ import gzip
 from typing import Dict, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field
 
 # 玩家数据模型
 class PlayerData(BaseModel):
@@ -26,9 +26,9 @@ class PlayerData(BaseModel):
     width: float = Field(default=0.6, gt=0, description="碰撞箱宽度")
     height: float = Field(default=1.8, gt=0, description="碰撞箱高度")
 
-    class Config:
-        # 允许额外字段，但会被忽略
-        extra = "ignore"
+    model_config = ConfigDict(
+        extra="ignore"
+    )
 
 
 class EntityData(BaseModel):
@@ -45,9 +45,9 @@ class EntityData(BaseModel):
     width: float = Field(default=0.6, gt=0, description="碰撞箱宽度")
     height: float = Field(default=1.8, gt=0, description="碰撞箱高度")
 
-    class Config:
-        # 允许额外字段，但会被忽略
-        extra = "ignore"
+    model_config = ConfigDict(
+        extra="ignore"
+    )
 
 
 # 存储玩家数据和连接
@@ -69,7 +69,7 @@ ENTITY_TIMEOUT = 5
 app = FastAPI()
 
 # 挂载静态页面目录到 /admin
-app.mount("/admin", StaticFiles(directory="Server/static", html=True), name="admin")
+app.mount("/admin", StaticFiles(directory="static", html=True), name="admin")
 
 
 async def broadcast_positions():
