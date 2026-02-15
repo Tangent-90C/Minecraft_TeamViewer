@@ -16,6 +16,8 @@
   "screen.multipleplayeresp.config.tracer_start_mode": "Tracer Start",
   "screen.multipleplayeresp.config.tracer_start_mode.crosshair": "Crosshair",
   "screen.multipleplayeresp.config.tracer_start_mode.top": "Top of Screen",
+  "screen.multipleplayeresp.config.tracer_top_offset": "Top Mode Offset",
+  "screen.multipleplayeresp.config.tracer_top_offset_hint": "e.g. 0.42 (range 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "Color Settings",
   "screen.multipleplayeresp.config.done": "Done",
   "screen.multipleplayeresp.config.cancel": "Cancel",

@@ -22,6 +22,7 @@ public class Config {
     private int boxColor = 0x80FF0000; // 50%不透明红色
     private int lineColor = 0xFFFF0000; // 不透明红色
     private String tracerStartMode = TRACER_START_CROSSHAIR; // 追踪线起始点模式：crosshair 或 top
+    private double tracerTopOffset = 0.42; // 顶部模式上抬偏移
     private boolean enableCompression = true; // 是否启用WebSocket压缩
     private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
     private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
@@ -115,6 +116,28 @@ public class Config {
 
     public boolean isTracerStartTop() {
         return TRACER_START_TOP.equals(getTracerStartMode());
+    }
+
+    public double getTracerTopOffset() {
+        if (Double.isNaN(tracerTopOffset) || Double.isInfinite(tracerTopOffset)) {
+            return 0.42;
+        }
+        if (tracerTopOffset < 0.0) {
+            return 0.0;
+        }
+        return Math.min(tracerTopOffset, 1.5);
+    }
+
+    public void setTracerTopOffset(double tracerTopOffset) {
+        if (Double.isNaN(tracerTopOffset) || Double.isInfinite(tracerTopOffset)) {
+            this.tracerTopOffset = 0.42;
+            return;
+        }
+        if (tracerTopOffset < 0.0) {
+            this.tracerTopOffset = 0.0;
+            return;
+        }
+        this.tracerTopOffset = Math.min(tracerTopOffset, 1.5);
     }
     
     public boolean isEnableCompression() {

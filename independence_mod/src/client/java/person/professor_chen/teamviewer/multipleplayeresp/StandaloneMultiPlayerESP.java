@@ -252,7 +252,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 					Vec3d tracerStart;
 					if (config.isTracerStartTop()) {
-						tracerStart = lookVec.multiply(0.6).add(cameraUpVec.multiply(0.42));
+						tracerStart = lookVec.multiply(0.6).add(cameraUpVec.multiply(config.getTracerTopOffset()));
 					} else {
 						tracerStart = lookVec.multiply(0.6);
 					}

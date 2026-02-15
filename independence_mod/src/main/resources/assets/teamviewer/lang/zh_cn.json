@@ -16,6 +16,8 @@
   "screen.multipleplayeresp.config.tracer_start_mode": "追踪线起点",
   "screen.multipleplayeresp.config.tracer_start_mode.crosshair": "玩家准心",
   "screen.multipleplayeresp.config.tracer_start_mode.top": "屏幕上方",
+  "screen.multipleplayeresp.config.tracer_top_offset": "顶部模式上抬偏移",
+  "screen.multipleplayeresp.config.tracer_top_offset_hint": "例如: 0.42 (范围 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "颜色设置",
   "screen.multipleplayeresp.config.done": "完成",
   "screen.multipleplayeresp.config.cancel": "取消",

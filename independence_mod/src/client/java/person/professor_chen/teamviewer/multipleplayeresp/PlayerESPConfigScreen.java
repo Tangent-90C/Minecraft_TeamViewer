@@ -14,6 +14,7 @@ public class PlayerESPConfigScreen extends Screen {
     private TextFieldWidget urlField;
     private TextFieldWidget renderDistanceField;
     private TextFieldWidget updateIntervalField;
+    private TextFieldWidget tracerTopOffsetField;
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget disconnectButton;
@@ -30,6 +31,7 @@ public class PlayerESPConfigScreen extends Screen {
     private final boolean originalShowBoxes;
     private final boolean originalShowLines;
     private final String originalTracerStartMode;
+    private final double originalTracerTopOffset;
     
     // 自动布局相关变量
     private static final int COMPONENT_WIDTH = 200;
@@ -49,6 +51,7 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
+        this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -66,6 +69,7 @@ public class PlayerESPConfigScreen extends Screen {
         totalHeight += BUTTON_SPACING;    // 方框按钮
         totalHeight += BUTTON_SPACING;    // 追踪线按钮
         totalHeight += BUTTON_SPACING;    // 追踪线起点模式按钮
+        totalHeight += COMPONENT_SPACING; // 顶部模式偏移输入框组
         totalHeight += BUTTON_SPACING;    // 颜色配置按钮
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
@@ -209,6 +213,29 @@ public class PlayerESPConfigScreen extends Screen {
             button -> toggleTracerStartMode()
         ).dimensions(componentX, tracerStartModeY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.tracerStartModeButton);
+
+        // 顶部模式上抬偏移输入框
+        int tracerTopOffsetY = getNextY();
+        this.tracerTopOffsetField = new TextFieldWidget(
+            this.textRenderer,
+            componentX,
+            tracerTopOffsetY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.multipleplayeresp.config.tracer_top_offset")
+        );
+        this.tracerTopOffsetField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getTracerTopOffset()));
+        this.tracerTopOffsetField.setMaxLength(6);
+        this.tracerTopOffsetField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.tracer_top_offset_hint"));
+        this.addDrawableChild(this.tracerTopOffsetField);
+
+        // 顶部模式上抬偏移标签
+        this.addDrawableChild(
+            new TextWidget(componentX, tracerTopOffsetY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.multipleplayeresp.config.tracer_top_offset"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
         
         // 颜色配置按钮
         int colorConfigY = getNextButtonY();
@@ -286,6 +313,7 @@ public class PlayerESPConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
+        StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
@@ -312,6 +340,12 @@ public class PlayerESPConfigScreen extends Screen {
                 if (updateInterval > 0) {
                     StandaloneMultiPlayerESP.getConfig().setUpdateInterval(updateInterval);
                 }
+            }
+
+            String tracerTopOffsetStr = this.tracerTopOffsetField.getText().trim();
+            if (!tracerTopOffsetStr.isEmpty()) {
+                double tracerTopOffset = Double.parseDouble(tracerTopOffsetStr);
+                StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(tracerTopOffset);
             }
             
             // 显示方框/追踪线设置已经在开关按钮中实时保存
