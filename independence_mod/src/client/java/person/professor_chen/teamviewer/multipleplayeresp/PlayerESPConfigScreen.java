@@ -27,6 +27,15 @@ public class PlayerESPConfigScreen extends Screen {
     private final int originalUpdateInterval;
     private final boolean originalEnablePlayerESP;
     
+    // 自动布局相关变量
+    private static final int COMPONENT_WIDTH = 200;
+    private static final int COMPONENT_HEIGHT = 20;
+    private static final int COMPONENT_SPACING = 30;
+    private static final int LABEL_SPACING = 12;
+    private static final int BUTTON_SPACING = 25;
+    private int startY;
+    private int currentY;
+    
     public PlayerESPConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.config.title"));
         this.parent = parent;
@@ -36,6 +45,52 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalEnablePlayerESP = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
         // 初始化连接状态
         updateConnectionStatus();
+    }
+    
+    /**
+     * 计算起始Y坐标，使所有组件居中显示
+     */
+    private void calculateLayout() {
+        // 计算总高度需求
+        int totalHeight = 0;
+        totalHeight += COMPONENT_SPACING; // 标题间距
+        totalHeight += COMPONENT_SPACING; // URL输入框组
+        totalHeight += COMPONENT_SPACING; // 渲染距离输入框组
+        totalHeight += COMPONENT_SPACING; // 上报频率输入框组
+        totalHeight += BUTTON_SPACING;    // PlayerESP按钮
+        totalHeight += BUTTON_SPACING;    // 颜色配置按钮
+        totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
+        totalHeight += BUTTON_SPACING;    // 连接按钮
+        totalHeight += COMPONENT_SPACING; // 连接状态显示
+        
+        // 计算起始Y坐标
+        startY = (this.height - totalHeight) / 2;
+        currentY = startY;
+    }
+    
+    /**
+     * 获取下一个组件的Y坐标
+     */
+    private int getNextY() {
+        int result = currentY;
+        currentY += COMPONENT_SPACING;
+        return result;
+    }
+    
+    /**
+     * 获取按钮组的Y坐标（较大间距）
+     */
+    private int getNextButtonY() {
+        int result = currentY;
+        currentY += BUTTON_SPACING;
+        return result;
+    }
+    
+    /**
+     * 获取组件的X坐标（居中）
+     */
+    private int getComponentX() {
+        return (this.width - COMPONENT_WIDTH) / 2;
     }
     
     // 连接状态监听器实例
@@ -48,26 +103,43 @@ public class PlayerESPConfigScreen extends Screen {
     protected void init() {
         super.init();
         
+        // 计算自动布局参数
+        calculateLayout();
+        
+        // 跳过标题间距
+        currentY += COMPONENT_SPACING;
+        
         // 服务器URL输入框
+        int componentX = getComponentX();
+        int urlY = getNextY();
         this.urlField = new TextFieldWidget(
             this.textRenderer,
-            this.width / 2 - 100,
-            this.height / 4 + 20,
-            200,
-            20,
+            componentX,
+            urlY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.url")
         );
         this.urlField.setText(PlayerESPNetworkManager.getServerURL());
         this.urlField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.url_hint"));
         this.addDrawableChild(this.urlField);
         
+        // URL标签
+        this.addDrawableChild(
+            new TextWidget(componentX, urlY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
+                Text.translatable("screen.multipleplayeresp.config.url"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        
         // 渲染距离输入框
+        int renderDistanceY = getNextY();
         this.renderDistanceField = new TextFieldWidget(
             this.textRenderer,
-            this.width / 2 - 100,
-            this.height / 4 + 60,
-            200,
-            20,
+            componentX,
+            renderDistanceY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.render_distance")
         );
         this.renderDistanceField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getRenderDistance()));
@@ -75,13 +147,22 @@ public class PlayerESPConfigScreen extends Screen {
         this.renderDistanceField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.render_distance_hint"));
         this.addDrawableChild(this.renderDistanceField);
         
+        // 渲染距离标签
+        this.addDrawableChild(
+            new TextWidget(componentX, renderDistanceY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
+                Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        
         // 上报频率输入框
+        int updateIntervalY = getNextY();
         this.updateIntervalField = new TextFieldWidget(
             this.textRenderer,
-            this.width / 2 - 100,
-            this.height / 4 + 100,
-            200,
-            20,
+            componentX,
+            updateIntervalY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.update_interval")
         );
         this.updateIntervalField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getUpdateInterval()));
@@ -89,56 +170,50 @@ public class PlayerESPConfigScreen extends Screen {
         this.updateIntervalField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.update_interval_hint"));
         this.addDrawableChild(this.updateIntervalField);
         
+        // 上报频率标签
+        this.addDrawableChild(
+            new TextWidget(componentX, updateIntervalY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
+                Text.translatable("screen.multipleplayeresp.config.update_interval"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+        
         // PlayerESP开关按钮
+        int playerESPY = getNextButtonY();
         this.playerESPButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.enable_player_esp"),
             button -> togglePlayerESP()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 140, 200, 20).build();
+        ).dimensions(componentX, playerESPY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.playerESPButton);
         
         // 颜色配置按钮
+        int colorConfigY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.color_settings"),
             button -> openColorConfig()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 170, 200, 20).build());
+        ).dimensions(componentX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
         
-        // 完成按钮
+        // 完成和取消按钮（并排显示）
+        int buttonsY = getNextButtonY();
+        int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
         ButtonWidget doneButton = ButtonWidget.builder(
                 Text.translatable("screen.multipleplayeresp.config.done"),
                 button -> saveAndClose()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 200, 98, 20).build();
+        ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(doneButton);
         
-        // 取消按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.cancel"),
             button -> close()
-        ).dimensions(this.width / 2 + 2, this.height / 4 + 200, 98, 20).build());
+        ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
         
         // 连接按钮
+        int connectY = getNextButtonY();
         this.connectButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.connect"),
             button -> connectToServer()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 230, 200, 20).build();
+        ).dimensions(componentX, connectY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.connectButton);
-        
-        // 输入框上方的标签（最后添加以确保渲染在最上层）
-        int left = this.width / 2 - 100;
-        this.addDrawableChild(
-            new TextWidget(left, this.height / 4 + 8, 200, 12, Text.translatable("screen.multipleplayeresp.config.url"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
-        this.addDrawableChild(
-            new TextWidget(left, this.height / 4 + 48, 200, 12, Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
-        this.addDrawableChild(
-            new TextWidget(left, this.height / 4 + 88, 200, 12, Text.translatable("screen.multipleplayeresp.config.update_interval"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
         
         // 更新连接按钮文本
         updateConnectButton();
@@ -158,12 +233,12 @@ public class PlayerESPConfigScreen extends Screen {
         // 1.21.8: 每帧只能 blur 一次，由 super.render() 内部统一调用 renderBackground，此处不再重复调用
         super.render(context, mouseX, mouseY, delta);
         
-        // 绘制标签
+        // 绘制标题（在布局上方）
         context.drawCenteredTextWithShadow(
             this.textRenderer,
             this.title,
             this.width / 2,
-            this.height / 4 - 40,
+            startY - 30,
             0xFFFFFF
         );
         
@@ -289,14 +364,14 @@ public class PlayerESPConfigScreen extends Screen {
      * 添加连接状态显示组件
      */
     private void addConnectionStatusWidget() {
-        int left = this.width / 2 - 100;
-        int top = this.height / 4 + 260; // 在连接按钮下方
+        int componentX = getComponentX();
+        int statusY = getNextY();
         
         this.connectionStatusWidget = new TextWidget(
-            left, 
-            top, 
-            200, 
-            20, 
+            componentX, 
+            statusY, 
+            COMPONENT_WIDTH, 
+            COMPONENT_HEIGHT, 
             Text.translatable("screen.multipleplayeresp.config.connection_status", 
                 Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase())), 
             this.textRenderer

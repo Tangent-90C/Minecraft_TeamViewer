@@ -16,6 +16,14 @@ public class PlayerESPColorConfigScreen extends Screen {
     private final int originalBoxColor;
     private final int originalLineColor;
     
+    // 自动布局相关变量
+    private static final int COMPONENT_WIDTH = 200;
+    private static final int COMPONENT_HEIGHT = 20;
+    private static final int COMPONENT_SPACING = 30;
+    private static final int LABEL_SPACING = 12;
+    private int startY;
+    private int currentY;
+    
     public PlayerESPColorConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.color_config.title"));
         this.parent = parent;
@@ -23,45 +31,103 @@ public class PlayerESPColorConfigScreen extends Screen {
         this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
     }
     
+    /**
+     * 计算起始Y坐标，使所有组件居中显示
+     */
+    private void calculateLayout() {
+        // 计算总高度需求
+        int totalHeight = 0;
+        totalHeight += COMPONENT_SPACING; // 标题间距
+        totalHeight += COMPONENT_SPACING; // 方框颜色输入框组
+        totalHeight += COMPONENT_SPACING; // 线条颜色输入框组
+        totalHeight += COMPONENT_SPACING; // 按钮行
+        
+        // 计算起始Y坐标
+        startY = (this.height - totalHeight) / 2;
+        currentY = startY;
+    }
+    
+    /**
+     * 获取下一个组件的Y坐标
+     */
+    private int getNextY() {
+        int result = currentY;
+        currentY += COMPONENT_SPACING;
+        return result;
+    }
+    
+    /**
+     * 获取组件的X坐标（居中）
+     */
+    private int getComponentX() {
+        return (this.width - COMPONENT_WIDTH) / 2;
+    }
+    
     @Override
     protected void init() {
         super.init();
         
+        // 计算自动布局参数
+        calculateLayout();
+        
+        // 跳过标题间距
+        currentY += COMPONENT_SPACING;
+        
         // 方框颜色输入框
+        int componentX = getComponentX();
+        int boxColorY = getNextY();
         this.boxColorField = new TextFieldWidget(
             this.textRenderer,
-            this.width / 2 - 100,
-            this.height / 4 + 20,
-            200,
-            20,
+            componentX,
+            boxColorY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.color_config.box_color")
         );
         this.boxColorField.setText(String.format("0x%08X", StandaloneMultiPlayerESP.getConfig().getBoxColor()));
         this.addDrawableChild(this.boxColorField);
         
+        // 方框颜色标签
+        this.addDrawableChild(
+            new net.minecraft.client.gui.widget.TextWidget(componentX, boxColorY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
+                Text.translatable("screen.multipleplayeresp.color_config.box_color"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xA0A0A0)
+        );
+        
         // 线条颜色输入框
+        int lineColorY = getNextY();
         this.lineColorField = new TextFieldWidget(
             this.textRenderer,
-            this.width / 2 - 100,
-            this.height / 4 + 60,
-            200,
-            20,
+            componentX,
+            lineColorY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.color_config.line_color")
         );
         this.lineColorField.setText(String.format("0x%08X", StandaloneMultiPlayerESP.getConfig().getLineColor()));
         this.addDrawableChild(this.lineColorField);
         
-        // 完成按钮
+        // 线条颜色标签
+        this.addDrawableChild(
+            new net.minecraft.client.gui.widget.TextWidget(componentX, lineColorY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
+                Text.translatable("screen.multipleplayeresp.color_config.line_color"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xA0A0A0)
+        );
+        
+        // 完成和取消按钮（并排显示）
+        int buttonsY = getNextY();
+        int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.color_config.done"),
             button -> saveAndClose()
-        ).dimensions(this.width / 2 - 100, this.height / 4 + 100, 98, 20).build());
+        ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
         
-        // 取消按钮
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.color_config.cancel"),
             button -> close()
-        ).dimensions(this.width / 2 + 2, this.height / 4 + 100, 98, 20).build());
+        ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
     }
     
     @Override
@@ -69,29 +135,13 @@ public class PlayerESPColorConfigScreen extends Screen {
         // 1.21.8: 每帧只能 blur 一次，由 super.render() 内部统一调用 renderBackground
         super.render(context, mouseX, mouseY, delta);
         
-        // 绘制标签
+        // 绘制标题（在布局上方）
         context.drawCenteredTextWithShadow(
             this.textRenderer,
             this.title,
             this.width / 2,
-            this.height / 4 - 40,
+            startY - 30,
             0xFFFFFF
-        );
-        
-        context.drawTextWithShadow(
-            this.textRenderer,
-            Text.translatable("screen.multipleplayeresp.color_config.box_color"),
-            this.width / 2 - 100,
-            this.height / 4 + 10,
-            0xA0A0A0
-        );
-        
-        context.drawTextWithShadow(
-            this.textRenderer,
-            Text.translatable("screen.multipleplayeresp.color_config.line_color"),
-            this.width / 2 - 100,
-            this.height / 4 + 50,
-            0xA0A0A0
         );
     }
     
