@@ -8,7 +8,9 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +45,7 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private static Config config;
 
 	private final Map<UUID, Vec3d> playerPositions;
+	private final Map<UUID, RemotePlayerInfo> remotePlayers;
 	private WebSocket webSocket;
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
 	private boolean isConnected = false;
@@ -62,8 +65,9 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 	private boolean compressionEnabled = false;
 	private volatile String lastConnectionError = "";
 
-	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions) {
+	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
 		this.playerPositions = playerPositions;
+		this.remotePlayers = remotePlayers;
 		this.httpClient = HttpClient.newHttpClient();
 	}
 
@@ -239,6 +243,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 				if (json.has("players") && json.get("players").isJsonObject()) {
 					JsonObject players = json.getAsJsonObject("players");
 					Map<UUID, Vec3d> newPositions = new HashMap<>();
+					Map<UUID, RemotePlayerInfo> newRemotePlayers = new HashMap<>();
+					RegistryKey<World> fallbackDimension = getCurrentDimension();
 
 					for (Map.Entry<String, JsonElement> entry : players.entrySet()) {
 						try {
@@ -260,7 +266,18 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 							double x = actualPlayerData.get("x").getAsDouble();
 							double y = actualPlayerData.get("y").getAsDouble();
 							double z = actualPlayerData.get("z").getAsDouble();
-							newPositions.put(playerId, new Vec3d(x, y, z));
+
+							String dimensionId = actualPlayerData.has("dimension")
+									? actualPlayerData.get("dimension").getAsString()
+									: null;
+							RegistryKey<World> dimension = RemotePlayerInfo.parseDimension(dimensionId, fallbackDimension);
+							String playerName = actualPlayerData.has("playerName")
+									? actualPlayerData.get("playerName").getAsString()
+									: playerIdStr;
+
+							Vec3d position = new Vec3d(x, y, z);
+							newPositions.put(playerId, position);
+							newRemotePlayers.put(playerId, new RemotePlayerInfo(playerId, position, dimension, playerName));
 						} catch (Exception e) {
 							LOGGER.error("PlayerESP Network - Error parsing player data: {}", e.getMessage());
 						}
@@ -268,6 +285,8 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 
 					playerPositions.clear();
 					playerPositions.putAll(newPositions);
+					remotePlayers.clear();
+					remotePlayers.putAll(newRemotePlayers);
 				}
 
 				// 处理entities对象（注意是对象而不是数组）
@@ -397,6 +416,14 @@ public class PlayerESPNetworkManager implements WebSocket.Listener {
 			return fallback;
 		}
 		return throwable.getClass().getSimpleName();
+	}
+
+	private RegistryKey<World> getCurrentDimension() {
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client.world != null) {
+			return client.world.getRegistryKey();
+		}
+		return World.OVERWORLD;
 	}
 
 	/**

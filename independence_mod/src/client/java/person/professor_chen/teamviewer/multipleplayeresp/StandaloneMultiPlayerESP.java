@@ -34,6 +34,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	
 	// Player position tracking
 	private static final Map<UUID, Vec3d> playerPositions = new ConcurrentHashMap<>();
+	private static final Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
 	private static final Map<UUID, Vec3d> serverPlayerPositions = new ConcurrentHashMap<>();
 	
 	// Network manager
@@ -59,7 +60,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		config = Config.load();
 		
 		// 初始化网络管理器
-		networkManager = new PlayerESPNetworkManager(playerPositions);
+		networkManager = new PlayerESPNetworkManager(playerPositions, remotePlayers);
 		PlayerESPNetworkManager.setConfig(config);
 		
 		// 注册按键绑定
@@ -92,6 +93,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			
 			// 更新玩家位置信息
 			updatePlayerPositions();
+
+			// 同步远程玩家到Xaero世界地图
+			XaeroWorldMapBridge.tick(remotePlayers, espEnabled);
 			
 			// 发送玩家位置到服务器
 			if (espEnabled && networkManager != null) {
