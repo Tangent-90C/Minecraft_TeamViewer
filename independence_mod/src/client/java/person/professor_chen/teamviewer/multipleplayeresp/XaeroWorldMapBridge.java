@@ -16,7 +16,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
+ 
 public final class XaeroWorldMapBridge {
 	private static final Logger LOGGER = LoggerFactory.getLogger(XaeroWorldMapBridge.class);
 	private static final String XAERO_MOD_ID = "xaeroworldmap";

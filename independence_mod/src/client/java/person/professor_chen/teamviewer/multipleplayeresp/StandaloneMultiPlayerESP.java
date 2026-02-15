@@ -188,7 +188,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			networkManager.sendPlayersUpdate(submitPlayerId, players);
 
 			// 收集并上报当前世界中的实体（带 submitPlayerId）
-			if (client.world != null) {
+			if (config.isUploadEntities() && client.world != null) {
 				Map<String, Map<String, Object>> entities = new HashMap<>();
 				for (Entity entity : client.world.getEntities()) {
 					if (entity == client.player) continue;

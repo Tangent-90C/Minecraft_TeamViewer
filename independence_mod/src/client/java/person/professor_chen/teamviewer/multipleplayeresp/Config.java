@@ -26,6 +26,7 @@ public class Config {
     private boolean enableCompression = true; // 是否启用WebSocket压缩
     private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
     private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
+    private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -165,5 +166,13 @@ public class Config {
     
     public void setEnablePlayerESP(boolean enablePlayerESP) {
         this.enablePlayerESP = enablePlayerESP;
+    }
+
+    public boolean isUploadEntities() {
+        return uploadEntities;
+    }
+
+    public void setUploadEntities(boolean uploadEntities) {
+        this.uploadEntities = uploadEntities;
     }
 }

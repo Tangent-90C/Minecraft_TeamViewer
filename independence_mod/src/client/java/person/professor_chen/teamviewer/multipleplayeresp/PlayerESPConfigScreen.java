@@ -20,6 +20,7 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget disconnectButton;
     private ButtonWidget showBoxesButton; // 方框开关按钮
     private ButtonWidget showLinesButton; // 追踪线开关按钮
+    private ButtonWidget uploadEntitiesButton; // 上传实体信息开关按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private int connectionStatusX;
@@ -31,6 +32,7 @@ public class PlayerESPConfigScreen extends Screen {
     private final int originalUpdateInterval;
     private final boolean originalShowBoxes;
     private final boolean originalShowLines;
+    private final boolean originalUploadEntities;
     private final String originalTracerStartMode;
     private final double originalTracerTopOffset;
     
@@ -52,6 +54,7 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
         this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
+        this.originalUploadEntities = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
         this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
         // 初始化连接状态
@@ -68,7 +71,7 @@ public class PlayerESPConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING; // URL输入框组
         totalHeight += COMPONENT_SPACING; // 上报频率输入框组
         totalHeight += BUTTON_SPACING;    // 方框/追踪线按钮行
-        totalHeight += BUTTON_SPACING;    // 显示设置按钮
+        totalHeight += BUTTON_SPACING;    // 上传实体信息/显示设置按钮行
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
         totalHeight += COMPONENT_SPACING; // 连接状态显示
@@ -181,12 +184,19 @@ public class PlayerESPConfigScreen extends Screen {
         ).dimensions(componentX + toggleButtonWidth + 2, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showLinesButton);
 
-        // 显示设置二级菜单按钮
-        int displaySettingsY = getNextButtonY();
+        // 上传实体信息/显示设置按钮（左右布局）
+        int uploadEntitiesY = getNextButtonY();
+        int secondaryButtonWidth = (COMPONENT_WIDTH - 2) / 2;
+        this.uploadEntitiesButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.upload_entities"),
+            button -> toggleUploadEntities()
+        ).dimensions(componentX, uploadEntitiesY, secondaryButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.uploadEntitiesButton);
+
         this.displaySettingsButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.display_settings"),
             button -> openDisplaySettings()
-        ).dimensions(componentX, displaySettingsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(componentX + secondaryButtonWidth + 2, uploadEntitiesY, secondaryButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.displaySettingsButton);
         
         // 完成和取消按钮（并排显示）
@@ -226,6 +236,9 @@ public class PlayerESPConfigScreen extends Screen {
 
         // 更新追踪线按钮状态
         updateShowLinesButton();
+
+        // 更新上传实体信息按钮状态
+        updateUploadEntitiesButton();
         
         // 添加连接状态显示组件
         addConnectionStatusWidget();
@@ -274,6 +287,7 @@ public class PlayerESPConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
         StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
+        StandaloneMultiPlayerESP.getConfig().setUploadEntities(this.originalUploadEntities);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
         StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
         
@@ -370,6 +384,15 @@ public class PlayerESPConfigScreen extends Screen {
     }
 
     /**
+     * 切换实体上传开关状态
+     */
+    private void toggleUploadEntities() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
+        StandaloneMultiPlayerESP.getConfig().setUploadEntities(!currentStatus);
+        updateUploadEntitiesButton();
+    }
+
+    /**
      * 更新方框按钮显示状态
      */
     private void updateShowBoxesButton() {
@@ -398,6 +421,22 @@ public class PlayerESPConfigScreen extends Screen {
                 buttonText += " [OFF]";
             }
             this.showLinesButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    /**
+     * 更新上传实体信息按钮显示状态
+     */
+    private void updateUploadEntitiesButton() {
+        if (this.uploadEntitiesButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.upload_entities").getString();
+            if (isEnabled) {
+                buttonText += " [ON]";
+            } else {
+                buttonText += " [OFF]";
+            }
+            this.uploadEntitiesButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -520,5 +559,8 @@ public class PlayerESPConfigScreen extends Screen {
 
         // 更新追踪线按钮状态
         updateShowLinesButton();
+
+        // 更新上传实体信息按钮状态
+        updateUploadEntitiesButton();
     }
 }
