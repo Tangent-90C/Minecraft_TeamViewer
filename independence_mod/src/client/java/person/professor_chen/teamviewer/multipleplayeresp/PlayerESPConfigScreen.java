@@ -62,8 +62,7 @@ public class PlayerESPConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING; // 标题间距
         totalHeight += COMPONENT_SPACING; // URL输入框组
         totalHeight += COMPONENT_SPACING; // 上报频率输入框组
-        totalHeight += BUTTON_SPACING;    // 方框按钮
-        totalHeight += BUTTON_SPACING;    // 追踪线按钮
+        totalHeight += BUTTON_SPACING;    // 方框/追踪线按钮行
         totalHeight += BUTTON_SPACING;    // 显示设置按钮
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
@@ -161,20 +160,19 @@ public class PlayerESPConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
         
-        // 方框开关按钮
-        int showBoxesY = getNextButtonY();
+        // 方框/追踪线开关按钮（左右布局）
+        int displayToggleY = getNextButtonY();
+        int toggleButtonWidth = (COMPONENT_WIDTH - 2) / 2;
         this.showBoxesButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.show_boxes"),
             button -> toggleShowBoxes()
-        ).dimensions(componentX, showBoxesY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(componentX, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showBoxesButton);
 
-        // 追踪线开关按钮
-        int showLinesY = getNextButtonY();
         this.showLinesButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.show_tracking_lines"),
             button -> toggleShowLines()
-        ).dimensions(componentX, showLinesY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(componentX + toggleButtonWidth + 2, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showLinesButton);
 
         // 显示设置二级菜单按钮
