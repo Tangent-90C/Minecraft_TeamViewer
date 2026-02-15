@@ -17,7 +17,8 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget connectButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget disconnectButton;
-    private ButtonWidget playerESPButton; // PlayerESP开关按钮
+    private ButtonWidget showBoxesButton; // 方框开关按钮
+    private ButtonWidget showLinesButton; // 追踪线开关按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private String currentConnectionStatus = "Unknown";
@@ -25,7 +26,8 @@ public class PlayerESPConfigScreen extends Screen {
     private final String originalURL;
     private final int originalRenderDistance;
     private final int originalUpdateInterval;
-    private final boolean originalEnablePlayerESP;
+    private final boolean originalShowBoxes;
+    private final boolean originalShowLines;
     
     // 自动布局相关变量
     private static final int COMPONENT_WIDTH = 200;
@@ -42,7 +44,8 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
         this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
-        this.originalEnablePlayerESP = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
+        this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
+        this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -57,7 +60,8 @@ public class PlayerESPConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING; // URL输入框组
         totalHeight += COMPONENT_SPACING; // 渲染距离输入框组
         totalHeight += COMPONENT_SPACING; // 上报频率输入框组
-        totalHeight += BUTTON_SPACING;    // PlayerESP按钮
+        totalHeight += BUTTON_SPACING;    // 方框按钮
+        totalHeight += BUTTON_SPACING;    // 追踪线按钮
         totalHeight += BUTTON_SPACING;    // 颜色配置按钮
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
@@ -178,13 +182,21 @@ public class PlayerESPConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
         
-        // PlayerESP开关按钮
-        int playerESPY = getNextButtonY();
-        this.playerESPButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.enable_player_esp"),
-            button -> togglePlayerESP()
-        ).dimensions(componentX, playerESPY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.playerESPButton);
+        // 方框开关按钮
+        int showBoxesY = getNextButtonY();
+        this.showBoxesButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_boxes"),
+            button -> toggleShowBoxes()
+        ).dimensions(componentX, showBoxesY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showBoxesButton);
+
+        // 追踪线开关按钮
+        int showLinesY = getNextButtonY();
+        this.showLinesButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_tracking_lines"),
+            button -> toggleShowLines()
+        ).dimensions(componentX, showLinesY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showLinesButton);
         
         // 颜色配置按钮
         int colorConfigY = getNextButtonY();
@@ -218,8 +230,11 @@ public class PlayerESPConfigScreen extends Screen {
         // 更新连接按钮文本
         updateConnectButton();
         
-        // 更新PlayerESP按钮状态
-        updatePlayerESPButton();
+        // 更新方框按钮状态
+        updateShowBoxesButton();
+
+        // 更新追踪线按钮状态
+        updateShowLinesButton();
         
         // 添加连接状态显示组件
         addConnectionStatusWidget();
@@ -253,7 +268,8 @@ public class PlayerESPConfigScreen extends Screen {
         PlayerESPNetworkManager.setServerURL(this.originalURL);
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
         StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
-        StandaloneMultiPlayerESP.getConfig().setEnablePlayerESP(this.originalEnablePlayerESP);
+        StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
+        StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
@@ -282,7 +298,7 @@ public class PlayerESPConfigScreen extends Screen {
                 }
             }
             
-            // PlayerESP设置已经在togglePlayerESP方法中实时保存
+            // 显示方框/追踪线设置已经在开关按钮中实时保存
             // 保存配置到文件
             StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
@@ -325,27 +341,52 @@ public class PlayerESPConfigScreen extends Screen {
     }
     
     /**
-     * 切换PlayerESP开关状态
+     * 切换方框开关状态
      */
-    private void togglePlayerESP() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
-        StandaloneMultiPlayerESP.getConfig().setEnablePlayerESP(!currentStatus);
-        updatePlayerESPButton();
+    private void toggleShowBoxes() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
+        StandaloneMultiPlayerESP.getConfig().setShowBoxes(!currentStatus);
+        updateShowBoxesButton();
+    }
+
+    /**
+     * 切换追踪线开关状态
+     */
+    private void toggleShowLines() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowLines();
+        StandaloneMultiPlayerESP.getConfig().setShowLines(!currentStatus);
+        updateShowLinesButton();
     }
     
     /**
-     * 更新PlayerESP按钮显示状态
+     * 更新方框按钮显示状态
      */
-    private void updatePlayerESPButton() {
-        if (this.playerESPButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isEnablePlayerESP();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.enable_player_esp").getString();
+    private void updateShowBoxesButton() {
+        if (this.showBoxesButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_boxes").getString();
             if (isEnabled) {
                 buttonText += " [ON]";
             } else {
                 buttonText += " [OFF]";
             }
-            this.playerESPButton.setMessage(Text.of(buttonText));
+            this.showBoxesButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    /**
+     * 更新追踪线按钮显示状态
+     */
+    private void updateShowLinesButton() {
+        if (this.showLinesButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowLines();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_tracking_lines").getString();
+            if (isEnabled) {
+                buttonText += " [ON]";
+            } else {
+                buttonText += " [OFF]";
+            }
+            this.showLinesButton.setMessage(Text.of(buttonText));
         }
     }
     
@@ -409,7 +450,10 @@ public class PlayerESPConfigScreen extends Screen {
         // 更新连接按钮状态
         updateConnectButton();
         
-        // 更新PlayerESP按钮状态
-        updatePlayerESPButton();
+        // 更新方框按钮状态
+        updateShowBoxesButton();
+
+        // 更新追踪线按钮状态
+        updateShowLinesButton();
     }
 }

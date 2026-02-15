@@ -15,6 +15,7 @@ import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import person.professor_chen.teamviewer.render.UnifiedRenderModule;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -215,11 +216,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) return;
 		
-		// 检查PlayerESP是否启用
-		if (!config.isEnablePlayerESP()) {
-			return; // PlayerESP未启用，不渲染任何内容
-		}
-		
 		Vec3d cameraPos = context.camera().getPos();
 		Map<UUID, Vec3d> positions = useServerPositions ? serverPlayerPositions : playerPositions;
 		
@@ -240,13 +236,15 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				
 				// 绘制包围盒
 				if (config.isShowBoxes()) {
-					RenderUtils.drawOutlinedBox(context.matrixStack(), box, config.getBoxColor(), true);
+					UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), box, config.getBoxColor(), true);
 				}
 				
 				// 绘制连线
 				if (config.isShowLines()) {
-					Vec3d cameraRelativePos = client.player.getCameraPosVec(1.0F).subtract(cameraPos);
-					RenderUtils.drawLine(context.matrixStack(), cameraRelativePos, relativePos.add(0, 1, 0), config.getLineColor());
+					Vec3d targetPos = relativePos.add(0, 1.0, 0);
+					Vec3d lookVec = client.player.getRotationVec(1.0F).normalize();
+					Vec3d tracerStart = lookVec.multiply(0.6).add(0, 0.15, 0);
+					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, config.getLineColor());
 				}
 			}
 		}

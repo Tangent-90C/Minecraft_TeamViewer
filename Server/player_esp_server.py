@@ -76,7 +76,7 @@ async def broadcast_positions():
     # 清理过期数据
     current_time = time.time()
     expired_players = [
-        pid for pid, pdata in players.items()
+        pid for pid, pdata in list(players.items())
         if current_time - pdata["timestamp"] > PLAYER_TIMEOUT
     ]
     for pid in expired_players:
@@ -85,7 +85,7 @@ async def broadcast_positions():
 
     # 清理过期实体数据
     expired_entities = [
-        eid for eid, edata in entities.items()
+        eid for eid, edata in list(entities.items())
         if current_time - edata["timestamp"] > ENTITY_TIMEOUT
     ]
     for eid in expired_entities:
@@ -94,8 +94,8 @@ async def broadcast_positions():
     # 准备要发送的数据
     message_data = {
         "type": "positions",
-        "players": players,
-        "entities": entities
+        "players": dict(players),
+        "entities": dict(entities)
     }
 
     try:
@@ -105,7 +105,7 @@ async def broadcast_positions():
         return
 
     disconnected = []
-    for player_uuid, ws in connections.items():
+    for player_uuid, ws in list(connections.items()):
         try:
             # 检查该客户端的压缩配置
             client_config = connection_config.get(player_uuid, {})
@@ -135,7 +135,7 @@ async def broadcast_positions():
             del connections[player_uuid]
         if player_uuid in connection_config:
             del connection_config[player_uuid]
-        entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == player_uuid]
+        entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == player_uuid]
         for eid in entities_to_remove:
             del entities[eid]
 
@@ -146,8 +146,8 @@ async def broadcast_snapshot():
     current_time = time.time()
     snapshot_data = {
         "server_time": current_time,
-        "players": players,
-        "entities": entities,
+        "players": dict(players),
+        "entities": dict(entities),
         "connections": list(connections.keys()),
         "connections_count": len(connections)
     }
@@ -159,7 +159,7 @@ async def broadcast_snapshot():
         return
 
     disconnected = []
-    for admin_id, ws in admin_connections.items():
+    for admin_id, ws in list(admin_connections.items()):
         try:
             await ws.send_text(message)
         except Exception as e:
@@ -258,7 +258,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     print(f"Client {submitPlayerId} connected (legacy)")
                 
                 player_entities = data.get("entities", {})
-                entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == submitPlayerId]
+                entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == submitPlayerId]
                 for eid in entities_to_remove:
                     del entities[eid]
 
@@ -289,10 +289,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 del connections[submitPlayerId]
             if submitPlayerId in connection_config:
                 del connection_config[submitPlayerId]
-            players_to_remove = [pid for pid, pdata in players.items() if pdata.get("submitPlayerId") == submitPlayerId]
+            players_to_remove = [pid for pid, pdata in list(players.items()) if pdata.get("submitPlayerId") == submitPlayerId]
             for pid in players_to_remove:
                 del players[pid]
-            entities_to_remove = [eid for eid, edata in entities.items() if edata.get("submitPlayerId") == submitPlayerId]
+            entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == submitPlayerId]
             for eid in entities_to_remove:
                 del entities[eid]
             print(f"Client {submitPlayerId} disconnected")
@@ -311,8 +311,8 @@ async def snapshot():
     # 返回副本，避免并发修改导致的迭代问题
     return JSONResponse({
         "server_time": current_time,
-        "players": players,
-        "entities": entities,
+        "players": dict(players),
+        "entities": dict(entities),
         "connections": list(connections.keys()),
         "connections_count": len(connections)
     })
