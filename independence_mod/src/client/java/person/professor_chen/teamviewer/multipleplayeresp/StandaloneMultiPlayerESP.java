@@ -243,7 +243,19 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				if (config.isShowLines()) {
 					Vec3d targetPos = relativePos.add(0, 1.0, 0);
 					Vec3d lookVec = client.player.getRotationVec(1.0F).normalize();
-					Vec3d tracerStart = lookVec.multiply(0.6).add(0, 0.15, 0);
+					Vec3d worldUp = new Vec3d(0, 1, 0);
+					Vec3d rightVec = lookVec.crossProduct(worldUp);
+					if (rightVec.lengthSquared() < 1.0E-6) {
+						rightVec = new Vec3d(1, 0, 0);
+					}
+					Vec3d cameraUpVec = rightVec.normalize().crossProduct(lookVec).normalize();
+
+					Vec3d tracerStart;
+					if (config.isTracerStartTop()) {
+						tracerStart = lookVec.multiply(0.6).add(cameraUpVec.multiply(0.42));
+					} else {
+						tracerStart = lookVec.multiply(0.6);
+					}
 					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, config.getLineColor());
 				}
 			}

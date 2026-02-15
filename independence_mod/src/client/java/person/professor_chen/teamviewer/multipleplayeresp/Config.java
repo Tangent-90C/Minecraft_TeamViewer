@@ -9,6 +9,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class Config {
+    public static final String TRACER_START_CROSSHAIR = "crosshair";
+    public static final String TRACER_START_TOP = "top";
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
     
@@ -18,6 +21,7 @@ public class Config {
     private boolean showBoxes = true;
     private int boxColor = 0x80FF0000; // 50%不透明红色
     private int lineColor = 0xFFFF0000; // 不透明红色
+    private String tracerStartMode = TRACER_START_CROSSHAIR; // 追踪线起始点模式：crosshair 或 top
     private boolean enableCompression = true; // 是否启用WebSocket压缩
     private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
     private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
@@ -92,6 +96,25 @@ public class Config {
     
     public void setLineColor(int lineColor) {
         this.lineColor = lineColor;
+    }
+
+    public String getTracerStartMode() {
+        if (TRACER_START_TOP.equalsIgnoreCase(tracerStartMode)) {
+            return TRACER_START_TOP;
+        }
+        return TRACER_START_CROSSHAIR;
+    }
+
+    public void setTracerStartMode(String tracerStartMode) {
+        if (TRACER_START_TOP.equalsIgnoreCase(tracerStartMode)) {
+            this.tracerStartMode = TRACER_START_TOP;
+        } else {
+            this.tracerStartMode = TRACER_START_CROSSHAIR;
+        }
+    }
+
+    public boolean isTracerStartTop() {
+        return TRACER_START_TOP.equals(getTracerStartMode());
     }
     
     public boolean isEnableCompression() {
