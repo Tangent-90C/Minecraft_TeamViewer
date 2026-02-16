@@ -69,6 +69,7 @@ admin_connections: Dict[str, WebSocket] = {}
 
 PLAYER_TIMEOUT = 5
 ENTITY_TIMEOUT = 5
+ONLINE_OWNER_TIMEOUT_MULTIPLIER = 8
 
 PROTOCOL_V2 = 2
 DIGEST_INTERVAL_SEC = 10
@@ -123,6 +124,27 @@ def merge_patch(base: dict, extra: dict) -> None:
         base[scope]["delete"].extend(extra[scope]["delete"])
 
 
+def compute_field_delta(old_data: Optional[dict], new_data: dict) -> dict:
+    if old_data is None:
+        return dict(new_data)
+
+    delta = {}
+    for key, value in new_data.items():
+        if old_data.get(key) != value:
+            delta[key] = value
+    return delta
+
+
+def merge_patch_and_validate(model_cls, existing_node: Optional[dict], patch_data: dict) -> dict:
+    merged = {}
+    if existing_node and isinstance(existing_node.get("data"), dict):
+        merged.update(existing_node["data"])
+    if isinstance(patch_data, dict):
+        merged.update(patch_data)
+    validated = model_cls(**merged)
+    return validated.model_dump()
+
+
 def mark_player_capability(player_id: str, protocol_version: int, delta_enabled: bool) -> None:
     connection_caps[player_id] = {
         "protocol": protocol_version,
@@ -175,9 +197,18 @@ async def cleanup_timeouts() -> dict:
     current_time = time.time()
     patch = make_empty_patch()
 
+    def is_owner_online(node: dict) -> bool:
+        owner_id = node.get("submitPlayerId") if isinstance(node, dict) else None
+        return isinstance(owner_id, str) and owner_id in connections
+
+    def effective_timeout(base_timeout: int, node: dict) -> int:
+        if is_owner_online(node):
+            return base_timeout * ONLINE_OWNER_TIMEOUT_MULTIPLIER
+        return base_timeout
+
     expired_players = [
         pid for pid, pdata in list(players.items())
-        if current_time - pdata["timestamp"] > PLAYER_TIMEOUT
+        if current_time - pdata["timestamp"] > effective_timeout(PLAYER_TIMEOUT, pdata)
     ]
     for pid in expired_players:
         if pid in players:
@@ -186,7 +217,7 @@ async def cleanup_timeouts() -> dict:
 
     expired_entities = [
         eid for eid, edata in list(entities.items())
-        if current_time - edata["timestamp"] > ENTITY_TIMEOUT
+        if current_time - edata["timestamp"] > effective_timeout(ENTITY_TIMEOUT, edata)
     ]
     for eid in expired_entities:
         if eid in entities:
@@ -405,13 +436,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 current_time = time.time()
                 for pid, player_data in data.get("players", {}).items():
                     try:
+                        existing_node = players.get(pid)
                         validated_data = PlayerData(**player_data)
+                        normalized = validated_data.model_dump()
                         players[pid] = {
                             "timestamp": current_time,
                             "submitPlayerId": submit_player_id,
-                            "data": validated_data.model_dump(),
+                            "data": normalized,
                         }
-                        changes["players"]["upsert"][pid] = validated_data.model_dump()
+                        field_delta = compute_field_delta(
+                            existing_node.get("data") if existing_node else None,
+                            normalized,
+                        )
+                        if field_delta:
+                            changes["players"]["upsert"][pid] = field_delta
                     except Exception as e:
                         print(f"Error validating player data for {pid}: {e}")
 
@@ -425,13 +463,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 for pid, player_data in upsert.items():
                     try:
-                        validated_data = PlayerData(**player_data)
+                        existing_node = players.get(pid)
+                        old_data = existing_node.get("data") if existing_node else None
+                        normalized = merge_patch_and_validate(PlayerData, existing_node, player_data)
                         players[pid] = {
                             "timestamp": current_time,
                             "submitPlayerId": submit_player_id,
-                            "data": validated_data.model_dump(),
+                            "data": normalized,
                         }
-                        changes["players"]["upsert"][pid] = validated_data.model_dump()
+                        field_delta = compute_field_delta(old_data, normalized)
+                        if field_delta:
+                            changes["players"]["upsert"][pid] = field_delta
                     except Exception as e:
                         print(f"Error validating player patch for {pid}: {e}")
 
@@ -457,13 +499,20 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 for entity_id, entity_data in player_entities.items():
                     try:
+                        existing_node = entities.get(entity_id)
                         validated_data = EntityData(**entity_data)
+                        normalized = validated_data.model_dump()
                         entities[entity_id] = {
                             "timestamp": current_time,
                             "submitPlayerId": submit_player_id,
-                            "data": validated_data.model_dump(),
+                            "data": normalized,
                         }
-                        changes["entities"]["upsert"][entity_id] = validated_data.model_dump()
+                        field_delta = compute_field_delta(
+                            existing_node.get("data") if existing_node else None,
+                            normalized,
+                        )
+                        if field_delta:
+                            changes["entities"]["upsert"][entity_id] = field_delta
                     except Exception as e:
                         print(f"Error validating entity data for {entity_id}: {e}")
 
@@ -477,13 +526,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 for entity_id, entity_data in upsert.items():
                     try:
-                        validated_data = EntityData(**entity_data)
+                        existing_node = entities.get(entity_id)
+                        old_data = existing_node.get("data") if existing_node else None
+                        normalized = merge_patch_and_validate(EntityData, existing_node, entity_data)
                         entities[entity_id] = {
                             "timestamp": current_time,
                             "submitPlayerId": submit_player_id,
-                            "data": validated_data.model_dump(),
+                            "data": normalized,
                         }
-                        changes["entities"]["upsert"][entity_id] = validated_data.model_dump()
+                        field_delta = compute_field_delta(old_data, normalized)
+                        if field_delta:
+                            changes["entities"]["upsert"][entity_id] = field_delta
                     except Exception as e:
                         print(f"Error validating entity patch for {entity_id}: {e}")
 
