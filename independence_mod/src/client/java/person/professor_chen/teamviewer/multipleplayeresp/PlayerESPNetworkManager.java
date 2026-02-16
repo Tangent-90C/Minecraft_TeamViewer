@@ -19,6 +19,8 @@ import okhttp3.WebSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -56,6 +58,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private final Map<UUID, Vec3d> playerPositions;
 	private final Map<UUID, RemotePlayerInfo> remotePlayers;
 	private final Map<UUID, Map<String, Object>> remotePlayerDataCache = new HashMap<>();
+	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
+	private final Map<String, Map<String, Object>> remoteWaypointDataCache = new HashMap<>();
 	private final Map<String, SharedWaypointInfo> remoteWaypointCache = new HashMap<>();
 	private final Map<String, Map<String, Object>> lastSentPlayersSnapshot = new HashMap<>();
 	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
@@ -484,7 +488,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			reconcileRemotePlayers(latestRemotePlayers);
 		}
 
+		if (json.has("entities") && json.get("entities").isJsonObject()) {
+			replaceEntityCache(json.getAsJsonObject("entities"));
+		}
+
 		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+			remoteWaypointDataCache.clear();
 			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
 			remoteWaypointCache.clear();
 			remoteWaypointCache.putAll(receivedWaypoints);
@@ -500,7 +509,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			reconcileRemotePlayers(latestRemotePlayers);
 		}
 
+		if (json.has("entities") && json.get("entities").isJsonObject()) {
+			replaceEntityCache(json.getAsJsonObject("entities"));
+		}
+
 		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+			remoteWaypointDataCache.clear();
 			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
 			remoteWaypointCache.clear();
 			remoteWaypointCache.putAll(receivedWaypoints);
@@ -542,10 +556,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 					if (idElement != null && idElement.isJsonPrimitive()) {
 						String entityId = idElement.getAsString();
 						if (entityId != null && !entityId.isBlank()) {
+							remoteEntityDataCache.remove(entityId);
 							lastSentEntitiesSnapshot.remove(entityId);
 						}
 					}
 				}
+			}
+
+			if (entitiesPatch.has("upsert") && entitiesPatch.get("upsert").isJsonObject()) {
+				mergeEntityPatchUpsert(entitiesPatch.getAsJsonObject("upsert"));
 			}
 		}
 
@@ -559,6 +578,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 						String id = idElement.getAsString();
 						if (id != null && !id.isBlank()) {
 							remoteWaypointCache.remove(id);
+							remoteWaypointDataCache.remove(id);
 							deleteIds.add(id);
 						}
 					}
@@ -585,12 +605,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 		JsonObject hashes = json.getAsJsonObject("hashes");
 		String serverPlayerHash = getOptionalString(hashes, "players");
+		String serverEntityHash = getOptionalString(hashes, "entities");
 		String serverWaypointHash = getOptionalString(hashes, "waypoints");
 
 		String localPlayerHash = computePlayersDigest();
+		String localEntityHash = computeEntitiesDigest();
 		String localWaypointHash = computeWaypointDigest();
 
 		boolean mismatch = !Objects.equals(serverPlayerHash, localPlayerHash)
+				|| !Objects.equals(serverEntityHash, localEntityHash)
 				|| !Objects.equals(serverWaypointHash, localWaypointHash);
 
 		if (!mismatch) {
@@ -951,6 +974,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 				JsonObject node = entry.getValue().getAsJsonObject();
 				JsonObject data = extractDataNode(node);
+				Map<String, Object> rawData = jsonObjectToValueMap(data);
+				remoteWaypointDataCache.put(waypointId, rawData);
 
 				if (!data.has("x") || !data.has("y") || !data.has("z")) {
 					continue;
@@ -1038,35 +1063,58 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private String computePlayersDigest() {
-		List<String> lines = new ArrayList<>();
-		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
-			RemotePlayerInfo info = entry.getValue();
-			Vec3d pos = info.position();
-			String dimension = info.dimension() != null ? info.dimension().getValue().toString() : "";
-			lines.add(entry.getKey() + "|" + quantize(pos.x) + "|" + quantize(pos.y) + "|" + quantize(pos.z)
-					+ "|" + dimension + "|" + info.name());
+		Map<String, Map<String, Object>> state = new HashMap<>();
+		for (Map.Entry<UUID, Map<String, Object>> entry : remotePlayerDataCache.entrySet()) {
+			state.put(entry.getKey().toString(), entry.getValue());
 		}
-		return stableHash(lines);
+		return stateDigest(state);
+	}
+
+	private String computeEntitiesDigest() {
+		return stateDigest(remoteEntityDataCache);
 	}
 
 	private String computeWaypointDigest() {
-		List<String> lines = new ArrayList<>();
-		for (Map.Entry<String, SharedWaypointInfo> entry : remoteWaypointCache.entrySet()) {
-			SharedWaypointInfo waypoint = entry.getValue();
-			lines.add(entry.getKey() + "|" + waypoint.x() + "|" + waypoint.y() + "|" + waypoint.z() + "|"
-					+ Objects.toString(waypoint.dimension(), "") + "|" + waypoint.color() + "|"
-					+ Objects.toString(waypoint.name(), ""));
+		return stateDigest(remoteWaypointDataCache);
+	}
+
+	private void replaceEntityCache(JsonObject entitiesJson) {
+		remoteEntityDataCache.clear();
+		mergeEntityPatchUpsert(entitiesJson);
+	}
+
+	private void mergeEntityPatchUpsert(JsonObject upsertJson) {
+		for (Map.Entry<String, JsonElement> entry : upsertJson.entrySet()) {
+			try {
+				if (!entry.getValue().isJsonObject()) {
+					continue;
+				}
+				String entityId = entry.getKey();
+				JsonObject dataNode = extractDataNode(entry.getValue().getAsJsonObject());
+				Map<String, Object> merged = new HashMap<>();
+				Map<String, Object> existing = remoteEntityDataCache.get(entityId);
+				if (existing != null) {
+					merged.putAll(existing);
+				}
+				merged.putAll(jsonObjectToValueMap(dataNode));
+				remoteEntityDataCache.put(entityId, merged);
+			} catch (Exception e) {
+				LOGGER.error("PlayerESP Network - Error applying entity patch: {}", e.getMessage());
+			}
 		}
-		return stableHash(lines);
 	}
 
-	private long quantize(double value) {
-		return Math.round(value * 1000.0);
-	}
-
-	private String stableHash(List<String> lines) {
+	private String stateDigest(Map<String, Map<String, Object>> state) {
 		try {
-			Collections.sort(lines);
+			List<String> ids = new ArrayList<>(state.keySet());
+			Collections.sort(ids);
+
+			List<String> lines = new ArrayList<>();
+			for (String id : ids) {
+				Map<String, Object> data = state.get(id);
+				lines.add(gson.toJson(id) + ":" + canonicalValue(data == null ? Map.of() : data));
+			}
+
 			MessageDigest digest = MessageDigest.getInstance("SHA-1");
 			for (String line : lines) {
 				digest.update(line.getBytes(StandardCharsets.UTF_8));
@@ -1081,6 +1129,71 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		} catch (Exception e) {
 			return "hash_error";
 		}
+	}
+
+	private String canonicalValue(Object value) {
+		if (value == null) {
+			return "null";
+		}
+		if (value instanceof Boolean boolValue) {
+			return boolValue ? "true" : "false";
+		}
+		if (value instanceof Number numberValue) {
+			return canonicalNumber(numberValue);
+		}
+		if (value instanceof String stringValue) {
+			return gson.toJson(stringValue);
+		}
+		if (value instanceof Map<?, ?> mapValue) {
+			List<String> keys = new ArrayList<>();
+			for (Object key : mapValue.keySet()) {
+				keys.add(String.valueOf(key));
+			}
+			Collections.sort(keys);
+
+			StringBuilder builder = new StringBuilder("{");
+			for (int i = 0; i < keys.size(); i++) {
+				String key = keys.get(i);
+				if (i > 0) {
+					builder.append(',');
+				}
+				builder.append(gson.toJson(key)).append(':').append(canonicalValue(mapValue.get(key)));
+			}
+			builder.append('}');
+			return builder.toString();
+		}
+		if (value instanceof List<?> listValue) {
+			StringBuilder builder = new StringBuilder("[");
+			for (int i = 0; i < listValue.size(); i++) {
+				if (i > 0) {
+					builder.append(',');
+				}
+				builder.append(canonicalValue(listValue.get(i)));
+			}
+			builder.append(']');
+			return builder.toString();
+		}
+
+		return gson.toJson(value);
+	}
+
+	private String canonicalNumber(Number numberValue) {
+		if (numberValue instanceof Byte || numberValue instanceof Short
+				|| numberValue instanceof Integer || numberValue instanceof Long) {
+			return String.valueOf(numberValue.longValue());
+		}
+
+		double value = numberValue.doubleValue();
+		if (!Double.isFinite(value)) {
+			return "null";
+		}
+
+		BigDecimal decimal = BigDecimal.valueOf(value).setScale(6, RoundingMode.HALF_UP).stripTrailingZeros();
+		String text = decimal.toPlainString();
+		if ("-0".equals(text) || "".equals(text)) {
+			return "0";
+		}
+		return text;
 	}
 
 	private String getOptionalString(JsonObject json, String key) {
@@ -1119,6 +1232,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
 		remotePlayerDataCache.clear();
+		remoteEntityDataCache.clear();
+		remoteWaypointDataCache.clear();
 		remoteWaypointCache.clear();
 	}
 }

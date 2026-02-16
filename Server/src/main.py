@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import time
 from typing import Dict, Optional
 
@@ -90,16 +91,59 @@ def compact_state_map(state_map: Dict[str, dict]) -> Dict[str, dict]:
     return {sid: node.get("data", {}) for sid, node in state_map.items()}
 
 
-def stable_hash(payload: dict) -> str:
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def canonical_number(value: float) -> str:
+    if not math.isfinite(value):
+        return "null"
+    rounded = round(float(value), 6)
+    text = f"{rounded:.6f}".rstrip("0").rstrip(".")
+    if text in ("", "-0"):
+        return "0"
+    return text
+
+
+def canonical_value(value) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return canonical_number(value)
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, dict):
+        items = []
+        for key in sorted(value.keys(), key=lambda item: str(item)):
+            key_json = json.dumps(str(key), ensure_ascii=False, separators=(",", ":"))
+            items.append(f"{key_json}:{canonical_value(value[key])}")
+        return "{" + ",".join(items) + "}"
+    if isinstance(value, list):
+        return "[" + ",".join(canonical_value(item) for item in value) + "]"
+
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    except TypeError:
+        return json.dumps(str(value), ensure_ascii=False, separators=(",", ":"))
+
+
+def state_digest(state_map: Dict[str, dict]) -> str:
+    lines = []
+    for node_id in sorted(state_map.keys()):
+        node = state_map.get(node_id, {})
+        data = node.get("data", {}) if isinstance(node, dict) else {}
+        node_json = json.dumps(str(node_id), ensure_ascii=False, separators=(",", ":"))
+        lines.append(f"{node_json}:{canonical_value(data)}")
+
+    raw = "\n".join(lines)
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def build_digests() -> dict:
     return {
-        "players": stable_hash(compact_state_map(players)),
-        "entities": stable_hash(compact_state_map(entities)),
-        "waypoints": stable_hash(compact_state_map(waypoints)),
+        "players": state_digest(players),
+        "entities": state_digest(entities),
+        "waypoints": state_digest(waypoints),
     }
 
 
