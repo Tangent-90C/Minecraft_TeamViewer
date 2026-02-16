@@ -1,6 +1,5 @@
 import json
 import time
-import gzip
 from typing import Dict, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -74,9 +73,6 @@ connections: Dict[str, WebSocket] = {}
 # 后台页面连接
 admin_connections: Dict[str, WebSocket] = {}
 
-# 存储每个连接的配置（是否启用压缩）
-connection_config: Dict[str, dict] = {}  # {player_uuid: {"enable_compression": bool}}
-
 # 存储实体数据
 entities: Dict[str, dict] = {}
 
@@ -113,8 +109,6 @@ async def broadcast_waypoints_delete(waypoint_ids):
     for player_uuid in disconnected:
         if player_uuid in connections:
             del connections[player_uuid]
-        if player_uuid in connection_config:
-            del connection_config[player_uuid]
 
 
 async def broadcast_positions():
@@ -153,25 +147,7 @@ async def broadcast_positions():
     disconnected = []
     for player_uuid, ws in list(connections.items()):
         try:
-            # 检查该客户端的压缩配置
-            client_config = connection_config.get(player_uuid, {})
-            enable_compression = client_config.get("enable_compression", False)
-            
-            if enable_compression:
-                try:
-                    # 压缩JSON数据
-                    compressed_data = gzip.compress(message.encode('utf-8'))
-                    # 消息格式：1字节标志位(0x01=压缩) + 压缩数据
-                    payload = bytes([0x01]) + compressed_data
-                except Exception as e:
-                    print(f"Error compressing message for {player_uuid}: {e}")
-                    # 压缩失败，使用未压缩的数据
-                    payload = bytes([0x00]) + message.encode('utf-8')
-            else:
-                # 未压缩：1字节标志位(0x00=未压缩) + JSON数据
-                payload = bytes([0x00]) + message.encode('utf-8')
-            
-            await ws.send_bytes(payload)
+            await ws.send_text(message)
         except Exception as e:
             print(f"Error sending message to player {player_uuid}: {e}")
             disconnected.append(player_uuid)
@@ -179,8 +155,6 @@ async def broadcast_positions():
     for player_uuid in disconnected:
         if player_uuid in connections:
             del connections[player_uuid]
-        if player_uuid in connection_config:
-            del connection_config[player_uuid]
         entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == player_uuid]
         for eid in entities_to_remove:
             del entities[eid]
@@ -255,18 +229,12 @@ async def websocket_endpoint(websocket: WebSocket):
             # 握手消息：客户端声明是否使用压缩
             if message_type == "handshake":
                 if submitPlayerId:
-                    enable_compression = data.get("enableCompression", False)
                     connections[submitPlayerId] = websocket
-                    connection_config[submitPlayerId] = {
-                        "enable_compression": enable_compression
-                    }
-                    compression_status = "启用" if enable_compression else "禁用"
-                    print(f"Client {submitPlayerId} connected (compression: {compression_status})")
+                    print(f"Client {submitPlayerId} connected")
                     # 向客户端确认握手
                     await websocket.send_text(json.dumps({
                         "type": "handshake_ack",
-                        "ready": True,
-                        "compressionEnabled": enable_compression
+                        "ready": True
                     }))
                     await broadcast_snapshot()
                 continue
@@ -275,9 +243,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 自动记录连接（兼容旧客户端）
                 if submitPlayerId and submitPlayerId not in connections:
                     connections[submitPlayerId] = websocket
-                    connection_config[submitPlayerId] = {
-                        "enable_compression": data.get("enableCompression", False)
-                    }
                     print(f"Client {submitPlayerId} connected (legacy)")
                 # 支持批量更新多个玩家（推荐）
                 current_time = time.time()
@@ -299,9 +264,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 自动记录连接（兼容旧客户端）
                 if submitPlayerId and submitPlayerId not in connections:
                     connections[submitPlayerId] = websocket
-                    connection_config[submitPlayerId] = {
-                        "enable_compression": data.get("enableCompression", False)
-                    }
                     print(f"Client {submitPlayerId} connected (legacy)")
                 
                 player_entities = data.get("entities", {})
@@ -330,9 +292,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 自动记录连接（兼容旧客户端）
                 if submitPlayerId and submitPlayerId not in connections:
                     connections[submitPlayerId] = websocket
-                    connection_config[submitPlayerId] = {
-                        "enable_compression": data.get("enableCompression", False)
-                    }
                     print(f"Client {submitPlayerId} connected (legacy)")
 
                 current_time = time.time()
@@ -354,9 +313,6 @@ async def websocket_endpoint(websocket: WebSocket):
             elif data.get("type") == "waypoints_delete":
                 if submitPlayerId and submitPlayerId not in connections:
                     connections[submitPlayerId] = websocket
-                    connection_config[submitPlayerId] = {
-                        "enable_compression": data.get("enableCompression", False)
-                    }
                     print(f"Client {submitPlayerId} connected (legacy)")
 
                 waypoint_ids = data.get("waypointIds", [])
@@ -390,8 +346,6 @@ async def websocket_endpoint(websocket: WebSocket):
         if submitPlayerId:
             if submitPlayerId in connections:
                 del connections[submitPlayerId]
-            if submitPlayerId in connection_config:
-                del connection_config[submitPlayerId]
             players_to_remove = [pid for pid, pdata in list(players.items()) if pdata.get("submitPlayerId") == submitPlayerId]
             for pid in players_to_remove:
                 del players[pid]
@@ -427,4 +381,4 @@ async def snapshot():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8765)
+    uvicorn.run(app, host="0.0.0.0", port=8765, ws_per_message_deflate=True)

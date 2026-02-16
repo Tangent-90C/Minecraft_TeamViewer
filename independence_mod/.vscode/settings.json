@@ -3,6 +3,8 @@
     "chat.tools.terminal.autoApprove": {
         "jar": true,
         "javap": true,
-        "ForEach-Object": true
+        "ForEach-Object": true,
+        "Add-Type": true,
+        ".\\gradlew.bat": true
     }
 }
