@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 from typing import Dict, Optional
@@ -7,9 +8,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-# 玩家数据模型
+
 class PlayerData(BaseModel):
-    """玩家业务数据模型"""
     x: float = Field(..., description="X坐标")
     y: float = Field(..., description="Y坐标")
     z: float = Field(..., description="Z坐标")
@@ -25,13 +25,10 @@ class PlayerData(BaseModel):
     width: float = Field(default=0.6, gt=0, description="碰撞箱宽度")
     height: float = Field(default=1.8, gt=0, description="碰撞箱高度")
 
-    model_config = ConfigDict(
-        extra="ignore"
-    )
+    model_config = ConfigDict(extra="ignore")
 
 
 class EntityData(BaseModel):
-    """实体数据模型"""
     x: float = Field(..., description="X坐标")
     y: float = Field(..., description="Y坐标")
     z: float = Field(..., description="Z坐标")
@@ -44,13 +41,10 @@ class EntityData(BaseModel):
     width: float = Field(default=0.6, gt=0, description="碰撞箱宽度")
     height: float = Field(default=1.8, gt=0, description="碰撞箱高度")
 
-    model_config = ConfigDict(
-        extra="ignore"
-    )
+    model_config = ConfigDict(extra="ignore")
 
 
 class WaypointData(BaseModel):
-    """共享路标数据模型"""
     x: float = Field(..., description="X坐标")
     y: float = Field(..., description="Y坐标")
     z: float = Field(..., description="Z坐标")
@@ -62,58 +56,125 @@ class WaypointData(BaseModel):
     ownerName: Optional[str] = Field(None, description="创建者名称")
     createdAt: Optional[int] = Field(None, description="创建时间戳(ms)")
 
-    model_config = ConfigDict(
-        extra="ignore"
-    )
+    model_config = ConfigDict(extra="ignore")
 
 
-# 存储玩家数据和连接
 players: Dict[str, dict] = {}
-connections: Dict[str, WebSocket] = {}
-# 后台页面连接
-admin_connections: Dict[str, WebSocket] = {}
-
-# 存储实体数据
 entities: Dict[str, dict] = {}
-
-# 存储共享路标数据
 waypoints: Dict[str, dict] = {}
 
-# 存储玩家数据的时间限制（秒）
+connections: Dict[str, WebSocket] = {}
+connection_caps: Dict[str, dict] = {}
+admin_connections: Dict[str, WebSocket] = {}
+
 PLAYER_TIMEOUT = 5
 ENTITY_TIMEOUT = 5
 
-app = FastAPI()
+PROTOCOL_V2 = 2
+DIGEST_INTERVAL_SEC = 10
 
-# 挂载静态页面目录到 /admin
+revision = 0
+
+app = FastAPI()
 app.mount("/admin", StaticFiles(directory="static", html=True), name="admin")
 
 
-async def broadcast_waypoints_delete(waypoint_ids):
-    if not waypoint_ids:
+def next_revision() -> int:
+    global revision
+    revision += 1
+    return revision
+
+
+def compact_state_map(state_map: Dict[str, dict]) -> Dict[str, dict]:
+    return {sid: node.get("data", {}) for sid, node in state_map.items()}
+
+
+def stable_hash(payload: dict) -> str:
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def build_digests() -> dict:
+    return {
+        "players": stable_hash(compact_state_map(players)),
+        "entities": stable_hash(compact_state_map(entities)),
+        "waypoints": stable_hash(compact_state_map(waypoints)),
+    }
+
+
+def make_empty_patch() -> dict:
+    return {
+        "players": {"upsert": {}, "delete": []},
+        "entities": {"upsert": {}, "delete": []},
+        "waypoints": {"upsert": {}, "delete": []},
+    }
+
+
+def has_patch_changes(patch: dict) -> bool:
+    for scope in ("players", "entities", "waypoints"):
+        if patch[scope]["upsert"] or patch[scope]["delete"]:
+            return True
+    return False
+
+
+def merge_patch(base: dict, extra: dict) -> None:
+    for scope in ("players", "entities", "waypoints"):
+        base[scope]["upsert"].update(extra[scope]["upsert"])
+        base[scope]["delete"].extend(extra[scope]["delete"])
+
+
+def mark_player_capability(player_id: str, protocol_version: int, delta_enabled: bool) -> None:
+    connection_caps[player_id] = {
+        "protocol": protocol_version,
+        "delta": bool(protocol_version >= PROTOCOL_V2 and delta_enabled),
+        "lastDigestSent": 0.0,
+    }
+
+
+def is_delta_client(player_id: str) -> bool:
+    caps = connection_caps.get(player_id)
+    if not caps:
+        return False
+    return bool(caps.get("delta", False))
+
+
+async def send_snapshot_full_to_player(player_id: str) -> None:
+    ws = connections.get(player_id)
+    if ws is None:
+        return
+    message = {
+        "type": "snapshot_full",
+        "rev": revision,
+        "players": compact_state_map(players),
+        "entities": compact_state_map(entities),
+        "waypoints": compact_state_map(waypoints),
+    }
+    await ws.send_text(json.dumps(message, separators=(",", ":")))
+
+
+async def maybe_send_digest(player_id: str) -> None:
+    ws = connections.get(player_id)
+    caps = connection_caps.get(player_id)
+    if ws is None or caps is None or not caps.get("delta"):
         return
 
-    message = json.dumps({
-        "type": "waypoints_delete",
-        "waypointIds": waypoint_ids
-    }, separators=(",", ":"))
+    now = time.time()
+    if now - float(caps.get("lastDigestSent", 0.0)) < DIGEST_INTERVAL_SEC:
+        return
 
-    disconnected = []
-    for player_uuid, ws in list(connections.items()):
-        try:
-            await ws.send_text(message)
-        except Exception as e:
-            print(f"Error sending waypoint delete to player {player_uuid}: {e}")
-            disconnected.append(player_uuid)
-
-    for player_uuid in disconnected:
-        if player_uuid in connections:
-            del connections[player_uuid]
+    caps["lastDigestSent"] = now
+    message = {
+        "type": "digest",
+        "rev": revision,
+        "hashes": build_digests(),
+    }
+    await ws.send_text(json.dumps(message, separators=(",", ":")))
 
 
-async def broadcast_positions():
-    # 清理过期数据
+async def cleanup_timeouts() -> dict:
     current_time = time.time()
+    patch = make_empty_patch()
+
     expired_players = [
         pid for pid, pdata in list(players.items())
         if current_time - pdata["timestamp"] > PLAYER_TIMEOUT
@@ -121,48 +182,21 @@ async def broadcast_positions():
     for pid in expired_players:
         if pid in players:
             del players[pid]
+            patch["players"]["delete"].append(pid)
 
-    # 清理过期实体数据
     expired_entities = [
         eid for eid, edata in list(entities.items())
         if current_time - edata["timestamp"] > ENTITY_TIMEOUT
     ]
     for eid in expired_entities:
-        del entities[eid]
-
-    # 准备要发送的数据
-    message_data = {
-        "type": "positions",
-        "players": dict(players),
-        "entities": dict(entities),
-        "waypoints": dict(waypoints)
-    }
-    
-    try:
-        message = json.dumps(message_data, separators=(",", ":"))
-    except Exception as e:
-        print(f"Error serializing message data: {e}")
-        return
-
-    disconnected = []
-    for player_uuid, ws in list(connections.items()):
-        try:
-            await ws.send_text(message)
-        except Exception as e:
-            print(f"Error sending message to player {player_uuid}: {e}")
-            disconnected.append(player_uuid)
-
-    for player_uuid in disconnected:
-        if player_uuid in connections:
-            del connections[player_uuid]
-        entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == player_uuid]
-        for eid in entities_to_remove:
+        if eid in entities:
             del entities[eid]
+            patch["entities"]["delete"].append(eid)
 
-    await broadcast_snapshot()
+    return patch
 
 
-async def broadcast_snapshot():
+async def broadcast_snapshot() -> None:
     current_time = time.time()
     snapshot_data = {
         "server_time": current_time,
@@ -170,7 +204,8 @@ async def broadcast_snapshot():
         "entities": dict(entities),
         "waypoints": dict(waypoints),
         "connections": list(connections.keys()),
-        "connections_count": len(connections)
+        "connections_count": len(connections),
+        "revision": revision,
     }
 
     try:
@@ -190,6 +225,116 @@ async def broadcast_snapshot():
     for admin_id in disconnected:
         if admin_id in admin_connections:
             del admin_connections[admin_id]
+
+
+async def broadcast_legacy_positions() -> None:
+    message_data = {
+        "type": "positions",
+        "players": dict(players),
+        "entities": dict(entities),
+        "waypoints": dict(waypoints),
+    }
+
+    try:
+        message = json.dumps(message_data, separators=(",", ":"))
+    except Exception as e:
+        print(f"Error serializing legacy positions data: {e}")
+        return
+
+    disconnected = []
+    for player_uuid, ws in list(connections.items()):
+        if is_delta_client(player_uuid):
+            continue
+        try:
+            await ws.send_text(message)
+        except Exception as e:
+            print(f"Error sending legacy message to player {player_uuid}: {e}")
+            disconnected.append(player_uuid)
+
+    for player_uuid in disconnected:
+        remove_connection(player_uuid)
+
+
+async def broadcast_updates(changes: dict, force_full_to_delta: bool = False) -> None:
+    timeout_patch = await cleanup_timeouts()
+    merge_patch(changes, timeout_patch)
+
+    changed = has_patch_changes(changes)
+    if changed:
+        rev = next_revision()
+    else:
+        rev = revision
+
+    disconnected = []
+    for player_id, ws in list(connections.items()):
+        try:
+            if is_delta_client(player_id):
+                if force_full_to_delta:
+                    full_msg = {
+                        "type": "snapshot_full",
+                        "rev": rev,
+                        "players": compact_state_map(players),
+                        "entities": compact_state_map(entities),
+                        "waypoints": compact_state_map(waypoints),
+                    }
+                    await ws.send_text(json.dumps(full_msg, separators=(",", ":")))
+                elif changed:
+                    patch_msg = {
+                        "type": "patch",
+                        "rev": rev,
+                        "players": changes["players"],
+                        "entities": changes["entities"],
+                        "waypoints": changes["waypoints"],
+                    }
+                    await ws.send_text(json.dumps(patch_msg, separators=(",", ":")))
+
+                await maybe_send_digest(player_id)
+        except Exception as e:
+            print(f"Error sending delta update to player {player_id}: {e}")
+            disconnected.append(player_id)
+
+    for player_id in disconnected:
+        remove_connection(player_id)
+
+    if changed:
+        await broadcast_legacy_positions()
+
+    await broadcast_snapshot()
+
+
+def remove_connection(player_id: str) -> dict:
+    patch = make_empty_patch()
+
+    if player_id in connections:
+        del connections[player_id]
+    if player_id in connection_caps:
+        del connection_caps[player_id]
+
+    players_to_remove = [
+        pid for pid, pdata in list(players.items())
+        if pdata.get("submitPlayerId") == player_id
+    ]
+    for pid in players_to_remove:
+        del players[pid]
+        patch["players"]["delete"].append(pid)
+
+    entities_to_remove = [
+        eid for eid, edata in list(entities.items())
+        if edata.get("submitPlayerId") == player_id
+    ]
+    for eid in entities_to_remove:
+        del entities[eid]
+        patch["entities"]["delete"].append(eid)
+
+    waypoints_to_remove = [
+        wid for wid, wdata in list(waypoints.items())
+        if wdata.get("submitPlayerId") == player_id
+    ]
+    for wid in waypoints_to_remove:
+        del waypoints[wid]
+        patch["waypoints"]["delete"].append(wid)
+
+    return patch
 
 
 @app.websocket("/adminws")
@@ -213,7 +358,8 @@ async def admin_ws(websocket: WebSocket):
 @app.websocket("/playeresp")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    submitPlayerId = None
+    submit_player_id = None
+
     try:
         while True:
             message = await websocket.receive_text()
@@ -222,78 +368,135 @@ async def websocket_endpoint(websocket: WebSocket):
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON message: {e}")
                 continue
-            
-            submitPlayerId = data.get("submitPlayerId")
+
+            submit_player_id = data.get("submitPlayerId")
             message_type = data.get("type")
 
-            # 握手消息：客户端声明是否使用压缩
             if message_type == "handshake":
-                if submitPlayerId:
-                    connections[submitPlayerId] = websocket
-                    print(f"Client {submitPlayerId} connected")
-                    # 向客户端确认握手
-                    await websocket.send_text(json.dumps({
+                if submit_player_id:
+                    connections[submit_player_id] = websocket
+                    client_protocol = int(data.get("protocolVersion", 1))
+                    client_delta = bool(data.get("supportsDelta", False))
+                    mark_player_capability(submit_player_id, client_protocol, client_delta)
+
+                    print(f"Client {submit_player_id} connected (protocol {client_protocol})")
+                    ack = {
                         "type": "handshake_ack",
-                        "ready": True
-                    }))
-                    await broadcast_snapshot()
+                        "ready": True,
+                        "protocolVersion": PROTOCOL_V2,
+                        "deltaEnabled": is_delta_client(submit_player_id),
+                        "digestIntervalSec": DIGEST_INTERVAL_SEC,
+                        "rev": revision,
+                    }
+                    await websocket.send_text(json.dumps(ack, separators=(",", ":")))
+
+                    changes = make_empty_patch()
+                    await broadcast_updates(changes, force_full_to_delta=is_delta_client(submit_player_id))
                 continue
 
-            if data.get("type") == "players_update":
-                # 自动记录连接（兼容旧客户端）
-                if submitPlayerId and submitPlayerId not in connections:
-                    connections[submitPlayerId] = websocket
-                    print(f"Client {submitPlayerId} connected (legacy)")
-                # 支持批量更新多个玩家（推荐）
+            if submit_player_id and submit_player_id not in connections:
+                connections[submit_player_id] = websocket
+                mark_player_capability(submit_player_id, 1, False)
+                print(f"Client {submit_player_id} connected (legacy)")
+
+            changes = make_empty_patch()
+
+            if message_type == "players_update":
                 current_time = time.time()
-                for pid, player_data in data["players"].items():
+                for pid, player_data in data.get("players", {}).items():
                     try:
-                        # 使用Pydantic模型验证和规范化数据
                         validated_data = PlayerData(**player_data)
                         players[pid] = {
                             "timestamp": current_time,
-                            "submitPlayerId": submitPlayerId,
-                            "data": validated_data.model_dump()
+                            "submitPlayerId": submit_player_id,
+                            "data": validated_data.model_dump(),
                         }
+                        changes["players"]["upsert"][pid] = validated_data.model_dump()
                     except Exception as e:
                         print(f"Error validating player data for {pid}: {e}")
-                        continue
-                await broadcast_positions()
 
-            elif data.get("type") == "entities_update":
-                # 自动记录连接（兼容旧客户端）
-                if submitPlayerId and submitPlayerId not in connections:
-                    connections[submitPlayerId] = websocket
-                    print(f"Client {submitPlayerId} connected (legacy)")
-                
+                await broadcast_updates(changes)
+                continue
+
+            if message_type == "players_patch":
+                current_time = time.time()
+                upsert = data.get("upsert", {})
+                delete = data.get("delete", [])
+
+                for pid, player_data in upsert.items():
+                    try:
+                        validated_data = PlayerData(**player_data)
+                        players[pid] = {
+                            "timestamp": current_time,
+                            "submitPlayerId": submit_player_id,
+                            "data": validated_data.model_dump(),
+                        }
+                        changes["players"]["upsert"][pid] = validated_data.model_dump()
+                    except Exception as e:
+                        print(f"Error validating player patch for {pid}: {e}")
+
+                if isinstance(delete, list):
+                    for pid in delete:
+                        if isinstance(pid, str) and pid in players:
+                            del players[pid]
+                            changes["players"]["delete"].append(pid)
+
+                await broadcast_updates(changes)
+                continue
+
+            if message_type == "entities_update":
+                current_time = time.time()
                 player_entities = data.get("entities", {})
-                entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == submitPlayerId]
+                entities_to_remove = [
+                    eid for eid, edata in list(entities.items())
+                    if edata.get("submitPlayerId") == submit_player_id
+                ]
                 for eid in entities_to_remove:
                     del entities[eid]
+                    changes["entities"]["delete"].append(eid)
 
-                current_time = time.time()
                 for entity_id, entity_data in player_entities.items():
                     try:
-                        # 使用Pydantic模型验证和规范化数据
                         validated_data = EntityData(**entity_data)
                         entities[entity_id] = {
                             "timestamp": current_time,
-                            "submitPlayerId": submitPlayerId,
-                            "data": validated_data.model_dump()
+                            "submitPlayerId": submit_player_id,
+                            "data": validated_data.model_dump(),
                         }
+                        changes["entities"]["upsert"][entity_id] = validated_data.model_dump()
                     except Exception as e:
                         print(f"Error validating entity data for {entity_id}: {e}")
-                        continue
 
-                await broadcast_positions()
+                await broadcast_updates(changes)
+                continue
 
-            elif data.get("type") == "waypoints_update":
-                print(f"Received waypoints update from {submitPlayerId}: {data.get('waypoints', {})}")
-                # 自动记录连接（兼容旧客户端）
-                if submitPlayerId and submitPlayerId not in connections:
-                    connections[submitPlayerId] = websocket
-                    print(f"Client {submitPlayerId} connected (legacy)")
+            if message_type == "entities_patch":
+                current_time = time.time()
+                upsert = data.get("upsert", {})
+                delete = data.get("delete", [])
 
+                for entity_id, entity_data in upsert.items():
+                    try:
+                        validated_data = EntityData(**entity_data)
+                        entities[entity_id] = {
+                            "timestamp": current_time,
+                            "submitPlayerId": submit_player_id,
+                            "data": validated_data.model_dump(),
+                        }
+                        changes["entities"]["upsert"][entity_id] = validated_data.model_dump()
+                    except Exception as e:
+                        print(f"Error validating entity patch for {entity_id}: {e}")
+
+                if isinstance(delete, list):
+                    for entity_id in delete:
+                        if isinstance(entity_id, str) and entity_id in entities:
+                            del entities[entity_id]
+                            changes["entities"]["delete"].append(entity_id)
+
+                await broadcast_updates(changes)
+                continue
+
+            if message_type == "waypoints_update":
                 current_time = time.time()
                 player_waypoints = data.get("waypoints", {})
                 for waypoint_id, waypoint_data in player_waypoints.items():
@@ -301,62 +504,47 @@ async def websocket_endpoint(websocket: WebSocket):
                         validated_data = WaypointData(**waypoint_data)
                         waypoints[waypoint_id] = {
                             "timestamp": current_time,
-                            "submitPlayerId": submitPlayerId,
-                            "data": validated_data.model_dump()
+                            "submitPlayerId": submit_player_id,
+                            "data": validated_data.model_dump(),
                         }
+                        changes["waypoints"]["upsert"][waypoint_id] = validated_data.model_dump()
                     except Exception as e:
                         print(f"Error validating waypoint data for {waypoint_id}: {e}")
-                        continue
 
-                await broadcast_positions()
+                await broadcast_updates(changes)
+                continue
 
-            elif data.get("type") == "waypoints_delete":
-                if submitPlayerId and submitPlayerId not in connections:
-                    connections[submitPlayerId] = websocket
-                    print(f"Client {submitPlayerId} connected (legacy)")
-
+            if message_type == "waypoints_delete":
                 waypoint_ids = data.get("waypointIds", [])
                 if not isinstance(waypoint_ids, list):
                     waypoint_ids = []
 
-                removed = 0
-                removed_ids = []
                 for waypoint_id in waypoint_ids:
                     if not isinstance(waypoint_id, str):
                         continue
                     if waypoint_id in waypoints:
                         del waypoints[waypoint_id]
-                        removed_ids.append(waypoint_id)
-                        removed += 1
+                        changes["waypoints"]["delete"].append(waypoint_id)
 
-                if removed > 0:
-                    print(f"Removed {removed} shared waypoints from {submitPlayerId}")
+                await broadcast_updates(changes)
+                continue
 
-                if removed_ids:
-                    await broadcast_waypoints_delete(removed_ids)
-
-                await broadcast_positions()
-                
+            if message_type == "resync_req" and submit_player_id:
+                try:
+                    await send_snapshot_full_to_player(submit_player_id)
+                except Exception as e:
+                    print(f"Error sending snapshot_full to {submit_player_id}: {e}")
+                continue
 
     except WebSocketDisconnect:
         pass
     except Exception as e:
         print(f"Error handling player message: {e}")
     finally:
-        if submitPlayerId:
-            if submitPlayerId in connections:
-                del connections[submitPlayerId]
-            players_to_remove = [pid for pid, pdata in list(players.items()) if pdata.get("submitPlayerId") == submitPlayerId]
-            for pid in players_to_remove:
-                del players[pid]
-            entities_to_remove = [eid for eid, edata in list(entities.items()) if edata.get("submitPlayerId") == submitPlayerId]
-            for eid in entities_to_remove:
-                del entities[eid]
-            waypoints_to_remove = [wid for wid, wdata in list(waypoints.items()) if wdata.get("submitPlayerId") == submitPlayerId]
-            for wid in waypoints_to_remove:
-                del waypoints[wid]
-            print(f"Client {submitPlayerId} disconnected")
-            await broadcast_positions()
+        if submit_player_id:
+            disconnected_patch = remove_connection(submit_player_id)
+            print(f"Client {submit_player_id} disconnected")
+            await broadcast_updates(disconnected_patch)
 
 
 @app.get("/health")
@@ -366,19 +554,20 @@ async def health_check():
 
 @app.get("/snapshot")
 async def snapshot():
-    # 提供只读数据给后台页面
     current_time = time.time()
-    # 返回副本，避免并发修改导致的迭代问题
     return JSONResponse({
         "server_time": current_time,
         "players": dict(players),
         "entities": dict(entities),
         "waypoints": dict(waypoints),
         "connections": list(connections.keys()),
-        "connections_count": len(connections)
+        "connections_count": len(connections),
+        "revision": revision,
+        "digests": build_digests(),
     })
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8765, ws_per_message_deflate=True)

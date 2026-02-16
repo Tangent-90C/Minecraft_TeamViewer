@@ -6,7 +6,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.registry.RegistryKey;
@@ -20,6 +19,10 @@ import okhttp3.WebSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,9 +35,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class PlayerESPNetworkManager extends WebSocketListener {
-	/**
-	 * 连接状态监听器接口
-	 */
 	public interface ConnectionStatusListener {
 		void onConnectionStatusChanged(boolean connected);
 	}
@@ -47,22 +47,33 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
+	private static final int CLIENT_PROTOCOL_VERSION = 2;
+	private static final long RESYNC_COOLDOWN_MS = 3_000L;
+
 	private static Config config;
 
 	private final Map<UUID, Vec3d> playerPositions;
 	private final Map<UUID, RemotePlayerInfo> remotePlayers;
+	private final Map<String, SharedWaypointInfo> remoteWaypointCache = new HashMap<>();
+	private final Map<String, Map<String, Object>> lastSentPlayersSnapshot = new HashMap<>();
+	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
+
 	private WebSocket webSocket;
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
-	private boolean isConnected = false;
+	private volatile boolean isConnected = false;
 	private volatile boolean shouldReconnect = false;
 	private final Gson gson = new Gson();
 	private final OkHttpClient httpClient;
 
-	// 连接状态监听器列表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
 	private final List<WaypointUpdateListener> waypointListeners = new CopyOnWriteArrayList<>();
 
 	private volatile String lastConnectionError = "";
+	private volatile boolean serverSupportsDelta = false;
+	private volatile int serverProtocolVersion = 1;
+	private volatile int digestIntervalSec = 10;
+	private volatile long lastServerRevision = 0;
+	private volatile long lastResyncRequestMs = 0L;
 
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
 		this.playerPositions = playerPositions;
@@ -75,8 +86,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	public void connect() {
-		if (config == null)
+		if (config == null) {
 			return;
+		}
 		shouldReconnect = true;
 
 		String uri = config.getServerURL();
@@ -110,65 +122,137 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			webSocket.close(1000, "Client disconnect");
 			webSocket = null;
 		}
+		resetNegotiationState();
+		clearLocalOutboundSnapshots();
 		isConnected = false;
 		lastConnectionError = "";
 		notifyConnectionStatusChanged(false);
 	}
 
-	/**
-	 * 批量发送玩家更新到云端（type: players_update）
-	 * 云端期望：submitPlayerId（提交者UUID），players 为 playerId -> { x, y, z, vx, vy, vz,
-	 * dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
-	 */
+	public void addConnectionStatusListener(ConnectionStatusListener listener) {
+		if (listener != null) {
+			statusListeners.add(listener);
+		}
+	}
+
+	public void removeConnectionStatusListener(ConnectionStatusListener listener) {
+		if (listener != null) {
+			statusListeners.remove(listener);
+		}
+	}
+
+	public void addWaypointUpdateListener(WaypointUpdateListener listener) {
+		if (listener != null) {
+			waypointListeners.add(listener);
+		}
+	}
+
+	public void removeWaypointUpdateListener(WaypointUpdateListener listener) {
+		if (listener != null) {
+			waypointListeners.remove(listener);
+		}
+	}
+
 	public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
-		if (webSocket == null || !isConnected)
+		if (webSocket == null || !isConnected || submitPlayerId == null || players == null) {
 			return;
-		if (players == null || players.isEmpty())
+		}
+
+		if (!serverSupportsDelta) {
+			sendPlayersUpdateLegacy(submitPlayerId, players);
 			return;
+		}
+
+		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
+		for (Map.Entry<UUID, Map<String, Object>> entry : players.entrySet()) {
+			currentSnapshot.put(entry.getKey().toString(), copyValueMap(entry.getValue()));
+		}
+
+		Map<String, Map<String, Object>> upsert = new HashMap<>();
+		List<String> delete = new ArrayList<>();
+
+		for (Map.Entry<String, Map<String, Object>> entry : currentSnapshot.entrySet()) {
+			Map<String, Object> previous = lastSentPlayersSnapshot.get(entry.getKey());
+			if (!Objects.equals(previous, entry.getValue())) {
+				upsert.put(entry.getKey(), entry.getValue());
+			}
+		}
+
+		for (String previousId : lastSentPlayersSnapshot.keySet()) {
+			if (!currentSnapshot.containsKey(previousId)) {
+				delete.add(previousId);
+			}
+		}
+
+		if (upsert.isEmpty() && delete.isEmpty()) {
+			return;
+		}
+
 		try {
 			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "players_update");
+			obj.addProperty("type", "players_patch");
 			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonObject playersJson = new JsonObject();
-			for (Map.Entry<UUID, Map<String, Object>> e : players.entrySet()) {
-				playersJson.add(e.getKey().toString(), mapToJsonObject(e.getValue()));
-			}
-			obj.add("players", playersJson);
+			obj.addProperty("ackRev", lastServerRevision);
+			obj.add("upsert", mapOfMapToJsonObject(upsert));
+			obj.add("delete", toStringArray(delete));
 			webSocket.send(gson.toJson(obj));
+			lastSentPlayersSnapshot.clear();
+			lastSentPlayersSnapshot.putAll(currentSnapshot);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send players_update to PlayerESP server: {}", e.getMessage());
+			LOGGER.error("Failed to send players_patch: {}", e.getMessage());
 		}
 	}
 
-	/**
-	 * 发送实体更新到云端（type: entities_update）
-	 * 云端期望：submitPlayerId（提交者UUID），entities 为 entity_id -> { x, y, z, vx, vy, vz,
-	 * dimension, entityType, entityName, width, height, ... }
-	 */
 	public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
-		if (webSocket == null || !isConnected)
+		if (webSocket == null || !isConnected || submitPlayerId == null || entities == null) {
 			return;
-		if (entities == null || entities.isEmpty())
+		}
+
+		if (!serverSupportsDelta) {
+			sendEntitiesUpdateLegacy(submitPlayerId, entities);
 			return;
+		}
+
+		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
+		for (Map.Entry<String, Map<String, Object>> entry : entities.entrySet()) {
+			currentSnapshot.put(entry.getKey(), copyValueMap(entry.getValue()));
+		}
+
+		Map<String, Map<String, Object>> upsert = new HashMap<>();
+		List<String> delete = new ArrayList<>();
+
+		for (Map.Entry<String, Map<String, Object>> entry : currentSnapshot.entrySet()) {
+			Map<String, Object> previous = lastSentEntitiesSnapshot.get(entry.getKey());
+			if (!Objects.equals(previous, entry.getValue())) {
+				upsert.put(entry.getKey(), entry.getValue());
+			}
+		}
+
+		for (String previousId : lastSentEntitiesSnapshot.keySet()) {
+			if (!currentSnapshot.containsKey(previousId)) {
+				delete.add(previousId);
+			}
+		}
+
+		if (upsert.isEmpty() && delete.isEmpty()) {
+			return;
+		}
+
 		try {
 			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "entities_update");
+			obj.addProperty("type", "entities_patch");
 			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonObject entitiesJson = new JsonObject();
-			for (Map.Entry<String, Map<String, Object>> e : entities.entrySet()) {
-				entitiesJson.add(e.getKey(), mapToJsonObject(e.getValue()));
-			}
-			obj.add("entities", entitiesJson);
+			obj.addProperty("ackRev", lastServerRevision);
+			obj.add("upsert", mapOfMapToJsonObject(upsert));
+			obj.add("delete", toStringArray(delete));
 			webSocket.send(gson.toJson(obj));
+			lastSentEntitiesSnapshot.clear();
+			lastSentEntitiesSnapshot.putAll(currentSnapshot);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send entities_update to PlayerESP server: {}", e.getMessage());
+			LOGGER.error("Failed to send entities_patch: {}", e.getMessage());
 		}
 	}
 
-	/**
-	 * 发送 waypoint 更新到云端（type: waypoints_update）
-	 * waypoints 为 waypointId -> { x, y, z, dimension, name, symbol, color, ownerId, ownerName, createdAt }
-	 */
 	public void sendWaypointsUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> waypoints) {
 		if (webSocket == null || !isConnected)
 			return;
@@ -178,20 +262,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			JsonObject obj = new JsonObject();
 			obj.addProperty("type", "waypoints_update");
 			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonObject waypointsJson = new JsonObject();
-			for (Map.Entry<String, Map<String, Object>> e : waypoints.entrySet()) {
-				waypointsJson.add(e.getKey(), mapToJsonObject(e.getValue()));
-			}
-			obj.add("waypoints", waypointsJson);
+			obj.add("waypoints", mapOfMapToJsonObject(waypoints));
 			webSocket.send(gson.toJson(obj));
 		} catch (Exception e) {
 			LOGGER.error("Failed to send waypoints_update to PlayerESP server: {}", e.getMessage());
 		}
 	}
 
-	/**
-	 * 发送 waypoint 删除通知到云端（type: waypoints_delete）
-	 */
 	public void sendWaypointsDelete(UUID submitPlayerId, List<String> waypointIds) {
 		if (webSocket == null || !isConnected)
 			return;
@@ -217,22 +294,80 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
-	private static JsonObject mapToJsonObject(Map<String, Object> map) {
-		JsonObject o = new JsonObject();
-		for (Map.Entry<String, Object> e : map.entrySet()) {
-			if (e.getValue() == null) {
-				o.add(e.getKey(), JsonNull.INSTANCE);
+	private void sendPlayersUpdateLegacy(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
+		if (players.isEmpty()) {
+			return;
+		}
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "players_update");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonObject playersJson = new JsonObject();
+			for (Map.Entry<UUID, Map<String, Object>> e : players.entrySet()) {
+				playersJson.add(e.getKey().toString(), mapToJsonObject(e.getValue()));
+			}
+			obj.add("players", playersJson);
+			webSocket.send(gson.toJson(obj));
+		} catch (Exception e) {
+			LOGGER.error("Failed to send players_update to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
+	private void sendEntitiesUpdateLegacy(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
+		if (entities.isEmpty()) {
+			return;
+		}
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "entities_update");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonObject entitiesJson = new JsonObject();
+			for (Map.Entry<String, Map<String, Object>> e : entities.entrySet()) {
+				entitiesJson.add(e.getKey(), mapToJsonObject(e.getValue()));
+			}
+			obj.add("entities", entitiesJson);
+			webSocket.send(gson.toJson(obj));
+		} catch (Exception e) {
+			LOGGER.error("Failed to send entities_update to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
+	private JsonObject mapToJsonObject(Map<String, Object> map) {
+		JsonObject object = new JsonObject();
+		for (Map.Entry<String, Object> entry : map.entrySet()) {
+			if (entry.getValue() == null) {
+				object.add(entry.getKey(), JsonNull.INSTANCE);
 			} else {
-				o.add(e.getKey(), new JsonPrimitive(e.getValue().toString()));
+				object.add(entry.getKey(), gson.toJsonTree(entry.getValue()));
 			}
 		}
-		return o;
+		return object;
+	}
+
+	private JsonObject mapOfMapToJsonObject(Map<String, Map<String, Object>> map) {
+		JsonObject object = new JsonObject();
+		for (Map.Entry<String, Map<String, Object>> entry : map.entrySet()) {
+			object.add(entry.getKey(), mapToJsonObject(entry.getValue()));
+		}
+		return object;
+	}
+
+	private JsonArray toStringArray(List<String> list) {
+		JsonArray array = new JsonArray();
+		for (String value : list) {
+			if (value != null && !value.isBlank()) {
+				array.add(value);
+			}
+		}
+		return array;
 	}
 
 	@Override
 	public void onOpen(WebSocket webSocket, Response response) {
 		isConnected = true;
 		lastConnectionError = "";
+		resetNegotiationState();
+		clearLocalOutboundSnapshots();
 		LOGGER.info("WebSocket connection opened to PlayerESP server");
 		if (response != null) {
 			String negotiatedExtensions = response.header("Sec-WebSocket-Extensions", "");
@@ -251,13 +386,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private void processCompleteMessage(String message) {
 		try {
-			// 检查消息是否为空
 			if (message == null || message.trim().isEmpty()) {
 				LOGGER.warn("Received empty message");
 				return;
 			}
 
-			// 尝试解析JSON
 			JsonObject json;
 			try {
 				json = JsonParser.parseString(message).getAsJsonObject();
@@ -266,17 +399,39 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
-			// 处理握手确认消息
-			if (json.has("type") && "handshake_ack".equals(json.get("type").getAsString())) {
+			String messageType = json.has("type") ? json.get("type").getAsString() : "";
+
+			if (json.has("rev") && !json.get("rev").isJsonNull()) {
+				try {
+					lastServerRevision = Math.max(lastServerRevision, json.get("rev").getAsLong());
+				} catch (Exception ignored) {
+				}
+			}
+
+			if ("handshake_ack".equals(messageType)) {
 				handleHandshakeAck(json);
 				return;
 			}
 
-			String messageType = json.has("type") ? json.get("type").getAsString() : "";
+			if ("snapshot_full".equals(messageType)) {
+				applySnapshot(json);
+				return;
+			}
+
+			if ("patch".equals(messageType)) {
+				applyPatch(json);
+				return;
+			}
+
+			if ("digest".equals(messageType)) {
+				handleDigest(json);
+				return;
+			}
 
 			if ("waypoints_update".equals(messageType)) {
-				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypoints(json);
+				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
 				if (!receivedWaypoints.isEmpty()) {
+					remoteWaypointCache.putAll(receivedWaypoints);
 					notifyWaypointsReceived(receivedWaypoints);
 				}
 				return;
@@ -285,112 +440,153 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			if ("waypoints_delete".equals(messageType)) {
 				List<String> waypointIds = parseWaypointDeleteIds(json);
 				if (!waypointIds.isEmpty()) {
+					for (String id : waypointIds) {
+						remoteWaypointCache.remove(id);
+					}
 					notifyWaypointsDeleted(waypointIds);
 				}
 				return;
 			}
 
-			// 解析服务器发送的位置信息
 			if ("positions".equals(messageType)) {
-				// 处理players对象（注意是对象而不是数组）
-				if (json.has("players") && json.get("players").isJsonObject()) {
-					JsonObject players = json.getAsJsonObject("players");
-					Map<UUID, Vec3d> newPositions = new HashMap<>();
-					Map<UUID, RemotePlayerInfo> newRemotePlayers = new HashMap<>();
-					RegistryKey<World> fallbackDimension = getCurrentDimension();
+				applyLegacyPositions(json);
+			}
+		} catch (Exception e) {
+			LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(), message);
+		}
+	}
 
-					for (Map.Entry<String, JsonElement> entry : players.entrySet()) {
+	private void applyLegacyPositions(JsonObject json) {
+		if (json.has("players") && json.get("players").isJsonObject()) {
+			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"));
+			reconcileRemotePlayers(latestRemotePlayers);
+		}
+
+		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
+			remoteWaypointCache.clear();
+			remoteWaypointCache.putAll(receivedWaypoints);
+			if (!receivedWaypoints.isEmpty()) {
+				notifyWaypointsReceived(receivedWaypoints);
+			}
+		}
+	}
+
+	private void applySnapshot(JsonObject json) {
+		if (json.has("players") && json.get("players").isJsonObject()) {
+			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"));
+			reconcileRemotePlayers(latestRemotePlayers);
+		}
+
+		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
+			remoteWaypointCache.clear();
+			remoteWaypointCache.putAll(receivedWaypoints);
+			if (!receivedWaypoints.isEmpty()) {
+				notifyWaypointsReceived(receivedWaypoints);
+			}
+		}
+	}
+
+	private void applyPatch(JsonObject json) {
+		if (json.has("players") && json.get("players").isJsonObject()) {
+			JsonObject playersPatch = json.getAsJsonObject("players");
+
+			if (playersPatch.has("delete") && playersPatch.get("delete").isJsonArray()) {
+				for (JsonElement idElement : playersPatch.getAsJsonArray("delete")) {
+					if (idElement != null && idElement.isJsonPrimitive()) {
 						try {
-							String playerIdStr = entry.getKey();
-							JsonObject playerData = entry.getValue().getAsJsonObject();
-
-							// 直接获取data字段中的数据
-							JsonObject actualPlayerData = playerData.getAsJsonObject("data");
-
-							// 检查必要字段是否存在
-							if (!actualPlayerData.has("x") || !actualPlayerData.has("y")
-									|| !actualPlayerData.has("z")) {
-								LOGGER.warn("Player data missing required fields: {}, data: {}", playerIdStr,
-										playerData);
-								continue;
-							}
-
-							UUID playerId = UUID.fromString(playerIdStr);
-							double x = actualPlayerData.get("x").getAsDouble();
-							double y = actualPlayerData.get("y").getAsDouble();
-							double z = actualPlayerData.get("z").getAsDouble();
-
-							String dimensionId = actualPlayerData.has("dimension")
-									? actualPlayerData.get("dimension").getAsString()
-									: null;
-							RegistryKey<World> dimension = RemotePlayerInfo.parseDimension(dimensionId, fallbackDimension);
-							String playerName = actualPlayerData.has("playerName")
-									? actualPlayerData.get("playerName").getAsString()
-									: playerIdStr;
-
-							Vec3d position = new Vec3d(x, y, z);
-							newPositions.put(playerId, position);
-							newRemotePlayers.put(playerId, new RemotePlayerInfo(playerId, position, dimension, playerName));
-						} catch (Exception e) {
-							LOGGER.error("PlayerESP Network - Error parsing player data: {}", e.getMessage());
+							UUID playerId = UUID.fromString(idElement.getAsString());
+							remotePlayers.remove(playerId);
+							playerPositions.remove(playerId);
+						} catch (Exception ignored) {
 						}
-					}
-
-					reconcilePlayerPositions(newPositions);
-					reconcileRemotePlayers(newRemotePlayers);
-				}
-
-				// 处理entities对象（注意是对象而不是数组）
-				if (json.has("entities") && json.get("entities").isJsonObject()) {
-					JsonObject entities = json.getAsJsonObject("entities");
-					int playerCount = 0;
-					int entityCount = 0;
-
-					for (Map.Entry<String, JsonElement> entry : entities.entrySet()) {
-						try {
-							String entityId = entry.getKey();
-							JsonObject entityData = entry.getValue().getAsJsonObject();
-
-							// 直接获取data字段中的数据
-							JsonObject actualData = entityData.getAsJsonObject("data");
-
-							// 检查必要字段是否存在
-							if (!actualData.has("x") || !actualData.has("y") || !actualData.has("z")) {
-								LOGGER.warn("Entity data missing required fields: {}, data: {}", entityId, entityData);
-								continue;
-							}
-
-							String entityType = actualData.has("entityType")
-									? actualData.get("entityType").getAsString()
-									: null;
-
-							if (entityId != null && entityType != null) {
-								if ("player".equals(entityType)) {
-									// 这里我们已经有了players字段，所以不需要重复处理
-									entityCount++;
-								}
-								entityCount++;
-							} else {
-								LOGGER.error("PlayerESP Network - Incomplete entity data for {}", entityId);
-							}
-						} catch (Exception e) {
-							LOGGER.error("PlayerESP Network - Error parsing entity data: {}", e.getMessage());
-						}
-					}
-
-					LOGGER.debug("PlayerESP Network - Processed: {} players, {} entities", playerCount, entityCount);
-				}
-
-				if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
-					Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypoints(json);
-					if (!receivedWaypoints.isEmpty()) {
-						notifyWaypointsReceived(receivedWaypoints);
 					}
 				}
 			}
+
+			if (playersPatch.has("upsert") && playersPatch.get("upsert").isJsonObject()) {
+				Map<UUID, RemotePlayerInfo> upsertPlayers = parseRemotePlayers(playersPatch.getAsJsonObject("upsert"));
+				for (Map.Entry<UUID, RemotePlayerInfo> entry : upsertPlayers.entrySet()) {
+					remotePlayers.put(entry.getKey(), entry.getValue());
+					playerPositions.put(entry.getKey(), entry.getValue().position());
+				}
+			}
+		}
+
+		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+			JsonObject waypointPatch = json.getAsJsonObject("waypoints");
+
+			if (waypointPatch.has("delete") && waypointPatch.get("delete").isJsonArray()) {
+				List<String> deleteIds = new ArrayList<>();
+				for (JsonElement idElement : waypointPatch.getAsJsonArray("delete")) {
+					if (idElement != null && idElement.isJsonPrimitive()) {
+						String id = idElement.getAsString();
+						if (id != null && !id.isBlank()) {
+							remoteWaypointCache.remove(id);
+							deleteIds.add(id);
+						}
+					}
+				}
+				if (!deleteIds.isEmpty()) {
+					notifyWaypointsDeleted(deleteIds);
+				}
+			}
+
+			if (waypointPatch.has("upsert") && waypointPatch.get("upsert").isJsonObject()) {
+				Map<String, SharedWaypointInfo> upserts = parseWaypointsFromObject(waypointPatch.getAsJsonObject("upsert"));
+				if (!upserts.isEmpty()) {
+					remoteWaypointCache.putAll(upserts);
+					notifyWaypointsReceived(upserts);
+				}
+			}
+		}
+	}
+
+	private void handleDigest(JsonObject json) {
+		if (!json.has("hashes") || !json.get("hashes").isJsonObject()) {
+			return;
+		}
+
+		JsonObject hashes = json.getAsJsonObject("hashes");
+		String serverPlayerHash = getOptionalString(hashes, "players");
+		String serverWaypointHash = getOptionalString(hashes, "waypoints");
+
+		String localPlayerHash = computePlayersDigest();
+		String localWaypointHash = computeWaypointDigest();
+
+		boolean mismatch = !Objects.equals(serverPlayerHash, localPlayerHash)
+				|| !Objects.equals(serverWaypointHash, localWaypointHash);
+
+		if (!mismatch) {
+			return;
+		}
+
+		long now = System.currentTimeMillis();
+		if (now - lastResyncRequestMs < RESYNC_COOLDOWN_MS) {
+			return;
+		}
+
+		lastResyncRequestMs = now;
+		sendResyncRequest("digest_mismatch");
+	}
+
+	private void sendResyncRequest(String reason) {
+		if (webSocket == null || !isConnected) {
+			return;
+		}
+		try {
+			JsonObject req = new JsonObject();
+			req.addProperty("type", "resync_req");
+			req.addProperty("reason", reason);
+			req.addProperty("ackRev", lastServerRevision);
+			MinecraftClient client = MinecraftClient.getInstance();
+			if (client.player != null) {
+				req.addProperty("submitPlayerId", client.player.getUuid().toString());
+			}
+			webSocket.send(gson.toJson(req));
 		} catch (Exception e) {
-			LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(),
-					message);
+			LOGGER.warn("Failed to send resync request: {}", e.getMessage());
 		}
 	}
 
@@ -401,8 +597,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			lastConnectionError = "WebSocket closed (" + statusCode + "): "
 					+ (reason == null || reason.isBlank() ? "unknown reason" : reason);
 		} else {
-			lastConnectionError = ""; 
+			lastConnectionError = "";
 		}
+		resetNegotiationState();
+		clearLocalOutboundSnapshots();
 		notifyConnectionStatusChanged(false);
 		LOGGER.info("Disconnected from PlayerESP server. Status: {}, Reason: {}", statusCode, reason);
 		if (shouldReconnect) {
@@ -415,13 +613,14 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		LOGGER.error("PlayerESP network error: {}", error.getMessage());
 		isConnected = false;
 		lastConnectionError = formatThrowableReason(error);
+		resetNegotiationState();
+		clearLocalOutboundSnapshots();
 		notifyConnectionStatusChanged(false);
 		if (shouldReconnect) {
 			scheduleReconnect();
 		}
 	}
 
-	// Getter and Setter methods
 	public static String getServerURL() {
 		return config != null ? config.getServerURL() : "ws://localhost:8080/playeresp";
 	}
@@ -480,9 +679,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return World.OVERWORLD;
 	}
 
-	/**
-	 * 发送握手消息
-	 */
 	private void sendHandshake() {
 		if (webSocket == null || !isConnected)
 			return;
@@ -490,7 +686,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		try {
 			JsonObject handshake = new JsonObject();
 			handshake.addProperty("type", "handshake");
-			// 使用本地玩家UUID作为submitPlayerId
+			handshake.addProperty("protocolVersion", CLIENT_PROTOCOL_VERSION);
+			handshake.addProperty("supportsDelta", true);
+
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
 				handshake.addProperty("submitPlayerId", client.player.getUuid().toString());
@@ -503,44 +701,19 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
-	/**
-	 * 处理握手确认消息
-	 */
 	private void handleHandshakeAck(JsonObject json) {
 		if (json.has("ready") && json.get("ready").getAsBoolean()) {
-			LOGGER.info("Handshake completed");
+			serverProtocolVersion = json.has("protocolVersion") ? json.get("protocolVersion").getAsInt() : 1;
+			serverSupportsDelta = json.has("deltaEnabled") && json.get("deltaEnabled").getAsBoolean();
+			digestIntervalSec = json.has("digestIntervalSec") ? json.get("digestIntervalSec").getAsInt() : 10;
+			if (json.has("rev") && !json.get("rev").isJsonNull()) {
+				lastServerRevision = json.get("rev").getAsLong();
+			}
+			LOGGER.info("Handshake completed: protocol={}, delta={}, digestInterval={}s",
+					serverProtocolVersion, serverSupportsDelta, digestIntervalSec);
 		}
 	}
 
-	/**
-	 * 注册连接状态监听器
-	 */
-	public void addConnectionStatusListener(ConnectionStatusListener listener) {
-		if (listener != null && !statusListeners.contains(listener)) {
-			statusListeners.add(listener);
-		}
-	}
-
-	/**
-	 * 移除连接状态监听器
-	 */
-	public void removeConnectionStatusListener(ConnectionStatusListener listener) {
-		statusListeners.remove(listener);
-	}
-
-	public void addWaypointUpdateListener(WaypointUpdateListener listener) {
-		if (listener != null && !waypointListeners.contains(listener)) {
-			waypointListeners.add(listener);
-		}
-	}
-
-	public void removeWaypointUpdateListener(WaypointUpdateListener listener) {
-		waypointListeners.remove(listener);
-	}
-
-	/**
-	 * 通知所有监听器连接状态变化
-	 */
 	private void notifyConnectionStatusChanged(boolean connected) {
 		for (ConnectionStatusListener listener : statusListeners) {
 			try {
@@ -571,12 +744,61 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
-	private Map<String, SharedWaypointInfo> parseWaypoints(JsonObject json) {
-		if (!json.has("waypoints") || !json.get("waypoints").isJsonObject()) {
-			return Map.of();
+	private Map<UUID, RemotePlayerInfo> parseRemotePlayers(JsonObject playersJson) {
+		Map<UUID, RemotePlayerInfo> newRemotePlayers = new HashMap<>();
+		RegistryKey<World> fallbackDimension = getCurrentDimension();
+
+		for (Map.Entry<String, JsonElement> entry : playersJson.entrySet()) {
+			try {
+				String playerIdStr = entry.getKey();
+				if (!entry.getValue().isJsonObject()) {
+					continue;
+				}
+				JsonObject playerDataNode = entry.getValue().getAsJsonObject();
+				JsonObject actualData = extractDataNode(playerDataNode);
+
+				if (!actualData.has("x") || !actualData.has("y") || !actualData.has("z")) {
+					continue;
+				}
+
+				UUID playerId = UUID.fromString(playerIdStr);
+				double x = actualData.get("x").getAsDouble();
+				double y = actualData.get("y").getAsDouble();
+				double z = actualData.get("z").getAsDouble();
+
+				String dimensionId = actualData.has("dimension")
+						? actualData.get("dimension").getAsString()
+						: null;
+				RegistryKey<World> dimension = RemotePlayerInfo.parseDimension(dimensionId, fallbackDimension);
+				String playerName = actualData.has("playerName")
+						? actualData.get("playerName").getAsString()
+						: playerIdStr;
+
+				Vec3d position = new Vec3d(x, y, z);
+				newRemotePlayers.put(playerId, new RemotePlayerInfo(playerId, position, dimension, playerName));
+			} catch (Exception e) {
+				LOGGER.error("PlayerESP Network - Error parsing player data: {}", e.getMessage());
+			}
 		}
 
-		JsonObject waypointsJson = json.getAsJsonObject("waypoints");
+		return newRemotePlayers;
+	}
+
+	private JsonObject extractDataNode(JsonObject node) {
+		if (node.has("data") && node.get("data").isJsonObject()) {
+			return node.getAsJsonObject("data");
+		}
+		return node;
+	}
+
+	private Map<String, SharedWaypointInfo> parseWaypointsNode(JsonObject json, String fieldName) {
+		if (!json.has(fieldName) || !json.get(fieldName).isJsonObject()) {
+			return Map.of();
+		}
+		return parseWaypointsFromObject(json.getAsJsonObject(fieldName));
+	}
+
+	private Map<String, SharedWaypointInfo> parseWaypointsFromObject(JsonObject waypointsJson) {
 		Map<String, SharedWaypointInfo> result = new HashMap<>();
 
 		for (Map.Entry<String, JsonElement> entry : waypointsJson.entrySet()) {
@@ -587,9 +809,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				}
 
 				JsonObject node = entry.getValue().getAsJsonObject();
-				JsonObject data = node.has("data") && node.get("data").isJsonObject()
-						? node.getAsJsonObject("data")
-						: node;
+				JsonObject data = extractDataNode(node);
 
 				if (!data.has("x") || !data.has("y") || !data.has("z")) {
 					continue;
@@ -605,8 +825,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				String ownerName = data.has("ownerName") ? data.get("ownerName").getAsString() : "Unknown";
 				String dimension = data.has("dimension") ? data.get("dimension").getAsString() : null;
 				int color = data.has("color") ? data.get("color").getAsInt() : 0x55FF55;
-				long createdAt = data.has("createdAt") ? data.get("createdAt").getAsLong()
-						: System.currentTimeMillis();
+				long createdAt = data.has("createdAt") ? data.get("createdAt").getAsLong() : System.currentTimeMillis();
 
 				SharedWaypointInfo waypoint = new SharedWaypointInfo(
 						waypointId,
@@ -634,7 +853,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return List.of();
 		}
 
-		List<String> result = new java.util.ArrayList<>();
+		List<String> result = new ArrayList<>();
 		for (JsonElement idElement : json.getAsJsonArray("waypointIds")) {
 			if (idElement != null && idElement.isJsonPrimitive()) {
 				String id = idElement.getAsString();
@@ -649,7 +868,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private void reconcilePlayerPositions(Map<UUID, Vec3d> latestPositions) {
 		playerPositions.entrySet().removeIf(entry -> !latestPositions.containsKey(entry.getKey()));
-
 		for (Map.Entry<UUID, Vec3d> entry : latestPositions.entrySet()) {
 			UUID playerId = entry.getKey();
 			Vec3d latest = entry.getValue();
@@ -662,7 +880,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private void reconcileRemotePlayers(Map<UUID, RemotePlayerInfo> latestRemotePlayers) {
 		remotePlayers.entrySet().removeIf(entry -> !latestRemotePlayers.containsKey(entry.getKey()));
-
 		for (Map.Entry<UUID, RemotePlayerInfo> entry : latestRemotePlayers.entrySet()) {
 			UUID playerId = entry.getKey();
 			RemotePlayerInfo latest = entry.getValue();
@@ -671,5 +888,93 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				remotePlayers.put(playerId, latest);
 			}
 		}
+
+		Map<UUID, Vec3d> latestPositions = new HashMap<>();
+		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
+			latestPositions.put(entry.getKey(), entry.getValue().position());
+		}
+		reconcilePlayerPositions(latestPositions);
+	}
+
+	private String computePlayersDigest() {
+		List<String> lines = new ArrayList<>();
+		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
+			RemotePlayerInfo info = entry.getValue();
+			Vec3d pos = info.position();
+			String dimension = info.dimension() != null ? info.dimension().getValue().toString() : "";
+			lines.add(entry.getKey() + "|" + quantize(pos.x) + "|" + quantize(pos.y) + "|" + quantize(pos.z)
+					+ "|" + dimension + "|" + info.name());
+		}
+		return stableHash(lines);
+	}
+
+	private String computeWaypointDigest() {
+		List<String> lines = new ArrayList<>();
+		for (Map.Entry<String, SharedWaypointInfo> entry : remoteWaypointCache.entrySet()) {
+			SharedWaypointInfo waypoint = entry.getValue();
+			lines.add(entry.getKey() + "|" + waypoint.x() + "|" + waypoint.y() + "|" + waypoint.z() + "|"
+					+ Objects.toString(waypoint.dimension(), "") + "|" + waypoint.color() + "|"
+					+ Objects.toString(waypoint.name(), ""));
+		}
+		return stableHash(lines);
+	}
+
+	private long quantize(double value) {
+		return Math.round(value * 1000.0);
+	}
+
+	private String stableHash(List<String> lines) {
+		try {
+			Collections.sort(lines);
+			MessageDigest digest = MessageDigest.getInstance("SHA-1");
+			for (String line : lines) {
+				digest.update(line.getBytes(StandardCharsets.UTF_8));
+				digest.update((byte) '\n');
+			}
+			byte[] bytes = digest.digest();
+			StringBuilder hex = new StringBuilder();
+			for (int i = 0; i < 8 && i < bytes.length; i++) {
+				hex.append(String.format("%02x", bytes[i]));
+			}
+			return hex.toString();
+		} catch (Exception e) {
+			return "hash_error";
+		}
+	}
+
+	private String getOptionalString(JsonObject json, String key) {
+		if (!json.has(key) || json.get(key).isJsonNull()) {
+			return "";
+		}
+		try {
+			return json.get(key).getAsString();
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	private Map<String, Object> copyValueMap(Map<String, Object> source) {
+		Map<String, Object> copy = new HashMap<>();
+		if (source == null) {
+			return copy;
+		}
+		for (Map.Entry<String, Object> entry : source.entrySet()) {
+			copy.put(entry.getKey(), entry.getValue());
+		}
+		return copy;
+	}
+
+	private void resetNegotiationState() {
+		serverSupportsDelta = false;
+		serverProtocolVersion = 1;
+		digestIntervalSec = 10;
+		lastServerRevision = 0;
+		lastResyncRequestMs = 0L;
+	}
+
+	private void clearLocalOutboundSnapshots() {
+		lastSentPlayersSnapshot.clear();
+		lastSentEntitiesSnapshot.clear();
+		remoteWaypointCache.clear();
 	}
 }
