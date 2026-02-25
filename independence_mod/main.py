@@ -56,6 +56,10 @@ class WaypointData(BaseModel):
     ownerId: Optional[str] = Field(None, description="创建者UUID")
     ownerName: Optional[str] = Field(None, description="创建者名称")
     createdAt: Optional[int] = Field(None, description="创建时间戳(ms)")
+    targetType: Optional[str] = Field(None, description="命中目标类型:block/entity")
+    targetEntityId: Optional[str] = Field(None, description="命中实体UUID")
+    targetEntityType: Optional[str] = Field(None, description="命中实体类型")
+    targetEntityName: Optional[str] = Field(None, description="命中实体名称")
 
     model_config = ConfigDict(extra="ignore")
 
@@ -70,6 +74,7 @@ admin_connections: Dict[str, WebSocket] = {}
 
 PLAYER_TIMEOUT = 5
 ENTITY_TIMEOUT = 5
+WAYPOINT_TIMEOUT = 120
 ONLINE_OWNER_TIMEOUT_MULTIPLIER = 8
 
 PROTOCOL_V2 = 2
@@ -267,6 +272,15 @@ async def cleanup_timeouts() -> dict:
         if eid in entities:
             del entities[eid]
             patch["entities"]["delete"].append(eid)
+
+    expired_waypoints = [
+        wid for wid, wdata in list(waypoints.items())
+        if current_time - wdata["timestamp"] > WAYPOINT_TIMEOUT
+    ]
+    for wid in expired_waypoints:
+        if wid in waypoints:
+            del waypoints[wid]
+            patch["waypoints"]["delete"].append(wid)
 
     return patch
 

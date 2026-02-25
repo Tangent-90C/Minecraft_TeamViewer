@@ -8,10 +8,16 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.projectile.ProjectileUtil;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.text.Text;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,11 +25,14 @@ import person.professor_chen.teamviewer.multipleplayeresp.bridge.XaeroWaypointSh
 import person.professor_chen.teamviewer.multipleplayeresp.bridge.XaeroWorldMapBridge;
 import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
 import person.professor_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import person.professor_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
 import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
 import person.professor_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
 import person.professor_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,11 +46,13 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	// Mod keybinding
 	private static KeyBinding toggleKey;
 	private static KeyBinding configKey;
+	private static KeyBinding markKey;
 	
 	// Player position tracking
 	private static final Map<UUID, Vec3d> playerPositions = new ConcurrentHashMap<>();
 	private static final Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
 	private static final Map<UUID, Vec3d> serverPlayerPositions = new ConcurrentHashMap<>();
+	private static final Map<String, SharedWaypointInfo> sharedWaypoints = new ConcurrentHashMap<>();
 	
 	// Network manager
 	private static PlayerESPNetworkManager networkManager;
@@ -56,6 +67,13 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	
 	// 用于控制位置更新频率
 	private static int tickCounter = 0;
+
+	// 鼠标中键双击报点
+	private static final long MARK_DOUBLE_CLICK_MS = 300L;
+	private static final double MARK_RAYCAST_DISTANCE = 256.0D;
+	private static final int MARKER_COLOR_RGB = 0xFF8C00;
+	private static boolean middlePressedLastTick = false;
+	private static long lastMiddleClickTs = 0L;
 	
 	@Override
 	public void onInitializeClient() {
@@ -68,6 +86,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		// 初始化网络管理器
 		networkManager = new PlayerESPNetworkManager(playerPositions, remotePlayers);
 		PlayerESPNetworkManager.setConfig(config);
+		registerWaypointSyncListener();
 		
 		// 注册按键绑定
 		toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -84,6 +103,14 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			GLFW.GLFW_KEY_P, // 默认绑定P键
 			"category.multipleplayeresp.general"
 		));
+
+		// 注册报点按键（可在游戏控制设置中自定义）
+		markKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+			"key.multipleplayeresp.mark",
+			InputUtil.Type.KEYSYM,
+			GLFW.GLFW_KEY_UNKNOWN, // 默认不绑定，玩家自行设置
+			"category.multipleplayeresp.general"
+		));
 		
 		// 注册客户端tick事件
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -96,9 +123,17 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			while (configKey.wasPressed()) {
 				openConfigScreen();
 			}
+
+			// 处理报点按键（单击触发）
+			while (markKey.wasPressed()) {
+				if (canCreateMark(client)) {
+					createAndSyncQuickMark(client);
+				}
+			}
 			
 			// 更新玩家位置信息
 			updatePlayerPositions();
+			handleMiddleMouseDoubleClickMarking(client);
 
 			// 同步远程玩家到Xaero世界地图
 			XaeroWorldMapBridge.tick(remotePlayers, espEnabled);
@@ -130,6 +165,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		} else {
 			// 禁用ESP，断开连接
 			networkManager.disconnect();
+			sharedWaypoints.clear();
 			LOGGER.info("MultiPlayer ESP disabled");
 		}
 		
@@ -275,6 +311,259 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				}
 			}
 		}
+
+		renderSharedWaypointMarkers(context, cameraPos);
+	}
+
+	private void registerWaypointSyncListener() {
+		networkManager.addWaypointUpdateListener(new PlayerESPNetworkManager.WaypointUpdateListener() {
+			@Override
+			public void onWaypointsReceived(Map<String, SharedWaypointInfo> waypoints) {
+				if (waypoints == null || waypoints.isEmpty()) {
+					return;
+				}
+				sharedWaypoints.putAll(waypoints);
+			}
+
+			@Override
+			public void onWaypointsDeleted(List<String> waypointIds) {
+				if (waypointIds == null || waypointIds.isEmpty()) {
+					return;
+				}
+				for (String waypointId : waypointIds) {
+					sharedWaypoints.remove(waypointId);
+				}
+				XaeroWaypointShareBridge.deleteSharedWaypoints(waypointIds);
+			}
+		});
+	}
+
+	private void handleMiddleMouseDoubleClickMarking(MinecraftClient client) {
+		if (config == null || !config.isEnableMiddleDoubleClickMark()) {
+			middlePressedLastTick = false;
+			return;
+		}
+
+		if (!canCreateMark(client)) {
+			middlePressedLastTick = false;
+			return;
+		}
+
+		long windowHandle = client.getWindow().getHandle();
+		boolean middlePressed = GLFW.glfwGetMouseButton(windowHandle, GLFW.GLFW_MOUSE_BUTTON_MIDDLE) == GLFW.GLFW_PRESS;
+
+		if (middlePressed && !middlePressedLastTick) {
+			long now = System.currentTimeMillis();
+			if (now - lastMiddleClickTs <= MARK_DOUBLE_CLICK_MS) {
+				lastMiddleClickTs = 0L;
+				createAndSyncQuickMark(client);
+			} else {
+				lastMiddleClickTs = now;
+			}
+		}
+
+		middlePressedLastTick = middlePressed;
+	}
+
+	private boolean canCreateMark(MinecraftClient client) {
+		return espEnabled
+			&& client != null
+			&& client.player != null
+			&& client.world != null
+			&& client.currentScreen == null
+			&& networkManager != null
+			&& networkManager.isConnected();
+	}
+
+	private void createAndSyncQuickMark(MinecraftClient client) {
+		if (client.player == null || client.world == null) {
+			return;
+		}
+
+		MarkTarget target = resolveMarkTarget(client);
+		if (target == null) {
+			client.player.sendMessage(Text.literal("§c[TV] 报点失败：未命中方块或实体"), true);
+			return;
+		}
+
+		Vec3d worldPos = target.position();
+		int markX = (int) Math.floor(worldPos.x);
+		int markY = (int) Math.floor(worldPos.y);
+		int markZ = (int) Math.floor(worldPos.z);
+
+		UUID ownerId = client.player.getUuid();
+		String ownerName = client.player.getName().getString();
+		String dimension = client.world.getRegistryKey().getValue().toString();
+		long createdAt = System.currentTimeMillis();
+		String idSource = ownerId + "|" + createdAt + "|" + dimension + "|" + markX + "|" + markY + "|" + markZ;
+		String waypointId = UUID.nameUUIDFromBytes(idSource.getBytes(StandardCharsets.UTF_8)).toString();
+
+		String targetType = target.targetEntity() == null ? "block" : "entity";
+		String targetEntityId = target.targetEntity() == null ? null : target.targetEntity().getUuidAsString();
+		String targetEntityType = target.targetEntity() == null
+				? null
+				: target.targetEntity().getType().getRegistryEntry().registryKey().getValue().toString();
+		String targetEntityName = target.targetEntity() == null
+				? null
+				: target.targetEntity().getDisplayName().getString();
+
+		String markName;
+		if (target.targetEntity() != null) {
+			String displayName = targetEntityName == null || targetEntityName.isBlank() ? "Entity" : targetEntityName;
+			markName = "报点[实体] " + displayName + " @ " + markX + " " + markY + " " + markZ;
+		} else {
+			markName = "报点 " + markX + " " + markY + " " + markZ;
+		}
+
+		SharedWaypointInfo waypoint = new SharedWaypointInfo(
+			waypointId,
+			ownerId,
+			ownerName,
+			markName,
+			"!",
+			markX,
+			markY,
+			markZ,
+			dimension,
+			MARKER_COLOR_RGB,
+			createdAt,
+			targetType,
+			targetEntityId,
+			targetEntityType,
+			targetEntityName
+		);
+		sharedWaypoints.put(waypointId, waypoint);
+
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("x", markX);
+		payload.put("y", markY);
+		payload.put("z", markZ);
+		payload.put("dimension", dimension);
+		payload.put("name", waypoint.name());
+		payload.put("symbol", waypoint.symbol());
+		payload.put("color", waypoint.color());
+		payload.put("ownerId", ownerId.toString());
+		payload.put("ownerName", ownerName);
+		payload.put("createdAt", createdAt);
+		payload.put("targetType", targetType);
+		payload.put("targetEntityId", targetEntityId);
+		payload.put("targetEntityType", targetEntityType);
+		payload.put("targetEntityName", targetEntityName);
+
+		Map<String, Map<String, Object>> toUpload = new HashMap<>();
+		toUpload.put(waypointId, payload);
+		networkManager.sendWaypointsUpdate(ownerId, toUpload);
+
+		if (target.targetEntity() != null) {
+			String displayName = targetEntityName == null || targetEntityName.isBlank() ? "实体" : targetEntityName;
+			client.player.sendMessage(Text.literal("§6[TV] 已报点实体: " + displayName + " @ " + markX + " " + markY + " " + markZ), true);
+		} else {
+			client.player.sendMessage(Text.literal("§6[TV] 已报点方块: " + markX + " " + markY + " " + markZ), true);
+		}
+	}
+
+	private MarkTarget resolveMarkTarget(MinecraftClient client) {
+		if (client.player == null || client.world == null) {
+			return null;
+		}
+
+		Vec3d eyePos = client.player.getCameraPosVec(1.0F);
+		Vec3d lookVec = client.player.getRotationVec(1.0F).normalize();
+		double maxDistance = Math.max(config.getRenderDistance(), MARK_RAYCAST_DISTANCE);
+		Vec3d rayEnd = eyePos.add(lookVec.multiply(maxDistance));
+
+		BlockHitResult blockHit = client.world.raycast(new RaycastContext(
+			eyePos,
+			rayEnd,
+			RaycastContext.ShapeType.OUTLINE,
+			RaycastContext.FluidHandling.NONE,
+			client.player
+		));
+
+		double blockDistSq = Double.MAX_VALUE;
+		Vec3d blockMarkPos = null;
+		if (blockHit != null && blockHit.getType() == HitResult.Type.BLOCK) {
+			blockDistSq = eyePos.squaredDistanceTo(blockHit.getPos());
+			blockMarkPos = new Vec3d(
+				blockHit.getBlockPos().getX() + 0.5D,
+				blockHit.getBlockPos().getY() + 1.0D,
+				blockHit.getBlockPos().getZ() + 0.5D
+			);
+		}
+
+		Box searchBox = client.player.getBoundingBox().stretch(lookVec.multiply(maxDistance)).expand(1.0D);
+		EntityHitResult entityHit = ProjectileUtil.raycast(
+			client.player,
+			eyePos,
+			rayEnd,
+			searchBox,
+			entity -> entity != null && entity.isAlive() && !entity.isSpectator() && entity.canHit(),
+			maxDistance * maxDistance
+		);
+
+		double entityDistSq = Double.MAX_VALUE;
+		Entity entityTarget = null;
+		Vec3d entityMarkPos = null;
+		if (entityHit != null && entityHit.getEntity() != null) {
+			entityTarget = entityHit.getEntity();
+			entityMarkPos = entityTarget.getPos();
+			entityDistSq = eyePos.squaredDistanceTo(entityHit.getPos());
+		}
+
+		if (entityMarkPos == null && blockMarkPos == null) {
+			return null;
+		}
+		if (entityMarkPos != null && entityDistSq <= blockDistSq) {
+			return new MarkTarget(entityMarkPos, entityTarget);
+		}
+		return new MarkTarget(blockMarkPos, null);
+	}
+
+	private void renderSharedWaypointMarkers(WorldRenderContext context, Vec3d cameraPos) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client.player == null || client.world == null) {
+			return;
+		}
+		if (!config.isShowSharedWaypoints() || sharedWaypoints.isEmpty()) {
+			return;
+		}
+
+		String currentDimension = client.world.getRegistryKey().getValue().toString();
+		double maxDistance = Math.max(config.getRenderDistance(), 16.0);
+
+		for (SharedWaypointInfo waypoint : sharedWaypoints.values()) {
+			if (waypoint == null) {
+				continue;
+			}
+			if (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(currentDimension)) {
+				continue;
+			}
+
+			Vec3d worldPos = new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
+			if (client.player.getPos().distanceTo(worldPos) > maxDistance) {
+				continue;
+			}
+
+			Vec3d relativePos = worldPos.subtract(cameraPos);
+			int color = withAlpha(waypoint.color(), 0xCC);
+
+			Box markerBox = new Box(
+				relativePos.x - 0.22D, relativePos.y, relativePos.z - 0.22D,
+				relativePos.x + 0.22D, relativePos.y + 1.35D, relativePos.z + 0.22D
+			);
+			UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), markerBox, color, true);
+
+			Vec3d topPoint = relativePos.add(0.0D, 2.1D, 0.0D);
+			UnifiedRenderModule.drawLine(context.matrixStack(), relativePos, topPoint, color);
+			UnifiedRenderModule.drawTracerLine(context.matrixStack(), Vec3d.ZERO, relativePos.add(0.0D, 0.8D, 0.0D), color);
+		}
+	}
+
+	private int withAlpha(int rgb, int alpha) {
+		return ((alpha & 0xFF) << 24) | (rgb & 0x00FFFFFF);
+	}
+
+	private record MarkTarget(Vec3d position, Entity targetEntity) {
 	}
 	
 	// 网络管理方法

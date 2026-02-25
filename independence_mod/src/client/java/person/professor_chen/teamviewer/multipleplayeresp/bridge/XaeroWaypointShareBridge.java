@@ -65,6 +65,24 @@ public final class XaeroWaypointShareBridge {
 	private XaeroWaypointShareBridge() {
 	}
 
+	public static void deleteSharedWaypoint(String waypointId) {
+		if (waypointId == null || waypointId.isBlank()) {
+			return;
+		}
+		pendingRemoteDeletes.add(waypointId);
+		latestRemoteWaypoints.remove(waypointId);
+		pendingRemoteUpserts.remove(waypointId);
+	}
+
+	public static void deleteSharedWaypoints(List<String> waypointIds) {
+		if (waypointIds == null || waypointIds.isEmpty()) {
+			return;
+		}
+		for (String waypointId : waypointIds) {
+			deleteSharedWaypoint(waypointId);
+		}
+	}
+
 	public static void tick(PlayerESPNetworkManager networkManager, boolean espEnabled, Config config) {
 		if (!espEnabled || networkManager == null || config == null) {
 			return;
@@ -310,7 +328,11 @@ public final class XaeroWaypointShareBridge {
 					z,
 					dimension,
 					color,
-					createdAt));
+					createdAt,
+					null,
+					null,
+					null,
+					null));
 		}
 
 		return result;

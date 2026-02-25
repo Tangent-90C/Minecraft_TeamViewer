@@ -24,6 +24,8 @@ import person.professor_chen.teamviewer.multipleplayeresp.model.SharedWaypointIn
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.Proxy;
+import java.net.ProxySelector;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -72,7 +74,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private volatile boolean isConnected = false;
 	private volatile boolean shouldReconnect = false;
 	private final Gson gson = new Gson();
-	private final OkHttpClient httpClient;
+	private OkHttpClient httpClient;
+	private volatile boolean currentUseSystemProxy = true;
 
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
 	private final List<WaypointUpdateListener> waypointListeners = new CopyOnWriteArrayList<>();
@@ -89,7 +92,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
 		this.playerPositions = playerPositions;
 		this.remotePlayers = remotePlayers;
-		this.httpClient = new OkHttpClient();
+		this.httpClient = createHttpClient(true);
 	}
 
 	public static void setConfig(Config config) {
@@ -101,6 +104,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 		shouldReconnect = true;
+
+		boolean useSystemProxy = config.isUseSystemProxy();
+		if (this.httpClient == null || this.currentUseSystemProxy != useSystemProxy) {
+			this.httpClient = createHttpClient(useSystemProxy);
+			this.currentUseSystemProxy = useSystemProxy;
+		}
 
 		String uri = config.getServerURL();
 		Request.Builder builder = new Request.Builder().url(uri);
@@ -114,6 +123,16 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			notifyConnectionStatusChanged(false);
 			scheduleReconnect();
 		}
+	}
+
+	private OkHttpClient createHttpClient(boolean useSystemProxy) {
+		OkHttpClient.Builder builder = new OkHttpClient.Builder();
+		if (useSystemProxy) {
+			builder.proxySelector(ProxySelector.getDefault());
+		} else {
+			builder.proxy(Proxy.NO_PROXY);
+		}
+		return builder.build();
 	}
 
 	private void scheduleReconnect() {
@@ -692,6 +711,16 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	public static boolean isUseSystemProxy() {
+		return config == null || config.isUseSystemProxy();
+	}
+
+	public static void setUseSystemProxy(boolean useSystemProxy) {
+		if (config != null) {
+			config.setUseSystemProxy(useSystemProxy);
+		}
+	}
+
 	public boolean isConnected() {
 		return isConnected;
 	}
@@ -995,6 +1024,18 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				String dimension = data.has("dimension") ? data.get("dimension").getAsString() : null;
 				int color = data.has("color") ? data.get("color").getAsInt() : 0x55FF55;
 				long createdAt = data.has("createdAt") ? data.get("createdAt").getAsLong() : System.currentTimeMillis();
+				String targetType = data.has("targetType") && !data.get("targetType").isJsonNull()
+						? data.get("targetType").getAsString()
+						: null;
+				String targetEntityId = data.has("targetEntityId") && !data.get("targetEntityId").isJsonNull()
+						? data.get("targetEntityId").getAsString()
+						: null;
+				String targetEntityType = data.has("targetEntityType") && !data.get("targetEntityType").isJsonNull()
+						? data.get("targetEntityType").getAsString()
+						: null;
+				String targetEntityName = data.has("targetEntityName") && !data.get("targetEntityName").isJsonNull()
+						? data.get("targetEntityName").getAsString()
+						: null;
 
 				SharedWaypointInfo waypoint = new SharedWaypointInfo(
 						waypointId,
@@ -1007,7 +1048,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 						data.get("z").getAsInt(),
 						dimension,
 						color,
-						createdAt);
+						createdAt,
+						targetType,
+						targetEntityId,
+						targetEntityType,
+						targetEntityName);
 				result.put(waypointId, waypoint);
 			} catch (Exception e) {
 				LOGGER.error("Failed to parse shared waypoint {}: {}", entry.getKey(), e.getMessage());

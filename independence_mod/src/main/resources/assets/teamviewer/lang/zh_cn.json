@@ -1,6 +1,7 @@
 {
   "key.multipleplayeresp.toggle": "切换玩家ESP",
   "key.multipleplayeresp.config": "打开玩家ESP配置",
+  "key.multipleplayeresp.mark": "快速报点",
   "category.multipleplayeresp.general": "多人玩家ESP",
   
   "screen.multipleplayeresp.config.title": "多人玩家ESP配置",
@@ -14,9 +15,11 @@
   "screen.multipleplayeresp.config.show_boxes": "显示方框",
   "screen.multipleplayeresp.config.enable_player_esp": "启用PlayerESP",
   "screen.multipleplayeresp.config.show_tracking_lines": "显示追踪线",
+  "screen.multipleplayeresp.config.middle_double_click_mark": "中键双击报点",
   "screen.multipleplayeresp.config.upload_entities": "上传实体信息",
   "screen.multipleplayeresp.config.upload_shared_waypoints": "上报共享路标",
   "screen.multipleplayeresp.config.show_shared_waypoints": "显示共享路标",
+  "screen.multipleplayeresp.config.use_system_proxy": "使用系统代理",
   "screen.multipleplayeresp.config.tracer_start_mode": "追踪线起点",
   "screen.multipleplayeresp.config.tracer_start_mode.crosshair": "玩家准心",
   "screen.multipleplayeresp.config.tracer_start_mode.top": "屏幕上方",
@@ -24,6 +27,7 @@
   "screen.multipleplayeresp.config.tracer_top_offset_hint": "例如: 0.42 (范围 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "颜色设置",
   "screen.multipleplayeresp.config.display_settings": "显示设置",
+  "screen.multipleplayeresp.config.network_settings": "网络设置",
   "screen.multipleplayeresp.config.done": "保存",
   "screen.multipleplayeresp.config.cancel": "取消",
   "screen.multipleplayeresp.config.connect": "连接",
@@ -40,6 +44,7 @@
   "screen.multipleplayeresp.color_config.done": "保存",
   "screen.multipleplayeresp.color_config.cancel": "取消",
   "screen.multipleplayeresp.display_config.title": "显示配置",
+  "screen.multipleplayeresp.network_config.title": "网络配置",
   
   "connection.status.connected": "已连接",
   "connection.status.failed": "连接失败",

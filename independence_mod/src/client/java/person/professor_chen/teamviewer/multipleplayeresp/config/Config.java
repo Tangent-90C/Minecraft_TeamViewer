@@ -29,6 +29,8 @@ public class Config {
     private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
+    private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
+    private boolean useSystemProxy = true; // 连接服务器时是否使用系统代理
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -192,5 +194,21 @@ public class Config {
 
     public void setShowSharedWaypoints(boolean showSharedWaypoints) {
         this.showSharedWaypoints = showSharedWaypoints;
+    }
+
+    public boolean isEnableMiddleDoubleClickMark() {
+        return enableMiddleDoubleClickMark;
+    }
+
+    public void setEnableMiddleDoubleClickMark(boolean enableMiddleDoubleClickMark) {
+        this.enableMiddleDoubleClickMark = enableMiddleDoubleClickMark;
+    }
+
+    public boolean isUseSystemProxy() {
+        return useSystemProxy;
+    }
+
+    public void setUseSystemProxy(boolean useSystemProxy) {
+        this.useSystemProxy = useSystemProxy;
     }
 }

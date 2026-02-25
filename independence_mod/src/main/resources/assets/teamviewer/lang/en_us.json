@@ -1,6 +1,7 @@
 {
   "key.multipleplayeresp.toggle": "Toggle Player ESP",
   "key.multipleplayeresp.config": "Open Player ESP Config",
+  "key.multipleplayeresp.mark": "Quick Mark",
   "category.multipleplayeresp.general": "MultiPlayer ESP",
   
   "screen.multipleplayeresp.config.title": "MultiPlayer ESP Configuration",
@@ -14,9 +15,11 @@
   "screen.multipleplayeresp.config.show_boxes": "Show Boxes",
   "screen.multipleplayeresp.config.enable_player_esp": "Enable PlayerESP",
   "screen.multipleplayeresp.config.show_tracking_lines": "Show Tracking Lines",
+  "screen.multipleplayeresp.config.middle_double_click_mark": "Middle Double-Click Mark",
   "screen.multipleplayeresp.config.upload_entities": "Upload Entity Data",
   "screen.multipleplayeresp.config.upload_shared_waypoints": "Upload Shared Waypoints",
   "screen.multipleplayeresp.config.show_shared_waypoints": "Show Shared Waypoints",
+  "screen.multipleplayeresp.config.use_system_proxy": "Use System Proxy",
   "screen.multipleplayeresp.config.tracer_start_mode": "Tracer Start",
   "screen.multipleplayeresp.config.tracer_start_mode.crosshair": "Crosshair",
   "screen.multipleplayeresp.config.tracer_start_mode.top": "Top of Screen",
@@ -24,6 +27,7 @@
   "screen.multipleplayeresp.config.tracer_top_offset_hint": "e.g. 0.42 (range 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "Color Settings",
   "screen.multipleplayeresp.config.display_settings": "Display Settings",
+  "screen.multipleplayeresp.config.network_settings": "Network Settings",
   "screen.multipleplayeresp.config.done": "Save",
   "screen.multipleplayeresp.config.cancel": "Cancel",
   "screen.multipleplayeresp.config.connect": "Connect",
@@ -40,6 +44,7 @@
   "screen.multipleplayeresp.color_config.done": "Save",
   "screen.multipleplayeresp.color_config.cancel": "Cancel",
   "screen.multipleplayeresp.display_config.title": "Display Configuration",
+  "screen.multipleplayeresp.network_config.title": "Network Configuration",
   
   "connection.status.connected": "Connected",
   "connection.status.failed": "Failed",

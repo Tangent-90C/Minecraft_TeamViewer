@@ -15,10 +15,18 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private TextFieldWidget renderDistanceField;
     private TextFieldWidget tracerTopOffsetField;
     private ButtonWidget tracerStartModeButton;
+    private ButtonWidget showBoxesButton;
+    private ButtonWidget showLinesButton;
+    private ButtonWidget showSharedWaypointsButton;
+    private ButtonWidget middleDoubleClickMarkButton;
 
     private final int originalRenderDistance;
     private final String originalTracerStartMode;
     private final double originalTracerTopOffset;
+    private final boolean originalShowBoxes;
+    private final boolean originalShowLines;
+    private final boolean originalShowSharedWaypoints;
+    private final boolean originalEnableMiddleDoubleClickMark;
     private final int originalBoxColor;
     private final int originalLineColor;
 
@@ -36,6 +44,10 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
         this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
+        this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
+        this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
+        this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
+        this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
         this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
         this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
     }
@@ -45,6 +57,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
+        totalHeight += BUTTON_SPACING;
+        totalHeight += BUTTON_SPACING;
+        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -120,6 +135,34 @@ public class PlayerESPDisplayConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
 
+        int displayToggleY = getNextButtonY();
+        int toggleButtonWidth = (COMPONENT_WIDTH - 2) / 2;
+        this.showBoxesButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_boxes"),
+            button -> toggleShowBoxes()
+        ).dimensions(componentX, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showBoxesButton);
+
+        this.showLinesButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_tracking_lines"),
+            button -> toggleShowLines()
+        ).dimensions(componentX + toggleButtonWidth + 2, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showLinesButton);
+
+        int showSharedWaypointsY = getNextButtonY();
+        this.showSharedWaypointsButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints"),
+            button -> toggleShowSharedWaypoints()
+        ).dimensions(componentX, showSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showSharedWaypointsButton);
+
+        int middleDoubleClickMarkY = getNextButtonY();
+        this.middleDoubleClickMarkButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.middle_double_click_mark"),
+            button -> toggleMiddleDoubleClickMark()
+        ).dimensions(componentX, middleDoubleClickMarkY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.middleDoubleClickMarkButton);
+
         int tracerStartModeY = getNextButtonY();
         this.tracerStartModeButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.tracer_start_mode"),
@@ -146,6 +189,10 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
 
         updateTracerStartModeButton();
+        updateShowBoxesButton();
+        updateShowLinesButton();
+        updateShowSharedWaypointsButton();
+        updateMiddleDoubleClickMarkButton();
     }
 
     @Override
@@ -175,6 +222,10 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
         StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
+        StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
+        StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
+        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
+        StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
         StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
         StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
 
@@ -208,6 +259,66 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleShowBoxes() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
+        StandaloneMultiPlayerESP.getConfig().setShowBoxes(!currentStatus);
+        updateShowBoxesButton();
+    }
+
+    private void toggleShowLines() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowLines();
+        StandaloneMultiPlayerESP.getConfig().setShowLines(!currentStatus);
+        updateShowLinesButton();
+    }
+
+    private void toggleShowSharedWaypoints() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
+        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(!currentStatus);
+        updateShowSharedWaypointsButton();
+    }
+
+    private void updateShowBoxesButton() {
+        if (this.showBoxesButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_boxes").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.showBoxesButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void updateShowLinesButton() {
+        if (this.showLinesButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowLines();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_tracking_lines").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.showLinesButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void updateShowSharedWaypointsButton() {
+        if (this.showSharedWaypointsButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.showSharedWaypointsButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void toggleMiddleDoubleClickMark() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
+        StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(!currentStatus);
+        updateMiddleDoubleClickMarkButton();
+    }
+
+    private void updateMiddleDoubleClickMarkButton() {
+        if (this.middleDoubleClickMarkButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.middle_double_click_mark").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.middleDoubleClickMarkButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void saveAndClose() {
         try {
             String renderDistanceStr = this.renderDistanceField.getText().trim();
@@ -236,5 +347,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     public void tick() {
         super.tick();
         updateTracerStartModeButton();
+        updateShowBoxesButton();
+        updateShowLinesButton();
+        updateShowSharedWaypointsButton();
     }
 }

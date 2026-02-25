@@ -16,15 +16,10 @@ import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetwo
 public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
-    private TextFieldWidget updateIntervalField;
     private ButtonWidget connectButton;
     private ButtonWidget displaySettingsButton;
+    private ButtonWidget networkSettingsButton;
     private ButtonWidget disconnectButton;
-    private ButtonWidget showBoxesButton; // 方框开关按钮
-    private ButtonWidget showLinesButton; // 追踪线开关按钮
-    private ButtonWidget uploadEntitiesButton; // 上传实体信息开关按钮
-    private ButtonWidget uploadSharedWaypointsButton; // 上报共享路标开关按钮
-    private ButtonWidget showSharedWaypointsButton; // 显示共享路标开关按钮
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private int connectionStatusX;
@@ -39,6 +34,7 @@ public class PlayerESPConfigScreen extends Screen {
     private final boolean originalUploadEntities;
     private final boolean originalUploadSharedWaypoints;
     private final boolean originalShowSharedWaypoints;
+    private final boolean originalUseSystemProxy;
     private final String originalTracerStartMode;
     private final double originalTracerTopOffset;
     
@@ -63,6 +59,7 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalUploadEntities = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
         this.originalUploadSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
         this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
+        this.originalUseSystemProxy = StandaloneMultiPlayerESP.getConfig().isUseSystemProxy();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
         this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
         // 初始化连接状态
@@ -77,10 +74,7 @@ public class PlayerESPConfigScreen extends Screen {
         int totalHeight = 0;
         totalHeight += COMPONENT_SPACING; // 标题间距
         totalHeight += COMPONENT_SPACING; // URL输入框组
-        totalHeight += COMPONENT_SPACING; // 上报频率输入框组
-        totalHeight += BUTTON_SPACING;    // 方框/追踪线按钮行
-        totalHeight += BUTTON_SPACING;    // 上传实体信息/显示设置按钮行
-        totalHeight += BUTTON_SPACING;    // 路标共享设置按钮行
+        totalHeight += BUTTON_SPACING;    // 显示设置/网络设置按钮行
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
         totalHeight += COMPONENT_SPACING; // 连接状态显示
@@ -155,72 +149,20 @@ public class PlayerESPConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
         
-        // 上报频率输入框
-        int updateIntervalY = getNextY();
-        this.updateIntervalField = new TextFieldWidget(
-            this.textRenderer,
-            componentX,
-            updateIntervalY,
-            COMPONENT_WIDTH,
-            COMPONENT_HEIGHT,
-            Text.translatable("screen.multipleplayeresp.config.update_interval")
-        );
-        this.updateIntervalField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getUpdateInterval()));
-        this.updateIntervalField.setMaxLength(4); // 上报频率最大4位数字
-        this.updateIntervalField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.update_interval_hint"));
-        this.addDrawableChild(this.updateIntervalField);
-        
-        // 上报频率标签
-        this.addDrawableChild(
-            new TextWidget(componentX, updateIntervalY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
-                Text.translatable("screen.multipleplayeresp.config.update_interval"), this.textRenderer)
-                .alignLeft()
-                .setTextColor(0xFFFFFF)
-        );
-        
-        // 方框/追踪线开关按钮（左右布局）
-        int displayToggleY = getNextButtonY();
-        int toggleButtonWidth = (COMPONENT_WIDTH - 2) / 2;
-        this.showBoxesButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.show_boxes"),
-            button -> toggleShowBoxes()
-        ).dimensions(componentX, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.showBoxesButton);
-
-        this.showLinesButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.show_tracking_lines"),
-            button -> toggleShowLines()
-        ).dimensions(componentX + toggleButtonWidth + 2, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.showLinesButton);
-
-        // 上传实体信息/显示设置按钮（左右布局）
-        int uploadEntitiesY = getNextButtonY();
-        int secondaryButtonWidth = (COMPONENT_WIDTH - 2) / 2;
-        this.uploadEntitiesButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.upload_entities"),
-            button -> toggleUploadEntities()
-        ).dimensions(componentX, uploadEntitiesY, secondaryButtonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.uploadEntitiesButton);
-
+        // 显示设置/网络设置按钮（左右布局）
+        int settingsY = getNextButtonY();
+        int settingsButtonWidth = (COMPONENT_WIDTH - 2) / 2;
         this.displaySettingsButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.display_settings"),
             button -> openDisplaySettings()
-        ).dimensions(componentX + secondaryButtonWidth + 2, uploadEntitiesY, secondaryButtonWidth, COMPONENT_HEIGHT).build();
+        ).dimensions(componentX, settingsY, settingsButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.displaySettingsButton);
 
-        int waypointSharingY = getNextButtonY();
-        int waypointButtonWidth = (COMPONENT_WIDTH - 2) / 2;
-        this.uploadSharedWaypointsButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.upload_shared_waypoints"),
-            button -> toggleUploadSharedWaypoints()
-        ).dimensions(componentX, waypointSharingY, waypointButtonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.uploadSharedWaypointsButton);
-
-        this.showSharedWaypointsButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints"),
-            button -> toggleShowSharedWaypoints()
-        ).dimensions(componentX + waypointButtonWidth + 2, waypointSharingY, waypointButtonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.showSharedWaypointsButton);
+        this.networkSettingsButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.network_settings"),
+            button -> openNetworkSettings()
+        ).dimensions(componentX + settingsButtonWidth + 2, settingsY, settingsButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.networkSettingsButton);
         
         // 完成和取消按钮（并排显示）
         int buttonsY = getNextButtonY();
@@ -253,19 +195,6 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 更新连接按钮文本
         updateConnectButton();
-        
-        // 更新方框按钮状态
-        updateShowBoxesButton();
-
-        // 更新追踪线按钮状态
-        updateShowLinesButton();
-
-        // 更新上传实体信息按钮状态
-        updateUploadEntitiesButton();
-
-        // 更新共享路标按钮状态
-        updateUploadSharedWaypointsButton();
-        updateShowSharedWaypointsButton();
         
         // 添加连接状态显示组件
         addConnectionStatusWidget();
@@ -317,6 +246,7 @@ public class PlayerESPConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setUploadEntities(this.originalUploadEntities);
         StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(this.originalUploadSharedWaypoints);
         StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
+        StandaloneMultiPlayerESP.getConfig().setUseSystemProxy(this.originalUseSystemProxy);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
         StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
         
@@ -331,15 +261,7 @@ public class PlayerESPConfigScreen extends Screen {
                 PlayerESPNetworkManager.setServerURL(url);
             }
             
-            String updateIntervalStr = this.updateIntervalField.getText().trim();
-            if (!updateIntervalStr.isEmpty()) {
-                int updateInterval = Integer.parseInt(updateIntervalStr);
-                if (updateInterval > 0) {
-                    StandaloneMultiPlayerESP.getConfig().setUpdateInterval(updateInterval);
-                }
-            }
-            
-            // 显示方框/追踪线设置已经在开关按钮中实时保存
+            // 显示/网络开关设置在二级页面中实时保存
             // 保存配置到文件
             StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
@@ -393,110 +315,9 @@ public class PlayerESPConfigScreen extends Screen {
     private void openDisplaySettings() {
         MinecraftClient.getInstance().setScreen(new PlayerESPDisplayConfigScreen(this));
     }
-    
-    /**
-     * 切换方框开关状态
-     */
-    private void toggleShowBoxes() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
-        StandaloneMultiPlayerESP.getConfig().setShowBoxes(!currentStatus);
-        updateShowBoxesButton();
-    }
 
-    /**
-     * 切换追踪线开关状态
-     */
-    private void toggleShowLines() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowLines();
-        StandaloneMultiPlayerESP.getConfig().setShowLines(!currentStatus);
-        updateShowLinesButton();
-    }
-
-    /**
-     * 切换实体上传开关状态
-     */
-    private void toggleUploadEntities() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
-        StandaloneMultiPlayerESP.getConfig().setUploadEntities(!currentStatus);
-        updateUploadEntitiesButton();
-    }
-
-    private void toggleUploadSharedWaypoints() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
-        StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(!currentStatus);
-        updateUploadSharedWaypointsButton();
-    }
-
-    private void toggleShowSharedWaypoints() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
-        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(!currentStatus);
-        updateShowSharedWaypointsButton();
-    }
-
-    /**
-     * 更新方框按钮显示状态
-     */
-    private void updateShowBoxesButton() {
-        if (this.showBoxesButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_boxes").getString();
-            if (isEnabled) {
-                buttonText += " [ON]";
-            } else {
-                buttonText += " [OFF]";
-            }
-            this.showBoxesButton.setMessage(Text.of(buttonText));
-        }
-    }
-
-    /**
-     * 更新追踪线按钮显示状态
-     */
-    private void updateShowLinesButton() {
-        if (this.showLinesButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowLines();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_tracking_lines").getString();
-            if (isEnabled) {
-                buttonText += " [ON]";
-            } else {
-                buttonText += " [OFF]";
-            }
-            this.showLinesButton.setMessage(Text.of(buttonText));
-        }
-    }
-
-    /**
-     * 更新上传实体信息按钮显示状态
-     */
-    private void updateUploadEntitiesButton() {
-        if (this.uploadEntitiesButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.upload_entities").getString();
-            if (isEnabled) {
-                buttonText += " [ON]";
-            } else {
-                buttonText += " [OFF]";
-            }
-            this.uploadEntitiesButton.setMessage(Text.of(buttonText));
-        }
-    }
-
-    private void updateUploadSharedWaypointsButton() {
-        if (this.uploadSharedWaypointsButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.upload_shared_waypoints").getString();
-            buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.uploadSharedWaypointsButton.setMessage(Text.of(buttonText));
-        }
-    }
-
-    private void updateShowSharedWaypointsButton() {
-        if (this.showSharedWaypointsButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints").getString();
-            buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.showSharedWaypointsButton.setMessage(Text.of(buttonText));
-        }
+    private void openNetworkSettings() {
+        MinecraftClient.getInstance().setScreen(new PlayerESPNetworkConfigScreen(this));
     }
 
     /**
@@ -612,18 +433,5 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 更新连接按钮状态
         updateConnectButton();
-        
-        // 更新方框按钮状态
-        updateShowBoxesButton();
-
-        // 更新追踪线按钮状态
-        updateShowLinesButton();
-
-        // 更新上传实体信息按钮状态
-        updateUploadEntitiesButton();
-
-        // 更新共享路标按钮状态
-        updateUploadSharedWaypointsButton();
-        updateShowSharedWaypointsButton();
     }
 }

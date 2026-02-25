@@ -13,5 +13,9 @@ public record SharedWaypointInfo(
 		int z,
 		String dimension,
 		int color,
-		long createdAt) {
+		long createdAt,
+		String targetType,
+		String targetEntityId,
+		String targetEntityType,
+		String targetEntityName) {
 }
