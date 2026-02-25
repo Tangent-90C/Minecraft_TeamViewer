@@ -7,7 +7,8 @@ from typing import Dict, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.websockets import WebSocketState
 
 
 class PlayerData(BaseModel):
@@ -212,11 +213,108 @@ def merge_patch_and_validate(model_cls, existing_node: Optional[dict], patch_dat
     return validated.model_dump()
 
 
-def build_state_node(submit_player_id: Optional[str], current_time: float, normalized: dict) -> dict:
+def merge_patch_data(existing_node: Optional[dict], patch_data: dict) -> dict:
+    merged = {}
+    if existing_node and isinstance(existing_node.get("data"), dict):
+        merged.update(existing_node["data"])
+    if isinstance(patch_data, dict):
+        merged.update(patch_data)
+    return merged
+
+
+def is_only_missing_required_error(exc: ValidationError) -> bool:
+    details = exc.errors()
+    return bool(details) and all(item.get("type") == "missing" for item in details)
+
+
+def get_patch_base_node(
+    report_map: Dict[str, Dict[str, dict]],
+    resolved_map: Dict[str, dict],
+    object_id: str,
+    source_id: Optional[str],
+) -> Optional[dict]:
+    source_key = source_id if isinstance(source_id, str) else ""
+    source_node = report_map.get(object_id, {}).get(source_key)
+    if isinstance(source_node, dict) and isinstance(source_node.get("data"), dict):
+        return source_node
+
+    resolved_node = resolved_map.get(object_id)
+    if isinstance(resolved_node, dict) and isinstance(resolved_node.get("data"), dict):
+        return {"data": dict(resolved_node["data"])}
+
+    return None
+
+
+def websocket_is_active(ws: Optional[WebSocket]) -> bool:
+    if ws is None:
+        return False
+    return ws.client_state == WebSocketState.CONNECTED and ws.application_state == WebSocketState.CONNECTED
+
+
+def map_dimension_to_squaremap_world(dimension: Optional[str]) -> str:
+    if not dimension:
+        return "minecraft:overworld"
+
+    value = str(dimension).strip().lower()
+    mapping = {
+        "overworld": "minecraft:overworld",
+        "minecraft:overworld": "minecraft:overworld",
+        "the_nether": "minecraft:the_nether",
+        "nether": "minecraft:the_nether",
+        "minecraft:the_nether": "minecraft:the_nether",
+        "the_end": "minecraft:the_end",
+        "end": "minecraft:the_end",
+        "minecraft:the_end": "minecraft:the_end",
+    }
+    return mapping.get(value, str(dimension))
+
+
+def build_squaremap_players_payload() -> dict:
+    squaremap_players = []
+
+    for object_id, node in players.items():
+        if not isinstance(node, dict):
+            continue
+
+        data = node.get("data")
+        if not isinstance(data, dict):
+            continue
+
+        try:
+            x = float(data.get("x"))
+            z = float(data.get("z"))
+        except (TypeError, ValueError):
+            continue
+
+        player_name = data.get("playerName")
+        player_uuid = data.get("playerUUID")
+        display_name = player_name if isinstance(player_name, str) and player_name.strip() else str(object_id)
+        uuid = player_uuid if isinstance(player_uuid, str) and player_uuid.strip() else str(object_id)
+
+        squaremap_players.append({
+            "name": display_name,
+            "display_name": display_name,
+            "uuid": uuid,
+            "world": map_dimension_to_squaremap_world(data.get("dimension")),
+            "x": x,
+            "z": z,
+            "yaw": float(data.get("yaw", 0) or 0),
+            "health": float(data.get("health", 20) or 20),
+            "armor": float(data.get("armor", 0) or 0),
+        })
+
+    return {
+        "players": squaremap_players,
+        "max": len(squaremap_players),
+    }
+
+
+def build_state_node(submit_player_id: Optional[str], current_time: float, normalized: dict, valid: bool = True) -> dict:
     """标准化单条来源上报结构。"""
     return {
         "timestamp": current_time,
         "submitPlayerId": submit_player_id,
+        "valid": bool(valid),
         "data": normalized,
     }
 
@@ -278,7 +376,7 @@ def resolve_report_map(
         valid_bucket: Dict[str, dict] = {
             source_id: node
             for source_id, node in source_bucket.items()
-            if isinstance(node, dict)
+            if isinstance(node, dict) and bool(node.get("valid", True))
         }
         if not valid_bucket:
             continue
@@ -405,7 +503,8 @@ def is_delta_client(player_id: str) -> bool:
 
 async def send_snapshot_full_to_player(player_id: str) -> None:
     ws = connections.get(player_id)
-    if ws is None:
+    if not websocket_is_active(ws):
+        remove_connection(player_id)
         return
     message = {
         "type": "snapshot_full",
@@ -420,7 +519,10 @@ async def send_snapshot_full_to_player(player_id: str) -> None:
 async def maybe_send_digest(player_id: str) -> None:
     ws = connections.get(player_id)
     caps = connection_caps.get(player_id)
-    if ws is None or caps is None or not caps.get("delta"):
+    if not websocket_is_active(ws):
+        remove_connection(player_id)
+        return
+    if caps is None or not caps.get("delta"):
         return
 
     now = time.time()
@@ -513,6 +615,9 @@ async def broadcast_snapshot() -> None:
 
     disconnected = []
     for admin_id, ws in list(admin_connections.items()):
+        if not websocket_is_active(ws):
+            disconnected.append(admin_id)
+            continue
         try:
             await ws.send_text(message)
         except Exception as e:
@@ -542,6 +647,9 @@ async def broadcast_legacy_positions() -> None:
     for player_uuid, ws in list(connections.items()):
         if is_delta_client(player_uuid):
             continue
+        if not websocket_is_active(ws):
+            disconnected.append(player_uuid)
+            continue
         try:
             await ws.send_text(message)
         except Exception as e:
@@ -569,6 +677,9 @@ async def broadcast_updates(force_full_to_delta: bool = False) -> None:
 
     disconnected = []
     for player_id, ws in list(connections.items()):
+        if not websocket_is_active(ws):
+            disconnected.append(player_id)
+            continue
         try:
             if is_delta_client(player_id):
                 if force_full_to_delta:
@@ -719,11 +830,28 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 for pid, player_data in upsert.items():
                     try:
-                        source_key = submit_player_id if isinstance(submit_player_id, str) else ""
-                        existing_node = player_reports.get(pid, {}).get(source_key)
+                        existing_node = get_patch_base_node(
+                            player_reports,
+                            players,
+                            pid,
+                            submit_player_id,
+                        )
                         normalized = merge_patch_and_validate(PlayerData, existing_node, player_data)
                         node = build_state_node(submit_player_id, current_time, normalized)
                         upsert_report(player_reports, pid, submit_player_id, node)
+                    except ValidationError as e:
+                        if is_only_missing_required_error(e):
+                            existing_node = get_patch_base_node(
+                                player_reports,
+                                players,
+                                pid,
+                                submit_player_id,
+                            )
+                            partial_data = merge_patch_data(existing_node, player_data)
+                            node = build_state_node(submit_player_id, current_time, partial_data, valid=False)
+                            upsert_report(player_reports, pid, submit_player_id, node)
+                            continue
+                        print(f"Error validating player patch for {pid}: {e}")
                     except Exception as e:
                         print(f"Error validating player patch for {pid}: {e}")
 
@@ -767,11 +895,28 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 for entity_id, entity_data in upsert.items():
                     try:
-                        source_key = submit_player_id if isinstance(submit_player_id, str) else ""
-                        existing_node = entity_reports.get(entity_id, {}).get(source_key)
+                        existing_node = get_patch_base_node(
+                            entity_reports,
+                            entities,
+                            entity_id,
+                            submit_player_id,
+                        )
                         normalized = merge_patch_and_validate(EntityData, existing_node, entity_data)
                         node = build_state_node(submit_player_id, current_time, normalized)
                         upsert_report(entity_reports, entity_id, submit_player_id, node)
+                    except ValidationError as e:
+                        if is_only_missing_required_error(e):
+                            existing_node = get_patch_base_node(
+                                entity_reports,
+                                entities,
+                                entity_id,
+                                submit_player_id,
+                            )
+                            partial_data = merge_patch_data(existing_node, entity_data)
+                            node = build_state_node(submit_player_id, current_time, partial_data, valid=False)
+                            upsert_report(entity_reports, entity_id, submit_player_id, node)
+                            continue
+                        print(f"Error validating entity patch for {entity_id}: {e}")
                     except Exception as e:
                         print(f"Error validating entity patch for {entity_id}: {e}")
 
@@ -911,6 +1056,11 @@ async def snapshot():
         "revision": revision,
         "digests": build_digests(),
     })
+
+
+@app.get("/squaremap/players.json")
+async def squaremap_players_snapshot():
+    return JSONResponse(build_squaremap_players_payload())
 
 
 if __name__ == "__main__":
