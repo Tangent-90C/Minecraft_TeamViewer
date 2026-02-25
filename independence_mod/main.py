@@ -67,18 +67,32 @@ class WaypointData(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+# 当前“已仲裁后的最终视图”，用于直接对外广播。
 players: Dict[str, dict] = {}
 entities: Dict[str, dict] = {}
 waypoints: Dict[str, dict] = {}
+
+# 原始上报池：object_id -> source_id -> state_node
+# 每个来源都单独保存，不在写入时丢弃其他来源。
+player_reports: Dict[str, Dict[str, dict]] = {}
+entity_reports: Dict[str, Dict[str, dict]] = {}
+waypoint_reports: Dict[str, Dict[str, dict]] = {}
 
 connections: Dict[str, WebSocket] = {}
 connection_caps: Dict[str, dict] = {}
 admin_connections: Dict[str, WebSocket] = {}
 
+# 记录每个 object 当前选中的来源，用于“来源粘性”避免频繁切源抖动。
+player_selected_sources: Dict[str, str] = {}
+entity_selected_sources: Dict[str, str] = {}
+waypoint_selected_sources: Dict[str, str] = {}
+
 PLAYER_TIMEOUT = 5
 ENTITY_TIMEOUT = 5
 WAYPOINT_TIMEOUT = 120
 ONLINE_OWNER_TIMEOUT_MULTIPLIER = 8
+# 仅当候选来源相对当前来源领先超过阈值，才允许切源。
+SOURCE_SWITCH_THRESHOLD_SEC = 0.35
 
 PROTOCOL_V2 = 2
 DIGEST_INTERVAL_SEC = 10
@@ -197,6 +211,182 @@ def merge_patch_and_validate(model_cls, existing_node: Optional[dict], patch_dat
     return validated.model_dump()
 
 
+def build_state_node(submit_player_id: Optional[str], current_time: float, normalized: dict) -> dict:
+    """标准化单条来源上报结构。"""
+    return {
+        "timestamp": current_time,
+        "submitPlayerId": submit_player_id,
+        "data": normalized,
+    }
+
+
+def upsert_report(report_map: Dict[str, Dict[str, dict]], object_id: str, source_id: Optional[str], node: dict) -> None:
+    """写入/覆盖某 object 在某来源下的最新上报。"""
+    source_key = source_id if isinstance(source_id, str) else ""
+    source_bucket = report_map.setdefault(object_id, {})
+    source_bucket[source_key] = node
+
+
+def delete_report(report_map: Dict[str, Dict[str, dict]], object_id: str, source_id: Optional[str]) -> bool:
+    """删除某 object 在某来源下的上报；若 bucket 为空则清理 object。"""
+    if object_id not in report_map:
+        return False
+
+    source_bucket = report_map[object_id]
+    source_key = source_id if isinstance(source_id, str) else ""
+    if source_key not in source_bucket:
+        return False
+
+    del source_bucket[source_key]
+    if not source_bucket:
+        del report_map[object_id]
+    return True
+
+
+def node_timestamp(node: Optional[dict]) -> float:
+    """安全读取 node 时间戳，异常数据统一按 0 处理。"""
+    if not isinstance(node, dict):
+        return 0.0
+    value = node.get("timestamp")
+    if not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
+
+
+def resolve_report_map(
+    report_map: Dict[str, Dict[str, dict]],
+    selected_sources: Dict[str, str],
+    switch_threshold_sec: float,
+    prefer_object_id_source: bool = False,
+) -> Dict[str, dict]:
+    """
+    从多来源上报池计算“最终视图”。
+
+    仲裁顺序：
+    1) 基础候选：时间戳最新（并发相同时间戳时按 source_id 保持稳定）。
+    2) 可选偏好：如果 object_id 对应来源存在（常用于玩家本人），且不明显落后则优先它。
+    3) 来源粘性：若上一帧选中的来源仍在且差距不大，保持原来源避免来回切换。
+    """
+    resolved: Dict[str, dict] = {}
+    next_selected_sources: Dict[str, str] = {}
+
+    for object_id, source_bucket in report_map.items():
+        if not isinstance(source_bucket, dict) or not source_bucket:
+            continue
+
+        valid_bucket: Dict[str, dict] = {
+            source_id: node
+            for source_id, node in source_bucket.items()
+            if isinstance(node, dict)
+        }
+        if not valid_bucket:
+            continue
+
+        best_source_id = None
+        best_node = None
+        best_timestamp = float("-inf")
+        for source_id, node in valid_bucket.items():
+            timestamp_value = node_timestamp(node)
+
+            if timestamp_value > best_timestamp:
+                best_source_id = source_id
+                best_node = node
+                best_timestamp = timestamp_value
+                continue
+
+            if timestamp_value == best_timestamp:
+                current_best_key = str(best_source_id) if best_source_id is not None else ""
+                current_key = str(source_id)
+                if current_key < current_best_key:
+                    best_source_id = source_id
+                    best_node = node
+
+        chosen_source_id = best_source_id
+        chosen_node = best_node
+
+        # 玩家对象可优先本人来源（object_id == source_id）。
+        preferred_source = str(object_id) if prefer_object_id_source else None
+        if preferred_source and preferred_source in valid_bucket:
+            preferred_node = valid_bucket[preferred_source]
+            preferred_ts = node_timestamp(preferred_node)
+            if best_timestamp - preferred_ts <= switch_threshold_sec:
+                chosen_source_id = preferred_source
+                chosen_node = preferred_node
+
+        # 粘性策略：上一轮来源若仍可用且不明显落后，则继续沿用。
+        previous_source = selected_sources.get(object_id)
+        if previous_source in valid_bucket:
+            previous_node = valid_bucket[previous_source]
+            previous_ts = node_timestamp(previous_node)
+            chosen_ts = node_timestamp(chosen_node)
+            if chosen_ts - previous_ts <= switch_threshold_sec:
+                chosen_source_id = previous_source
+                chosen_node = previous_node
+
+        if chosen_node is not None and chosen_source_id is not None:
+            resolved[object_id] = chosen_node
+            next_selected_sources[object_id] = chosen_source_id
+
+    selected_sources.clear()
+    selected_sources.update(next_selected_sources)
+
+    return resolved
+
+
+def compute_scope_patch(old_map: Dict[str, dict], new_map: Dict[str, dict]) -> dict:
+    scope_patch = {"upsert": {}, "delete": []}
+
+    for object_id in old_map.keys() - new_map.keys():
+        scope_patch["delete"].append(object_id)
+
+    for object_id, new_node in new_map.items():
+        old_node = old_map.get(object_id)
+        old_data = old_node.get("data") if isinstance(old_node, dict) else None
+        new_data = new_node.get("data") if isinstance(new_node, dict) else None
+        if not isinstance(new_data, dict):
+            new_data = {}
+        delta = compute_field_delta(old_data if isinstance(old_data, dict) else None, new_data)
+        if delta:
+            scope_patch["upsert"][object_id] = delta
+
+    scope_patch["delete"].sort()
+    return scope_patch
+
+
+def refresh_resolved_states() -> dict:
+    """刷新三类最终视图，并返回相对上一帧的 patch。"""
+    global players, entities, waypoints
+
+    old_players = dict(players)
+    old_entities = dict(entities)
+    old_waypoints = dict(waypoints)
+
+    players = resolve_report_map(
+        player_reports,
+        player_selected_sources,
+        SOURCE_SWITCH_THRESHOLD_SEC,
+        prefer_object_id_source=True,
+    )
+    entities = resolve_report_map(
+        entity_reports,
+        entity_selected_sources,
+        SOURCE_SWITCH_THRESHOLD_SEC,
+        prefer_object_id_source=False,
+    )
+    waypoints = resolve_report_map(
+        waypoint_reports,
+        waypoint_selected_sources,
+        SOURCE_SWITCH_THRESHOLD_SEC,
+        prefer_object_id_source=False,
+    )
+
+    return {
+        "players": compute_scope_patch(old_players, players),
+        "entities": compute_scope_patch(old_entities, entities),
+        "waypoints": compute_scope_patch(old_waypoints, waypoints),
+    }
+
+
 def mark_player_capability(player_id: str, protocol_version: int, delta_enabled: bool) -> None:
     connection_caps[player_id] = {
         "protocol": protocol_version,
@@ -245,9 +435,9 @@ async def maybe_send_digest(player_id: str) -> None:
     await ws.send_text(json.dumps(message, separators=(",", ":")))
 
 
-async def cleanup_timeouts() -> dict:
+def cleanup_timeouts() -> None:
+    """按来源维度清理超时上报，保留仍活跃的来源数据。"""
     current_time = time.time()
-    patch = make_empty_patch()
 
     def is_owner_online(node: dict) -> bool:
         owner_id = node.get("submitPlayerId") if isinstance(node, dict) else None
@@ -272,34 +462,34 @@ async def cleanup_timeouts() -> dict:
             return min(ttl_int, 86400)
         return WAYPOINT_TIMEOUT
 
-    expired_players = [
-        pid for pid, pdata in list(players.items())
-        if current_time - pdata["timestamp"] > effective_timeout(PLAYER_TIMEOUT, pdata)
-    ]
-    for pid in expired_players:
-        if pid in players:
-            del players[pid]
-            patch["players"]["delete"].append(pid)
+    def cleanup_report_map(report_map: Dict[str, Dict[str, dict]], timeout_resolver) -> None:
+        # 两层清理：先清理来源，再清理空 object bucket。
+        for object_id in list(report_map.keys()):
+            source_bucket = report_map.get(object_id)
+            if not isinstance(source_bucket, dict):
+                del report_map[object_id]
+                continue
 
-    expired_entities = [
-        eid for eid, edata in list(entities.items())
-        if current_time - edata["timestamp"] > effective_timeout(ENTITY_TIMEOUT, edata)
-    ]
-    for eid in expired_entities:
-        if eid in entities:
-            del entities[eid]
-            patch["entities"]["delete"].append(eid)
+            for source_id in list(source_bucket.keys()):
+                node = source_bucket.get(source_id)
+                if not isinstance(node, dict):
+                    del source_bucket[source_id]
+                    continue
+                timestamp = node.get("timestamp")
+                if not isinstance(timestamp, (int, float)):
+                    del source_bucket[source_id]
+                    continue
 
-    expired_waypoints = [
-        wid for wid, wdata in list(waypoints.items())
-        if current_time - wdata["timestamp"] > effective_waypoint_timeout(wdata)
-    ]
-    for wid in expired_waypoints:
-        if wid in waypoints:
-            del waypoints[wid]
-            patch["waypoints"]["delete"].append(wid)
+                timeout_seconds = timeout_resolver(node)
+                if current_time - float(timestamp) > timeout_seconds:
+                    del source_bucket[source_id]
 
-    return patch
+            if not source_bucket:
+                del report_map[object_id]
+
+    cleanup_report_map(player_reports, lambda node: effective_timeout(PLAYER_TIMEOUT, node))
+    cleanup_report_map(entity_reports, lambda node: effective_timeout(ENTITY_TIMEOUT, node))
+    cleanup_report_map(waypoint_reports, effective_waypoint_timeout)
 
 
 async def broadcast_snapshot() -> None:
@@ -361,9 +551,14 @@ async def broadcast_legacy_positions() -> None:
         remove_connection(player_uuid)
 
 
-async def broadcast_updates(changes: dict, force_full_to_delta: bool = False) -> None:
-    timeout_patch = await cleanup_timeouts()
-    merge_patch(changes, timeout_patch)
+async def broadcast_updates(force_full_to_delta: bool = False) -> None:
+    """
+    统一广播入口。
+
+    流程：清理超时 -> 聚合仲裁 -> 计算 patch -> 按客户端能力广播。
+    """
+    cleanup_timeouts()
+    changes = refresh_resolved_states()
 
     changed = has_patch_changes(changes)
     if changed:
@@ -408,39 +603,28 @@ async def broadcast_updates(changes: dict, force_full_to_delta: bool = False) ->
     await broadcast_snapshot()
 
 
-def remove_connection(player_id: str) -> dict:
-    patch = make_empty_patch()
+def remove_connection(player_id: str) -> None:
+    """连接断开后，移除该来源在所有上报池中的数据。"""
 
     if player_id in connections:
         del connections[player_id]
     if player_id in connection_caps:
         del connection_caps[player_id]
 
-    players_to_remove = [
-        pid for pid, pdata in list(players.items())
-        if pdata.get("submitPlayerId") == player_id
-    ]
-    for pid in players_to_remove:
-        del players[pid]
-        patch["players"]["delete"].append(pid)
+    def remove_source_reports(report_map: Dict[str, Dict[str, dict]]) -> None:
+        for object_id in list(report_map.keys()):
+            source_bucket = report_map.get(object_id)
+            if not isinstance(source_bucket, dict):
+                del report_map[object_id]
+                continue
+            if player_id in source_bucket:
+                del source_bucket[player_id]
+            if not source_bucket:
+                del report_map[object_id]
 
-    entities_to_remove = [
-        eid for eid, edata in list(entities.items())
-        if edata.get("submitPlayerId") == player_id
-    ]
-    for eid in entities_to_remove:
-        del entities[eid]
-        patch["entities"]["delete"].append(eid)
-
-    waypoints_to_remove = [
-        wid for wid, wdata in list(waypoints.items())
-        if wdata.get("submitPlayerId") == player_id
-    ]
-    for wid in waypoints_to_remove:
-        del waypoints[wid]
-        patch["waypoints"]["delete"].append(wid)
-
-    return patch
+    remove_source_reports(player_reports)
+    remove_source_reports(entity_reports)
+    remove_source_reports(waypoint_reports)
 
 
 @app.websocket("/adminws")
@@ -463,6 +647,13 @@ async def admin_ws(websocket: WebSocket):
 
 @app.websocket("/playeresp")
 async def websocket_endpoint(websocket: WebSocket):
+    """
+    客户端主通道。
+
+    关键约定：
+    - 写入阶段只更新“来源上报池”；
+    - 下发阶段统一走 broadcast_updates 做聚合仲裁。
+    """
     await websocket.accept()
     submit_player_id = None
 
@@ -496,8 +687,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     }
                     await websocket.send_text(json.dumps(ack, separators=(",", ":")))
 
-                    changes = make_empty_patch()
-                    await broadcast_updates(changes, force_full_to_delta=is_delta_client(submit_player_id))
+                    await broadcast_updates(force_full_to_delta=is_delta_client(submit_player_id))
                 continue
 
             if submit_player_id and submit_player_id not in connections:
@@ -505,126 +695,96 @@ async def websocket_endpoint(websocket: WebSocket):
                 mark_player_capability(submit_player_id, 1, False)
                 print(f"Client {submit_player_id} connected (legacy)")
 
-            changes = make_empty_patch()
-
             if message_type == "players_update":
+                # 全量更新：仅覆盖当前来源提交的这些玩家数据。
                 current_time = time.time()
                 for pid, player_data in data.get("players", {}).items():
                     try:
-                        existing_node = players.get(pid)
                         validated_data = PlayerData(**player_data)
                         normalized = validated_data.model_dump()
-                        players[pid] = {
-                            "timestamp": current_time,
-                            "submitPlayerId": submit_player_id,
-                            "data": normalized,
-                        }
-                        field_delta = compute_field_delta(
-                            existing_node.get("data") if existing_node else None,
-                            normalized,
-                        )
-                        if field_delta:
-                            changes["players"]["upsert"][pid] = field_delta
+                        node = build_state_node(submit_player_id, current_time, normalized)
+                        upsert_report(player_reports, pid, submit_player_id, node)
                     except Exception as e:
                         print(f"Error validating player data for {pid}: {e}")
 
-                await broadcast_updates(changes)
+                await broadcast_updates()
                 continue
 
             if message_type == "players_patch":
+                # 增量更新：基于“当前来源已有快照”合并后校验。
                 current_time = time.time()
                 upsert = data.get("upsert", {})
                 delete = data.get("delete", [])
 
                 for pid, player_data in upsert.items():
                     try:
-                        existing_node = players.get(pid)
-                        old_data = existing_node.get("data") if existing_node else None
+                        source_key = submit_player_id if isinstance(submit_player_id, str) else ""
+                        existing_node = player_reports.get(pid, {}).get(source_key)
                         normalized = merge_patch_and_validate(PlayerData, existing_node, player_data)
-                        players[pid] = {
-                            "timestamp": current_time,
-                            "submitPlayerId": submit_player_id,
-                            "data": normalized,
-                        }
-                        field_delta = compute_field_delta(old_data, normalized)
-                        if field_delta:
-                            changes["players"]["upsert"][pid] = field_delta
+                        node = build_state_node(submit_player_id, current_time, normalized)
+                        upsert_report(player_reports, pid, submit_player_id, node)
                     except Exception as e:
                         print(f"Error validating player patch for {pid}: {e}")
 
                 if isinstance(delete, list):
                     for pid in delete:
-                        if isinstance(pid, str) and pid in players:
-                            del players[pid]
-                            changes["players"]["delete"].append(pid)
+                        if not isinstance(pid, str):
+                            continue
+                        delete_report(player_reports, pid, submit_player_id)
 
-                await broadcast_updates(changes)
+                await broadcast_updates()
                 continue
 
             if message_type == "entities_update":
+                # 语义保持旧协议：当前来源的实体列表视为“本轮全量”。
+                # 因此先删除该来源旧实体，再写入新实体。
                 current_time = time.time()
                 player_entities = data.get("entities", {})
-                entities_to_remove = [
-                    eid for eid, edata in list(entities.items())
-                    if edata.get("submitPlayerId") == submit_player_id
-                ]
-                for eid in entities_to_remove:
-                    del entities[eid]
-                    changes["entities"]["delete"].append(eid)
+                source_key = submit_player_id if isinstance(submit_player_id, str) else ""
+                for entity_id in list(entity_reports.keys()):
+                    source_bucket = entity_reports.get(entity_id, {})
+                    if source_key in source_bucket:
+                        delete_report(entity_reports, entity_id, submit_player_id)
 
                 for entity_id, entity_data in player_entities.items():
                     try:
-                        existing_node = entities.get(entity_id)
                         validated_data = EntityData(**entity_data)
                         normalized = validated_data.model_dump()
-                        entities[entity_id] = {
-                            "timestamp": current_time,
-                            "submitPlayerId": submit_player_id,
-                            "data": normalized,
-                        }
-                        field_delta = compute_field_delta(
-                            existing_node.get("data") if existing_node else None,
-                            normalized,
-                        )
-                        if field_delta:
-                            changes["entities"]["upsert"][entity_id] = field_delta
+                        node = build_state_node(submit_player_id, current_time, normalized)
+                        upsert_report(entity_reports, entity_id, submit_player_id, node)
                     except Exception as e:
                         print(f"Error validating entity data for {entity_id}: {e}")
 
-                await broadcast_updates(changes)
+                await broadcast_updates()
                 continue
 
             if message_type == "entities_patch":
+                # 增量实体更新，仅影响当前来源的数据桶。
                 current_time = time.time()
                 upsert = data.get("upsert", {})
                 delete = data.get("delete", [])
 
                 for entity_id, entity_data in upsert.items():
                     try:
-                        existing_node = entities.get(entity_id)
-                        old_data = existing_node.get("data") if existing_node else None
+                        source_key = submit_player_id if isinstance(submit_player_id, str) else ""
+                        existing_node = entity_reports.get(entity_id, {}).get(source_key)
                         normalized = merge_patch_and_validate(EntityData, existing_node, entity_data)
-                        entities[entity_id] = {
-                            "timestamp": current_time,
-                            "submitPlayerId": submit_player_id,
-                            "data": normalized,
-                        }
-                        field_delta = compute_field_delta(old_data, normalized)
-                        if field_delta:
-                            changes["entities"]["upsert"][entity_id] = field_delta
+                        node = build_state_node(submit_player_id, current_time, normalized)
+                        upsert_report(entity_reports, entity_id, submit_player_id, node)
                     except Exception as e:
                         print(f"Error validating entity patch for {entity_id}: {e}")
 
                 if isinstance(delete, list):
                     for entity_id in delete:
-                        if isinstance(entity_id, str) and entity_id in entities:
-                            del entities[entity_id]
-                            changes["entities"]["delete"].append(entity_id)
+                        if not isinstance(entity_id, str):
+                            continue
+                        delete_report(entity_reports, entity_id, submit_player_id)
 
-                await broadcast_updates(changes)
+                await broadcast_updates()
                 continue
 
             if message_type == "waypoints_update":
+                # 路标上报；quick + replaceOldQuick 时仅清理“当前来源”的旧 quick。
                 current_time = time.time()
                 player_waypoints = data.get("waypoints", {})
                 for waypoint_id, waypoint_data in player_waypoints.items():
@@ -634,42 +794,36 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         if normalized.get("waypointKind") == "quick" and bool(normalized.get("replaceOldQuick")):
                             old_quick_waypoints = [
-                                wid for wid, wdata in list(waypoints.items())
+                                wid for wid, source_bucket in list(waypoint_reports.items())
                                 if wid != waypoint_id
-                                and wdata.get("submitPlayerId") == submit_player_id
-                                and isinstance(wdata.get("data"), dict)
-                                and wdata["data"].get("waypointKind") == "quick"
+                                and isinstance(source_bucket, dict)
+                                and submit_player_id in source_bucket
+                                and isinstance(source_bucket[submit_player_id].get("data"), dict)
+                                and source_bucket[submit_player_id]["data"].get("waypointKind") == "quick"
                             ]
                             for old_id in old_quick_waypoints:
-                                if old_id in waypoints:
-                                    del waypoints[old_id]
-                                    changes["waypoints"]["delete"].append(old_id)
+                                delete_report(waypoint_reports, old_id, submit_player_id)
 
-                        waypoints[waypoint_id] = {
-                            "timestamp": current_time,
-                            "submitPlayerId": submit_player_id,
-                            "data": normalized,
-                        }
-                        changes["waypoints"]["upsert"][waypoint_id] = normalized
+                        node = build_state_node(submit_player_id, current_time, normalized)
+                        upsert_report(waypoint_reports, waypoint_id, submit_player_id, node)
                     except Exception as e:
                         print(f"Error validating waypoint data for {waypoint_id}: {e}")
 
-                await broadcast_updates(changes)
+                await broadcast_updates()
                 continue
 
             if message_type == "waypoints_delete":
                 waypoint_ids = data.get("waypointIds", [])
+                current_time = time.time()
                 if not isinstance(waypoint_ids, list):
                     waypoint_ids = []
 
                 for waypoint_id in waypoint_ids:
                     if not isinstance(waypoint_id, str):
                         continue
-                    if waypoint_id in waypoints:
-                        del waypoints[waypoint_id]
-                        changes["waypoints"]["delete"].append(waypoint_id)
+                    delete_report(waypoint_reports, waypoint_id, submit_player_id)
 
-                await broadcast_updates(changes)
+                await broadcast_updates()
                 continue
 
             if message_type == "resync_req" and submit_player_id:
@@ -685,9 +839,9 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Error handling player message: {e}")
     finally:
         if submit_player_id:
-            disconnected_patch = remove_connection(submit_player_id)
+            remove_connection(submit_player_id)
             print(f"Client {submit_player_id} disconnected")
-            await broadcast_updates(disconnected_patch)
+            await broadcast_updates()
 
 
 @app.get("/health")
