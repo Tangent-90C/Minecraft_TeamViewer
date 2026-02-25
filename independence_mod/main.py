@@ -843,6 +843,38 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcast_updates()
                 continue
 
+            if message_type == "waypoints_entity_death_cancel":
+                target_entity_ids = data.get("targetEntityIds", [])
+                if not isinstance(target_entity_ids, list):
+                    target_entity_ids = []
+
+                target_entity_id_set = {
+                    entity_id for entity_id in target_entity_ids
+                    if isinstance(entity_id, str) and entity_id.strip()
+                }
+
+                if target_entity_id_set:
+                    for waypoint_id in list(waypoint_reports.keys()):
+                        source_bucket = waypoint_reports.get(waypoint_id)
+                        if not isinstance(source_bucket, dict):
+                            continue
+
+                        for source_id in list(source_bucket.keys()):
+                            node = source_bucket.get(source_id)
+                            if not isinstance(node, dict):
+                                continue
+                            payload = node.get("data")
+                            if not isinstance(payload, dict):
+                                continue
+                            if payload.get("targetType") != "entity":
+                                continue
+                            if payload.get("targetEntityId") not in target_entity_id_set:
+                                continue
+                            delete_report(waypoint_reports, waypoint_id, source_id)
+
+                    await broadcast_updates()
+                continue
+
             if message_type == "resync_req" and submit_player_id:
                 try:
                     await send_snapshot_full_to_player(submit_player_id)

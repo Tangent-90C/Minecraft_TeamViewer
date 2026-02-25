@@ -9,6 +9,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.text.Text;
@@ -138,6 +139,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			// 更新玩家位置信息
 			updatePlayerPositions();
 			handleMiddleMouseDoubleClickMarking(client);
+			handleAutoCancelWaypointOnEntityDeath(client);
 
 			// 同步远程玩家到Xaero世界地图
 			XaeroWorldMapBridge.tick(remotePlayers, espEnabled);
@@ -386,6 +388,95 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		}
 
 		middlePressedLastTick = middlePressed;
+	}
+
+	private void handleAutoCancelWaypointOnEntityDeath(MinecraftClient client) {
+		if (config == null || !config.isAutoCancelWaypointOnEntityDeath()) {
+			return;
+		}
+		if (client == null || client.player == null || client.world == null || sharedWaypoints.isEmpty()) {
+			return;
+		}
+
+		UUID localPlayerId = client.player.getUuid();
+		String currentDimension = client.world.getRegistryKey().getValue().toString();
+		Map<String, Entity> localEntitiesById = new HashMap<>();
+		for (Entity entity : client.world.getEntities()) {
+			if (entity == null) {
+				continue;
+			}
+			localEntitiesById.put(entity.getUuidAsString(), entity);
+		}
+
+		Map<String, LivingEntity> confirmedDeadEntities = new HashMap<>();
+		for (Map.Entry<String, Entity> entry : localEntitiesById.entrySet()) {
+			Entity entity = entry.getValue();
+			if (!(entity instanceof LivingEntity livingEntity)) {
+				continue;
+			}
+			if (!isKillableMarkTarget(entity)) {
+				continue;
+			}
+			if (!isEntityDeathConfirmed(livingEntity)) {
+				continue;
+			}
+			confirmedDeadEntities.put(entry.getKey(), livingEntity);
+		}
+		if (confirmedDeadEntities.isEmpty()) {
+			return;
+		}
+
+		List<String> toDelete = new java.util.ArrayList<>();
+		List<String> cancelledTargetEntityIds = new java.util.ArrayList<>();
+		for (Map.Entry<String, SharedWaypointInfo> entry : sharedWaypoints.entrySet()) {
+			String waypointId = entry.getKey();
+			SharedWaypointInfo waypoint = entry.getValue();
+			if (waypoint == null) {
+				continue;
+			}
+			if (!"entity".equalsIgnoreCase(waypoint.targetType())) {
+				continue;
+			}
+			if (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(currentDimension)) {
+				continue;
+			}
+			String targetEntityId = waypoint.targetEntityId();
+			if (targetEntityId == null || targetEntityId.isBlank()) {
+				continue;
+			}
+			if (!confirmedDeadEntities.containsKey(targetEntityId)) {
+				continue;
+			}
+
+			toDelete.add(waypointId);
+			cancelledTargetEntityIds.add(targetEntityId);
+		}
+
+		if (toDelete.isEmpty()) {
+			return;
+		}
+
+		for (String waypointId : toDelete) {
+			SharedWaypointInfo removed = sharedWaypoints.remove(waypointId);
+			trackedEntityWaypointLastPositions.remove(waypointId);
+			XaeroWaypointShareBridge.deleteSharedWaypoint(waypointId);
+			if (removed != null && client.player != null) {
+				String removedName = removed.name() == null || removed.name().isBlank() ? waypointId : removed.name();
+				client.player.sendMessage(Text.literal("§7[TV] 目标已确认死亡，自动取消报点: " + removedName), true);
+			}
+		}
+
+		if (networkManager != null && networkManager.isConnected()) {
+			networkManager.sendWaypointEntityDeathCancel(localPlayerId, cancelledTargetEntityIds);
+		}
+	}
+
+	private boolean isKillableMarkTarget(Entity entity) {
+		return entity instanceof LivingEntity;
+	}
+
+	private boolean isEntityDeathConfirmed(LivingEntity livingEntity) {
+		return livingEntity.getHealth() <= 0.0F;
 	}
 
 	private boolean tryCancelTargetedWaypoint(MinecraftClient client) {
@@ -709,10 +800,26 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			return localEntityPos;
 		}
 
+		if (isPlayerTarget(waypoint)) {
+			Vec3d localPlayerPos = resolveLocalPlayerPositionFallback(client, targetEntityId, waypoint.targetEntityName(), currentDimension);
+			if (localPlayerPos != null) {
+				trackedEntityWaypointLastPositions.put(waypoint.waypointId(), localPlayerPos);
+				return localPlayerPos;
+			}
+		}
+
 		Vec3d remoteEntityPos = networkManager == null ? null : networkManager.getRemoteEntityPosition(targetEntityId, currentDimension);
 		if (remoteEntityPos != null) {
 			trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remoteEntityPos);
 			return remoteEntityPos;
+		}
+
+		if (isPlayerTarget(waypoint) && networkManager != null) {
+			Vec3d remotePlayerPos = networkManager.getRemotePlayerPosition(targetEntityId, waypoint.targetEntityName(), currentDimension);
+			if (remotePlayerPos != null) {
+				trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remotePlayerPos);
+				return remotePlayerPos;
+			}
 		}
 
 		Vec3d lastKnown = trackedEntityWaypointLastPositions.get(waypoint.waypointId());
@@ -745,6 +852,50 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		}
 
 		return null;
+	}
+
+	private Vec3d resolveLocalPlayerPositionFallback(MinecraftClient client, String targetEntityId, String targetEntityName, String currentDimension) {
+		if (client == null || client.world == null) {
+			return null;
+		}
+
+		String worldDimension = client.world.getRegistryKey().getValue().toString();
+		if (currentDimension != null && !currentDimension.isBlank() && !currentDimension.equals(worldDimension)) {
+			return null;
+		}
+
+		UUID expectedUuid = null;
+		if (targetEntityId != null && !targetEntityId.isBlank()) {
+			try {
+				expectedUuid = UUID.fromString(targetEntityId);
+			} catch (IllegalArgumentException ignored) {
+			}
+		}
+
+		for (AbstractClientPlayerEntity player : client.world.getPlayers()) {
+			if (player == null) {
+				continue;
+			}
+			if (expectedUuid != null && expectedUuid.equals(player.getUuid())) {
+				return player.getPos();
+			}
+			if (targetEntityName != null && !targetEntityName.isBlank()) {
+				String currentName = player.getName().getString();
+				if (currentName != null && currentName.equalsIgnoreCase(targetEntityName)) {
+					return player.getPos();
+				}
+			}
+		}
+
+		return null;
+	}
+
+	private boolean isPlayerTarget(SharedWaypointInfo waypoint) {
+		if (waypoint == null) {
+			return false;
+		}
+		String targetEntityType = waypoint.targetEntityType();
+		return targetEntityType != null && "minecraft:player".equalsIgnoreCase(targetEntityType);
 	}
 
 	private void renderWaypointMarkerStyle(WorldRenderContext context, Vec3d basePos, int color) {

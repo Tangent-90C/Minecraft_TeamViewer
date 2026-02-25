@@ -27,6 +27,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private ButtonWidget showSharedWaypointsButton;
     private ButtonWidget middleDoubleClickMarkButton;
     private ButtonWidget middleClickCancelWaypointButton;
+    private ButtonWidget autoCancelWaypointOnEntityDeathButton;
     private ButtonWidget enableLongTermWaypointButton;
     private ButtonWidget colorSettingsButton;
 
@@ -41,6 +42,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private final boolean originalShowSharedWaypoints;
     private final boolean originalEnableMiddleDoubleClickMark;
     private final boolean originalEnableMiddleClickCancelWaypoint;
+    private final boolean originalAutoCancelWaypointOnEntityDeath;
     private final boolean originalEnableLongTermWaypoint;
     private final int originalMaxQuickMarkCount;
     private final int originalBoxColor;
@@ -69,6 +71,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
         this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
         this.originalEnableMiddleClickCancelWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
+        this.originalAutoCancelWaypointOnEntityDeath = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
         this.originalEnableLongTermWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
         this.originalMaxQuickMarkCount = StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount();
         this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
@@ -283,6 +286,13 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(rightX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.middleClickCancelWaypointButton);
 
+        int autoCancelOnDeathY = getNextButtonY();
+        this.autoCancelWaypointOnEntityDeathButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death"),
+            button -> toggleAutoCancelWaypointOnEntityDeath()
+        ).dimensions(leftX, autoCancelOnDeathY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.autoCancelWaypointOnEntityDeathButton);
+
         int buttonsY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.done"),
@@ -300,6 +310,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
         updateMiddleClickCancelWaypointButton();
+        updateAutoCancelWaypointOnEntityDeathButton();
         updateEnableLongTermWaypointButton();
         updateWaypointUiStyleButton();
     }
@@ -351,6 +362,10 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
         if (this.middleClickCancelWaypointButton != null && this.middleClickCancelWaypointButton.isMouseOver(mouseX, mouseY)) {
             drawTooltip(context, "screen.multipleplayeresp.config.middle_click_cancel_waypoint.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.autoCancelWaypointOnEntityDeathButton != null && this.autoCancelWaypointOnEntityDeathButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death.tooltip", mouseX, mouseY);
             return;
         }
         if (this.enableLongTermWaypointButton != null && this.enableLongTermWaypointButton.isMouseOver(mouseX, mouseY)) {
@@ -422,6 +437,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
         StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
         StandaloneMultiPlayerESP.getConfig().setEnableMiddleClickCancelWaypoint(this.originalEnableMiddleClickCancelWaypoint);
+        StandaloneMultiPlayerESP.getConfig().setAutoCancelWaypointOnEntityDeath(this.originalAutoCancelWaypointOnEntityDeath);
         StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(this.originalEnableLongTermWaypoint);
         StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(this.originalMaxQuickMarkCount);
         StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
@@ -532,6 +548,21 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleAutoCancelWaypointOnEntityDeath() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
+        StandaloneMultiPlayerESP.getConfig().setAutoCancelWaypointOnEntityDeath(!currentStatus);
+        updateAutoCancelWaypointOnEntityDeathButton();
+    }
+
+    private void updateAutoCancelWaypointOnEntityDeathButton() {
+        if (this.autoCancelWaypointOnEntityDeathButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.autoCancelWaypointOnEntityDeathButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void toggleEnableLongTermWaypoint() {
         boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
         StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(!currentStatus);
@@ -629,6 +660,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
         updateMiddleClickCancelWaypointButton();
+        updateAutoCancelWaypointOnEntityDeathButton();
         updateEnableLongTermWaypointButton();
         updateWaypointUiStyleButton();
     }

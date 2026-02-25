@@ -34,6 +34,7 @@ public class Config {
     private boolean showSharedWaypoints = true; // 是否显示共享路标
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
     private boolean enableMiddleClickCancelWaypoint = true; // 是否启用中键单击取消报点
+    private boolean autoCancelWaypointOnEntityDeath = true; // 标记实体死亡后自动取消报点
     private int waypointTimeoutSeconds = 60; // 报点超时秒数
     private boolean enableLongTermWaypoint = true; // 是否启用长期报点
     private int longTermWaypointTimeoutSeconds = 1800; // 长期报点超时秒数
@@ -221,6 +222,14 @@ public class Config {
 
     public void setEnableMiddleClickCancelWaypoint(boolean enableMiddleClickCancelWaypoint) {
         this.enableMiddleClickCancelWaypoint = enableMiddleClickCancelWaypoint;
+    }
+
+    public boolean isAutoCancelWaypointOnEntityDeath() {
+        return autoCancelWaypointOnEntityDeath;
+    }
+
+    public void setAutoCancelWaypointOnEntityDeath(boolean autoCancelWaypointOnEntityDeath) {
+        this.autoCancelWaypointOnEntityDeath = autoCancelWaypointOnEntityDeath;
     }
 
     public int getWaypointTimeoutSeconds() {

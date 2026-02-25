@@ -176,7 +176,8 @@
 5. `entities_patch`（增量）
 6. `waypoints_update`
 7. `waypoints_delete`
-8. `resync_req`
+8. `waypoints_entity_death_cancel`
+9. `resync_req`
 
 ### 6.2 服务端 -> 客户端
 
@@ -366,6 +367,7 @@ Waypoints 当前策略：
 - `waypoints_delete`：按 ID 显式删除
 - 支持 TTL 自动清理（见 10.2）
 - 当 `waypointKind == "quick"` 且 `replaceOldQuick == true` 时，服务端会先删除同一来源下其他 quick 路标，再写入当前路标
+- `waypoints_entity_death_cancel`：按 `targetEntityIds` 在全来源删除满足 `targetType=="entity"` 且 `targetEntityId` 命中的路标（当前默认所有玩家提交都被信任）
 
 ---
 

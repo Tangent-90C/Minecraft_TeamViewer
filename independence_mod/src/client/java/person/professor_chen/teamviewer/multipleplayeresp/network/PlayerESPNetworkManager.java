@@ -342,6 +342,31 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	public void sendWaypointEntityDeathCancel(UUID submitPlayerId, List<String> targetEntityIds) {
+		if (webSocket == null || !isConnected)
+			return;
+		if (submitPlayerId == null || targetEntityIds == null || targetEntityIds.isEmpty())
+			return;
+		try {
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "waypoints_entity_death_cancel");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			JsonArray ids = new JsonArray();
+			for (String entityId : targetEntityIds) {
+				if (entityId != null && !entityId.isBlank()) {
+					ids.add(entityId);
+				}
+			}
+			if (ids.isEmpty()) {
+				return;
+			}
+			obj.add("targetEntityIds", ids);
+			webSocket.send(gson.toJson(obj));
+		} catch (Exception e) {
+			LOGGER.error("Failed to send waypoints_entity_death_cancel to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
 	private void sendPlayersUpdateLegacy(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
 		if (players.isEmpty()) {
 			return;
@@ -754,6 +779,51 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 
 		return new Vec3d(x, y, z);
+	}
+
+	public Vec3d getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) {
+		UUID expectedUuid = null;
+		if (playerId != null && !playerId.isBlank()) {
+			try {
+				expectedUuid = UUID.fromString(playerId);
+			} catch (IllegalArgumentException ignored) {
+			}
+		}
+
+		if (expectedUuid != null) {
+			RemotePlayerInfo info = remotePlayers.get(expectedUuid);
+			if (isRemotePlayerMatch(info, playerName, expectedDimension)) {
+				return info.position();
+			}
+		}
+
+		for (RemotePlayerInfo info : remotePlayers.values()) {
+			if (isRemotePlayerMatch(info, playerName, expectedDimension)) {
+				return info.position();
+			}
+		}
+
+		return null;
+	}
+
+	private boolean isRemotePlayerMatch(RemotePlayerInfo info, String expectedPlayerName, String expectedDimension) {
+		if (info == null || info.position() == null || info.dimension() == null) {
+			return false;
+		}
+
+		if (expectedDimension != null && !expectedDimension.isBlank()) {
+			String actualDimension = info.dimension().getValue().toString();
+			if (!expectedDimension.equals(actualDimension)) {
+				return false;
+			}
+		}
+
+		if (expectedPlayerName == null || expectedPlayerName.isBlank()) {
+			return true;
+		}
+
+		String actualName = info.name();
+		return actualName != null && actualName.equalsIgnoreCase(expectedPlayerName);
 	}
 
 	private String formatThrowableReason(Throwable throwable) {

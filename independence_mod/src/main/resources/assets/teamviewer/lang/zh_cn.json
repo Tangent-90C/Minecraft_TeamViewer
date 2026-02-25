@@ -28,6 +28,8 @@
   "screen.multipleplayeresp.config.middle_double_click_mark.tooltip": "启用后可通过中键双击快速报点。",
   "screen.multipleplayeresp.config.middle_click_cancel_waypoint": "中键单击取消报点",
   "screen.multipleplayeresp.config.middle_click_cancel_waypoint.tooltip": "启用后，中键单击会尝试取消准星附近已有的本人报点；无需精确对准坐标。",
+  "screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death": "实体死亡自动取消报点",
+  "screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death.tooltip": "仅对实体报点生效；当本地确认目标实体生命值归零时自动取消，目标失踪/未加载不会取消。",
   "screen.multipleplayeresp.config.enable_long_term_waypoint": "启用长期报点",
   "screen.multipleplayeresp.config.enable_long_term_waypoint.tooltip": "在Xaero小地图中标点时，将标点信息按长期报点超时时间同步给其他玩家，否之则按普通报点超时时间同步。",
   "screen.multipleplayeresp.config.quick_mark_max_count": "快捷报点最多数量",

@@ -2,6 +2,7 @@ package person.professor_chen.teamviewer.multipleplayeresp.bridge;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
@@ -293,6 +294,7 @@ public final class XaeroWaypointShareBridge {
 							(int) Math.floor(trackedPos.y),
 							(int) Math.floor(trackedPos.z));
 				}
+				String decoratedName = decorateSharedName(renderWaypoint);
 
 				Object existingObject = appliedRemoteWaypointObjects.get(waypointId);
 				if (existingObject != null && containsWaypointObject(currentWaypointSet, existingObject)) {
@@ -301,9 +303,15 @@ public final class XaeroWaypointShareBridge {
 					}
 					removeRemoteWaypointById(currentWaypointSet, waypointId);
 					changed = true;
+				} else {
+					appliedRemoteWaypointObjects.remove(waypointId);
 				}
 
-				Object newWaypoint = createXaeroWaypoint(decorateSharedName(renderWaypoint), renderWaypoint);
+				if (removeSharedWaypointsByExactName(currentWaypointSet, decoratedName, null)) {
+					changed = true;
+				}
+
+				Object newWaypoint = createXaeroWaypoint(decoratedName, renderWaypoint);
 				if (newWaypoint == null) {
 					continue;
 				}
@@ -338,6 +346,7 @@ public final class XaeroWaypointShareBridge {
 			}
 
 			List<Object> staleObjects = new ArrayList<>();
+			Map<String, Object> firstMatchedObjectById = new HashMap<>();
 			for (Object waypointObject : waypoints) {
 				if (waypointObject == null) {
 					continue;
@@ -353,8 +362,15 @@ public final class XaeroWaypointShareBridge {
 					continue;
 				}
 
-				if (!appliedRemoteWaypointObjects.containsKey(matchedId)) {
+				Object firstObject = firstMatchedObjectById.get(matchedId);
+				if (firstObject == null) {
+					firstMatchedObjectById.put(matchedId, waypointObject);
 					appliedRemoteWaypointObjects.put(matchedId, waypointObject);
+					continue;
+				}
+
+				if (firstObject != waypointObject) {
+					staleObjects.add(waypointObject);
 				}
 			}
 
@@ -365,6 +381,40 @@ public final class XaeroWaypointShareBridge {
 		} catch (Exception e) {
 			LOGGER.debug("Failed to reconcile existing shared waypoints: {}", e.getMessage());
 		}
+		return changed;
+	}
+
+	private static boolean removeSharedWaypointsByExactName(Object waypointSet, String exactName, Object excludeObject) {
+		if (waypointSet == null || exactName == null || exactName.isBlank()) {
+			return false;
+		}
+
+		boolean changed = false;
+		try {
+			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
+			if (!(iterableObject instanceof Iterable<?> waypoints)) {
+				return false;
+			}
+
+			List<Object> toRemove = new ArrayList<>();
+			for (Object waypointObject : waypoints) {
+				if (waypointObject == null || waypointObject == excludeObject) {
+					continue;
+				}
+				String name = stringValue(invokeNoArg(waypointObject, "getName"));
+				if (exactName.equals(name)) {
+					toRemove.add(waypointObject);
+				}
+			}
+
+			for (Object waypointObject : toRemove) {
+				invokeSingleArg(waypointSet, "remove", waypointObject);
+				changed = true;
+			}
+		} catch (Exception e) {
+			LOGGER.debug("Failed to remove duplicated shared waypoints by name: {}", e.getMessage());
+		}
+
 		return changed;
 	}
 
@@ -520,6 +570,14 @@ public final class XaeroWaypointShareBridge {
 						return pos;
 					}
 				}
+
+				if (isPlayerTarget(waypoint)) {
+					Vec3d localPlayerPos = resolveLocalPlayerPositionFallback(client, targetEntityId, waypoint.targetEntityName());
+					if (localPlayerPos != null) {
+						trackedEntityWaypointLastPositions.put(waypoint.waypointId(), localPlayerPos);
+						return localPlayerPos;
+					}
+				}
 			}
 		}
 
@@ -528,6 +586,14 @@ public final class XaeroWaypointShareBridge {
 			if (remotePos != null) {
 				trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remotePos);
 				return remotePos;
+			}
+
+			if (isPlayerTarget(waypoint)) {
+				Vec3d remotePlayerPos = boundNetworkManager.getRemotePlayerPosition(targetEntityId, waypoint.targetEntityName(), currentDimension);
+				if (remotePlayerPos != null) {
+					trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remotePlayerPos);
+					return remotePlayerPos;
+				}
 			}
 		}
 
@@ -539,6 +605,45 @@ public final class XaeroWaypointShareBridge {
 		Vec3d initial = new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
 		trackedEntityWaypointLastPositions.put(waypoint.waypointId(), initial);
 		return initial;
+	}
+
+	private static Vec3d resolveLocalPlayerPositionFallback(MinecraftClient client, String targetEntityId, String targetEntityName) {
+		if (client == null || client.world == null) {
+			return null;
+		}
+
+		UUID expectedUuid = null;
+		if (targetEntityId != null && !targetEntityId.isBlank()) {
+			try {
+				expectedUuid = UUID.fromString(targetEntityId);
+			} catch (IllegalArgumentException ignored) {
+			}
+		}
+
+		for (AbstractClientPlayerEntity player : client.world.getPlayers()) {
+			if (player == null) {
+				continue;
+			}
+			if (expectedUuid != null && expectedUuid.equals(player.getUuid())) {
+				return player.getPos();
+			}
+			if (targetEntityName != null && !targetEntityName.isBlank()) {
+				String currentName = player.getName().getString();
+				if (currentName != null && currentName.equalsIgnoreCase(targetEntityName)) {
+					return player.getPos();
+				}
+			}
+		}
+
+		return null;
+	}
+
+	private static boolean isPlayerTarget(SharedWaypointInfo waypoint) {
+		if (waypoint == null) {
+			return false;
+		}
+		String targetEntityType = waypoint.targetEntityType();
+		return targetEntityType != null && "minecraft:player".equalsIgnoreCase(targetEntityType);
 	}
 
 	private static SharedWaypointInfo copyWaypointWithPosition(SharedWaypointInfo source, int x, int y, int z) {

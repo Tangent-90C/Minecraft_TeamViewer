@@ -28,6 +28,8 @@
   "screen.multipleplayeresp.config.middle_double_click_mark.tooltip": "Enable quick marking via middle mouse double-click.",
   "screen.multipleplayeresp.config.middle_click_cancel_waypoint": "Middle-Click Cancel Mark",
   "screen.multipleplayeresp.config.middle_click_cancel_waypoint.tooltip": "When enabled, middle-click tries to cancel your existing mark near the crosshair without requiring pixel-perfect aim.",
+  "screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death": "Auto Cancel Mark on Entity Death",
+  "screen.multipleplayeresp.config.auto_cancel_waypoint_on_entity_death.tooltip": "Only for entity marks: auto-cancels when local client confirms target health is zero; missing or unloaded targets are not canceled.",
   "screen.multipleplayeresp.config.enable_long_term_waypoint": "Enable Long-term Mark",
   "screen.multipleplayeresp.config.enable_long_term_waypoint.tooltip": "When creating marks in Xaero minimap, sync them to other players using long-term timeout; otherwise use normal quick-mark timeout.",
   "screen.multipleplayeresp.config.quick_mark_max_count": "Quick Mark Max Count",
