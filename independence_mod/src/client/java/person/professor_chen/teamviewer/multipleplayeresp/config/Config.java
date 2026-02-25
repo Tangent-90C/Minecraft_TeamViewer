@@ -32,6 +32,7 @@ public class Config {
     private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
+    private boolean showOwnSharedWaypointsOnMinimap = true; // 是否在小地图显示自己的共享报点
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
     private boolean enableMiddleClickCancelWaypoint = true; // 是否启用中键单击取消报点
     private boolean autoCancelWaypointOnEntityDeath = true; // 标记实体死亡后自动取消报点
@@ -206,6 +207,14 @@ public class Config {
 
     public void setShowSharedWaypoints(boolean showSharedWaypoints) {
         this.showSharedWaypoints = showSharedWaypoints;
+    }
+
+    public boolean isShowOwnSharedWaypointsOnMinimap() {
+        return showOwnSharedWaypointsOnMinimap;
+    }
+
+    public void setShowOwnSharedWaypointsOnMinimap(boolean showOwnSharedWaypointsOnMinimap) {
+        this.showOwnSharedWaypointsOnMinimap = showOwnSharedWaypointsOnMinimap;
     }
 
     public boolean isEnableMiddleDoubleClickMark() {

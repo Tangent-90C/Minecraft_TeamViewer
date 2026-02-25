@@ -39,6 +39,8 @@
   "screen.multipleplayeresp.config.upload_shared_waypoints": "上报共享路标",
   "screen.multipleplayeresp.config.show_shared_waypoints": "显示共享路标",
   "screen.multipleplayeresp.config.show_shared_waypoints.tooltip": "控制是否显示其他玩家共享过来的路标（含小地图）。",
+  "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap": "在小地图显示自己的共享报点",
+  "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap.tooltip": "开启后，你自己上报的共享报点（如快捷标点）也会显示在自己的小地图上。",
   "screen.multipleplayeresp.config.use_system_proxy": "使用系统代理",
   "screen.multipleplayeresp.config.tracer_start_mode": "追踪线起点",
   "screen.multipleplayeresp.config.tracer_start_mode.tooltip": "切换追踪线从准心发出或从屏幕上方发出。",

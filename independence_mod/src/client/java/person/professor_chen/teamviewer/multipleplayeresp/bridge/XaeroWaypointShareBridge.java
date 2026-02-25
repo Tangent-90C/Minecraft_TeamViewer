@@ -244,6 +244,7 @@ public final class XaeroWaypointShareBridge {
 
 			UUID localPlayerId = client.player.getUuid();
 			String currentDimension = client.world.getRegistryKey().getValue().toString();
+			boolean includeOwnSharedWaypoints = config.isShowOwnSharedWaypointsOnMinimap();
 			boolean changed = false;
 			Set<String> keepIds = new HashSet<>();
 			Map<String, String> decoratedNameToId = new HashMap<>();
@@ -259,7 +260,7 @@ public final class XaeroWaypointShareBridge {
 				if (waypoint == null) {
 					continue;
 				}
-				if (waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
+				if (!includeOwnSharedWaypoints && waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
 					continue;
 				}
 				if (waypoint.dimension() != null && !waypoint.dimension().isBlank()
@@ -277,7 +278,7 @@ public final class XaeroWaypointShareBridge {
 				if (waypoint == null) {
 					continue;
 				}
-				if (waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
+				if (!includeOwnSharedWaypoints && waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
 					continue;
 				}
 				if (waypoint.dimension() != null && !waypoint.dimension().isBlank()

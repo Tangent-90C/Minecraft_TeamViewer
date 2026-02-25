@@ -39,6 +39,8 @@
   "screen.multipleplayeresp.config.upload_shared_waypoints": "Upload Shared Waypoints",
   "screen.multipleplayeresp.config.show_shared_waypoints": "Show Shared Waypoints",
   "screen.multipleplayeresp.config.show_shared_waypoints.tooltip": "Control whether shared waypoints from other players are displayed (including minimap).",
+  "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap": "Show Own Shared Marks on Minimap",
+  "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap.tooltip": "When enabled, your own uploaded shared marks (such as quick marks) are also shown on your minimap.",
   "screen.multipleplayeresp.config.use_system_proxy": "Use System Proxy",
   "screen.multipleplayeresp.config.tracer_start_mode": "Tracer Start",
   "screen.multipleplayeresp.config.tracer_start_mode.tooltip": "Switch tracer origin between Crosshair and Top of Screen.",
