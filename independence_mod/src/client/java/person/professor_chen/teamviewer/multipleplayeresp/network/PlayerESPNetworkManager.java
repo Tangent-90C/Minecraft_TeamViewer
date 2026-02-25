@@ -729,6 +729,33 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return lastConnectionError;
 	}
 
+	public Vec3d getRemoteEntityPosition(String entityId, String expectedDimension) {
+		if (entityId == null || entityId.isBlank()) {
+			return null;
+		}
+
+		Map<String, Object> data = remoteEntityDataCache.get(entityId);
+		if (data == null) {
+			return null;
+		}
+
+		if (expectedDimension != null && !expectedDimension.isBlank()) {
+			Object dimension = data.get("dimension");
+			if (dimension == null || !expectedDimension.equals(String.valueOf(dimension))) {
+				return null;
+			}
+		}
+
+		Double x = getAsDouble(data.get("x"));
+		Double y = getAsDouble(data.get("y"));
+		Double z = getAsDouble(data.get("z"));
+		if (x == null || y == null || z == null) {
+			return null;
+		}
+
+		return new Vec3d(x, y, z);
+	}
+
 	private String formatThrowableReason(Throwable throwable) {
 		if (throwable == null) {
 			return "Unknown error";

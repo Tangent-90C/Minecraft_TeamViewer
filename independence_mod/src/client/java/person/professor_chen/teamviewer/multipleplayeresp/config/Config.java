@@ -33,10 +33,13 @@ public class Config {
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
+    private boolean enableMiddleClickCancelWaypoint = true; // 是否启用中键单击取消报点
     private int waypointTimeoutSeconds = 60; // 报点超时秒数
     private boolean enableLongTermWaypoint = true; // 是否启用长期报点
     private int longTermWaypointTimeoutSeconds = 1800; // 长期报点超时秒数
-    private boolean keepOnlyLatestQuickMark = true; // 快捷报点是否仅保留最新一个
+    private int maxQuickMarkCount = 1; // 最多保留的快捷报点数量
+    @Deprecated
+    private Boolean keepOnlyLatestQuickMark = null; // 兼容旧配置
     private String waypointUiStyle = WAYPOINT_UI_BEACON; // 报点UI样式
     private boolean useSystemProxy = true; // 连接服务器时是否使用系统代理
     
@@ -212,6 +215,14 @@ public class Config {
         this.enableMiddleDoubleClickMark = enableMiddleDoubleClickMark;
     }
 
+    public boolean isEnableMiddleClickCancelWaypoint() {
+        return enableMiddleClickCancelWaypoint;
+    }
+
+    public void setEnableMiddleClickCancelWaypoint(boolean enableMiddleClickCancelWaypoint) {
+        this.enableMiddleClickCancelWaypoint = enableMiddleClickCancelWaypoint;
+    }
+
     public int getWaypointTimeoutSeconds() {
         if (waypointTimeoutSeconds < 10) {
             return 10;
@@ -250,12 +261,22 @@ public class Config {
         this.longTermWaypointTimeoutSeconds = Math.min(longTermWaypointTimeoutSeconds, 86400);
     }
 
-    public boolean isKeepOnlyLatestQuickMark() {
-        return keepOnlyLatestQuickMark;
+    public int getMaxQuickMarkCount() {
+        if (maxQuickMarkCount < 1) {
+            if (keepOnlyLatestQuickMark != null) {
+                return keepOnlyLatestQuickMark ? 1 : 10;
+            }
+            return 1;
+        }
+        return Math.min(maxQuickMarkCount, 20);
     }
 
-    public void setKeepOnlyLatestQuickMark(boolean keepOnlyLatestQuickMark) {
-        this.keepOnlyLatestQuickMark = keepOnlyLatestQuickMark;
+    public void setMaxQuickMarkCount(int maxQuickMarkCount) {
+        if (maxQuickMarkCount < 1) {
+            this.maxQuickMarkCount = 1;
+            return;
+        }
+        this.maxQuickMarkCount = Math.min(maxQuickMarkCount, 20);
     }
 
     public String getWaypointUiStyle() {

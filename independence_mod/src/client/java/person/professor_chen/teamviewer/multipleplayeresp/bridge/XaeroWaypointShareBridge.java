@@ -2,6 +2,8 @@ package person.professor_chen.teamviewer.multipleplayeresp.bridge;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
@@ -31,6 +33,7 @@ public final class XaeroWaypointShareBridge {
 	private static final Map<String, SharedWaypointInfo> knownLocalWaypoints = new ConcurrentHashMap<>();
 	private static final Map<String, SharedWaypointInfo> latestRemoteWaypoints = new ConcurrentHashMap<>();
 	private static final Map<String, Object> appliedRemoteWaypointObjects = new ConcurrentHashMap<>();
+	private static final Map<String, Vec3d> trackedEntityWaypointLastPositions = new ConcurrentHashMap<>();
 	private static final Map<String, SharedWaypointInfo> pendingRemoteUpserts = new ConcurrentHashMap<>();
 	private static final Set<String> pendingRemoteDeletes = ConcurrentHashMap.newKeySet();
 
@@ -73,6 +76,7 @@ public final class XaeroWaypointShareBridge {
 		pendingRemoteDeletes.add(waypointId);
 		latestRemoteWaypoints.remove(waypointId);
 		pendingRemoteUpserts.remove(waypointId);
+		trackedEntityWaypointLastPositions.remove(waypointId);
 	}
 
 	public static void deleteSharedWaypoints(List<String> waypointIds) {
@@ -281,12 +285,25 @@ public final class XaeroWaypointShareBridge {
 				}
 
 				keepIds.add(waypointId);
-				Object existingObject = appliedRemoteWaypointObjects.get(waypointId);
-				if (existingObject != null && containsWaypointObject(currentWaypointSet, existingObject)) {
-					continue;
+				Vec3d trackedPos = resolveWaypointSyncPosition(waypoint, currentDimension);
+				SharedWaypointInfo renderWaypoint = waypoint;
+				if (trackedPos != null) {
+					renderWaypoint = copyWaypointWithPosition(waypoint,
+							(int) Math.floor(trackedPos.x),
+							(int) Math.floor(trackedPos.y),
+							(int) Math.floor(trackedPos.z));
 				}
 
-				Object newWaypoint = createXaeroWaypoint(decorateSharedName(waypoint), waypoint);
+				Object existingObject = appliedRemoteWaypointObjects.get(waypointId);
+				if (existingObject != null && containsWaypointObject(currentWaypointSet, existingObject)) {
+					if (!waypointPositionChanged(existingObject, renderWaypoint.x(), renderWaypoint.y(), renderWaypoint.z())) {
+						continue;
+					}
+					removeRemoteWaypointById(currentWaypointSet, waypointId);
+					changed = true;
+				}
+
+				Object newWaypoint = createXaeroWaypoint(decorateSharedName(renderWaypoint), renderWaypoint);
 				if (newWaypoint == null) {
 					continue;
 				}
@@ -478,7 +495,81 @@ public final class XaeroWaypointShareBridge {
 			LOGGER.debug("Failed to remove prefixed shared waypoints: {}", e.getMessage());
 		}
 		appliedRemoteWaypointObjects.clear();
+		trackedEntityWaypointLastPositions.clear();
 		return changed;
+	}
+
+	private static Vec3d resolveWaypointSyncPosition(SharedWaypointInfo waypoint, String currentDimension) {
+		if (waypoint == null) {
+			return null;
+		}
+		String targetType = waypoint.targetType();
+		String targetEntityId = waypoint.targetEntityId();
+		if (!"entity".equalsIgnoreCase(targetType) || targetEntityId == null || targetEntityId.isBlank()) {
+			return new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
+		}
+
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client.world != null) {
+			String worldDimension = client.world.getRegistryKey().getValue().toString();
+			if (Objects.equals(currentDimension, worldDimension)) {
+				for (Entity entity : client.world.getEntities()) {
+					if (entity != null && targetEntityId.equals(entity.getUuidAsString())) {
+						Vec3d pos = entity.getPos();
+						trackedEntityWaypointLastPositions.put(waypoint.waypointId(), pos);
+						return pos;
+					}
+				}
+			}
+		}
+
+		if (boundNetworkManager != null) {
+			Vec3d remotePos = boundNetworkManager.getRemoteEntityPosition(targetEntityId, currentDimension);
+			if (remotePos != null) {
+				trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remotePos);
+				return remotePos;
+			}
+		}
+
+		Vec3d lastKnown = trackedEntityWaypointLastPositions.get(waypoint.waypointId());
+		if (lastKnown != null) {
+			return lastKnown;
+		}
+
+		Vec3d initial = new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
+		trackedEntityWaypointLastPositions.put(waypoint.waypointId(), initial);
+		return initial;
+	}
+
+	private static SharedWaypointInfo copyWaypointWithPosition(SharedWaypointInfo source, int x, int y, int z) {
+		return new SharedWaypointInfo(
+				source.waypointId(),
+				source.ownerId(),
+				source.ownerName(),
+				source.name(),
+				source.symbol(),
+				x,
+				y,
+				z,
+				source.dimension(),
+				source.color(),
+				source.createdAt(),
+				source.targetType(),
+				source.targetEntityId(),
+				source.targetEntityType(),
+				source.targetEntityName(),
+				source.waypointKind());
+	}
+
+	private static boolean waypointPositionChanged(Object waypointObject, int expectedX, int expectedY, int expectedZ) {
+		try {
+			int currentX = intValue(invokeNoArg(waypointObject, "getX"), expectedX);
+			int currentY = intValue(invokeNoArg(waypointObject, "getY"), expectedY);
+			int currentZ = intValue(invokeNoArg(waypointObject, "getZ"), expectedZ);
+			return currentX != expectedX || currentY != expectedY || currentZ != expectedZ;
+		} catch (Exception e) {
+			return true;
+		}
 	}
 
 	private static void saveWaypointWorld(Object minimapSession, Object currentWorld) {
@@ -608,10 +699,40 @@ public final class XaeroWaypointShareBridge {
 		String ownerName = sharedWaypoint.ownerName() == null || sharedWaypoint.ownerName().isBlank()
 				? "Unknown"
 				: sharedWaypoint.ownerName();
-		String name = sharedWaypoint.name() == null || sharedWaypoint.name().isBlank()
-				? "Waypoint"
-				: sharedWaypoint.name();
+		String name = compactSharedWaypointName(sharedWaypoint);
 		return SHARED_PREFIX + ownerName + ": " + name;
+	}
+
+	private static String compactSharedWaypointName(SharedWaypointInfo sharedWaypoint) {
+		if (sharedWaypoint == null) {
+			return "Waypoint";
+		}
+
+		String rawName = sharedWaypoint.name();
+		String baseName = (rawName == null || rawName.isBlank()) ? "Waypoint" : rawName.trim();
+
+		if ("quick".equalsIgnoreCase(sharedWaypoint.waypointKind())) {
+			if ("entity".equalsIgnoreCase(sharedWaypoint.targetType())) {
+				String entityName = sharedWaypoint.targetEntityName();
+				if (entityName != null && !entityName.isBlank()) {
+					return "报点[实体] " + entityName.trim();
+				}
+				return "报点[实体]";
+			}
+			return "报点";
+		}
+
+		String nameWithoutAt = baseName.replaceFirst("\\s*@\\s*-?\\d+\\s+-?\\d+\\s+-?\\d+\\s*$", "").trim();
+		if (!nameWithoutAt.isBlank()) {
+			baseName = nameWithoutAt;
+		}
+
+		String nameWithoutTrailingCoords = baseName.replaceFirst("\\s+-?\\d+\\s+-?\\d+\\s+-?\\d+\\s*$", "").trim();
+		if (!nameWithoutTrailingCoords.isBlank()) {
+			baseName = nameWithoutTrailingCoords;
+		}
+
+		return baseName;
 	}
 
 	private static int intValue(Object value, int fallback) {

@@ -85,6 +85,11 @@
 - `symbol`（默认 `"W"`）
 - `color`
 - `ownerId`, `ownerName`, `createdAt`
+- `ttlSeconds`（路标超时秒数，范围 5~86400）
+- `waypointKind`（`quick` / `manual`）
+- `replaceOldQuick`（仅 `quick` 有意义，表示是否替换该来源旧 quick）
+- `targetType`（`block` / `entity`）
+- `targetEntityId`, `targetEntityType`, `targetEntityName`
 
 ---
 
@@ -219,6 +224,7 @@
 Waypoints 当前策略：
 
 - `waypoints_update` 写入时通常直接携带完整对象（非字段级差量）
+- `waypoints_update` 内可携带业务扩展字段（如 `ttlSeconds`、`waypointKind`、`targetEntity*`）
 
 ### 7.4 客户端本地合并
 
@@ -328,7 +334,10 @@ Waypoints 当前策略：
 ### 10.2 哪些会超时
 
 - 玩家、实体：会被 `cleanup_timeouts()` 删除
-- 路标：不会因时间自动删除
+- 路标：会按 `effective_waypoint_timeout()` 清理
+  - 若带 `ttlSeconds`：使用该值（并夹紧到 5~86400）
+  - 若未带 `ttlSeconds`：回退到 `WAYPOINT_TIMEOUT = 120s`
+  - 不套用 `ONLINE_OWNER_TIMEOUT_MULTIPLIER`
 
 ### 10.3 断连清理
 
@@ -355,7 +364,8 @@ Waypoints 当前策略：
 
 - `waypoints_update`：upsert
 - `waypoints_delete`：按 ID 显式删除
-- 无超时自动删除
+- 支持 TTL 自动清理（见 10.2）
+- 当 `waypointKind == "quick"` 且 `replaceOldQuick == true` 时，服务端会先删除同一来源下其他 quick 路标，再写入当前路标
 
 ---
 

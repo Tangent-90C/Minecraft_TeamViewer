@@ -18,6 +18,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private TextFieldWidget renderDistanceField;
     private TextFieldWidget waypointTimeoutField;
     private TextFieldWidget longTermWaypointTimeoutField;
+    private TextFieldWidget quickMarkMaxCountField;
     private TextFieldWidget tracerTopOffsetField;
     private ButtonWidget tracerStartModeButton;
     private ButtonWidget waypointUiStyleButton;
@@ -25,8 +26,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private ButtonWidget showLinesButton;
     private ButtonWidget showSharedWaypointsButton;
     private ButtonWidget middleDoubleClickMarkButton;
+    private ButtonWidget middleClickCancelWaypointButton;
     private ButtonWidget enableLongTermWaypointButton;
-    private ButtonWidget keepOnlyLatestQuickMarkButton;
     private ButtonWidget colorSettingsButton;
 
     private final int originalRenderDistance;
@@ -39,8 +40,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private final boolean originalShowLines;
     private final boolean originalShowSharedWaypoints;
     private final boolean originalEnableMiddleDoubleClickMark;
+    private final boolean originalEnableMiddleClickCancelWaypoint;
     private final boolean originalEnableLongTermWaypoint;
-    private final boolean originalKeepOnlyLatestQuickMark;
+    private final int originalMaxQuickMarkCount;
     private final int originalBoxColor;
     private final int originalLineColor;
 
@@ -66,8 +68,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
         this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
         this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
+        this.originalEnableMiddleClickCancelWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
         this.originalEnableLongTermWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
-        this.originalKeepOnlyLatestQuickMark = StandaloneMultiPlayerESP.getConfig().isKeepOnlyLatestQuickMark();
+        this.originalMaxQuickMarkCount = StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount();
         this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
         this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
     }
@@ -234,11 +237,25 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(leftX, enableLongTermWaypointY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.enableLongTermWaypointButton);
 
-        this.keepOnlyLatestQuickMarkButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.keep_only_latest_quick_mark"),
-            button -> toggleKeepOnlyLatestQuickMark()
-        ).dimensions(rightX, enableLongTermWaypointY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.keepOnlyLatestQuickMarkButton);
+        this.quickMarkMaxCountField = new TextFieldWidget(
+            this.textRenderer,
+            rightX,
+            enableLongTermWaypointY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.multipleplayeresp.config.quick_mark_max_count")
+        );
+        this.quickMarkMaxCountField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount()));
+        this.quickMarkMaxCountField.setMaxLength(2);
+        this.quickMarkMaxCountField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.quick_mark_max_count_hint"));
+        this.addDrawableChild(this.quickMarkMaxCountField);
+
+        this.addDrawableChild(
+            new TextWidget(rightX, enableLongTermWaypointY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.multipleplayeresp.config.quick_mark_max_count"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
 
         int waypointUiStyleY = getNextButtonY();
         this.waypointUiStyleButton = ButtonWidget.builder(
@@ -260,6 +277,12 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(leftX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.colorSettingsButton);
 
+        this.middleClickCancelWaypointButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.middle_click_cancel_waypoint"),
+            button -> toggleMiddleClickCancelWaypoint()
+        ).dimensions(rightX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.middleClickCancelWaypointButton);
+
         int buttonsY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.done"),
@@ -276,8 +299,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
+        updateMiddleClickCancelWaypointButton();
         updateEnableLongTermWaypointButton();
-        updateKeepOnlyLatestQuickMarkButton();
         updateWaypointUiStyleButton();
     }
 
@@ -326,12 +349,16 @@ public class PlayerESPDisplayConfigScreen extends Screen {
             drawTooltip(context, "screen.multipleplayeresp.config.middle_double_click_mark.tooltip", mouseX, mouseY);
             return;
         }
+        if (this.middleClickCancelWaypointButton != null && this.middleClickCancelWaypointButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.middle_click_cancel_waypoint.tooltip", mouseX, mouseY);
+            return;
+        }
         if (this.enableLongTermWaypointButton != null && this.enableLongTermWaypointButton.isMouseOver(mouseX, mouseY)) {
             drawTooltip(context, "screen.multipleplayeresp.config.enable_long_term_waypoint.tooltip", mouseX, mouseY);
             return;
         }
-        if (this.keepOnlyLatestQuickMarkButton != null && this.keepOnlyLatestQuickMarkButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.multipleplayeresp.config.keep_only_latest_quick_mark.tooltip", mouseX, mouseY);
+        if (this.quickMarkMaxCountField != null && this.quickMarkMaxCountField.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.quick_mark_max_count.tooltip", mouseX, mouseY);
             return;
         }
         if (this.waypointUiStyleButton != null && this.waypointUiStyleButton.isMouseOver(mouseX, mouseY)) {
@@ -394,8 +421,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
         StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
         StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
+        StandaloneMultiPlayerESP.getConfig().setEnableMiddleClickCancelWaypoint(this.originalEnableMiddleClickCancelWaypoint);
         StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(this.originalEnableLongTermWaypoint);
-        StandaloneMultiPlayerESP.getConfig().setKeepOnlyLatestQuickMark(this.originalKeepOnlyLatestQuickMark);
+        StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(this.originalMaxQuickMarkCount);
         StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
         StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
 
@@ -489,6 +517,21 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleMiddleClickCancelWaypoint() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
+        StandaloneMultiPlayerESP.getConfig().setEnableMiddleClickCancelWaypoint(!currentStatus);
+        updateMiddleClickCancelWaypointButton();
+    }
+
+    private void updateMiddleClickCancelWaypointButton() {
+        if (this.middleClickCancelWaypointButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.middle_click_cancel_waypoint").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.middleClickCancelWaypointButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void toggleEnableLongTermWaypoint() {
         boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
         StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(!currentStatus);
@@ -501,21 +544,6 @@ public class PlayerESPDisplayConfigScreen extends Screen {
             String buttonText = Text.translatable("screen.multipleplayeresp.config.enable_long_term_waypoint").getString();
             buttonText += isEnabled ? " [ON]" : " [OFF]";
             this.enableLongTermWaypointButton.setMessage(Text.of(buttonText));
-        }
-    }
-
-    private void toggleKeepOnlyLatestQuickMark() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isKeepOnlyLatestQuickMark();
-        StandaloneMultiPlayerESP.getConfig().setKeepOnlyLatestQuickMark(!currentStatus);
-        updateKeepOnlyLatestQuickMarkButton();
-    }
-
-    private void updateKeepOnlyLatestQuickMarkButton() {
-        if (this.keepOnlyLatestQuickMarkButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isKeepOnlyLatestQuickMark();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.keep_only_latest_quick_mark").getString();
-            buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.keepOnlyLatestQuickMarkButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -572,6 +600,12 @@ public class PlayerESPDisplayConfigScreen extends Screen {
                 StandaloneMultiPlayerESP.getConfig().setLongTermWaypointTimeoutSeconds(longTermWaypointTimeout);
             }
 
+            String quickMarkMaxCountStr = this.quickMarkMaxCountField.getText().trim();
+            if (!quickMarkMaxCountStr.isEmpty()) {
+                int quickMarkMaxCount = Integer.parseInt(quickMarkMaxCountStr);
+                StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(quickMarkMaxCount);
+            }
+
             String tracerTopOffsetStr = this.tracerTopOffsetField.getText().trim();
             if (!tracerTopOffsetStr.isEmpty()) {
                 double tracerTopOffset = Double.parseDouble(tracerTopOffsetStr);
@@ -594,8 +628,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
+        updateMiddleClickCancelWaypointButton();
         updateEnableLongTermWaypointButton();
-        updateKeepOnlyLatestQuickMarkButton();
         updateWaypointUiStyleButton();
     }
 }

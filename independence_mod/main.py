@@ -59,6 +59,7 @@ class WaypointData(BaseModel):
     ttlSeconds: Optional[int] = Field(None, ge=5, le=86400, description="路标超时秒数")
     waypointKind: Optional[str] = Field(None, description="路标类型: quick/manual")
     replaceOldQuick: Optional[bool] = Field(None, description="是否替换同玩家旧快捷报点")
+    maxQuickMarks: Optional[int] = Field(None, ge=1, le=100, description="快捷报点最多保留数量")
     targetType: Optional[str] = Field(None, description="命中目标类型:block/entity")
     targetEntityId: Optional[str] = Field(None, description="命中实体UUID")
     targetEntityType: Optional[str] = Field(None, description="命中实体类型")
@@ -784,7 +785,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             if message_type == "waypoints_update":
-                # 路标上报；quick + replaceOldQuick 时仅清理“当前来源”的旧 quick。
+                # 路标上报；quick 时按 maxQuickMarks 限制“当前来源”的旧 quick 数量。
                 current_time = time.time()
                 player_waypoints = data.get("waypoints", {})
                 for waypoint_id, waypoint_data in player_waypoints.items():
@@ -792,17 +793,33 @@ async def websocket_endpoint(websocket: WebSocket):
                         validated_data = WaypointData(**waypoint_data)
                         normalized = validated_data.model_dump()
 
-                        if normalized.get("waypointKind") == "quick" and bool(normalized.get("replaceOldQuick")):
-                            old_quick_waypoints = [
-                                wid for wid, source_bucket in list(waypoint_reports.items())
-                                if wid != waypoint_id
-                                and isinstance(source_bucket, dict)
-                                and submit_player_id in source_bucket
-                                and isinstance(source_bucket[submit_player_id].get("data"), dict)
-                                and source_bucket[submit_player_id]["data"].get("waypointKind") == "quick"
-                            ]
-                            for old_id in old_quick_waypoints:
-                                delete_report(waypoint_reports, old_id, submit_player_id)
+                        if normalized.get("waypointKind") == "quick":
+                            max_quick_marks = normalized.get("maxQuickMarks")
+                            if isinstance(max_quick_marks, (int, float)):
+                                max_quick_marks = max(1, min(int(max_quick_marks), 100))
+                            elif bool(normalized.get("replaceOldQuick")):
+                                # 兼容旧客户端：replaceOldQuick=true 等价于最多保留 1 个。
+                                max_quick_marks = 1
+                            else:
+                                max_quick_marks = None
+
+                            if max_quick_marks is not None:
+                                old_quick_waypoints = [
+                                    (wid, source_bucket[submit_player_id])
+                                    for wid, source_bucket in list(waypoint_reports.items())
+                                    if wid != waypoint_id
+                                    and isinstance(source_bucket, dict)
+                                    and submit_player_id in source_bucket
+                                    and isinstance(source_bucket[submit_player_id], dict)
+                                    and isinstance(source_bucket[submit_player_id].get("data"), dict)
+                                    and source_bucket[submit_player_id]["data"].get("waypointKind") == "quick"
+                                ]
+
+                                remove_count = len(old_quick_waypoints) - max_quick_marks + 1
+                                if remove_count > 0:
+                                    old_quick_waypoints.sort(key=lambda item: node_timestamp(item[1]))
+                                    for old_id, _ in old_quick_waypoints[:remove_count]:
+                                        delete_report(waypoint_reports, old_id, submit_player_id)
 
                         node = build_state_node(submit_player_id, current_time, normalized)
                         upsert_report(waypoint_reports, waypoint_id, submit_player_id, node)

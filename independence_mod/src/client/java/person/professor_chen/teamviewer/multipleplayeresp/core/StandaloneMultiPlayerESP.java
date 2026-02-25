@@ -53,6 +53,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	private static final Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
 	private static final Map<UUID, Vec3d> serverPlayerPositions = new ConcurrentHashMap<>();
 	private static final Map<String, SharedWaypointInfo> sharedWaypoints = new ConcurrentHashMap<>();
+	private static final Map<String, Vec3d> trackedEntityWaypointLastPositions = new ConcurrentHashMap<>();
 	
 	// Network manager
 	private static PlayerESPNetworkManager networkManager;
@@ -71,6 +72,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	// 鼠标中键双击报点
 	private static final long MARK_DOUBLE_CLICK_MS = 300L;
 	private static final double MARK_RAYCAST_DISTANCE = 256.0D;
+	private static final double MARK_CANCEL_BASE_RADIUS = 1.2D;
+	private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
+	private static final double MARK_CANCEL_MAX_RADIUS = 4.0D;
 	private static final int MARKER_COLOR_RGB = 0xFF8C00;
 	private static boolean middlePressedLastTick = false;
 	private static long lastMiddleClickTs = 0L;
@@ -166,6 +170,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			// 禁用ESP，断开连接
 			networkManager.disconnect();
 			sharedWaypoints.clear();
+			trackedEntityWaypointLastPositions.clear();
 			LOGGER.info("MultiPlayer ESP disabled");
 		}
 		
@@ -332,6 +337,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				}
 				for (String waypointId : waypointIds) {
 					sharedWaypoints.remove(waypointId);
+					trackedEntityWaypointLastPositions.remove(waypointId);
 				}
 				XaeroWaypointShareBridge.deleteSharedWaypoints(waypointIds);
 			}
@@ -339,7 +345,14 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	}
 
 	private void handleMiddleMouseDoubleClickMarking(MinecraftClient client) {
-		if (config == null || !config.isEnableMiddleDoubleClickMark()) {
+		if (config == null) {
+			middlePressedLastTick = false;
+			return;
+		}
+
+		boolean enableDoubleClickMark = config.isEnableMiddleDoubleClickMark();
+		boolean enableClickCancel = config.isEnableMiddleClickCancelWaypoint();
+		if (!enableDoubleClickMark && !enableClickCancel) {
 			middlePressedLastTick = false;
 			return;
 		}
@@ -353,6 +366,16 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		boolean middlePressed = GLFW.glfwGetMouseButton(windowHandle, GLFW.GLFW_MOUSE_BUTTON_MIDDLE) == GLFW.GLFW_PRESS;
 
 		if (middlePressed && !middlePressedLastTick) {
+			if (enableClickCancel && tryCancelTargetedWaypoint(client)) {
+				lastMiddleClickTs = 0L;
+				middlePressedLastTick = middlePressed;
+				return;
+			}
+			if (!enableDoubleClickMark) {
+				middlePressedLastTick = middlePressed;
+				return;
+			}
+
 			long now = System.currentTimeMillis();
 			if (now - lastMiddleClickTs <= MARK_DOUBLE_CLICK_MS) {
 				lastMiddleClickTs = 0L;
@@ -363,6 +386,76 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		}
 
 		middlePressedLastTick = middlePressed;
+	}
+
+	private boolean tryCancelTargetedWaypoint(MinecraftClient client) {
+		if (client == null || client.player == null || client.world == null || sharedWaypoints.isEmpty()) {
+			return false;
+		}
+
+		UUID localPlayerId = client.player.getUuid();
+		String currentDimension = client.world.getRegistryKey().getValue().toString();
+		Vec3d eyePos = client.player.getCameraPosVec(1.0F);
+		Vec3d lookVec = client.player.getRotationVec(1.0F).normalize();
+		double maxDistance = Math.max(config.getRenderDistance(), MARK_RAYCAST_DISTANCE);
+
+		String selectedWaypointId = null;
+		double selectedScore = Double.MAX_VALUE;
+
+		for (Map.Entry<String, SharedWaypointInfo> entry : sharedWaypoints.entrySet()) {
+			SharedWaypointInfo waypoint = entry.getValue();
+			if (waypoint == null) {
+				continue;
+			}
+			if (waypoint.ownerId() == null || !localPlayerId.equals(waypoint.ownerId())) {
+				continue;
+			}
+			if (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(currentDimension)) {
+				continue;
+			}
+
+			Vec3d waypointPos = resolveWaypointWorldPosition(client, waypoint, currentDimension);
+			if (waypointPos == null) {
+				continue;
+			}
+
+			Vec3d toWaypoint = waypointPos.subtract(eyePos);
+			double alongRay = toWaypoint.dotProduct(lookVec);
+			if (alongRay <= 0.0D || alongRay > maxDistance) {
+				continue;
+			}
+
+			Vec3d closestPoint = eyePos.add(lookVec.multiply(alongRay));
+			double lateralDistance = waypointPos.distanceTo(closestPoint);
+			double allowedRadius = Math.min(
+				MARK_CANCEL_MAX_RADIUS,
+				MARK_CANCEL_BASE_RADIUS + alongRay * MARK_CANCEL_RADIUS_PER_BLOCK
+			);
+			if (lateralDistance > allowedRadius) {
+				continue;
+			}
+
+			double score = lateralDistance + alongRay * 0.0025D;
+			if (score < selectedScore) {
+				selectedScore = score;
+				selectedWaypointId = entry.getKey();
+			}
+		}
+
+		if (selectedWaypointId == null) {
+			return false;
+		}
+
+		SharedWaypointInfo removed = sharedWaypoints.remove(selectedWaypointId);
+		trackedEntityWaypointLastPositions.remove(selectedWaypointId);
+		XaeroWaypointShareBridge.deleteSharedWaypoint(selectedWaypointId);
+		networkManager.sendWaypointsDelete(localPlayerId, List.of(selectedWaypointId));
+
+		if (removed != null) {
+			String removedName = removed.name() == null || removed.name().isBlank() ? selectedWaypointId : removed.name();
+			client.player.sendMessage(Text.literal("§e[TV] 已取消报点: " + removedName), true);
+		}
+		return true;
 	}
 
 	private boolean canCreateMark(MinecraftClient client) {
@@ -398,14 +491,13 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		String idSource = ownerId + "|" + createdAt + "|" + dimension + "|" + markX + "|" + markY + "|" + markZ;
 		String waypointId = UUID.nameUUIDFromBytes(idSource.getBytes(StandardCharsets.UTF_8)).toString();
 
-		if (config.isKeepOnlyLatestQuickMark()) {
-			List<String> oldQuickWaypointIds = collectQuickWaypointIdsByOwner(ownerId, waypointId);
-			if (!oldQuickWaypointIds.isEmpty()) {
-				for (String oldId : oldQuickWaypointIds) {
-					sharedWaypoints.remove(oldId);
-				}
-				networkManager.sendWaypointsDelete(ownerId, oldQuickWaypointIds);
+		int maxQuickMarkCount = config.getMaxQuickMarkCount();
+		List<String> overflowQuickWaypointIds = collectOverflowQuickWaypointIdsByOwner(ownerId, waypointId, maxQuickMarkCount);
+		if (!overflowQuickWaypointIds.isEmpty()) {
+			for (String oldId : overflowQuickWaypointIds) {
+				sharedWaypoints.remove(oldId);
 			}
+			networkManager.sendWaypointsDelete(ownerId, overflowQuickWaypointIds);
 		}
 
 		String targetType = target.targetEntity() == null ? "block" : "entity";
@@ -458,7 +550,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		payload.put("createdAt", createdAt);
 		payload.put("ttlSeconds", config.getWaypointTimeoutSeconds());
 		payload.put("waypointKind", "quick");
-		payload.put("replaceOldQuick", config.isKeepOnlyLatestQuickMark());
+		payload.put("maxQuickMarks", maxQuickMarkCount);
 		payload.put("targetType", targetType);
 		payload.put("targetEntityId", targetEntityId);
 		payload.put("targetEntityType", targetEntityType);
@@ -476,8 +568,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		}
 	}
 
-	private List<String> collectQuickWaypointIdsByOwner(UUID ownerId, String exceptWaypointId) {
-		List<String> ids = new java.util.ArrayList<>();
+	private List<String> collectOverflowQuickWaypointIdsByOwner(UUID ownerId, String exceptWaypointId, int maxKeepCount) {
+		List<Map.Entry<String, SharedWaypointInfo>> quickEntries = new java.util.ArrayList<>();
 		for (Map.Entry<String, SharedWaypointInfo> entry : sharedWaypoints.entrySet()) {
 			SharedWaypointInfo waypoint = entry.getValue();
 			if (waypoint == null) {
@@ -492,9 +584,21 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			if (!"quick".equalsIgnoreCase(waypoint.waypointKind())) {
 				continue;
 			}
-			ids.add(entry.getKey());
+			quickEntries.add(entry);
 		}
-		return ids;
+
+		int normalizedMax = Math.max(1, maxKeepCount);
+		int removeCount = quickEntries.size() - normalizedMax + 1;
+		if (removeCount <= 0) {
+			return List.of();
+		}
+
+		quickEntries.sort((left, right) -> Long.compare(left.getValue().createdAt(), right.getValue().createdAt()));
+		List<String> overflowIds = new java.util.ArrayList<>();
+		for (int index = 0; index < removeCount && index < quickEntries.size(); index++) {
+			overflowIds.add(quickEntries.get(index).getKey());
+		}
+		return overflowIds;
 	}
 
 	private MarkTarget resolveMarkTarget(MinecraftClient client) {
@@ -574,7 +678,10 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				continue;
 			}
 
-			Vec3d worldPos = new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
+			Vec3d worldPos = resolveWaypointWorldPosition(client, waypoint, currentDimension);
+			if (worldPos == null) {
+				continue;
+			}
 			if (client.player.getPos().distanceTo(worldPos) > maxDistance) {
 				continue;
 			}
@@ -583,6 +690,61 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			int color = withAlpha(waypoint.color(), 0xCC);
 			renderWaypointMarkerStyle(context, relativePos, color);
 		}
+	}
+
+	private Vec3d resolveWaypointWorldPosition(MinecraftClient client, SharedWaypointInfo waypoint, String currentDimension) {
+		if (waypoint == null) {
+			return null;
+		}
+
+		String targetType = waypoint.targetType();
+		String targetEntityId = waypoint.targetEntityId();
+		if (!"entity".equalsIgnoreCase(targetType) || targetEntityId == null || targetEntityId.isBlank()) {
+			return new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
+		}
+
+		Vec3d localEntityPos = resolveLocalEntityPosition(client, targetEntityId, currentDimension);
+		if (localEntityPos != null) {
+			trackedEntityWaypointLastPositions.put(waypoint.waypointId(), localEntityPos);
+			return localEntityPos;
+		}
+
+		Vec3d remoteEntityPos = networkManager == null ? null : networkManager.getRemoteEntityPosition(targetEntityId, currentDimension);
+		if (remoteEntityPos != null) {
+			trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remoteEntityPos);
+			return remoteEntityPos;
+		}
+
+		Vec3d lastKnown = trackedEntityWaypointLastPositions.get(waypoint.waypointId());
+		if (lastKnown != null) {
+			return lastKnown;
+		}
+
+		Vec3d initial = new Vec3d(waypoint.x() + 0.5D, waypoint.y(), waypoint.z() + 0.5D);
+		trackedEntityWaypointLastPositions.put(waypoint.waypointId(), initial);
+		return initial;
+	}
+
+	private Vec3d resolveLocalEntityPosition(MinecraftClient client, String entityUuid, String currentDimension) {
+		if (client == null || client.world == null || entityUuid == null || entityUuid.isBlank()) {
+			return null;
+		}
+
+		String worldDimension = client.world.getRegistryKey().getValue().toString();
+		if (currentDimension != null && !currentDimension.isBlank() && !currentDimension.equals(worldDimension)) {
+			return null;
+		}
+
+		for (Entity entity : client.world.getEntities()) {
+			if (entity == null) {
+				continue;
+			}
+			if (entityUuid.equals(entity.getUuidAsString())) {
+				return entity.getPos();
+			}
+		}
+
+		return null;
 	}
 
 	private void renderWaypointMarkerStyle(WorldRenderContext context, Vec3d basePos, int color) {
