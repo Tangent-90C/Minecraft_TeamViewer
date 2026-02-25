@@ -13,15 +13,19 @@ import person.professor_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPl
 public class PlayerESPDisplayConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget renderDistanceField;
+    private TextFieldWidget waypointTimeoutField;
     private TextFieldWidget tracerTopOffsetField;
     private ButtonWidget tracerStartModeButton;
+    private ButtonWidget waypointUiStyleButton;
     private ButtonWidget showBoxesButton;
     private ButtonWidget showLinesButton;
     private ButtonWidget showSharedWaypointsButton;
     private ButtonWidget middleDoubleClickMarkButton;
 
     private final int originalRenderDistance;
+    private final int originalWaypointTimeoutSeconds;
     private final String originalTracerStartMode;
+    private final String originalWaypointUiStyle;
     private final double originalTracerTopOffset;
     private final boolean originalShowBoxes;
     private final boolean originalShowLines;
@@ -42,7 +46,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         super(Text.translatable("screen.multipleplayeresp.display_config.title"));
         this.parent = parent;
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
+        this.originalWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
+        this.originalWaypointUiStyle = StandaloneMultiPlayerESP.getConfig().getWaypointUiStyle();
         this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
         this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
@@ -54,6 +60,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
 
     private void calculateLayout() {
         int totalHeight = 0;
+        totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
@@ -114,6 +121,27 @@ public class PlayerESPDisplayConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
 
+        int waypointTimeoutY = getNextY();
+        this.waypointTimeoutField = new TextFieldWidget(
+            this.textRenderer,
+            componentX,
+            waypointTimeoutY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.multipleplayeresp.config.waypoint_timeout")
+        );
+        this.waypointTimeoutField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds()));
+        this.waypointTimeoutField.setMaxLength(4);
+        this.waypointTimeoutField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.waypoint_timeout_hint"));
+        this.addDrawableChild(this.waypointTimeoutField);
+
+        this.addDrawableChild(
+            new TextWidget(componentX, waypointTimeoutY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.multipleplayeresp.config.waypoint_timeout"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+
         int tracerTopOffsetY = getNextY();
         this.tracerTopOffsetField = new TextFieldWidget(
             this.textRenderer,
@@ -163,6 +191,13 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(componentX, middleDoubleClickMarkY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.middleDoubleClickMarkButton);
 
+        int waypointUiStyleY = getNextButtonY();
+        this.waypointUiStyleButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.waypoint_ui_style"),
+            button -> toggleWaypointUiStyle()
+        ).dimensions(componentX, waypointUiStyleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.waypointUiStyleButton);
+
         int tracerStartModeY = getNextButtonY();
         this.tracerStartModeButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.tracer_start_mode"),
@@ -193,6 +228,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
+        updateWaypointUiStyleButton();
     }
 
     @Override
@@ -220,7 +256,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     @Override
     public void close() {
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
+        StandaloneMultiPlayerESP.getConfig().setWaypointTimeoutSeconds(this.originalWaypointTimeoutSeconds);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
+        StandaloneMultiPlayerESP.getConfig().setWaypointUiStyle(this.originalWaypointUiStyle);
         StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
         StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
@@ -319,6 +357,37 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleWaypointUiStyle() {
+        Config config = StandaloneMultiPlayerESP.getConfig();
+        String current = config.getWaypointUiStyle();
+        if (Config.WAYPOINT_UI_BEACON.equals(current)) {
+            config.setWaypointUiStyle(Config.WAYPOINT_UI_RING);
+        } else if (Config.WAYPOINT_UI_RING.equals(current)) {
+            config.setWaypointUiStyle(Config.WAYPOINT_UI_PIN);
+        } else {
+            config.setWaypointUiStyle(Config.WAYPOINT_UI_BEACON);
+        }
+        updateWaypointUiStyleButton();
+    }
+
+    private void updateWaypointUiStyleButton() {
+        if (this.waypointUiStyleButton != null) {
+            String style = StandaloneMultiPlayerESP.getConfig().getWaypointUiStyle();
+            String styleKey;
+            if (Config.WAYPOINT_UI_RING.equals(style)) {
+                styleKey = "screen.multipleplayeresp.config.waypoint_ui_style.ring";
+            } else if (Config.WAYPOINT_UI_PIN.equals(style)) {
+                styleKey = "screen.multipleplayeresp.config.waypoint_ui_style.pin";
+            } else {
+                styleKey = "screen.multipleplayeresp.config.waypoint_ui_style.beacon";
+            }
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.waypoint_ui_style").getString()
+                + ": "
+                + Text.translatable(styleKey).getString();
+            this.waypointUiStyleButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void saveAndClose() {
         try {
             String renderDistanceStr = this.renderDistanceField.getText().trim();
@@ -327,6 +396,12 @@ public class PlayerESPDisplayConfigScreen extends Screen {
                 if (renderDistance > 0) {
                     StandaloneMultiPlayerESP.getConfig().setRenderDistance(renderDistance);
                 }
+            }
+
+            String waypointTimeoutStr = this.waypointTimeoutField.getText().trim();
+            if (!waypointTimeoutStr.isEmpty()) {
+                int waypointTimeout = Integer.parseInt(waypointTimeoutStr);
+                StandaloneMultiPlayerESP.getConfig().setWaypointTimeoutSeconds(waypointTimeout);
             }
 
             String tracerTopOffsetStr = this.tracerTopOffsetField.getText().trim();
@@ -350,5 +425,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowBoxesButton();
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
+        updateMiddleDoubleClickMarkButton();
+        updateWaypointUiStyleButton();
     }
 }

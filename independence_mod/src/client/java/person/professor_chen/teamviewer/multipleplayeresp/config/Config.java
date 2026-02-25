@@ -11,6 +11,9 @@ import java.nio.file.Path;
 public class Config {
     public static final String TRACER_START_CROSSHAIR = "crosshair";
     public static final String TRACER_START_TOP = "top";
+    public static final String WAYPOINT_UI_BEACON = "beacon";
+    public static final String WAYPOINT_UI_RING = "ring";
+    public static final String WAYPOINT_UI_PIN = "pin";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
@@ -30,6 +33,8 @@ public class Config {
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
+    private int waypointTimeoutSeconds = 120; // 报点超时秒数
+    private String waypointUiStyle = WAYPOINT_UI_BEACON; // 报点UI样式
     private boolean useSystemProxy = true; // 连接服务器时是否使用系统代理
     
     public static Config load() {
@@ -202,6 +207,43 @@ public class Config {
 
     public void setEnableMiddleDoubleClickMark(boolean enableMiddleDoubleClickMark) {
         this.enableMiddleDoubleClickMark = enableMiddleDoubleClickMark;
+    }
+
+    public int getWaypointTimeoutSeconds() {
+        if (waypointTimeoutSeconds < 10) {
+            return 10;
+        }
+        return Math.min(waypointTimeoutSeconds, 3600);
+    }
+
+    public void setWaypointTimeoutSeconds(int waypointTimeoutSeconds) {
+        if (waypointTimeoutSeconds < 10) {
+            this.waypointTimeoutSeconds = 10;
+            return;
+        }
+        this.waypointTimeoutSeconds = Math.min(waypointTimeoutSeconds, 3600);
+    }
+
+    public String getWaypointUiStyle() {
+        if (WAYPOINT_UI_RING.equalsIgnoreCase(waypointUiStyle)) {
+            return WAYPOINT_UI_RING;
+        }
+        if (WAYPOINT_UI_PIN.equalsIgnoreCase(waypointUiStyle)) {
+            return WAYPOINT_UI_PIN;
+        }
+        return WAYPOINT_UI_BEACON;
+    }
+
+    public void setWaypointUiStyle(String waypointUiStyle) {
+        if (WAYPOINT_UI_RING.equalsIgnoreCase(waypointUiStyle)) {
+            this.waypointUiStyle = WAYPOINT_UI_RING;
+            return;
+        }
+        if (WAYPOINT_UI_PIN.equalsIgnoreCase(waypointUiStyle)) {
+            this.waypointUiStyle = WAYPOINT_UI_PIN;
+            return;
+        }
+        this.waypointUiStyle = WAYPOINT_UI_BEACON;
     }
 
     public boolean isUseSystemProxy() {

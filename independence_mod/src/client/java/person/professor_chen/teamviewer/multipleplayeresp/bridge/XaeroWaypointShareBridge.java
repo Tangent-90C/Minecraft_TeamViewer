@@ -37,6 +37,7 @@ public final class XaeroWaypointShareBridge {
 	private static volatile PlayerESPNetworkManager boundNetworkManager;
 	private static volatile boolean listenerRegistered = false;
 	private static volatile boolean baselineInitialized = false;
+	private static volatile boolean remoteReconcileRequired = true;
 	private static volatile long lastLocalScanMs = 0L;
 	private static volatile long lastRemoteSyncMs = 0L;
 
@@ -93,6 +94,9 @@ public final class XaeroWaypointShareBridge {
 
 		ensureWaypointListener(networkManager);
 		long now = System.currentTimeMillis();
+		if (!networkManager.isConnected()) {
+			remoteReconcileRequired = true;
+		}
 
 		if (networkManager.isConnected() && now - lastLocalScanMs >= LOCAL_SCAN_INTERVAL_MS) {
 			lastLocalScanMs = now;
@@ -112,6 +116,7 @@ public final class XaeroWaypointShareBridge {
 			}
 			boundNetworkManager = networkManager;
 			listenerRegistered = false;
+			remoteReconcileRequired = true;
 		}
 
 		if (!listenerRegistered) {
@@ -215,8 +220,10 @@ public final class XaeroWaypointShareBridge {
 			}
 
 			if (!config.isShowSharedWaypoints()) {
-				removeAllAppliedRemoteWaypoints(currentWaypointSet);
-				saveWaypointWorld(minimapSession, currentWorld);
+				boolean changed = removeAllSharedWaypoints(currentWaypointSet);
+				if (changed) {
+					saveWaypointWorld(minimapSession, currentWorld);
+				}
 				return;
 			}
 
@@ -229,6 +236,30 @@ public final class XaeroWaypointShareBridge {
 			String currentDimension = client.world.getRegistryKey().getValue().toString();
 			boolean changed = false;
 			Set<String> keepIds = new HashSet<>();
+			Map<String, String> decoratedNameToId = new HashMap<>();
+
+			if (remoteReconcileRequired) {
+				changed |= removeAllSharedWaypoints(currentWaypointSet);
+				appliedRemoteWaypointObjects.clear();
+				remoteReconcileRequired = false;
+			}
+
+			for (Map.Entry<String, SharedWaypointInfo> entry : latestRemoteWaypoints.entrySet()) {
+				SharedWaypointInfo waypoint = entry.getValue();
+				if (waypoint == null) {
+					continue;
+				}
+				if (waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
+					continue;
+				}
+				if (waypoint.dimension() != null && !waypoint.dimension().isBlank()
+						&& !Objects.equals(waypoint.dimension(), currentDimension)) {
+					continue;
+				}
+				decoratedNameToId.put(decorateSharedName(waypoint), entry.getKey());
+			}
+
+			changed |= reconcileExistingSharedWaypointsByName(currentWaypointSet, decoratedNameToId);
 
 			for (Map.Entry<String, SharedWaypointInfo> entry : latestRemoteWaypoints.entrySet()) {
 				String waypointId = entry.getKey();
@@ -274,6 +305,45 @@ public final class XaeroWaypointShareBridge {
 		} catch (Exception e) {
 			LOGGER.error("Failed to sync remote waypoints: {}", e.getMessage());
 		}
+	}
+
+	private static boolean reconcileExistingSharedWaypointsByName(Object waypointSet, Map<String, String> decoratedNameToId) {
+		boolean changed = false;
+		try {
+			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
+			if (!(iterableObject instanceof Iterable<?> waypoints)) {
+				return false;
+			}
+
+			List<Object> staleObjects = new ArrayList<>();
+			for (Object waypointObject : waypoints) {
+				if (waypointObject == null) {
+					continue;
+				}
+				String name = stringValue(invokeNoArg(waypointObject, "getName"));
+				if (name == null || !name.startsWith(SHARED_PREFIX)) {
+					continue;
+				}
+
+				String matchedId = decoratedNameToId.get(name);
+				if (matchedId == null) {
+					staleObjects.add(waypointObject);
+					continue;
+				}
+
+				if (!appliedRemoteWaypointObjects.containsKey(matchedId)) {
+					appliedRemoteWaypointObjects.put(matchedId, waypointObject);
+				}
+			}
+
+			for (Object staleObject : staleObjects) {
+				invokeSingleArg(waypointSet, "remove", staleObject);
+				changed = true;
+			}
+		} catch (Exception e) {
+			LOGGER.debug("Failed to reconcile existing shared waypoints: {}", e.getMessage());
+		}
+		return changed;
 	}
 
 	private static Map<String, SharedWaypointInfo> readCurrentLocalWaypoints(UUID ownerId, String ownerName,
@@ -356,6 +426,53 @@ public final class XaeroWaypointShareBridge {
 		for (String waypointId : new ArrayList<>(appliedRemoteWaypointObjects.keySet())) {
 			removeRemoteWaypointById(waypointSet, waypointId);
 		}
+	}
+
+	private static boolean removeAllSharedWaypoints(Object waypointSet) {
+		boolean changed = false;
+		changed |= removeAllAppliedRemoteWaypointsTracked(waypointSet);
+		changed |= removeAllPrefixedSharedWaypoints(waypointSet);
+		return changed;
+	}
+
+	private static boolean removeAllAppliedRemoteWaypointsTracked(Object waypointSet) {
+		boolean changed = false;
+		for (String waypointId : new ArrayList<>(appliedRemoteWaypointObjects.keySet())) {
+			if (removeRemoteWaypointById(waypointSet, waypointId)) {
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
+	private static boolean removeAllPrefixedSharedWaypoints(Object waypointSet) {
+		boolean changed = false;
+		try {
+			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
+			if (!(iterableObject instanceof Iterable<?> waypoints)) {
+				return false;
+			}
+
+			List<Object> toRemove = new ArrayList<>();
+			for (Object waypointObject : waypoints) {
+				if (waypointObject == null) {
+					continue;
+				}
+				String name = stringValue(invokeNoArg(waypointObject, "getName"));
+				if (name != null && name.startsWith(SHARED_PREFIX)) {
+					toRemove.add(waypointObject);
+				}
+			}
+
+			for (Object waypointObject : toRemove) {
+				invokeSingleArg(waypointSet, "remove", waypointObject);
+				changed = true;
+			}
+		} catch (Exception e) {
+			LOGGER.debug("Failed to remove prefixed shared waypoints: {}", e.getMessage());
+		}
+		appliedRemoteWaypointObjects.clear();
+		return changed;
 	}
 
 	private static void saveWaypointWorld(Object minimapSession, Object currentWorld) {

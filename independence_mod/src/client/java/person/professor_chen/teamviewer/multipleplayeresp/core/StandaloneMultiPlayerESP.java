@@ -445,6 +445,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		payload.put("ownerId", ownerId.toString());
 		payload.put("ownerName", ownerName);
 		payload.put("createdAt", createdAt);
+		payload.put("ttlSeconds", config.getWaypointTimeoutSeconds());
 		payload.put("targetType", targetType);
 		payload.put("targetEntityId", targetEntityId);
 		payload.put("targetEntityType", targetEntityType);
@@ -546,16 +547,92 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 			Vec3d relativePos = worldPos.subtract(cameraPos);
 			int color = withAlpha(waypoint.color(), 0xCC);
+			renderWaypointMarkerStyle(context, relativePos, color);
+		}
+	}
 
-			Box markerBox = new Box(
-				relativePos.x - 0.22D, relativePos.y, relativePos.z - 0.22D,
-				relativePos.x + 0.22D, relativePos.y + 1.35D, relativePos.z + 0.22D
+	private void renderWaypointMarkerStyle(WorldRenderContext context, Vec3d basePos, int color) {
+		String style = config.getWaypointUiStyle();
+		if (Config.WAYPOINT_UI_RING.equals(style)) {
+			renderWaypointRingStyle(context, basePos, color);
+			return;
+		}
+		if (Config.WAYPOINT_UI_PIN.equals(style)) {
+			renderWaypointPinStyle(context, basePos, color);
+			return;
+		}
+		renderWaypointBeaconStyle(context, basePos, color);
+	}
+
+	private void renderWaypointBeaconStyle(WorldRenderContext context, Vec3d basePos, int color) {
+		Vec3d center = basePos.add(0.0D, 0.2D, 0.0D);
+		Vec3d top = basePos.add(0.0D, 8.0D, 0.0D);
+		UnifiedRenderModule.drawLine(context.matrixStack(), center, top, color);
+
+		double radius = 0.28D;
+		for (int i = 0; i < 4; i++) {
+			double angle = (Math.PI / 2.0D) * i;
+			Vec3d p = center.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius);
+			Vec3d pTop = p.add(0.0D, 6.5D, 0.0D);
+			UnifiedRenderModule.drawLine(context.matrixStack(), p, pTop, withAlpha(color, 0x90));
+		}
+
+		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.7D, color, 18);
+		renderCircle(context, center.add(0.0D, 7.2D, 0.0D), 0.4D, withAlpha(color, 0xAA), 14);
+	}
+
+	private void renderWaypointRingStyle(WorldRenderContext context, Vec3d basePos, int color) {
+		Vec3d center = basePos.add(0.0D, 0.05D, 0.0D);
+		renderCircle(context, center, 0.95D, color, 24);
+		renderCircle(context, center.add(0.0D, 0.3D, 0.0D), 0.65D, withAlpha(color, 0x9A), 18);
+
+		for (int i = 0; i < 4; i++) {
+			double angle = (Math.PI / 2.0D) * i;
+			Vec3d start = center.add(Math.cos(angle) * 0.3D, 0.0D, Math.sin(angle) * 0.3D);
+			Vec3d end = center.add(Math.cos(angle) * 1.2D, 0.0D, Math.sin(angle) * 1.2D);
+			UnifiedRenderModule.drawLine(context.matrixStack(), start, end, withAlpha(color, 0x88));
+		}
+
+		UnifiedRenderModule.drawLine(context.matrixStack(), center.add(0.0D, 0.1D, 0.0D), center.add(0.0D, 3.0D, 0.0D), withAlpha(color, 0xB5));
+	}
+
+	private void renderWaypointPinStyle(WorldRenderContext context, Vec3d basePos, int color) {
+		Vec3d center = basePos.add(0.0D, 0.1D, 0.0D);
+		Vec3d head = basePos.add(0.0D, 2.8D, 0.0D);
+		UnifiedRenderModule.drawLine(context.matrixStack(), center, head, color);
+
+		double size = 0.42D;
+		Vec3d north = head.add(0.0D, 0.0D, -size);
+		Vec3d south = head.add(0.0D, 0.0D, size);
+		Vec3d east = head.add(size, 0.0D, 0.0D);
+		Vec3d west = head.add(-size, 0.0D, 0.0D);
+		UnifiedRenderModule.drawLine(context.matrixStack(), north, south, color);
+		UnifiedRenderModule.drawLine(context.matrixStack(), east, west, color);
+		UnifiedRenderModule.drawLine(context.matrixStack(), north, east, withAlpha(color, 0x9A));
+		UnifiedRenderModule.drawLine(context.matrixStack(), east, south, withAlpha(color, 0x9A));
+		UnifiedRenderModule.drawLine(context.matrixStack(), south, west, withAlpha(color, 0x9A));
+		UnifiedRenderModule.drawLine(context.matrixStack(), west, north, withAlpha(color, 0x9A));
+
+		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.35D, withAlpha(color, 0xB0), 12);
+	}
+
+	private void renderCircle(WorldRenderContext context, Vec3d center, double radius, int color, int segments) {
+		if (segments < 3) {
+			return;
+		}
+		double step = (Math.PI * 2.0D) / segments;
+		Vec3d prev = null;
+		for (int i = 0; i <= segments; i++) {
+			double angle = step * i;
+			Vec3d current = new Vec3d(
+				center.x + Math.cos(angle) * radius,
+				center.y,
+				center.z + Math.sin(angle) * radius
 			);
-			UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), markerBox, color, true);
-
-			Vec3d topPoint = relativePos.add(0.0D, 2.1D, 0.0D);
-			UnifiedRenderModule.drawLine(context.matrixStack(), relativePos, topPoint, color);
-			UnifiedRenderModule.drawTracerLine(context.matrixStack(), Vec3d.ZERO, relativePos.add(0.0D, 0.8D, 0.0D), color);
+			if (prev != null) {
+				UnifiedRenderModule.drawLine(context.matrixStack(), prev, current, color);
+			}
+			prev = current;
 		}
 	}
 

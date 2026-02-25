@@ -56,6 +56,7 @@ class WaypointData(BaseModel):
     ownerId: Optional[str] = Field(None, description="创建者UUID")
     ownerName: Optional[str] = Field(None, description="创建者名称")
     createdAt: Optional[int] = Field(None, description="创建时间戳(ms)")
+    ttlSeconds: Optional[int] = Field(None, ge=5, le=3600, description="路标超时秒数")
     targetType: Optional[str] = Field(None, description="命中目标类型:block/entity")
     targetEntityId: Optional[str] = Field(None, description="命中实体UUID")
     targetEntityType: Optional[str] = Field(None, description="命中实体类型")
@@ -255,6 +256,20 @@ async def cleanup_timeouts() -> dict:
             return base_timeout * ONLINE_OWNER_TIMEOUT_MULTIPLIER
         return base_timeout
 
+    def effective_waypoint_timeout(node: dict) -> int:
+        if not isinstance(node, dict):
+            return WAYPOINT_TIMEOUT
+        data = node.get("data")
+        if not isinstance(data, dict):
+            return WAYPOINT_TIMEOUT
+        ttl = data.get("ttlSeconds")
+        if isinstance(ttl, (int, float)):
+            ttl_int = int(ttl)
+            if ttl_int < 5:
+                return 5
+            return min(ttl_int, 3600)
+        return WAYPOINT_TIMEOUT
+
     expired_players = [
         pid for pid, pdata in list(players.items())
         if current_time - pdata["timestamp"] > effective_timeout(PLAYER_TIMEOUT, pdata)
@@ -275,7 +290,7 @@ async def cleanup_timeouts() -> dict:
 
     expired_waypoints = [
         wid for wid, wdata in list(waypoints.items())
-        if current_time - wdata["timestamp"] > WAYPOINT_TIMEOUT
+        if current_time - wdata["timestamp"] > effective_waypoint_timeout(wdata)
     ]
     for wid in expired_waypoints:
         if wid in waypoints:
