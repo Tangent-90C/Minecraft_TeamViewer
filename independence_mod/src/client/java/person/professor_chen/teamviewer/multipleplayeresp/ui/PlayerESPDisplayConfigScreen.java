@@ -10,10 +10,14 @@ import net.minecraft.text.Text;
 import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
 import person.professor_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class PlayerESPDisplayConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget renderDistanceField;
     private TextFieldWidget waypointTimeoutField;
+    private TextFieldWidget longTermWaypointTimeoutField;
     private TextFieldWidget tracerTopOffsetField;
     private ButtonWidget tracerStartModeButton;
     private ButtonWidget waypointUiStyleButton;
@@ -21,9 +25,13 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private ButtonWidget showLinesButton;
     private ButtonWidget showSharedWaypointsButton;
     private ButtonWidget middleDoubleClickMarkButton;
+    private ButtonWidget enableLongTermWaypointButton;
+    private ButtonWidget keepOnlyLatestQuickMarkButton;
+    private ButtonWidget colorSettingsButton;
 
     private final int originalRenderDistance;
     private final int originalWaypointTimeoutSeconds;
+    private final int originalLongTermWaypointTimeoutSeconds;
     private final String originalTracerStartMode;
     private final String originalWaypointUiStyle;
     private final double originalTracerTopOffset;
@@ -31,14 +39,17 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private final boolean originalShowLines;
     private final boolean originalShowSharedWaypoints;
     private final boolean originalEnableMiddleDoubleClickMark;
+    private final boolean originalEnableLongTermWaypoint;
+    private final boolean originalKeepOnlyLatestQuickMark;
     private final int originalBoxColor;
     private final int originalLineColor;
 
-    private static final int COMPONENT_WIDTH = 200;
+    private static final int COMPONENT_WIDTH = 170;
     private static final int COMPONENT_HEIGHT = 20;
     private static final int COMPONENT_SPACING = 30;
     private static final int LABEL_SPACING = 12;
     private static final int BUTTON_SPACING = 25;
+    private static final int COLUMN_GAP = 6;
     private int startY;
     private int currentY;
 
@@ -47,6 +58,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.parent = parent;
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
         this.originalWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds();
+        this.originalLongTermWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getLongTermWaypointTimeoutSeconds();
         this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
         this.originalWaypointUiStyle = StandaloneMultiPlayerESP.getConfig().getWaypointUiStyle();
         this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
@@ -54,22 +66,23 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
         this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
         this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
+        this.originalEnableLongTermWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
+        this.originalKeepOnlyLatestQuickMark = StandaloneMultiPlayerESP.getConfig().isKeepOnlyLatestQuickMark();
         this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
         this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
     }
 
     private void calculateLayout() {
         int totalHeight = 0;
-        totalHeight += COMPONENT_SPACING;
-        totalHeight += COMPONENT_SPACING;
-        totalHeight += COMPONENT_SPACING;
-        totalHeight += COMPONENT_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
+        totalHeight += COMPONENT_SPACING; // 顶部留白
+        totalHeight += COMPONENT_SPACING; // 第一行输入框
+        totalHeight += COMPONENT_SPACING; // 第二行输入框
+        totalHeight += BUTTON_SPACING;    // 开关行1
+        totalHeight += BUTTON_SPACING;    // 开关行2
+        totalHeight += BUTTON_SPACING;    // 开关行3
+        totalHeight += BUTTON_SPACING;    // 样式行
+        totalHeight += BUTTON_SPACING;    // 颜色设置行
+        totalHeight += BUTTON_SPACING;    // 完成/取消
 
         startY = (this.height - totalHeight) / 2;
         currentY = startY;
@@ -87,8 +100,13 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         return result;
     }
 
-    private int getComponentX() {
-        return (this.width - COMPONENT_WIDTH) / 2;
+    private int getLeftColumnX() {
+        int totalWidth = COMPONENT_WIDTH * 2 + COLUMN_GAP;
+        return (this.width - totalWidth) / 2;
+    }
+
+    private int getRightColumnX() {
+        return getLeftColumnX() + COMPONENT_WIDTH + COLUMN_GAP;
     }
 
     @Override
@@ -98,13 +116,14 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         calculateLayout();
         currentY += COMPONENT_SPACING;
 
-        int componentX = getComponentX();
+        int leftX = getLeftColumnX();
+        int rightX = getRightColumnX();
 
-        int renderDistanceY = getNextY();
+        int firstFieldY = getNextY();
         this.renderDistanceField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            renderDistanceY,
+            leftX,
+            firstFieldY,
             COMPONENT_WIDTH,
             COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.render_distance")
@@ -115,17 +134,16 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.addDrawableChild(this.renderDistanceField);
 
         this.addDrawableChild(
-            new TextWidget(componentX, renderDistanceY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(leftX, firstFieldY - LABEL_SPACING, COMPONENT_WIDTH, 12,
                 Text.translatable("screen.multipleplayeresp.config.render_distance"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
-        int waypointTimeoutY = getNextY();
         this.waypointTimeoutField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            waypointTimeoutY,
+            rightX,
+            firstFieldY,
             COMPONENT_WIDTH,
             COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.waypoint_timeout")
@@ -136,17 +154,37 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.addDrawableChild(this.waypointTimeoutField);
 
         this.addDrawableChild(
-            new TextWidget(componentX, waypointTimeoutY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(rightX, firstFieldY - LABEL_SPACING, COMPONENT_WIDTH, 12,
                 Text.translatable("screen.multipleplayeresp.config.waypoint_timeout"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
-        int tracerTopOffsetY = getNextY();
+        int secondFieldY = getNextY();
+        this.longTermWaypointTimeoutField = new TextFieldWidget(
+            this.textRenderer,
+            leftX,
+            secondFieldY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.multipleplayeresp.config.long_term_waypoint_timeout")
+        );
+        this.longTermWaypointTimeoutField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getLongTermWaypointTimeoutSeconds()));
+        this.longTermWaypointTimeoutField.setMaxLength(5);
+        this.longTermWaypointTimeoutField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.long_term_waypoint_timeout_hint"));
+        this.addDrawableChild(this.longTermWaypointTimeoutField);
+
+        this.addDrawableChild(
+            new TextWidget(leftX, secondFieldY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.multipleplayeresp.config.long_term_waypoint_timeout"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+
         this.tracerTopOffsetField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            tracerTopOffsetY,
+            rightX,
+            secondFieldY,
             COMPONENT_WIDTH,
             COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.tracer_top_offset")
@@ -157,77 +195,89 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.addDrawableChild(this.tracerTopOffsetField);
 
         this.addDrawableChild(
-            new TextWidget(componentX, tracerTopOffsetY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(rightX, secondFieldY - LABEL_SPACING, COMPONENT_WIDTH, 12,
                 Text.translatable("screen.multipleplayeresp.config.tracer_top_offset"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
         int displayToggleY = getNextButtonY();
-        int toggleButtonWidth = (COMPONENT_WIDTH - 2) / 2;
         this.showBoxesButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.show_boxes"),
             button -> toggleShowBoxes()
-        ).dimensions(componentX, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
+        ).dimensions(leftX, displayToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showBoxesButton);
 
         this.showLinesButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.show_tracking_lines"),
             button -> toggleShowLines()
-        ).dimensions(componentX + toggleButtonWidth + 2, displayToggleY, toggleButtonWidth, COMPONENT_HEIGHT).build();
+        ).dimensions(rightX, displayToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showLinesButton);
 
         int showSharedWaypointsY = getNextButtonY();
         this.showSharedWaypointsButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.show_shared_waypoints"),
             button -> toggleShowSharedWaypoints()
-        ).dimensions(componentX, showSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(leftX, showSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showSharedWaypointsButton);
 
-        int middleDoubleClickMarkY = getNextButtonY();
         this.middleDoubleClickMarkButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.middle_double_click_mark"),
             button -> toggleMiddleDoubleClickMark()
-        ).dimensions(componentX, middleDoubleClickMarkY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(rightX, showSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.middleDoubleClickMarkButton);
+
+        int enableLongTermWaypointY = getNextButtonY();
+        this.enableLongTermWaypointButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.enable_long_term_waypoint"),
+            button -> toggleEnableLongTermWaypoint()
+        ).dimensions(leftX, enableLongTermWaypointY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.enableLongTermWaypointButton);
+
+        this.keepOnlyLatestQuickMarkButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.keep_only_latest_quick_mark"),
+            button -> toggleKeepOnlyLatestQuickMark()
+        ).dimensions(rightX, enableLongTermWaypointY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.keepOnlyLatestQuickMarkButton);
 
         int waypointUiStyleY = getNextButtonY();
         this.waypointUiStyleButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.waypoint_ui_style"),
             button -> toggleWaypointUiStyle()
-        ).dimensions(componentX, waypointUiStyleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(leftX, waypointUiStyleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.waypointUiStyleButton);
 
-        int tracerStartModeY = getNextButtonY();
         this.tracerStartModeButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.tracer_start_mode"),
             button -> toggleTracerStartMode()
-        ).dimensions(componentX, tracerStartModeY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(rightX, waypointUiStyleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.tracerStartModeButton);
 
         int colorConfigY = getNextButtonY();
-        this.addDrawableChild(ButtonWidget.builder(
+        this.colorSettingsButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.color_settings"),
             button -> openColorConfig()
-        ).dimensions(componentX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+        ).dimensions(leftX, colorConfigY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.colorSettingsButton);
 
         int buttonsY = getNextButtonY();
-        int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.done"),
             button -> saveAndClose()
-        ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
+        ).dimensions(leftX, buttonsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
 
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.cancel"),
             button -> close()
-        ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
+        ).dimensions(rightX, buttonsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
 
         updateTracerStartModeButton();
         updateShowBoxesButton();
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
+        updateEnableLongTermWaypointButton();
+        updateKeepOnlyLatestQuickMarkButton();
         updateWaypointUiStyleButton();
     }
 
@@ -244,19 +294,99 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         );
 
         if (this.renderDistanceField != null && this.renderDistanceField.isMouseOver(mouseX, mouseY)) {
-            context.drawTooltip(
-                this.textRenderer,
-                Text.translatable("screen.multipleplayeresp.config.render_distance.tooltip"),
-                mouseX,
-                mouseY
-            );
+            drawTooltip(context, "screen.multipleplayeresp.config.render_distance.tooltip", mouseX, mouseY);
+            return;
         }
+        if (this.waypointTimeoutField != null && this.waypointTimeoutField.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.waypoint_timeout.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.longTermWaypointTimeoutField != null && this.longTermWaypointTimeoutField.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.long_term_waypoint_timeout.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.tracerTopOffsetField != null && this.tracerTopOffsetField.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.tracer_top_offset.tooltip", mouseX, mouseY);
+            return;
+        }
+
+        if (this.showBoxesButton != null && this.showBoxesButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.show_boxes.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.showLinesButton != null && this.showLinesButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.show_tracking_lines.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.showSharedWaypointsButton != null && this.showSharedWaypointsButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.show_shared_waypoints.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.middleDoubleClickMarkButton != null && this.middleDoubleClickMarkButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.middle_double_click_mark.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.enableLongTermWaypointButton != null && this.enableLongTermWaypointButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.enable_long_term_waypoint.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.keepOnlyLatestQuickMarkButton != null && this.keepOnlyLatestQuickMarkButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.keep_only_latest_quick_mark.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.waypointUiStyleButton != null && this.waypointUiStyleButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.waypoint_ui_style.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.tracerStartModeButton != null && this.tracerStartModeButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.tracer_start_mode.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.colorSettingsButton != null && this.colorSettingsButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.color_settings.tooltip", mouseX, mouseY);
+        }
+    }
+
+    private void drawTooltip(DrawContext context, String key, int mouseX, int mouseY) {
+        String text = Text.translatable(key).getString();
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        List<Text> lines = splitTooltipLines(text, 42);
+        context.drawTooltip(this.textRenderer, lines, mouseX, mouseY);
+    }
+
+    private List<Text> splitTooltipLines(String input, int maxChars) {
+        List<Text> lines = new ArrayList<>();
+        if (input == null || input.isBlank()) {
+            return lines;
+        }
+        String[] words = input.trim().split("\\s+");
+        StringBuilder currentLine = new StringBuilder();
+        for (String word : words) {
+            if (currentLine.length() == 0) {
+                currentLine.append(word);
+                continue;
+            }
+            if (currentLine.length() + 1 + word.length() <= maxChars) {
+                currentLine.append(' ').append(word);
+            } else {
+                lines.add(Text.of(currentLine.toString()));
+                currentLine.setLength(0);
+                currentLine.append(word);
+            }
+        }
+        if (currentLine.length() > 0) {
+            lines.add(Text.of(currentLine.toString()));
+        }
+        return lines;
     }
 
     @Override
     public void close() {
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
         StandaloneMultiPlayerESP.getConfig().setWaypointTimeoutSeconds(this.originalWaypointTimeoutSeconds);
+        StandaloneMultiPlayerESP.getConfig().setLongTermWaypointTimeoutSeconds(this.originalLongTermWaypointTimeoutSeconds);
         StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
         StandaloneMultiPlayerESP.getConfig().setWaypointUiStyle(this.originalWaypointUiStyle);
         StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
@@ -264,6 +394,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
         StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
         StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
+        StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(this.originalEnableLongTermWaypoint);
+        StandaloneMultiPlayerESP.getConfig().setKeepOnlyLatestQuickMark(this.originalKeepOnlyLatestQuickMark);
         StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
         StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
 
@@ -357,6 +489,36 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleEnableLongTermWaypoint() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
+        StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(!currentStatus);
+        updateEnableLongTermWaypointButton();
+    }
+
+    private void updateEnableLongTermWaypointButton() {
+        if (this.enableLongTermWaypointButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.enable_long_term_waypoint").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.enableLongTermWaypointButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void toggleKeepOnlyLatestQuickMark() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isKeepOnlyLatestQuickMark();
+        StandaloneMultiPlayerESP.getConfig().setKeepOnlyLatestQuickMark(!currentStatus);
+        updateKeepOnlyLatestQuickMarkButton();
+    }
+
+    private void updateKeepOnlyLatestQuickMarkButton() {
+        if (this.keepOnlyLatestQuickMarkButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isKeepOnlyLatestQuickMark();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.keep_only_latest_quick_mark").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.keepOnlyLatestQuickMarkButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void toggleWaypointUiStyle() {
         Config config = StandaloneMultiPlayerESP.getConfig();
         String current = config.getWaypointUiStyle();
@@ -404,6 +566,12 @@ public class PlayerESPDisplayConfigScreen extends Screen {
                 StandaloneMultiPlayerESP.getConfig().setWaypointTimeoutSeconds(waypointTimeout);
             }
 
+            String longTermWaypointTimeoutStr = this.longTermWaypointTimeoutField.getText().trim();
+            if (!longTermWaypointTimeoutStr.isEmpty()) {
+                int longTermWaypointTimeout = Integer.parseInt(longTermWaypointTimeoutStr);
+                StandaloneMultiPlayerESP.getConfig().setLongTermWaypointTimeoutSeconds(longTermWaypointTimeout);
+            }
+
             String tracerTopOffsetStr = this.tracerTopOffsetField.getText().trim();
             if (!tracerTopOffsetStr.isEmpty()) {
                 double tracerTopOffset = Double.parseDouble(tracerTopOffsetStr);
@@ -426,6 +594,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateMiddleDoubleClickMarkButton();
+        updateEnableLongTermWaypointButton();
+        updateKeepOnlyLatestQuickMarkButton();
         updateWaypointUiStyleButton();
     }
 }

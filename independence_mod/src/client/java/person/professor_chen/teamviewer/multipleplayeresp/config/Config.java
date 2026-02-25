@@ -19,7 +19,7 @@ public class Config {
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
     
     private String serverURL = "ws://localhost:8080/playeresp";
-    private int renderDistance = 64;
+    private int renderDistance = 128000;
     private boolean showLines = true;
     private boolean showBoxes = true;
     private int boxColor = 0x80FF0000; // 50%不透明红色
@@ -27,13 +27,16 @@ public class Config {
     private String tracerStartMode = TRACER_START_CROSSHAIR; // 追踪线起始点模式：crosshair 或 top
     private double tracerTopOffset = 0.42; // 顶部模式上抬偏移
     private boolean enableCompression = true; // 是否启用WebSocket压缩
-    private int updateInterval = 20; // 上报频率间隔（tick），默认20tick约每秒1次
+    private int updateInterval = 10; // 上报频率间隔（tick），默认20tick约每秒1次
     private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
     private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
-    private int waypointTimeoutSeconds = 120; // 报点超时秒数
+    private int waypointTimeoutSeconds = 60; // 报点超时秒数
+    private boolean enableLongTermWaypoint = true; // 是否启用长期报点
+    private int longTermWaypointTimeoutSeconds = 1800; // 长期报点超时秒数
+    private boolean keepOnlyLatestQuickMark = true; // 快捷报点是否仅保留最新一个
     private String waypointUiStyle = WAYPOINT_UI_BEACON; // 报点UI样式
     private boolean useSystemProxy = true; // 连接服务器时是否使用系统代理
     
@@ -222,6 +225,37 @@ public class Config {
             return;
         }
         this.waypointTimeoutSeconds = Math.min(waypointTimeoutSeconds, 3600);
+    }
+
+    public boolean isEnableLongTermWaypoint() {
+        return enableLongTermWaypoint;
+    }
+
+    public void setEnableLongTermWaypoint(boolean enableLongTermWaypoint) {
+        this.enableLongTermWaypoint = enableLongTermWaypoint;
+    }
+
+    public int getLongTermWaypointTimeoutSeconds() {
+        if (longTermWaypointTimeoutSeconds < 30) {
+            return 30;
+        }
+        return Math.min(longTermWaypointTimeoutSeconds, 86400);
+    }
+
+    public void setLongTermWaypointTimeoutSeconds(int longTermWaypointTimeoutSeconds) {
+        if (longTermWaypointTimeoutSeconds < 30) {
+            this.longTermWaypointTimeoutSeconds = 30;
+            return;
+        }
+        this.longTermWaypointTimeoutSeconds = Math.min(longTermWaypointTimeoutSeconds, 86400);
+    }
+
+    public boolean isKeepOnlyLatestQuickMark() {
+        return keepOnlyLatestQuickMark;
+    }
+
+    public void setKeepOnlyLatestQuickMark(boolean keepOnlyLatestQuickMark) {
+        this.keepOnlyLatestQuickMark = keepOnlyLatestQuickMark;
     }
 
     public String getWaypointUiStyle() {

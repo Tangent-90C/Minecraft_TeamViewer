@@ -398,6 +398,16 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		String idSource = ownerId + "|" + createdAt + "|" + dimension + "|" + markX + "|" + markY + "|" + markZ;
 		String waypointId = UUID.nameUUIDFromBytes(idSource.getBytes(StandardCharsets.UTF_8)).toString();
 
+		if (config.isKeepOnlyLatestQuickMark()) {
+			List<String> oldQuickWaypointIds = collectQuickWaypointIdsByOwner(ownerId, waypointId);
+			if (!oldQuickWaypointIds.isEmpty()) {
+				for (String oldId : oldQuickWaypointIds) {
+					sharedWaypoints.remove(oldId);
+				}
+				networkManager.sendWaypointsDelete(ownerId, oldQuickWaypointIds);
+			}
+		}
+
 		String targetType = target.targetEntity() == null ? "block" : "entity";
 		String targetEntityId = target.targetEntity() == null ? null : target.targetEntity().getUuidAsString();
 		String targetEntityType = target.targetEntity() == null
@@ -430,7 +440,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			targetType,
 			targetEntityId,
 			targetEntityType,
-			targetEntityName
+			targetEntityName,
+			"quick"
 		);
 		sharedWaypoints.put(waypointId, waypoint);
 
@@ -446,6 +457,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		payload.put("ownerName", ownerName);
 		payload.put("createdAt", createdAt);
 		payload.put("ttlSeconds", config.getWaypointTimeoutSeconds());
+		payload.put("waypointKind", "quick");
+		payload.put("replaceOldQuick", config.isKeepOnlyLatestQuickMark());
 		payload.put("targetType", targetType);
 		payload.put("targetEntityId", targetEntityId);
 		payload.put("targetEntityType", targetEntityType);
@@ -461,6 +474,27 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		} else {
 			client.player.sendMessage(Text.literal("§6[TV] 已报点方块: " + markX + " " + markY + " " + markZ), true);
 		}
+	}
+
+	private List<String> collectQuickWaypointIdsByOwner(UUID ownerId, String exceptWaypointId) {
+		List<String> ids = new java.util.ArrayList<>();
+		for (Map.Entry<String, SharedWaypointInfo> entry : sharedWaypoints.entrySet()) {
+			SharedWaypointInfo waypoint = entry.getValue();
+			if (waypoint == null) {
+				continue;
+			}
+			if (exceptWaypointId != null && exceptWaypointId.equals(entry.getKey())) {
+				continue;
+			}
+			if (!ownerId.equals(waypoint.ownerId())) {
+				continue;
+			}
+			if (!"quick".equalsIgnoreCase(waypoint.waypointKind())) {
+				continue;
+			}
+			ids.add(entry.getKey());
+		}
+		return ids;
 	}
 
 	private MarkTarget resolveMarkTarget(MinecraftClient client) {

@@ -152,6 +152,9 @@ public final class XaeroWaypointShareBridge {
 
 			Map<String, Map<String, Object>> toUpload = new HashMap<>();
 			List<String> toDelete = new ArrayList<>();
+			int manualTtl = config.isEnableLongTermWaypoint()
+					? config.getLongTermWaypointTimeoutSeconds()
+					: config.getWaypointTimeoutSeconds();
 
 			for (Map.Entry<String, SharedWaypointInfo> entry : currentLocal.entrySet()) {
 				if (!knownLocalWaypoints.containsKey(entry.getKey())) {
@@ -167,6 +170,8 @@ public final class XaeroWaypointShareBridge {
 					payload.put("ownerId", ownerId.toString());
 					payload.put("ownerName", ownerName);
 					payload.put("createdAt", waypoint.createdAt());
+					payload.put("ttlSeconds", manualTtl);
+					payload.put("waypointKind", "manual");
 					toUpload.put(entry.getKey(), payload);
 				}
 			}
@@ -402,7 +407,8 @@ public final class XaeroWaypointShareBridge {
 					null,
 					null,
 					null,
-					null));
+					null,
+					"manual"));
 		}
 
 		return result;

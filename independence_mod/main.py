@@ -56,7 +56,9 @@ class WaypointData(BaseModel):
     ownerId: Optional[str] = Field(None, description="创建者UUID")
     ownerName: Optional[str] = Field(None, description="创建者名称")
     createdAt: Optional[int] = Field(None, description="创建时间戳(ms)")
-    ttlSeconds: Optional[int] = Field(None, ge=5, le=3600, description="路标超时秒数")
+    ttlSeconds: Optional[int] = Field(None, ge=5, le=86400, description="路标超时秒数")
+    waypointKind: Optional[str] = Field(None, description="路标类型: quick/manual")
+    replaceOldQuick: Optional[bool] = Field(None, description="是否替换同玩家旧快捷报点")
     targetType: Optional[str] = Field(None, description="命中目标类型:block/entity")
     targetEntityId: Optional[str] = Field(None, description="命中实体UUID")
     targetEntityType: Optional[str] = Field(None, description="命中实体类型")
@@ -267,7 +269,7 @@ async def cleanup_timeouts() -> dict:
             ttl_int = int(ttl)
             if ttl_int < 5:
                 return 5
-            return min(ttl_int, 3600)
+            return min(ttl_int, 86400)
         return WAYPOINT_TIMEOUT
 
     expired_players = [
@@ -628,12 +630,27 @@ async def websocket_endpoint(websocket: WebSocket):
                 for waypoint_id, waypoint_data in player_waypoints.items():
                     try:
                         validated_data = WaypointData(**waypoint_data)
+                        normalized = validated_data.model_dump()
+
+                        if normalized.get("waypointKind") == "quick" and bool(normalized.get("replaceOldQuick")):
+                            old_quick_waypoints = [
+                                wid for wid, wdata in list(waypoints.items())
+                                if wid != waypoint_id
+                                and wdata.get("submitPlayerId") == submit_player_id
+                                and isinstance(wdata.get("data"), dict)
+                                and wdata["data"].get("waypointKind") == "quick"
+                            ]
+                            for old_id in old_quick_waypoints:
+                                if old_id in waypoints:
+                                    del waypoints[old_id]
+                                    changes["waypoints"]["delete"].append(old_id)
+
                         waypoints[waypoint_id] = {
                             "timestamp": current_time,
                             "submitPlayerId": submit_player_id,
-                            "data": validated_data.model_dump(),
+                            "data": normalized,
                         }
-                        changes["waypoints"]["upsert"][waypoint_id] = validated_data.model_dump()
+                        changes["waypoints"]["upsert"][waypoint_id] = normalized
                     except Exception as e:
                         print(f"Error validating waypoint data for {waypoint_id}: {e}")
 
