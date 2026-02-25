@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp;
+package person.professor_chen.teamviewer.multipleplayeresp.model;
 
 import java.util.UUID;
 

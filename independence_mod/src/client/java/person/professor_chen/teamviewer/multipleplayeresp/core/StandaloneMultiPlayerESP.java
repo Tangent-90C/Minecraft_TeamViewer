@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp;
+package person.professor_chen.teamviewer.multipleplayeresp.core;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -15,7 +15,13 @@ import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import person.professor_chen.teamviewer.render.UnifiedRenderModule;
+import person.professor_chen.teamviewer.multipleplayeresp.bridge.XaeroWaypointShareBridge;
+import person.professor_chen.teamviewer.multipleplayeresp.bridge.XaeroWorldMapBridge;
+import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
+import person.professor_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
+import person.professor_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
+import person.professor_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp;
+package person.professor_chen.teamviewer.multipleplayeresp.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp;
+package person.professor_chen.teamviewer.multipleplayeresp.network;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -18,6 +18,9 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
+import person.professor_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import person.professor_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;

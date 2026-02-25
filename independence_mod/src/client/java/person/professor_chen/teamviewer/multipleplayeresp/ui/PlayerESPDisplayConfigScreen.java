@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp;
+package person.professor_chen.teamviewer.multipleplayeresp.ui;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -7,6 +7,8 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.text.Text;
+import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
+import person.professor_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
 
 public class PlayerESPDisplayConfigScreen extends Screen {
     private final Screen parent;
