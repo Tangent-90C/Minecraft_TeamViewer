@@ -23,6 +23,15 @@
     ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
     RECONNECT_INTERVAL_MS: 1000,
     TARGET_DIMENSION: 'minecraft:overworld',
+    SHOW_PLAYER_ICON: true,
+    SHOW_PLAYER_TEXT: true,
+    SHOW_HORSE_ENTITIES: true,
+    SHOW_LABEL_TEAM_INFO: true,
+    SHOW_LABEL_TOWN_INFO: true,
+    PLAYER_ICON_SIZE: 10,
+    PLAYER_TEXT_SIZE: 12,
+    HORSE_ICON_SIZE: 14,
+    HORSE_TEXT_SIZE: 12,
     SHOW_COORDS: false,
     AUTO_TEAM_FROM_NAME: true,
     FRIENDLY_TAGS: '[xxx]',
@@ -117,6 +126,42 @@
       next.TARGET_DIMENSION = candidate.TARGET_DIMENSION.trim();
     }
 
+    next.SHOW_PLAYER_ICON = candidate.SHOW_PLAYER_ICON === undefined
+      ? DEFAULT_CONFIG.SHOW_PLAYER_ICON
+      : Boolean(candidate.SHOW_PLAYER_ICON);
+    next.SHOW_PLAYER_TEXT = candidate.SHOW_PLAYER_TEXT === undefined
+      ? DEFAULT_CONFIG.SHOW_PLAYER_TEXT
+      : Boolean(candidate.SHOW_PLAYER_TEXT);
+    next.SHOW_HORSE_ENTITIES = candidate.SHOW_HORSE_ENTITIES === undefined
+      ? DEFAULT_CONFIG.SHOW_HORSE_ENTITIES
+      : Boolean(candidate.SHOW_HORSE_ENTITIES);
+    next.SHOW_LABEL_TEAM_INFO = candidate.SHOW_LABEL_TEAM_INFO === undefined
+      ? DEFAULT_CONFIG.SHOW_LABEL_TEAM_INFO
+      : Boolean(candidate.SHOW_LABEL_TEAM_INFO);
+    next.SHOW_LABEL_TOWN_INFO = candidate.SHOW_LABEL_TOWN_INFO === undefined
+      ? DEFAULT_CONFIG.SHOW_LABEL_TOWN_INFO
+      : Boolean(candidate.SHOW_LABEL_TOWN_INFO);
+
+    const playerIconSize = Number(candidate.PLAYER_ICON_SIZE);
+    if (Number.isFinite(playerIconSize)) {
+      next.PLAYER_ICON_SIZE = Math.max(6, Math.min(40, Math.round(playerIconSize)));
+    }
+
+    const playerTextSize = Number(candidate.PLAYER_TEXT_SIZE);
+    if (Number.isFinite(playerTextSize)) {
+      next.PLAYER_TEXT_SIZE = Math.max(8, Math.min(32, Math.round(playerTextSize)));
+    }
+
+    const horseIconSize = Number(candidate.HORSE_ICON_SIZE);
+    if (Number.isFinite(horseIconSize)) {
+      next.HORSE_ICON_SIZE = Math.max(6, Math.min(40, Math.round(horseIconSize)));
+    }
+
+    const horseTextSize = Number(candidate.HORSE_TEXT_SIZE);
+    if (Number.isFinite(horseTextSize)) {
+      next.HORSE_TEXT_SIZE = Math.max(8, Math.min(32, Math.round(horseTextSize)));
+    }
+
     next.SHOW_COORDS = Boolean(candidate.SHOW_COORDS);
     next.AUTO_TEAM_FROM_NAME = candidate.AUTO_TEAM_FROM_NAME === undefined
       ? DEFAULT_CONFIG.AUTO_TEAM_FROM_NAME
@@ -201,14 +246,14 @@
       return {
         team: 'friendly',
         color: getConfiguredTeamColor('friendly'),
-        label: '自动识别',
+        label: '',
       };
     }
     if (enemyTags.some((tag) => name.includes(tag))) {
       return {
         team: 'enemy',
         color: getConfiguredTeamColor('enemy'),
-        label: '自动识别',
+        label: '',
       };
     }
     return null;
@@ -437,7 +482,36 @@
     return Number.isFinite(num) ? num : null;
   }
 
-  function buildMarkerHtml(name, x, z, health, mark) {
+  function getMarkerVisualConfig(markerKind) {
+    const isHorse = markerKind === 'horse';
+    const iconSizeRaw = Number(isHorse ? CONFIG.HORSE_ICON_SIZE : CONFIG.PLAYER_ICON_SIZE);
+    const textSizeRaw = Number(isHorse ? CONFIG.HORSE_TEXT_SIZE : CONFIG.PLAYER_TEXT_SIZE);
+    const iconSize = Number.isFinite(iconSizeRaw) ? Math.max(6, Math.min(40, Math.round(iconSizeRaw))) : (isHorse ? 14 : 10);
+    const textSize = Number.isFinite(textSizeRaw) ? Math.max(8, Math.min(32, Math.round(textSizeRaw))) : 12;
+    return {
+      iconSize,
+      textSize,
+      labelOffset: iconSize,
+    };
+  }
+
+  function buildMarkerHtml(name, x, z, health, mark, townInfo, markerKind = 'player') {
+    const team = mark ? normalizeTeam(mark.team) : 'neutral';
+    const color = mark ? normalizeColor(mark.color, getConfiguredTeamColor(team)) : getConfiguredTeamColor(team);
+    const showIcon = Boolean(CONFIG.SHOW_PLAYER_ICON);
+    const showText = Boolean(CONFIG.SHOW_PLAYER_TEXT);
+    if (!showIcon && !showText) {
+      return '';
+    }
+
+    const escapeHtml = (raw) => String(raw).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+
     let text = name;
     if (CONFIG.SHOW_COORDS) {
       text += ` (${Math.round(x)}, ${Math.round(z)})`;
@@ -446,41 +520,46 @@
       text += ` ❤${Math.round(health)}`;
     }
 
-    const team = mark ? normalizeTeam(mark.team) : 'neutral';
-    const color = mark ? normalizeColor(mark.color, getConfiguredTeamColor(team)) : getConfiguredTeamColor(team);
     const teamText = team === 'friendly' ? '友军' : team === 'enemy' ? '敌军' : '中立';
     const noteText = mark && mark.label ? String(mark.label) : '';
-    const safeName = String(text).replace(/[&<>"']/g, (ch) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[ch]));
-    const safeTeam = String(teamText).replace(/[&<>"']/g, (ch) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[ch]));
-    const safeNote = String(noteText).replace(/[&<>"']/g, (ch) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[ch]));
+    const townText = townInfo && typeof townInfo.text === 'string' ? townInfo.text.trim() : '';
+    const townColor = normalizeColor(townInfo && townInfo.color, '#93c5fd');
+    const safeName = escapeHtml(text);
+    const safeTeam = escapeHtml(teamText);
+    const safeNote = escapeHtml(noteText);
+    const safeTown = escapeHtml(townText);
+    const visual = getMarkerVisualConfig(markerKind);
 
-    const noteHtml = safeNote ? `<span class="n-note"> · ${safeNote}</span>` : '';
+    const iconContent = markerKind === 'horse' ? '🐎' : '';
+    const iconHtml = showIcon
+      ? `<span class="n-icon ${markerKind === 'horse' ? 'is-horse' : ''}" style="background:${markerKind === 'horse' ? 'rgba(15,23,42,.92)' : color};box-shadow:0 0 0 2px ${color}55,0 0 0 1px rgba(15,23,42,.95) inset;width:${visual.iconSize}px;height:${visual.iconSize}px;line-height:${visual.iconSize}px;font-size:${Math.max(9, Math.round(visual.iconSize * 0.75))}px;">${iconContent}</span>`
+      : '';
+    const teamHtml = CONFIG.SHOW_LABEL_TEAM_INFO && markerKind !== 'horse'
+      ? `<span class="n-team" style="color:${color}">[${safeTeam}]</span>`
+      : '';
+    const townHtml = CONFIG.SHOW_LABEL_TOWN_INFO && safeTown
+      ? ` <span class="n-town" style="color:${townColor}">${safeTown}</span>`
+      : '';
+    const gapAfterMeta = (teamHtml || safeNote || townHtml) ? ' ' : '';
+    const textHtml = showText
+      ? `<span class="n-label" data-align="${showIcon ? 'with-icon' : 'left-anchor'}" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;left:${showIcon ? visual.labelOffset : 0}px;font-size:${visual.textSize}px;">${teamHtml}${safeNote ? `<span class="n-note"> · ${safeNote}</span>` : ''}${townHtml}${gapAfterMeta}${safeName}</span>`
+      : '';
 
-    return `<div class="nodemc-player-label" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;"><span class="n-team" style="color:${color}">[${safeTeam}]</span>${noteHtml} ${safeName}</div>`;
+    return `<div class="nodemc-player-anchor">${iconHtml}${textHtml}</div>`;
   }
 
   function upsertMarker(map, playerId, payload) {
     const existing = markersById.get(playerId);
     const latLng = worldToLatLng(map, payload.x, payload.z);
-    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark);
+    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, payload.kind || 'player');
+
+    if (!html) {
+      if (existing) {
+        existing.remove();
+        markersById.delete(playerId);
+      }
+      return;
+    }
 
     if (existing) {
       existing.setLatLng(latLng);
@@ -488,7 +567,8 @@
         leafletRef.divIcon({
           className: '',
           html,
-          iconSize: null,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
         })
       );
       return;
@@ -498,7 +578,8 @@
       icon: leafletRef.divIcon({
         className: '',
         html,
-        iconSize: null,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
       }),
       interactive: false,
       keyboard: false,
@@ -540,11 +621,53 @@
       const health = readNumber(data.health);
       const name = String(data.playerName || data.playerUUID || playerId);
       const mark = getPlayerMark(playerId);
+      const tabInfo = getTabPlayerInfo(playerId);
       const autoName = getTabPlayerName(playerId) || name;
       const autoMark = mark ? null : autoTeamFromName(autoName);
+      const townInfo = tabInfo && tabInfo.teamText
+        ? {
+            text: tabInfo.teamText,
+            color: tabInfo.teamColor || null,
+          }
+        : null;
 
       nextIds.add(playerId);
-      upsertMarker(map, playerId, { x, z, health, name, mark: mark || autoMark });
+      upsertMarker(map, playerId, { x, z, health, name, mark: mark || autoMark, townInfo });
+    }
+
+    const entities = snapshot && typeof snapshot === 'object' ? snapshot.entities : null;
+    if (CONFIG.SHOW_HORSE_ENTITIES && entities && typeof entities === 'object') {
+      for (const [entityId, rawNode] of Object.entries(entities)) {
+        const data = getPlayerDataNode(rawNode);
+        if (!data) continue;
+
+        const entityType = String(data.entityType || '').toLowerCase();
+        if (!entityType.includes('horse')) continue;
+
+        const dim = normalizeDimension(data.dimension);
+        if (wantedDim && dim !== wantedDim) continue;
+
+        const x = readNumber(data.x);
+        const z = readNumber(data.z);
+        if (x === null || z === null) continue;
+
+        const markerId = `entity:${entityId}`;
+        const entityName = String(data.entityName || '马').trim() || '马';
+        nextIds.add(markerId);
+        upsertMarker(map, markerId, {
+          x,
+          z,
+          health: null,
+          name: entityName,
+          mark: {
+            team: 'neutral',
+            color: getConfiguredTeamColor('neutral'),
+            label: '',
+          },
+          townInfo: null,
+          kind: 'horse',
+        });
+      }
     }
 
     removeMissingMarkers(nextIds);
@@ -582,6 +705,15 @@
     const urlInput = document.getElementById('nodemc-overlay-url');
     const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
+    const showIconInput = document.getElementById('nodemc-overlay-show-icon');
+    const showTextInput = document.getElementById('nodemc-overlay-show-text');
+    const showHorseInput = document.getElementById('nodemc-overlay-show-horse-entities');
+    const showTeamInfoInput = document.getElementById('nodemc-overlay-show-team-info');
+    const showTownInfoInput = document.getElementById('nodemc-overlay-show-town-info');
+    const playerIconSizeInput = document.getElementById('nodemc-overlay-player-icon-size');
+    const playerTextSizeInput = document.getElementById('nodemc-overlay-player-text-size');
+    const horseIconSizeInput = document.getElementById('nodemc-overlay-horse-icon-size');
+    const horseTextSizeInput = document.getElementById('nodemc-overlay-horse-text-size');
     const coordsInput = document.getElementById('nodemc-overlay-coords');
     const autoTeamInput = document.getElementById('nodemc-overlay-auto-team');
     const friendlyTagsInput = document.getElementById('nodemc-overlay-friendly-tags');
@@ -594,6 +726,15 @@
     if (urlInput) urlInput.value = CONFIG.ADMIN_WS_URL;
     if (reconnectInput) reconnectInput.value = String(CONFIG.RECONNECT_INTERVAL_MS);
     if (dimInput) dimInput.value = CONFIG.TARGET_DIMENSION;
+    if (showIconInput) showIconInput.checked = CONFIG.SHOW_PLAYER_ICON;
+    if (showTextInput) showTextInput.checked = CONFIG.SHOW_PLAYER_TEXT;
+    if (showHorseInput) showHorseInput.checked = CONFIG.SHOW_HORSE_ENTITIES;
+    if (showTeamInfoInput) showTeamInfoInput.checked = CONFIG.SHOW_LABEL_TEAM_INFO;
+    if (showTownInfoInput) showTownInfoInput.checked = CONFIG.SHOW_LABEL_TOWN_INFO;
+    if (playerIconSizeInput) playerIconSizeInput.value = String(CONFIG.PLAYER_ICON_SIZE);
+    if (playerTextSizeInput) playerTextSizeInput.value = String(CONFIG.PLAYER_TEXT_SIZE);
+    if (horseIconSizeInput) horseIconSizeInput.value = String(CONFIG.HORSE_ICON_SIZE);
+    if (horseTextSizeInput) horseTextSizeInput.value = String(CONFIG.HORSE_TEXT_SIZE);
     if (coordsInput) coordsInput.checked = CONFIG.SHOW_COORDS;
     if (autoTeamInput) autoTeamInput.checked = CONFIG.AUTO_TEAM_FROM_NAME;
     if (friendlyTagsInput) friendlyTagsInput.value = CONFIG.FRIENDLY_TAGS;
@@ -608,6 +749,15 @@
     const urlInput = document.getElementById('nodemc-overlay-url');
     const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
+    const showIconInput = document.getElementById('nodemc-overlay-show-icon');
+    const showTextInput = document.getElementById('nodemc-overlay-show-text');
+    const showHorseInput = document.getElementById('nodemc-overlay-show-horse-entities');
+    const showTeamInfoInput = document.getElementById('nodemc-overlay-show-team-info');
+    const showTownInfoInput = document.getElementById('nodemc-overlay-show-town-info');
+    const playerIconSizeInput = document.getElementById('nodemc-overlay-player-icon-size');
+    const playerTextSizeInput = document.getElementById('nodemc-overlay-player-text-size');
+    const horseIconSizeInput = document.getElementById('nodemc-overlay-horse-icon-size');
+    const horseTextSizeInput = document.getElementById('nodemc-overlay-horse-text-size');
     const coordsInput = document.getElementById('nodemc-overlay-coords');
     const autoTeamInput = document.getElementById('nodemc-overlay-auto-team');
     const friendlyTagsInput = document.getElementById('nodemc-overlay-friendly-tags');
@@ -621,6 +771,15 @@
       ADMIN_WS_URL: urlInput ? urlInput.value : CONFIG.ADMIN_WS_URL,
       RECONNECT_INTERVAL_MS: reconnectInput ? reconnectInput.value : CONFIG.RECONNECT_INTERVAL_MS,
       TARGET_DIMENSION: dimInput ? dimInput.value : CONFIG.TARGET_DIMENSION,
+      SHOW_PLAYER_ICON: showIconInput ? showIconInput.checked : CONFIG.SHOW_PLAYER_ICON,
+      SHOW_PLAYER_TEXT: showTextInput ? showTextInput.checked : CONFIG.SHOW_PLAYER_TEXT,
+      SHOW_HORSE_ENTITIES: showHorseInput ? showHorseInput.checked : CONFIG.SHOW_HORSE_ENTITIES,
+      SHOW_LABEL_TEAM_INFO: showTeamInfoInput ? showTeamInfoInput.checked : CONFIG.SHOW_LABEL_TEAM_INFO,
+      SHOW_LABEL_TOWN_INFO: showTownInfoInput ? showTownInfoInput.checked : CONFIG.SHOW_LABEL_TOWN_INFO,
+      PLAYER_ICON_SIZE: playerIconSizeInput ? playerIconSizeInput.value : CONFIG.PLAYER_ICON_SIZE,
+      PLAYER_TEXT_SIZE: playerTextSizeInput ? playerTextSizeInput.value : CONFIG.PLAYER_TEXT_SIZE,
+      HORSE_ICON_SIZE: horseIconSizeInput ? horseIconSizeInput.value : CONFIG.HORSE_ICON_SIZE,
+      HORSE_TEXT_SIZE: horseTextSizeInput ? horseTextSizeInput.value : CONFIG.HORSE_TEXT_SIZE,
       SHOW_COORDS: coordsInput ? coordsInput.checked : CONFIG.SHOW_COORDS,
       AUTO_TEAM_FROM_NAME: autoTeamInput ? autoTeamInput.checked : CONFIG.AUTO_TEAM_FROM_NAME,
       FRIENDLY_TAGS: friendlyTagsInput ? friendlyTagsInput.value : CONFIG.FRIENDLY_TAGS,
@@ -856,10 +1015,6 @@
     panel.innerHTML = `
       <div class="n-title" id="nodemc-overlay-title">NodeMC Overlay 设置（可拖动）</div>
       <div class="n-page active" id="nodemc-overlay-page-main">
-        <div class="n-row">
-          <label>Admin WS URL</label>
-          <input id="nodemc-overlay-url" type="text" />
-        </div>
         <label class="n-check"><input id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
         <div class="n-row">
           <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
@@ -877,6 +1032,7 @@
         </div>
         <div class="n-btns">
           <button id="nodemc-overlay-open-advanced" type="button" class="n-link-btn">高级设置</button>
+          <button id="nodemc-overlay-open-mark" type="button" class="n-link-btn">玩家标记/颜色</button>
         </div>
       </div>
 
@@ -886,12 +1042,39 @@
           <button id="nodemc-overlay-back-main" type="button" class="n-link-btn">返回基础设置</button>
         </div>
         <div class="n-row">
+          <label>Admin WS URL</label>
+          <input id="nodemc-overlay-url" type="text" />
+        </div>
+        <div class="n-row">
           <label>重连间隔(ms)</label>
           <input id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
         </div>
         <div class="n-row">
           <label>维度过滤</label>
           <input id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
+        </div>
+        <label class="n-check"><input id="nodemc-overlay-show-icon" type="checkbox" />显示玩家图标（图标中心对准玩家坐标）</label>
+        <label class="n-check"><input id="nodemc-overlay-show-text" type="checkbox" />显示玩家文字信息（仅文字时左端对准玩家坐标）</label>
+        <label class="n-check"><input id="nodemc-overlay-show-horse-entities" type="checkbox" />是否显示马实体</label>
+        <label class="n-check"><input id="nodemc-overlay-show-team-info" type="checkbox" />地图文字显示阵营信息</label>
+        <label class="n-check"><input id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>
+        <div class="n-subtitle">大小设置（玩家）</div>
+        <div class="n-row">
+          <label>玩家图标大小(px)</label>
+          <input id="nodemc-overlay-player-icon-size" type="number" min="6" max="40" step="1" />
+        </div>
+        <div class="n-row">
+          <label>玩家文字大小(px)</label>
+          <input id="nodemc-overlay-player-text-size" type="number" min="8" max="32" step="1" />
+        </div>
+        <div class="n-subtitle">大小设置（马）</div>
+        <div class="n-row">
+          <label>马图标大小(px)</label>
+          <input id="nodemc-overlay-horse-icon-size" type="number" min="6" max="40" step="1" />
+        </div>
+        <div class="n-row">
+          <label>马文字大小(px)</label>
+          <input id="nodemc-overlay-horse-text-size" type="number" min="8" max="32" step="1" />
         </div>
         <label class="n-check"><input id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
         <label class="n-check"><input id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
@@ -900,6 +1083,9 @@
         <div class="n-row">
           <label>友军颜色(#RRGGBB)</label>
           <input id="nodemc-overlay-team-friendly-color" type="text" placeholder="#3b82f6" />
+        </div>
+        <div class="n-btns">
+          <button id="nodemc-overlay-save-advanced" type="button">保存高级设置</button>
         </div>
         <div class="n-row">
           <label>中立颜色(#RRGGBB)</label>
@@ -910,6 +1096,13 @@
           <input id="nodemc-overlay-team-enemy-color" type="text" placeholder="#ef4444" />
         </div>
 
+      </div>
+
+      <div class="n-page" id="nodemc-overlay-page-mark">
+        <div class="n-nav-row">
+          <div class="n-subtitle" style="margin:0;">玩家标记/颜色</div>
+          <button id="nodemc-overlay-back-main-from-mark" type="button" class="n-link-btn">返回基础设置</button>
+        </div>
         <div class="n-subtitle">定向玩家标记/颜色</div>
         <div class="n-row">
           <label>在线玩家列表（推荐）</label>
@@ -937,9 +1130,6 @@
           <button id="nodemc-mark-apply" type="button">应用标记</button>
           <button id="nodemc-mark-clear" type="button">清除该玩家</button>
           <button id="nodemc-mark-clear-all" type="button">清空全部标记</button>
-        </div>
-        <div class="n-btns">
-          <button id="nodemc-overlay-save-advanced" type="button">保存高级设置</button>
         </div>
       </div>
 
@@ -1098,14 +1288,18 @@
     updateUiStatus();
 
     const setPanelPage = (nextPage) => {
-      panelPage = nextPage === 'advanced' ? 'advanced' : 'main';
+      panelPage = nextPage === 'advanced' || nextPage === 'mark' ? nextPage : 'main';
       const mainPage = document.getElementById('nodemc-overlay-page-main');
       const advancedPage = document.getElementById('nodemc-overlay-page-advanced');
+      const markPage = document.getElementById('nodemc-overlay-page-mark');
       if (mainPage) {
         mainPage.classList.toggle('active', panelPage === 'main');
       }
       if (advancedPage) {
         advancedPage.classList.toggle('active', panelPage === 'advanced');
+      }
+      if (markPage) {
+        markPage.classList.toggle('active', panelPage === 'mark');
       }
     };
     setPanelPage('main');
@@ -1122,7 +1316,15 @@
       setPanelPage('advanced');
     });
 
+    document.getElementById('nodemc-overlay-open-mark')?.addEventListener('click', () => {
+      setPanelPage('mark');
+    });
+
     document.getElementById('nodemc-overlay-back-main')?.addEventListener('click', () => {
+      setPanelPage('main');
+    });
+
+    document.getElementById('nodemc-overlay-back-main-from-mark')?.addEventListener('click', () => {
       setPanelPage('main');
     });
 
@@ -1358,6 +1560,51 @@
         white-space: nowrap;
       }
       .nodemc-player-label .n-team {
+        font-weight: 700;
+      }
+      .nodemc-player-anchor {
+        position: relative;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+      }
+      .nodemc-player-anchor .n-icon {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.9);
+        transform: translate(-50%, -50%);
+      }
+      .nodemc-player-anchor .n-icon.is-horse {
+        width: 14px;
+        height: 14px;
+        font-size: 10px;
+        line-height: 14px;
+        text-align: center;
+      }
+      .nodemc-player-anchor .n-label {
+        position: absolute;
+        top: 0;
+        transform: translateY(-50%);
+        background: rgba(15, 23, 42, 0.88);
+        color: #dbeafe;
+        border: 1px solid rgba(147, 197, 253, 0.5);
+        border-radius: 6px;
+        padding: 3px 7px;
+        font-size: 12px;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+      .nodemc-player-anchor .n-label[data-align="with-icon"] {
+        left: 10px;
+      }
+      .nodemc-player-anchor .n-label[data-align="left-anchor"] {
+        left: 0;
+      }
+      .nodemc-player-anchor .n-team {
         font-weight: 700;
       }
     `;
