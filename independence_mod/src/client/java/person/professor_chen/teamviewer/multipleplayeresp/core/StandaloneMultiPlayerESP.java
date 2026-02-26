@@ -119,6 +119,12 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		
 		// 注册客户端tick事件
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			// 先消费网络线程投递的任务：保证网络状态与共享缓存在主线程串行更新，
+			// 再执行本 tick 的输入处理、世界采集与上行发送，避免并发读写冲突。
+			if (networkManager != null) {
+				networkManager.pumpMainThreadTasks();
+			}
+
 			// 处理按键输入
 			while (toggleKey.wasPressed()) {
 				toggleESP();

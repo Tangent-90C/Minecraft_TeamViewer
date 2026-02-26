@@ -35,12 +35,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Queue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * PlayerESP 网络层管理器。
+ * <p>
+ * 业务职责：
+ * 1) 维护与服务端的 WebSocket 连接（握手、重连、断线恢复）；
+ * 2) 负责玩家/实体/共享路标的数据收发、增量同步与校验重同步；
+ * 3) 维护本地缓存与上行快照，供渲染与业务模块读取。
+ * <p>
+ * 线程模型：
+ * - OkHttp 的 WebSocket 回调不在 Minecraft 渲染主线程执行；
+ * - 所有会修改共享缓存的逻辑必须切回主线程执行，避免并发修改异常。
+ */
 public class PlayerESPNetworkManager extends WebSocketListener {
 	public interface ConnectionStatusListener {
 		void onConnectionStatusChanged(boolean connected);
@@ -88,6 +102,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private volatile long lastResyncRequestMs = 0L;
 	private volatile long lastPlayersPacketSentMs = 0L;
 	private volatile long lastEntitiesPacketSentMs = 0L;
+	/**
+	 * 主线程任务队列。
+	 * <p>
+	 * WebSocket 回调线程只负责“投递任务”，真正的状态变更在客户端 tick 中统一执行。
+	 * 这样可确保对 lastSent*Snapshot、remote*Cache 等共享集合的读写在同一线程完成。
+	 */
+	private final Queue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
 		this.playerPositions = playerPositions;
@@ -97,6 +118,32 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	public static void setConfig(Config config) {
 		PlayerESPNetworkManager.config = config;
+	}
+
+	/**
+	 * 在客户端主线程中消费网络任务队列。
+	 * <p>
+	 * 调用方：StandaloneMultiPlayerESP 的 END_CLIENT_TICK。
+	 * 职责：把网络回调产生的状态更新串行化，避免跨线程修改共享集合。
+	 */
+	public void pumpMainThreadTasks() {
+		Runnable task;
+		while ((task = mainThreadTasks.poll()) != null) {
+			try {
+				task.run();
+			} catch (Exception e) {
+				LOGGER.error("Error while processing queued network task: {}", e.getMessage());
+			}
+		}
+	}
+
+	/**
+	 * 由网络回调线程调用，将需要主线程执行的任务入队。
+	 */
+	private void enqueueMainThreadTask(Runnable task) {
+		if (task != null) {
+			mainThreadTasks.offer(task);
+		}
 	}
 
 	public void connect() {
@@ -437,26 +484,38 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	@Override
 	public void onOpen(WebSocket webSocket, Response response) {
-		isConnected = true;
-		lastConnectionError = "";
-		resetNegotiationState();
-		clearLocalOutboundSnapshots();
-		LOGGER.info("WebSocket connection opened to PlayerESP server");
-		if (response != null) {
-			String negotiatedExtensions = response.header("Sec-WebSocket-Extensions", "");
-			if (!negotiatedExtensions.isBlank()) {
-				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
+		// 连接建立事件来自 OkHttp 线程，这里只投递任务，避免直接跨线程改共享状态。
+		enqueueMainThreadTask(() -> {
+			isConnected = true;
+			lastConnectionError = "";
+			resetNegotiationState();
+			clearLocalOutboundSnapshots();
+			LOGGER.info("WebSocket connection opened to PlayerESP server");
+			if (response != null) {
+				String negotiatedExtensions = response.header("Sec-WebSocket-Extensions", "");
+				if (!negotiatedExtensions.isBlank()) {
+					LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
+				}
 			}
-		}
-		notifyConnectionStatusChanged(true);
-		sendHandshake();
+			notifyConnectionStatusChanged(true);
+			sendHandshake();
+		});
 	}
 
 	@Override
 	public void onMessage(WebSocket webSocket, String text) {
-		processCompleteMessage(text);
+		// 消息解析与缓存更新在主线程执行，确保与渲染/tick 读写同线程。
+		enqueueMainThreadTask(() -> processCompleteMessage(text));
 	}
 
+	/**
+	 * 处理服务端完整消息。
+	 * <p>
+	 * 业务任务：
+	 * - 根据 type 分发到握手、全量快照、增量补丁、摘要校验、路标同步等分支；
+	 * - 更新本地 revision 与缓存；
+	 * - 触发上层监听器通知 UI/功能模块。
+	 */
 	private void processCompleteMessage(String message) {
 		try {
 			if (message == null || message.trim().isEmpty()) {
@@ -697,33 +756,39 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	@Override
 	public void onClosed(WebSocket webSocket, int statusCode, String reason) {
-		isConnected = false;
-		if (statusCode != 1000) {
-			lastConnectionError = "WebSocket closed (" + statusCode + "): "
-					+ (reason == null || reason.isBlank() ? "unknown reason" : reason);
-		} else {
-			lastConnectionError = "";
-		}
-		resetNegotiationState();
-		clearLocalOutboundSnapshots();
-		notifyConnectionStatusChanged(false);
-		LOGGER.info("Disconnected from PlayerESP server. Status: {}, Reason: {}", statusCode, reason);
-		if (shouldReconnect) {
-			scheduleReconnect();
-		}
+		// 关闭事件也切回主线程，统一处理状态重置与重连调度。
+		enqueueMainThreadTask(() -> {
+			isConnected = false;
+			if (statusCode != 1000) {
+				lastConnectionError = "WebSocket closed (" + statusCode + "): "
+						+ (reason == null || reason.isBlank() ? "unknown reason" : reason);
+			} else {
+				lastConnectionError = "";
+			}
+			resetNegotiationState();
+			clearLocalOutboundSnapshots();
+			notifyConnectionStatusChanged(false);
+			LOGGER.info("Disconnected from PlayerESP server. Status: {}, Reason: {}", statusCode, reason);
+			if (shouldReconnect) {
+				scheduleReconnect();
+			}
+		});
 	}
 
 	@Override
 	public void onFailure(WebSocket webSocket, Throwable error, Response response) {
-		LOGGER.error("PlayerESP network error: {}", error.getMessage());
-		isConnected = false;
-		lastConnectionError = formatThrowableReason(error);
-		resetNegotiationState();
-		clearLocalOutboundSnapshots();
-		notifyConnectionStatusChanged(false);
-		if (shouldReconnect) {
-			scheduleReconnect();
-		}
+		// 失败事件在网络线程触发，这里只入队，保证状态清理和通知时序一致。
+		enqueueMainThreadTask(() -> {
+			LOGGER.error("PlayerESP network error: {}", error.getMessage());
+			isConnected = false;
+			lastConnectionError = formatThrowableReason(error);
+			resetNegotiationState();
+			clearLocalOutboundSnapshots();
+			notifyConnectionStatusChanged(false);
+			if (shouldReconnect) {
+				scheduleReconnect();
+			}
+		});
 	}
 
 	public static String getServerURL() {

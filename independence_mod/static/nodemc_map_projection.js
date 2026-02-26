@@ -23,8 +23,8 @@
     ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
     RECONNECT_INTERVAL_MS: 1000,
     TARGET_DIMENSION: 'minecraft:overworld',
-    SHOW_COORDS: true,
-    DEBUG: true,
+    SHOW_COORDS: false,
+    DEBUG: false,
   };
   const CONFIG = { ...DEFAULT_CONFIG };
 
