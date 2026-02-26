@@ -40,6 +40,13 @@
   let wsConnected = false;
   let reconnectTimer = null;
   let manualWsClose = false;
+  let latestPlayerMarks = {};
+
+  const TEAM_DEFAULT_COLORS = {
+    friendly: '#3b82f6',
+    enemy: '#ef4444',
+    neutral: '#94a3b8',
+  };
 
   function patchLeaflet(leafletObj) {
     if (!leafletObj || !leafletObj.Map || leafletObj.__nodemcProjectionPatched) {
@@ -91,6 +98,36 @@
     if (next.startsWith('https://')) next = 'wss://' + next.slice('https://'.length);
     if (next.endsWith('/snapshot')) next = next.slice(0, -('/snapshot'.length)) + '/adminws';
     return next;
+  }
+
+  function normalizeTeam(teamValue) {
+    const text = String(teamValue || '').trim().toLowerCase();
+    if (text === 'friendly' || text === 'friend' || text === 'ally' || text === 'blue') return 'friendly';
+    if (text === 'enemy' || text === 'hostile' || text === 'red') return 'enemy';
+    return 'neutral';
+  }
+
+  function normalizeColor(colorValue, fallbackColor) {
+    const fallback = typeof fallbackColor === 'string' && fallbackColor ? fallbackColor : TEAM_DEFAULT_COLORS.neutral;
+    const text = String(colorValue || '').trim();
+    if (!text) return fallback;
+
+    const raw = text.startsWith('#') ? text.slice(1) : text;
+    if (!/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return fallback;
+    }
+    return `#${raw.toLowerCase()}`;
+  }
+
+  function getPlayerMark(playerId) {
+    if (!latestPlayerMarks || typeof latestPlayerMarks !== 'object') return null;
+    const entry = latestPlayerMarks[playerId];
+    if (!entry || typeof entry !== 'object') return null;
+
+    const team = normalizeTeam(entry.team);
+    const color = normalizeColor(entry.color, TEAM_DEFAULT_COLORS[team]);
+    const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : null;
+    return { team, color, label };
   }
 
   function loadConfigFromStorage() {
@@ -180,12 +217,96 @@
     return node;
   }
 
+  function getOnlinePlayers() {
+    const snapshotPlayers = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot.players : null;
+    if (!snapshotPlayers || typeof snapshotPlayers !== 'object') return [];
+
+    const players = [];
+    for (const [playerId, rawNode] of Object.entries(snapshotPlayers)) {
+      const data = getPlayerDataNode(rawNode);
+      const name = String((data && data.playerName) || (data && data.playerUUID) || playerId || '').trim();
+      players.push({
+        playerId: String(playerId),
+        playerName: name || String(playerId),
+      });
+    }
+
+    players.sort((a, b) => a.playerName.localeCompare(b.playerName, 'zh-Hans-CN'));
+    return players;
+  }
+
+  function refreshPlayerSelector() {
+    const select = document.getElementById('nodemc-mark-player-select');
+    if (!select) return;
+
+    const players = getOnlinePlayers();
+    const previousValue = select.value;
+    select.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = players.length ? '请选择在线玩家…' : '暂无在线玩家';
+    select.appendChild(placeholder);
+
+    for (const item of players) {
+      const option = document.createElement('option');
+      option.value = item.playerId;
+      option.textContent = `${item.playerName} ｜ ${item.playerId}`;
+      select.appendChild(option);
+    }
+
+    if (previousValue && players.some((item) => item.playerId === previousValue)) {
+      select.value = previousValue;
+    } else {
+      select.value = '';
+    }
+  }
+
+  function resolvePlayerIdFromInput() {
+    const queryInput = document.getElementById('nodemc-mark-player-query');
+    const select = document.getElementById('nodemc-mark-player-select');
+    const selectedPlayerId = select ? String(select.value || '').trim() : '';
+    if (selectedPlayerId) {
+      return { ok: true, playerId: selectedPlayerId };
+    }
+
+    const query = queryInput ? String(queryInput.value || '').trim() : '';
+    if (!query) {
+      return { ok: false, error: '请先从列表选择玩家，或输入玩家名/玩家ID' };
+    }
+
+    const players = getOnlinePlayers();
+    const byId = players.find((item) => item.playerId === query);
+    if (byId) {
+      return { ok: true, playerId: byId.playerId };
+    }
+
+    const lowerQuery = query.toLowerCase();
+    const exactNameMatches = players.filter((item) => item.playerName.toLowerCase() === lowerQuery);
+    if (exactNameMatches.length === 1) {
+      return { ok: true, playerId: exactNameMatches[0].playerId };
+    }
+    if (exactNameMatches.length > 1) {
+      return { ok: false, error: '匹配到多个同名玩家，请使用下拉列表选择' };
+    }
+
+    const fuzzyNameMatches = players.filter((item) => item.playerName.toLowerCase().includes(lowerQuery));
+    if (fuzzyNameMatches.length === 1) {
+      return { ok: true, playerId: fuzzyNameMatches[0].playerId };
+    }
+    if (fuzzyNameMatches.length > 1) {
+      return { ok: false, error: '匹配到多个玩家，请使用下拉列表选择' };
+    }
+
+    return { ok: true, playerId: query };
+  }
+
   function readNumber(value) {
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
   }
 
-  function buildMarkerHtml(name, x, z, health) {
+  function buildMarkerHtml(name, x, z, health, mark) {
     let text = name;
     if (CONFIG.SHOW_COORDS) {
       text += ` (${Math.round(x)}, ${Math.round(z)})`;
@@ -193,13 +314,32 @@
     if (Number.isFinite(health) && health > 0) {
       text += ` ❤${Math.round(health)}`;
     }
-    return `<div class="nodemc-player-label">${text}</div>`;
+
+    const team = mark ? normalizeTeam(mark.team) : 'neutral';
+    const color = mark ? normalizeColor(mark.color, TEAM_DEFAULT_COLORS[team]) : TEAM_DEFAULT_COLORS.neutral;
+    const teamText = mark && mark.label ? mark.label : (team === 'friendly' ? '友军' : team === 'enemy' ? '敌军' : '中立');
+    const safeName = String(text).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+    const safeTeam = String(teamText).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+
+    return `<div class="nodemc-player-label" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;"><span class="n-team" style="color:${color}">[${safeTeam}]</span> ${safeName}</div>`;
   }
 
   function upsertMarker(map, playerId, payload) {
     const existing = markersById.get(playerId);
     const latLng = worldToLatLng(map, payload.x, payload.z);
-    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health);
+    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark);
 
     if (existing) {
       existing.setLatLng(latLng);
@@ -258,9 +398,10 @@
 
       const health = readNumber(data.health);
       const name = String(data.playerName || data.playerUUID || playerId);
+      const mark = getPlayerMark(playerId);
 
       nextIds.add(playerId);
-      upsertMarker(map, playerId, { x, z, health, name });
+      upsertMarker(map, playerId, { x, z, health, name, mark });
     }
 
     removeMissingMarkers(nextIds);
@@ -271,6 +412,7 @@
       source: CONFIG.ADMIN_WS_URL,
       dimension: CONFIG.TARGET_DIMENSION,
       wsConnected,
+      playerMarks: latestPlayerMarks,
     };
   }
 
@@ -324,6 +466,79 @@
     Object.assign(CONFIG, next);
     saveConfigToStorage();
     updateUiStatus();
+  }
+
+  function sendAdminCommand(message) {
+    if (!adminWs || adminWs.readyState !== WebSocket.OPEN) {
+      lastErrorText = 'ws not connected';
+      updateUiStatus();
+      return false;
+    }
+    try {
+      adminWs.send(JSON.stringify(message));
+      return true;
+    } catch (error) {
+      lastErrorText = String(error && error.message ? error.message : error);
+      updateUiStatus();
+      return false;
+    }
+  }
+
+  function applyMarkFormToServer() {
+    const teamInput = document.getElementById('nodemc-mark-team');
+    const colorInput = document.getElementById('nodemc-mark-color');
+    const labelInput = document.getElementById('nodemc-mark-label');
+
+    const resolved = resolvePlayerIdFromInput();
+    if (!resolved.ok) {
+      lastErrorText = resolved.error;
+      updateUiStatus();
+      return;
+    }
+    const playerId = resolved.playerId;
+
+    const team = normalizeTeam(teamInput ? teamInput.value : 'neutral');
+    const color = normalizeColor(colorInput ? colorInput.value : TEAM_DEFAULT_COLORS[team], TEAM_DEFAULT_COLORS[team]);
+    const label = labelInput ? String(labelInput.value || '').trim() : '';
+
+    const ok = sendAdminCommand({
+      type: 'command_player_mark_set',
+      playerId,
+      team,
+      color,
+      label,
+    });
+    if (ok) {
+      lastErrorText = null;
+      updateUiStatus();
+    }
+  }
+
+  function clearMarkOnServer() {
+    const resolved = resolvePlayerIdFromInput();
+    if (!resolved.ok) {
+      lastErrorText = resolved.error;
+      updateUiStatus();
+      return;
+    }
+    const playerId = resolved.playerId;
+
+    const ok = sendAdminCommand({
+      type: 'command_player_mark_clear',
+      playerId,
+    });
+    if (ok) {
+      lastErrorText = null;
+      updateUiStatus();
+    }
+  }
+
+  function clearAllMarksOnServer() {
+    const ok = sendAdminCommand({ type: 'command_player_mark_clear_all' });
+    if (ok) {
+      lastErrorText = null;
+      updateUiStatus();
+    }
   }
 
   function injectSettingsUi() {
@@ -399,6 +614,7 @@
         display: flex;
         gap: 8px;
         margin-top: 10px;
+        flex-wrap: wrap;
       }
       #nodemc-overlay-panel button {
         border: 1px solid rgba(147,197,253,.45);
@@ -412,6 +628,21 @@
         margin-top: 8px;
         color: #93c5fd;
         word-break: break-word;
+      }
+      #nodemc-overlay-panel .n-subtitle {
+        margin-top: 10px;
+        margin-bottom: 6px;
+        font-weight: 700;
+        color: #bfdbfe;
+      }
+      #nodemc-overlay-panel select {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 8px;
+        border: 1px solid rgba(148,163,184,.45);
+        background: rgba(30,41,59,.9);
+        color: #e2e8f0;
+        padding: 7px 8px;
       }
     `;
     document.head.appendChild(style);
@@ -443,6 +674,38 @@
         <button id="nodemc-overlay-save" type="button">保存</button>
         <button id="nodemc-overlay-reset" type="button">重置</button>
         <button id="nodemc-overlay-refresh" type="button">立即重连</button>
+      </div>
+      <div class="n-subtitle">战略指挥：玩家标记</div>
+      <div class="n-row">
+        <label>在线玩家列表（推荐）</label>
+        <select id="nodemc-mark-player-select">
+          <option value="">暂无在线玩家</option>
+        </select>
+      </div>
+      <div class="n-row">
+        <label>玩家名 / 玩家ID（备选）</label>
+        <input id="nodemc-mark-player-query" type="text" placeholder="输入玩家名或玩家ID" />
+      </div>
+      <div class="n-row">
+        <label>阵营</label>
+        <select id="nodemc-mark-team">
+          <option value="friendly">友军</option>
+          <option value="enemy">敌军</option>
+          <option value="neutral" selected>中立</option>
+        </select>
+      </div>
+      <div class="n-row">
+        <label>颜色(#RRGGBB)</label>
+        <input id="nodemc-mark-color" type="text" placeholder="#ef4444" />
+      </div>
+      <div class="n-row">
+        <label>标签(可选)</label>
+        <input id="nodemc-mark-label" type="text" placeholder="例如：突击组/重点观察" />
+      </div>
+      <div class="n-btns">
+        <button id="nodemc-mark-apply" type="button">应用标记</button>
+        <button id="nodemc-mark-clear" type="button">清除该玩家</button>
+        <button id="nodemc-mark-clear-all" type="button">清空全部标记</button>
       </div>
       <div id="nodemc-overlay-status"></div>
     `;
@@ -565,6 +828,42 @@
     document.getElementById('nodemc-overlay-refresh')?.addEventListener('click', () => {
       reconnectAdminWs();
     });
+
+    const teamInput = document.getElementById('nodemc-mark-team');
+    const colorInput = document.getElementById('nodemc-mark-color');
+    const selectInput = document.getElementById('nodemc-mark-player-select');
+    const queryInput = document.getElementById('nodemc-mark-player-query');
+    if (teamInput && colorInput) {
+      teamInput.addEventListener('change', () => {
+        const team = normalizeTeam(teamInput.value);
+        colorInput.value = TEAM_DEFAULT_COLORS[team];
+      });
+      colorInput.value = TEAM_DEFAULT_COLORS[normalizeTeam(teamInput.value)];
+    }
+
+    if (selectInput && queryInput) {
+      selectInput.addEventListener('change', () => {
+        const selectedId = String(selectInput.value || '').trim();
+        if (!selectedId) return;
+        const players = getOnlinePlayers();
+        const selected = players.find((item) => item.playerId === selectedId);
+        queryInput.value = selected ? selected.playerName : selectedId;
+      });
+    }
+
+    refreshPlayerSelector();
+
+    document.getElementById('nodemc-mark-apply')?.addEventListener('click', () => {
+      applyMarkFormToServer();
+    });
+
+    document.getElementById('nodemc-mark-clear')?.addEventListener('click', () => {
+      clearMarkOnServer();
+    });
+
+    document.getElementById('nodemc-mark-clear-all')?.addEventListener('click', () => {
+      clearAllMarksOnServer();
+    });
   }
 
   function mountUiWhenReady() {
@@ -648,7 +947,27 @@
       if (typeof event?.data !== 'string') return;
       try {
         const snapshot = JSON.parse(event.data);
+        if (snapshot && snapshot.type === 'admin_ack') {
+          if (snapshot.ok) {
+            lastErrorText = null;
+          } else if (snapshot.error) {
+            lastErrorText = `命令失败: ${snapshot.error}`;
+          }
+          updateUiStatus();
+          return;
+        }
+
+        if (snapshot && snapshot.type === 'pong') {
+          lastErrorText = null;
+          updateUiStatus();
+          return;
+        }
+
         latestSnapshot = snapshot;
+        latestPlayerMarks = snapshot && typeof snapshot.playerMarks === 'object' && snapshot.playerMarks
+          ? snapshot.playerMarks
+          : {};
+        refreshPlayerSelector();
         lastRevision = snapshot?.revision;
         lastErrorText = null;
         applyLatestSnapshotIfPossible();
@@ -710,6 +1029,9 @@
         font-size: 12px;
         line-height: 1.2;
         white-space: nowrap;
+      }
+      .nodemc-player-label .n-team {
+        font-weight: 700;
       }
     `;
     document.head.appendChild(style);

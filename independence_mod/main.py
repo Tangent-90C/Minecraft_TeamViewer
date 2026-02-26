@@ -29,7 +29,96 @@ async def admin_ws(websocket: WebSocket):
     try:
         await broadcaster.broadcast_snapshot()
         while True:
-            await websocket.receive_text()
+            raw_text = await websocket.receive_text()
+            if not raw_text:
+                continue
+
+            try:
+                message = json.loads(raw_text)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": False,
+                    "error": "invalid_json",
+                }, separators=(",", ":")))
+                continue
+
+            if not isinstance(message, dict):
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": False,
+                    "error": "invalid_payload",
+                }, separators=(",", ":")))
+                continue
+
+            msg_type = str(message.get("type") or "").strip()
+
+            if msg_type in ("ping", "health"):
+                await websocket.send_text(json.dumps({
+                    "type": "pong",
+                    "serverTime": time.time(),
+                    "revision": state.revision,
+                }, separators=(",", ":")))
+                continue
+
+            if msg_type == "command_player_mark_set":
+                target_player_id = message.get("playerId")
+                updated_mark = state.set_player_mark(
+                    target_player_id,
+                    message.get("team"),
+                    message.get("color"),
+                    message.get("label"),
+                )
+
+                if updated_mark is None:
+                    await websocket.send_text(json.dumps({
+                        "type": "admin_ack",
+                        "ok": False,
+                        "error": "invalid_player_id",
+                    }, separators=(",", ":")))
+                    continue
+
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": True,
+                    "action": "command_player_mark_set",
+                    "playerId": str(target_player_id).strip() if isinstance(target_player_id, str) else target_player_id,
+                    "mark": updated_mark,
+                }, separators=(",", ":")))
+                await broadcaster.broadcast_snapshot()
+                continue
+
+            if msg_type == "command_player_mark_clear":
+                target_player_id = message.get("playerId")
+                removed = state.clear_player_mark(target_player_id)
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": bool(removed),
+                    "action": "command_player_mark_clear",
+                    "playerId": target_player_id,
+                    "error": None if removed else "mark_not_found",
+                }, separators=(",", ":")))
+                if removed:
+                    await broadcaster.broadcast_snapshot()
+                continue
+
+            if msg_type == "command_player_mark_clear_all":
+                removed_count = state.clear_all_player_marks()
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": True,
+                    "action": "command_player_mark_clear_all",
+                    "removedCount": removed_count,
+                }, separators=(",", ":")))
+                await broadcaster.broadcast_snapshot()
+                continue
+
+            await websocket.send_text(json.dumps({
+                "type": "admin_ack",
+                "ok": False,
+                "error": "unsupported_command",
+                "command": msg_type,
+            }, separators=(",", ":")))
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -321,6 +410,7 @@ async def snapshot():
         "players": dict(state.players),
         "entities": dict(state.entities),
         "waypoints": dict(state.waypoints),
+        "playerMarks": dict(state.player_marks),
         "connections": list(state.connections.keys()),
         "connections_count": len(state.connections),
         "revision": state.revision,

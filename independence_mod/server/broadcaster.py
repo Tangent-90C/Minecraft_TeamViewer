@@ -58,6 +58,7 @@ class Broadcaster:
             "players": dict(self.state.players),
             "entities": dict(self.state.entities),
             "waypoints": dict(self.state.waypoints),
+            "playerMarks": dict(self.state.player_marks),
             "connections": list(self.state.connections.keys()),
             "connections_count": len(self.state.connections),
             "revision": self.state.revision,

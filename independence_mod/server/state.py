@@ -45,12 +45,98 @@ class ServerState:
         self.connection_caps: Dict[str, dict] = {}
         self.admin_connections: Dict[str, WebSocket] = {}
 
+        # 管理端指挥态：用于玩家敌我/颜色标记。
+        self.player_marks: Dict[str, dict] = {}
+
         # 来源粘性：用于减少多来源切换抖动。
         self.player_selected_sources: Dict[str, str] = {}
         self.entity_selected_sources: Dict[str, str] = {}
         self.waypoint_selected_sources: Dict[str, str] = {}
 
         self.revision = 0
+
+    @staticmethod
+    def normalize_mark_color(color_value: Optional[str]) -> Optional[str]:
+        if not isinstance(color_value, str):
+            return None
+
+        text = color_value.strip()
+        if not text:
+            return None
+
+        if text.startswith("#"):
+            text = text[1:]
+
+        if len(text) != 6:
+            return None
+
+        try:
+            int(text, 16)
+        except ValueError:
+            return None
+
+        return "#" + text.lower()
+
+    @staticmethod
+    def normalize_mark_team(team_value: Optional[str]) -> str:
+        text = str(team_value or "").strip().lower()
+        if text in ("friendly", "friend", "ally", "blue"):
+            return "friendly"
+        if text in ("enemy", "hostile", "red"):
+            return "enemy"
+        if text in ("neutral", "none", "unknown", "gray", "grey"):
+            return "neutral"
+        return "neutral"
+
+    def set_player_mark(
+        self,
+        player_id: str,
+        team: Optional[str],
+        color: Optional[str],
+        label: Optional[str] = None,
+    ) -> Optional[dict]:
+        if not isinstance(player_id, str) or not player_id.strip():
+            return None
+
+        normalized_player_id = player_id.strip()
+        normalized_team = self.normalize_mark_team(team)
+        normalized_color = self.normalize_mark_color(color)
+
+        if normalized_color is None:
+            normalized_color = {
+                "friendly": "#3b82f6",
+                "enemy": "#ef4444",
+                "neutral": "#94a3b8",
+            }[normalized_team]
+
+        normalized_label: Optional[str] = None
+        if isinstance(label, str):
+            stripped = label.strip()
+            if stripped:
+                normalized_label = stripped[:64]
+
+        mark = {
+            "team": normalized_team,
+            "color": normalized_color,
+            "label": normalized_label,
+            "updatedAt": int(time.time() * 1000),
+        }
+        self.player_marks[normalized_player_id] = mark
+        return dict(mark)
+
+    def clear_player_mark(self, player_id: str) -> bool:
+        if not isinstance(player_id, str) or not player_id.strip():
+            return False
+        normalized_player_id = player_id.strip()
+        if normalized_player_id not in self.player_marks:
+            return False
+        del self.player_marks[normalized_player_id]
+        return True
+
+    def clear_all_player_marks(self) -> int:
+        count = len(self.player_marks)
+        self.player_marks.clear()
+        return count
 
     def next_revision(self) -> int:
         """全局版本号递增。用于客户端按 rev 应用状态。"""
