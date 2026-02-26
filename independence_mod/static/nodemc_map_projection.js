@@ -20,9 +20,8 @@
   const STORAGE_KEY = 'nodemc_player_overlay_settings_v1';
 
   const DEFAULT_CONFIG = {
-    SNAPSHOT_URL: 'http://127.0.0.1:8765/snapshot',
-    POLL_INTERVAL_MS: 1000,
-    REQUEST_TIMEOUT_MS: 5000,
+    ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
+    RECONNECT_INTERVAL_MS: 1000,
     TARGET_DIMENSION: 'minecraft:overworld',
     SHOW_COORDS: true,
     DEBUG: true,
@@ -32,13 +31,15 @@
   let leafletRef = null;
   let capturedMap = null;
   let markersById = new Map();
-  let pollingStarted = false;
-  let inFlight = false;
   let lastRevision = null;
   let lastErrorText = null;
   let latestSnapshot = null;
   let uiMounted = false;
   let panelVisible = false;
+  let adminWs = null;
+  let wsConnected = false;
+  let reconnectTimer = null;
+  let manualWsClose = false;
 
   function patchLeaflet(leafletObj) {
     if (!leafletObj || !leafletObj.Map || leafletObj.__nodemcProjectionPatched) {
@@ -58,18 +59,18 @@
     const next = { ...DEFAULT_CONFIG };
     if (!candidate || typeof candidate !== 'object') return next;
 
-    if (typeof candidate.SNAPSHOT_URL === 'string' && candidate.SNAPSHOT_URL.trim()) {
-      next.SNAPSHOT_URL = candidate.SNAPSHOT_URL.trim();
+    const wsUrlCandidate =
+      typeof candidate.ADMIN_WS_URL === 'string' && candidate.ADMIN_WS_URL.trim()
+        ? candidate.ADMIN_WS_URL.trim()
+        : (typeof candidate.SNAPSHOT_URL === 'string' ? candidate.SNAPSHOT_URL.trim() : '');
+
+    if (wsUrlCandidate) {
+      next.ADMIN_WS_URL = normalizeWsUrl(wsUrlCandidate);
     }
 
-    const poll = Number(candidate.POLL_INTERVAL_MS);
-    if (Number.isFinite(poll)) {
-      next.POLL_INTERVAL_MS = Math.max(200, Math.min(60000, Math.round(poll)));
-    }
-
-    const timeout = Number(candidate.REQUEST_TIMEOUT_MS);
-    if (Number.isFinite(timeout)) {
-      next.REQUEST_TIMEOUT_MS = Math.max(500, Math.min(60000, Math.round(timeout)));
+    const reconnect = Number(candidate.RECONNECT_INTERVAL_MS ?? candidate.POLL_INTERVAL_MS);
+    if (Number.isFinite(reconnect)) {
+      next.RECONNECT_INTERVAL_MS = Math.max(200, Math.min(60000, Math.round(reconnect)));
     }
 
     if (typeof candidate.TARGET_DIMENSION === 'string' && candidate.TARGET_DIMENSION.trim()) {
@@ -78,6 +79,17 @@
 
     next.SHOW_COORDS = Boolean(candidate.SHOW_COORDS);
     next.DEBUG = Boolean(candidate.DEBUG);
+    return next;
+  }
+
+  function normalizeWsUrl(rawUrl) {
+    const text = String(rawUrl || '').trim();
+    if (!text) return DEFAULT_CONFIG.ADMIN_WS_URL;
+
+    let next = text;
+    if (next.startsWith('http://')) next = 'ws://' + next.slice('http://'.length);
+    if (next.startsWith('https://')) next = 'wss://' + next.slice('https://'.length);
+    if (next.endsWith('/snapshot')) next = next.slice(0, -('/snapshot'.length)) + '/adminws';
     return next;
   }
 
@@ -256,8 +268,9 @@
     PAGE.__NODEMC_PLAYER_OVERLAY__ = {
       revision: snapshot.revision,
       playersOnMap: markersById.size,
-      source: CONFIG.SNAPSHOT_URL,
+      source: CONFIG.ADMIN_WS_URL,
       dimension: CONFIG.TARGET_DIMENSION,
+      wsConnected,
     };
   }
 
@@ -266,9 +279,10 @@
     if (!status) return;
 
     const lastErr = lastErrorText ? `错误: ${lastErrorText}` : '正常';
+    const wsText = wsConnected ? '已连接' : '未连接';
     const players = markersById.size;
     const revText = lastRevision === null || lastRevision === undefined ? '-' : String(lastRevision);
-    status.textContent = `状态: ${lastErr} | 标记: ${players} | Rev: ${revText}`;
+    status.textContent = `状态: ${lastErr} | WS: ${wsText} | 标记: ${players} | Rev: ${revText}`;
   }
 
   function setPanelVisible(visible) {
@@ -280,15 +294,13 @@
 
   function fillFormFromConfig() {
     const urlInput = document.getElementById('nodemc-overlay-url');
-    const pollInput = document.getElementById('nodemc-overlay-poll');
-    const timeoutInput = document.getElementById('nodemc-overlay-timeout');
+    const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
     const coordsInput = document.getElementById('nodemc-overlay-coords');
     const debugInput = document.getElementById('nodemc-overlay-debug');
 
-    if (urlInput) urlInput.value = CONFIG.SNAPSHOT_URL;
-    if (pollInput) pollInput.value = String(CONFIG.POLL_INTERVAL_MS);
-    if (timeoutInput) timeoutInput.value = String(CONFIG.REQUEST_TIMEOUT_MS);
+    if (urlInput) urlInput.value = CONFIG.ADMIN_WS_URL;
+    if (reconnectInput) reconnectInput.value = String(CONFIG.RECONNECT_INTERVAL_MS);
     if (dimInput) dimInput.value = CONFIG.TARGET_DIMENSION;
     if (coordsInput) coordsInput.checked = CONFIG.SHOW_COORDS;
     if (debugInput) debugInput.checked = CONFIG.DEBUG;
@@ -296,16 +308,14 @@
 
   function applyFormToConfig() {
     const urlInput = document.getElementById('nodemc-overlay-url');
-    const pollInput = document.getElementById('nodemc-overlay-poll');
-    const timeoutInput = document.getElementById('nodemc-overlay-timeout');
+    const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
     const coordsInput = document.getElementById('nodemc-overlay-coords');
     const debugInput = document.getElementById('nodemc-overlay-debug');
 
     const next = sanitizeConfig({
-      SNAPSHOT_URL: urlInput ? urlInput.value : CONFIG.SNAPSHOT_URL,
-      POLL_INTERVAL_MS: pollInput ? pollInput.value : CONFIG.POLL_INTERVAL_MS,
-      REQUEST_TIMEOUT_MS: timeoutInput ? timeoutInput.value : CONFIG.REQUEST_TIMEOUT_MS,
+      ADMIN_WS_URL: urlInput ? urlInput.value : CONFIG.ADMIN_WS_URL,
+      RECONNECT_INTERVAL_MS: reconnectInput ? reconnectInput.value : CONFIG.RECONNECT_INTERVAL_MS,
       TARGET_DIMENSION: dimInput ? dimInput.value : CONFIG.TARGET_DIMENSION,
       SHOW_COORDS: coordsInput ? coordsInput.checked : CONFIG.SHOW_COORDS,
       DEBUG: debugInput ? debugInput.checked : CONFIG.DEBUG,
@@ -327,19 +337,20 @@
         position: fixed;
         right: 18px;
         bottom: 96px;
-        width: 54px;
-        height: 54px;
+        width: 34px;
+        height: 34px;
         border-radius: 999px;
         border: 1px solid rgba(255,255,255,.35);
         background: radial-gradient(circle at 30% 30%, #60a5fa, #1d4ed8 70%);
         color: #fff;
-        font-size: 23px;
-        line-height: 54px;
+        font-size: 15px;
+        line-height: 34px;
         text-align: center;
         cursor: pointer;
         z-index: 2147483000;
         box-shadow: 0 8px 18px rgba(0,0,0,.35);
         user-select: none;
+        touch-action: none;
       }
       #nodemc-overlay-panel {
         position: fixed;
@@ -415,16 +426,12 @@
     panel.innerHTML = `
       <div class="n-title">NodeMC Overlay 设置</div>
       <div class="n-row">
-        <label>Snapshot URL</label>
+        <label>Admin WS URL</label>
         <input id="nodemc-overlay-url" type="text" />
       </div>
       <div class="n-row">
-        <label>轮询间隔(ms)</label>
-        <input id="nodemc-overlay-poll" type="number" min="200" max="60000" step="100" />
-      </div>
-      <div class="n-row">
-        <label>请求超时(ms)</label>
-        <input id="nodemc-overlay-timeout" type="number" min="500" max="60000" step="100" />
+        <label>重连间隔(ms)</label>
+        <input id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
       </div>
       <div class="n-row">
         <label>维度过滤</label>
@@ -435,7 +442,7 @@
       <div class="n-btns">
         <button id="nodemc-overlay-save" type="button">保存</button>
         <button id="nodemc-overlay-reset" type="button">重置</button>
-        <button id="nodemc-overlay-refresh" type="button">立即拉取</button>
+        <button id="nodemc-overlay-refresh" type="button">立即重连</button>
       </div>
       <div id="nodemc-overlay-status"></div>
     `;
@@ -443,30 +450,120 @@
     document.body.appendChild(fab);
     document.body.appendChild(panel);
 
+    const updatePanelPositionNearFab = () => {
+      const fabRect = fab.getBoundingClientRect();
+      const panelWidth = panel.offsetWidth || 320;
+      const panelHeight = panel.offsetHeight || 280;
+      const margin = 10;
+
+      let left = fabRect.left - panelWidth + fabRect.width;
+      let top = fabRect.top - panelHeight - margin;
+
+      if (left < margin) left = margin;
+      if (left + panelWidth > window.innerWidth - margin) left = window.innerWidth - panelWidth - margin;
+      if (top < margin) top = Math.min(window.innerHeight - panelHeight - margin, fabRect.bottom + margin);
+      if (top < margin) top = margin;
+
+      panel.style.left = `${Math.round(left)}px`;
+      panel.style.top = `${Math.round(top)}px`;
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+    };
+
+    const clampFabPosition = (left, top) => {
+      const width = fab.offsetWidth || 34;
+      const height = fab.offsetHeight || 34;
+      const margin = 6;
+      const minLeft = margin;
+      const minTop = margin;
+      const maxLeft = Math.max(minLeft, window.innerWidth - width - margin);
+      const maxTop = Math.max(minTop, window.innerHeight - height - margin);
+      return {
+        left: Math.min(maxLeft, Math.max(minLeft, left)),
+        top: Math.min(maxTop, Math.max(minTop, top)),
+      };
+    };
+
+    const setFabPosition = (left, top) => {
+      const clamped = clampFabPosition(left, top);
+      fab.style.left = `${Math.round(clamped.left)}px`;
+      fab.style.top = `${Math.round(clamped.top)}px`;
+      fab.style.right = 'auto';
+      fab.style.bottom = 'auto';
+      if (panelVisible) {
+        updatePanelPositionNearFab();
+      }
+    };
+
+    const initialRect = fab.getBoundingClientRect();
+    setFabPosition(initialRect.left, initialRect.top);
+
+    let dragState = null;
+    let dragMoved = false;
+    fab.addEventListener('pointerdown', (event) => {
+      dragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originLeft: fab.offsetLeft,
+        originTop: fab.offsetTop,
+      };
+      dragMoved = false;
+      try {
+        fab.setPointerCapture(event.pointerId);
+      } catch (_) {}
+    });
+
+    fab.addEventListener('pointermove', (event) => {
+      if (!dragState || event.pointerId !== dragState.pointerId) return;
+      const dx = event.clientX - dragState.startX;
+      const dy = event.clientY - dragState.startY;
+      if (!dragMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        dragMoved = true;
+      }
+      setFabPosition(dragState.originLeft + dx, dragState.originTop + dy);
+    });
+
+    const endDrag = (event) => {
+      if (!dragState || event.pointerId !== dragState.pointerId) return;
+      try {
+        fab.releasePointerCapture(event.pointerId);
+      } catch (_) {}
+      dragState = null;
+      setTimeout(() => {
+        dragMoved = false;
+      }, 0);
+    };
+
+    fab.addEventListener('pointerup', endDrag);
+    fab.addEventListener('pointercancel', endDrag);
+
     fillFormFromConfig();
     updateUiStatus();
 
-    fab.addEventListener('click', () => setPanelVisible(!panelVisible));
-
-    document.getElementById('nodemc-overlay-save')?.addEventListener('click', async () => {
-      applyFormToConfig();
-      await pollOnce();
-      applyLatestSnapshotIfPossible();
+    fab.addEventListener('click', () => {
+      if (dragMoved) return;
+      setPanelVisible(!panelVisible);
+      if (panelVisible) {
+        updatePanelPositionNearFab();
+      }
     });
 
-    document.getElementById('nodemc-overlay-reset')?.addEventListener('click', async () => {
+    document.getElementById('nodemc-overlay-save')?.addEventListener('click', () => {
+      applyFormToConfig();
+      reconnectAdminWs();
+    });
+
+    document.getElementById('nodemc-overlay-reset')?.addEventListener('click', () => {
       Object.assign(CONFIG, DEFAULT_CONFIG);
       saveConfigToStorage();
       fillFormFromConfig();
-      await pollOnce();
-      applyLatestSnapshotIfPossible();
+      reconnectAdminWs();
       updateUiStatus();
     });
 
-    document.getElementById('nodemc-overlay-refresh')?.addEventListener('click', async () => {
-      await pollOnce();
-      applyLatestSnapshotIfPossible();
-      updateUiStatus();
+    document.getElementById('nodemc-overlay-refresh')?.addEventListener('click', () => {
+      reconnectAdminWs();
     });
   }
 
@@ -479,45 +576,6 @@
     injectSettingsUi();
   }
 
-  function requestJson(url) {
-    const gmRequest =
-      (typeof GM_xmlhttpRequest === 'function' && GM_xmlhttpRequest) ||
-      (typeof GM === 'object' && GM && typeof GM.xmlHttpRequest === 'function' && GM.xmlHttpRequest);
-
-    if (typeof gmRequest === 'function') {
-      return new Promise((resolve, reject) => {
-        gmRequest({
-          method: 'GET',
-          url,
-          headers: { Accept: 'application/json' },
-          timeout: CONFIG.REQUEST_TIMEOUT_MS,
-          onload: (resp) => {
-            if (resp.status < 200 || resp.status >= 300) {
-              reject(new Error(`HTTP ${resp.status}`));
-              return;
-            }
-            try {
-              resolve(JSON.parse(resp.responseText));
-            } catch (error) {
-              reject(error);
-            }
-          },
-          onerror: () => reject(new Error('request error')),
-          ontimeout: () => reject(new Error('request timeout')),
-        });
-      });
-    }
-
-    if (CONFIG.DEBUG) {
-      console.warn('[NodeMC Player Overlay] GM_xmlhttpRequest unavailable, fallback to fetch (may be blocked by mixed-content/CORS).');
-    }
-
-    return fetch(url, { cache: 'no-store' }).then((resp) => {
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return resp.json();
-    });
-  }
-
   function applyLatestSnapshotIfPossible() {
     if (!latestSnapshot) return;
     const map = capturedMap || findMapByDom();
@@ -525,51 +583,105 @@
     applySnapshotPlayers(map, latestSnapshot);
   }
 
-  async function pollOnce() {
-    if (inFlight) return;
+  function scheduleReconnect() {
+    if (reconnectTimer !== null) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectAdminWs();
+    }, CONFIG.RECONNECT_INTERVAL_MS);
+  }
 
-    inFlight = true;
+  function cleanupWs() {
+    if (adminWs) {
+      adminWs.onopen = null;
+      adminWs.onmessage = null;
+      adminWs.onerror = null;
+      adminWs.onclose = null;
+      try {
+        adminWs.close();
+      } catch (_) {}
+      adminWs = null;
+    }
+    wsConnected = false;
+  }
+
+  function reconnectAdminWs() {
+    manualWsClose = true;
+    cleanupWs();
+    manualWsClose = false;
+    lastErrorText = null;
+    connectAdminWs();
+    updateUiStatus();
+  }
+
+  function connectAdminWs() {
+    if (adminWs && (adminWs.readyState === WebSocket.OPEN || adminWs.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    let ws;
     try {
-      const snapshot = await requestJson(CONFIG.SNAPSHOT_URL);
-      latestSnapshot = snapshot;
-
-      const rev = snapshot?.revision;
-      if (rev !== null && rev !== undefined && rev === lastRevision) {
-        lastErrorText = null;
-        applyLatestSnapshotIfPossible();
-        return;
-      }
-      lastRevision = rev;
-      applyLatestSnapshotIfPossible();
-      lastErrorText = null;
-
-      if (CONFIG.DEBUG) {
-        const count = snapshot?.players && typeof snapshot.players === 'object' ? Object.keys(snapshot.players).length : 0;
-        console.debug('[NodeMC Player Overlay] snapshot ok', { rev, players: count, url: CONFIG.SNAPSHOT_URL });
-      }
-      updateUiStatus();
+      ws = new WebSocket(CONFIG.ADMIN_WS_URL);
     } catch (error) {
       const text = String(error && error.message ? error.message : error);
       if (text !== lastErrorText) {
         lastErrorText = text;
-        console.warn('[NodeMC Player Overlay] snapshot pull failed:', text, CONFIG.SNAPSHOT_URL);
+        console.warn('[NodeMC Player Overlay] ws connect failed:', text, CONFIG.ADMIN_WS_URL);
       }
       updateUiStatus();
-    } finally {
-      inFlight = false;
+      scheduleReconnect();
+      return;
     }
-  }
 
-  function startPolling() {
-    if (pollingStarted) return;
-    pollingStarted = true;
+    adminWs = ws;
+    ws.onopen = () => {
+      wsConnected = true;
+      lastErrorText = null;
+      updateUiStatus();
 
-    const loop = async () => {
-      await pollOnce();
-      setTimeout(loop, CONFIG.POLL_INTERVAL_MS);
+      if (CONFIG.DEBUG) {
+        console.debug('[NodeMC Player Overlay] ws connected', { url: CONFIG.ADMIN_WS_URL });
+      }
     };
 
-    loop();
+    ws.onmessage = (event) => {
+      if (typeof event?.data !== 'string') return;
+      try {
+        const snapshot = JSON.parse(event.data);
+        latestSnapshot = snapshot;
+        lastRevision = snapshot?.revision;
+        lastErrorText = null;
+        applyLatestSnapshotIfPossible();
+        updateUiStatus();
+      } catch (error) {
+        const text = String(error && error.message ? error.message : error);
+        if (text !== lastErrorText) {
+          lastErrorText = text;
+          console.warn('[NodeMC Player Overlay] ws message parse failed:', text);
+        }
+        updateUiStatus();
+      }
+    };
+
+    ws.onerror = () => {
+      wsConnected = false;
+      if (!lastErrorText) {
+        lastErrorText = 'ws error';
+      }
+      updateUiStatus();
+    };
+
+    ws.onclose = () => {
+      wsConnected = false;
+      adminWs = null;
+      if (!manualWsClose) {
+        if (CONFIG.DEBUG) {
+          console.warn('[NodeMC Player Overlay] ws disconnected, reconnect scheduled', CONFIG.ADMIN_WS_URL);
+        }
+        scheduleReconnect();
+      }
+      updateUiStatus();
+    };
   }
 
   function ensureOverlayStyles() {
@@ -610,14 +722,15 @@
 
   function boot() {
     loadConfigFromStorage();
+    CONFIG.ADMIN_WS_URL = normalizeWsUrl(CONFIG.ADMIN_WS_URL);
     installLeafletHook();
-    startPolling();
+    connectAdminWs();
     mountUiWhenReady();
 
     if (CONFIG.DEBUG) {
       console.log('[NodeMC Player Overlay] boot', {
-        url: CONFIG.SNAPSHOT_URL,
-        interval: CONFIG.POLL_INTERVAL_MS,
+        wsUrl: CONFIG.ADMIN_WS_URL,
+        reconnectMs: CONFIG.RECONNECT_INTERVAL_MS,
       });
     }
 
