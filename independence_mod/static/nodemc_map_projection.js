@@ -24,6 +24,9 @@
     RECONNECT_INTERVAL_MS: 1000,
     TARGET_DIMENSION: 'minecraft:overworld',
     SHOW_COORDS: false,
+    AUTO_TEAM_FROM_NAME: true,
+    FRIENDLY_TAGS: '[xxx]',
+    ENEMY_TAGS: '[yyy]',
     DEBUG: false,
   };
   const CONFIG = { ...DEFAULT_CONFIG };
@@ -41,6 +44,7 @@
   let reconnectTimer = null;
   let manualWsClose = false;
   let latestPlayerMarks = {};
+  let sameServerFilterEnabled = false;
 
   const TEAM_DEFAULT_COLORS = {
     friendly: '#3b82f6',
@@ -85,8 +89,25 @@
     }
 
     next.SHOW_COORDS = Boolean(candidate.SHOW_COORDS);
+    next.AUTO_TEAM_FROM_NAME = candidate.AUTO_TEAM_FROM_NAME === undefined
+      ? DEFAULT_CONFIG.AUTO_TEAM_FROM_NAME
+      : Boolean(candidate.AUTO_TEAM_FROM_NAME);
+    if (typeof candidate.FRIENDLY_TAGS === 'string') {
+      next.FRIENDLY_TAGS = candidate.FRIENDLY_TAGS.trim();
+    }
+    if (typeof candidate.ENEMY_TAGS === 'string') {
+      next.ENEMY_TAGS = candidate.ENEMY_TAGS.trim();
+    }
     next.DEBUG = Boolean(candidate.DEBUG);
     return next;
+  }
+
+  function parseTagList(raw) {
+    return String(raw || '')
+      .split(/[，,;；\s]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
   }
 
   function normalizeWsUrl(rawUrl) {
@@ -128,6 +149,54 @@
     const color = normalizeColor(entry.color, TEAM_DEFAULT_COLORS[team]);
     const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : null;
     return { team, color, label };
+  }
+
+  function autoTeamFromName(nameText) {
+    if (!CONFIG.AUTO_TEAM_FROM_NAME) return null;
+    const name = String(nameText || '');
+    if (!name) return null;
+
+    const friendlyTags = parseTagList(CONFIG.FRIENDLY_TAGS);
+    const enemyTags = parseTagList(CONFIG.ENEMY_TAGS);
+    if (friendlyTags.some((tag) => name.includes(tag))) {
+      return {
+        team: 'friendly',
+        color: TEAM_DEFAULT_COLORS.friendly,
+        label: '自动识别:友军',
+      };
+    }
+    if (enemyTags.some((tag) => name.includes(tag))) {
+      return {
+        team: 'enemy',
+        color: TEAM_DEFAULT_COLORS.enemy,
+        label: '自动识别:敌军',
+      };
+    }
+    return null;
+  }
+
+  function getTabPlayerName(playerId) {
+    const tabState = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot.tabState : null;
+    const reports = tabState && typeof tabState.reports === 'object' ? tabState.reports : null;
+    if (!reports) return null;
+
+    for (const report of Object.values(reports)) {
+      if (!report || typeof report !== 'object') continue;
+      const players = Array.isArray(report.players) ? report.players : [];
+      for (const node of players) {
+        if (!node || typeof node !== 'object') continue;
+        const nodeId = String(node.uuid || node.id || '').trim();
+        if (!nodeId || nodeId !== String(playerId)) continue;
+        const prefixedName = String(node.prefixedName || '').trim();
+        const displayName = String(node.displayName || '').trim();
+        const name = String(node.name || '').trim();
+        if (prefixedName) return prefixedName;
+        if (displayName) return displayName;
+        if (name) return name;
+      }
+    }
+
+    return null;
   }
 
   function loadConfigFromStorage() {
@@ -369,9 +438,11 @@
       const health = readNumber(data.health);
       const name = String(data.playerName || data.playerUUID || playerId);
       const mark = getPlayerMark(playerId);
+      const autoName = getTabPlayerName(playerId) || name;
+      const autoMark = mark ? null : autoTeamFromName(autoName);
 
       nextIds.add(playerId);
-      upsertMarker(map, playerId, { x, z, health, name, mark });
+      upsertMarker(map, playerId, { x, z, health, name, mark: mark || autoMark });
     }
 
     removeMissingMarkers(nextIds);
@@ -394,7 +465,8 @@
     const wsText = wsConnected ? '已连接' : '未连接';
     const players = markersById.size;
     const revText = lastRevision === null || lastRevision === undefined ? '-' : String(lastRevision);
-    status.textContent = `状态: ${lastErr} | WS: ${wsText} | 标记: ${players} | Rev: ${revText}`;
+    const serverFilterText = sameServerFilterEnabled ? '同服过滤:开' : '同服过滤:关';
+    status.textContent = `状态: ${lastErr} | WS: ${wsText} | 标记: ${players} | ${serverFilterText} | Rev: ${revText}`;
   }
 
   function setPanelVisible(visible) {
@@ -409,12 +481,18 @@
     const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
     const coordsInput = document.getElementById('nodemc-overlay-coords');
+    const autoTeamInput = document.getElementById('nodemc-overlay-auto-team');
+    const friendlyTagsInput = document.getElementById('nodemc-overlay-friendly-tags');
+    const enemyTagsInput = document.getElementById('nodemc-overlay-enemy-tags');
     const debugInput = document.getElementById('nodemc-overlay-debug');
 
     if (urlInput) urlInput.value = CONFIG.ADMIN_WS_URL;
     if (reconnectInput) reconnectInput.value = String(CONFIG.RECONNECT_INTERVAL_MS);
     if (dimInput) dimInput.value = CONFIG.TARGET_DIMENSION;
     if (coordsInput) coordsInput.checked = CONFIG.SHOW_COORDS;
+    if (autoTeamInput) autoTeamInput.checked = CONFIG.AUTO_TEAM_FROM_NAME;
+    if (friendlyTagsInput) friendlyTagsInput.value = CONFIG.FRIENDLY_TAGS;
+    if (enemyTagsInput) enemyTagsInput.value = CONFIG.ENEMY_TAGS;
     if (debugInput) debugInput.checked = CONFIG.DEBUG;
   }
 
@@ -423,6 +501,9 @@
     const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
     const coordsInput = document.getElementById('nodemc-overlay-coords');
+    const autoTeamInput = document.getElementById('nodemc-overlay-auto-team');
+    const friendlyTagsInput = document.getElementById('nodemc-overlay-friendly-tags');
+    const enemyTagsInput = document.getElementById('nodemc-overlay-enemy-tags');
     const debugInput = document.getElementById('nodemc-overlay-debug');
 
     const next = sanitizeConfig({
@@ -430,6 +511,9 @@
       RECONNECT_INTERVAL_MS: reconnectInput ? reconnectInput.value : CONFIG.RECONNECT_INTERVAL_MS,
       TARGET_DIMENSION: dimInput ? dimInput.value : CONFIG.TARGET_DIMENSION,
       SHOW_COORDS: coordsInput ? coordsInput.checked : CONFIG.SHOW_COORDS,
+      AUTO_TEAM_FROM_NAME: autoTeamInput ? autoTeamInput.checked : CONFIG.AUTO_TEAM_FROM_NAME,
+      FRIENDLY_TAGS: friendlyTagsInput ? friendlyTagsInput.value : CONFIG.FRIENDLY_TAGS,
+      ENEMY_TAGS: enemyTagsInput ? enemyTagsInput.value : CONFIG.ENEMY_TAGS,
       DEBUG: debugInput ? debugInput.checked : CONFIG.DEBUG,
     });
 
@@ -505,6 +589,17 @@
 
   function clearAllMarksOnServer() {
     const ok = sendAdminCommand({ type: 'command_player_mark_clear_all' });
+    if (ok) {
+      lastErrorText = null;
+      updateUiStatus();
+    }
+  }
+
+  function setSameServerFilter(enabled) {
+    const ok = sendAdminCommand({
+      type: 'command_same_server_filter_set',
+      enabled: Boolean(enabled),
+    });
     if (ok) {
       lastErrorText = null;
       updateUiStatus();
@@ -641,6 +736,16 @@
         <input id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
       </div>
       <label class="n-check"><input id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
+      <label class="n-check"><input id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
+      <div class="n-row">
+        <label>友军标签（逗号分隔）</label>
+        <input id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
+      </div>
+      <div class="n-row">
+        <label>敌军标签（逗号分隔）</label>
+        <input id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
+      </div>
+      <label class="n-check"><input id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
       <label class="n-check"><input id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
       <div class="n-btns">
         <button id="nodemc-overlay-save" type="button">保存</button>
@@ -872,6 +977,13 @@
       });
     }
 
+    const serverFilterInput = document.getElementById('nodemc-overlay-server-filter');
+    if (serverFilterInput) {
+      serverFilterInput.addEventListener('change', () => {
+        setSameServerFilter(serverFilterInput.checked);
+      });
+    }
+
     refreshPlayerSelector();
 
     document.getElementById('nodemc-mark-apply')?.addEventListener('click', () => {
@@ -985,6 +1097,11 @@
         }
 
         latestSnapshot = snapshot;
+        sameServerFilterEnabled = Boolean(snapshot?.tabState?.enabled);
+        const serverFilterInput = document.getElementById('nodemc-overlay-server-filter');
+        if (serverFilterInput) {
+          serverFilterInput.checked = sameServerFilterEnabled;
+        }
         latestPlayerMarks = snapshot && typeof snapshot.playerMarks === 'object' && snapshot.playerMarks
           ? snapshot.playerMarks
           : {};

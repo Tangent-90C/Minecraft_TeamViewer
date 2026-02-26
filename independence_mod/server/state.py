@@ -44,6 +44,7 @@ class ServerState:
     # 协议配置
     PROTOCOL_V2 = 2
     DIGEST_INTERVAL_SEC = 10
+    TAB_REPORT_TIMEOUT_SEC = 45
 
     def __init__(self) -> None:
         # 已仲裁后的最终视图，供广播层直接下发。
@@ -63,6 +64,9 @@ class ServerState:
 
         # 管理端指挥态：用于玩家敌我/颜色标记。
         self.player_marks: Dict[str, dict] = {}
+
+        # Tab 玩家列表来源报告：submit_player_id -> report。
+        self.tab_player_reports: Dict[str, dict] = {}
 
         # 来源粘性：用于减少多来源切换抖动。
         self.player_selected_sources: Dict[str, str] = {}
@@ -85,10 +89,21 @@ class ServerState:
         self.REFRESH_REQUEST_LEAD_SEC = float(
             self._get_env_int("TEAMVIEWER_REFRESH_REQ_LEAD_SEC", int(self.REFRESH_REQUEST_LEAD_SEC), 1, 30)
         )
+        self.TAB_REPORT_TIMEOUT_SEC = self._get_env_int(
+            "TEAMVIEWER_TAB_REPORT_TIMEOUT_SEC",
+            self.TAB_REPORT_TIMEOUT_SEC,
+            5,
+            600,
+        )
+        self.same_server_filter_enabled = self._get_env_bool("TEAMVIEWER_ENABLE_SAME_SERVER_FILTER", False)
 
         logger.info(
             "ServerState timeout config "
             f"player={self.PLAYER_TIMEOUT}s entity={self.ENTITY_TIMEOUT}s waypoint={self.WAYPOINT_TIMEOUT}s"
+        )
+        logger.info(
+            "ServerState same-server filter config "
+            f"enabled={self.same_server_filter_enabled} tabReportTimeout={self.TAB_REPORT_TIMEOUT_SEC}s"
         )
 
     @staticmethod
@@ -105,6 +120,233 @@ class ServerState:
         if value > max_value:
             return max_value
         return value
+
+    @staticmethod
+    def _get_env_bool(key: str, default: bool) -> bool:
+        raw = os.getenv(key)
+        if raw is None:
+            return default
+        text = str(raw).strip().lower()
+        if text in ("1", "true", "yes", "on"):
+            return True
+        if text in ("0", "false", "no", "off"):
+            return False
+        return default
+
+    @staticmethod
+    def _normalize_tab_uuid(value) -> Optional[str]:
+        text = str(value or "").strip().lower()
+        if len(text) != 36:
+            return None
+        return text
+
+    @staticmethod
+    def _normalize_tab_name(value) -> Optional[str]:
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        return text[:64]
+
+    def upsert_tab_player_report(self, submit_player_id: str, tab_players: list, current_time: float) -> dict:
+        normalized_entries: list[dict] = []
+        identity_keys: set[str] = set()
+        if isinstance(submit_player_id, str) and submit_player_id.strip():
+            identity_keys.add(f"uuid:{submit_player_id.strip().lower()}")
+
+        if isinstance(tab_players, list):
+            for item in tab_players:
+                if not isinstance(item, dict):
+                    continue
+
+                entry_uuid = self._normalize_tab_uuid(item.get("uuid") or item.get("playerUUID") or item.get("id"))
+                entry_name = self._normalize_tab_name(item.get("name") or item.get("playerName"))
+                entry_display_name = self._normalize_tab_name(item.get("displayName"))
+                entry_prefixed_name = self._normalize_tab_name(item.get("prefixedName") or item.get("teamDisplayName"))
+
+                if entry_uuid is None and entry_name is None and entry_display_name is None and entry_prefixed_name is None:
+                    continue
+
+                entry = {
+                    "uuid": entry_uuid,
+                    "name": entry_name,
+                    "displayName": entry_display_name,
+                    "prefixedName": entry_prefixed_name,
+                }
+                normalized_entries.append(entry)
+
+                if entry_uuid:
+                    identity_keys.add(f"uuid:{entry_uuid}")
+                if entry_name:
+                    identity_keys.add(f"name:{entry_name.lower()}")
+
+        report = {
+            "timestamp": float(current_time),
+            "submitPlayerId": submit_player_id,
+            "players": normalized_entries,
+            "identityKeys": sorted(identity_keys),
+        }
+        self.tab_player_reports[submit_player_id] = report
+        return report
+
+    def cleanup_tab_reports(self, current_time: Optional[float] = None) -> None:
+        now = time.time() if current_time is None else float(current_time)
+        for source_id in list(self.tab_player_reports.keys()):
+            report = self.tab_player_reports.get(source_id)
+            if not isinstance(report, dict):
+                del self.tab_player_reports[source_id]
+                continue
+
+            if source_id not in self.connections:
+                del self.tab_player_reports[source_id]
+                continue
+
+            ts = report.get("timestamp")
+            if not isinstance(ts, (int, float)):
+                del self.tab_player_reports[source_id]
+                continue
+
+            if now - float(ts) > self.TAB_REPORT_TIMEOUT_SEC:
+                del self.tab_player_reports[source_id]
+
+    def _build_same_server_groups(self, current_time: Optional[float] = None) -> dict:
+        self.cleanup_tab_reports(current_time)
+
+        active_sources = [
+            source_id for source_id in self.connections.keys()
+            if isinstance(source_id, str) and source_id
+        ]
+        if not active_sources:
+            return {
+                "sourceToGroup": {},
+                "groups": [],
+            }
+
+        parent: Dict[str, str] = {source_id: source_id for source_id in active_sources}
+
+        def find(source_id: str) -> str:
+            root = parent.get(source_id, source_id)
+            while parent.get(root, root) != root:
+                root = parent[root]
+            current = source_id
+            while parent.get(current, current) != current:
+                next_node = parent[current]
+                parent[current] = root
+                current = next_node
+            return root
+
+        def union(a: str, b: str) -> None:
+            ra = find(a)
+            rb = find(b)
+            if ra == rb:
+                return
+            if ra <= rb:
+                parent[rb] = ra
+            else:
+                parent[ra] = rb
+
+        identity_sets: Dict[str, set[str]] = {}
+        for source_id in active_sources:
+            report = self.tab_player_reports.get(source_id)
+            if not isinstance(report, dict):
+                continue
+            keys = report.get("identityKeys")
+            if not isinstance(keys, list):
+                continue
+            normalized = {
+                str(item) for item in keys
+                if isinstance(item, str) and item
+            }
+            if normalized:
+                identity_sets[source_id] = normalized
+
+        for i in range(len(active_sources)):
+            source_a = active_sources[i]
+            keys_a = identity_sets.get(source_a)
+            if not keys_a:
+                continue
+            for j in range(i + 1, len(active_sources)):
+                source_b = active_sources[j]
+                keys_b = identity_sets.get(source_b)
+                if not keys_b:
+                    continue
+                if keys_a.intersection(keys_b):
+                    union(source_a, source_b)
+
+        grouped: Dict[str, list[str]] = {}
+        for source_id in active_sources:
+            root = find(source_id)
+            grouped.setdefault(root, []).append(source_id)
+
+        groups = []
+        source_to_group: Dict[str, str] = {}
+        for index, members in enumerate(sorted(grouped.values(), key=lambda item: item[0])):
+            sorted_members = sorted(members)
+            group_id = f"g{index + 1}"
+            groups.append({
+                "groupId": group_id,
+                "members": sorted_members,
+            })
+            for source_id in sorted_members:
+                source_to_group[source_id] = group_id
+
+        return {
+            "sourceToGroup": source_to_group,
+            "groups": groups,
+        }
+
+    def get_allowed_sources_for_player(self, player_id: str) -> set[str]:
+        all_sources = {
+            source_id for source_id in self.connections.keys()
+            if isinstance(source_id, str) and source_id
+        }
+        if not self.same_server_filter_enabled or player_id not in all_sources:
+            return all_sources
+
+        grouping = self._build_same_server_groups()
+        source_to_group = grouping.get("sourceToGroup", {})
+        group_id = source_to_group.get(player_id)
+        if not isinstance(group_id, str) or not group_id:
+            return all_sources
+
+        allowed = {
+            source_id for source_id, source_group in source_to_group.items()
+            if source_group == group_id
+        }
+        return allowed if allowed else all_sources
+
+    @staticmethod
+    def filter_state_map_by_sources(state_map: Dict[str, dict], allowed_sources: set[str]) -> Dict[str, dict]:
+        if not allowed_sources:
+            return {}
+
+        filtered: Dict[str, dict] = {}
+        for object_id, node in state_map.items():
+            if not isinstance(node, dict):
+                continue
+            source_id = node.get("submitPlayerId")
+            if isinstance(source_id, str) and source_id and source_id not in allowed_sources:
+                continue
+            filtered[object_id] = node
+        return filtered
+
+    def build_admin_tab_snapshot(self) -> dict:
+        self.cleanup_tab_reports()
+        grouping = self._build_same_server_groups()
+        reports = {}
+        for source_id, report in self.tab_player_reports.items():
+            if not isinstance(report, dict):
+                continue
+            reports[source_id] = {
+                "timestamp": report.get("timestamp"),
+                "players": report.get("players", []),
+            }
+        return {
+            "enabled": self.same_server_filter_enabled,
+            "reports": reports,
+            "groups": grouping.get("groups", []),
+        }
 
     @staticmethod
     def normalize_mark_color(color_value: Optional[str]) -> Optional[str]:
@@ -512,6 +754,7 @@ class ServerState:
     def cleanup_timeouts(self) -> None:
         """按来源维度清理超时上报，避免脏数据长期占用最终视图。"""
         current_time = time.time()
+        self.cleanup_tab_reports(current_time)
         removed_summary = {
             "players": 0,
             "entities": 0,
@@ -677,6 +920,8 @@ class ServerState:
             del self.connections[player_id]
         if player_id in self.connection_caps:
             del self.connection_caps[player_id]
+        if player_id in self.tab_player_reports:
+            del self.tab_player_reports[player_id]
 
         def remove_source_reports(report_map: Dict[str, Dict[str, dict]]) -> None:
             for object_id in list(report_map.keys()):

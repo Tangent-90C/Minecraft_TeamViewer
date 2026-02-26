@@ -104,6 +104,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private volatile long lastResyncRequestMs = 0L;
 	private volatile long lastPlayersPacketSentMs = 0L;
 	private volatile long lastEntitiesPacketSentMs = 0L;
+	private volatile long lastTabPlayersPacketSentMs = 0L;
+	private volatile String lastTabPlayersSignature = "";
 	private final Set<String> pendingPlayerRefreshIds = new HashSet<>();
 	private final Set<String> pendingEntityRefreshIds = new HashSet<>();
 	/**
@@ -369,6 +371,58 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			webSocket.send(gson.toJson(obj));
 		} catch (Exception e) {
 			LOGGER.error("Failed to send waypoints_update to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
+	public void sendTabPlayersUpdate(UUID submitPlayerId, List<Map<String, Object>> tabPlayers) {
+		if (webSocket == null || !isConnected || submitPlayerId == null || tabPlayers == null) {
+			return;
+		}
+
+		try {
+			List<Map<String, Object>> normalized = new ArrayList<>();
+			for (Map<String, Object> raw : tabPlayers) {
+				if (raw == null || raw.isEmpty()) {
+					continue;
+				}
+				Map<String, Object> copy = new HashMap<>();
+				Object idValue = raw.get("playerUUID");
+				Object nameValue = raw.get("name");
+				Object displayName = raw.get("prefixColored");
+
+				if (idValue != null && !String.valueOf(idValue).isBlank()) {
+					copy.put("id", String.valueOf(idValue));
+				}
+				if (nameValue != null && !String.valueOf(nameValue).isBlank()) {
+					copy.put("name", String.valueOf(nameValue));
+				}
+				if (displayName != null && !String.valueOf(displayName).isBlank()) {
+					copy.put("displayName", String.valueOf(displayName));
+				}
+
+				if (!copy.isEmpty()) {
+					normalized.add(copy);
+				}
+			}
+
+			String signature = gson.toJson(normalized);
+			long now = System.currentTimeMillis();
+			if (Objects.equals(signature, lastTabPlayersSignature)
+					&& now - lastTabPlayersPacketSentMs < FORCE_FULL_REFRESH_MS) {
+				return;
+			}
+
+			JsonObject obj = new JsonObject();
+			obj.addProperty("type", "tab_players_update");
+			obj.addProperty("submitPlayerId", submitPlayerId.toString());
+			obj.addProperty("ackRev", lastServerRevision);
+			obj.add("tabPlayers", gson.toJsonTree(normalized));
+			webSocket.send(gson.toJson(obj));
+
+			lastTabPlayersSignature = signature;
+			lastTabPlayersPacketSentMs = now;
+		} catch (Exception e) {
+			LOGGER.error("Failed to send tab_players_update: {}", e.getMessage());
 		}
 	}
 
@@ -1531,11 +1585,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
+		lastTabPlayersPacketSentMs = 0L;
 	}
 
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
+		lastTabPlayersSignature = "";
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();
 		remotePlayerDataCache.clear();

@@ -37,3 +37,5 @@ wurst-plugin/run/
 
 .idea
 independence_mod/offline-web
+
+**/__pycache__

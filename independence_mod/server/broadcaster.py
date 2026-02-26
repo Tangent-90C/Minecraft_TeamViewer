@@ -21,21 +21,33 @@ class Broadcaster:
     def __init__(self, state: ServerState) -> None:
         self.state = state
 
+    def _build_visible_state_for_player(self, player_id: str) -> dict:
+        allowed_sources = self.state.get_allowed_sources_for_player(player_id)
+        visible_players = self.state.filter_state_map_by_sources(self.state.players, allowed_sources)
+        visible_entities = self.state.filter_state_map_by_sources(self.state.entities, allowed_sources)
+        visible_waypoints = self.state.filter_state_map_by_sources(self.state.waypoints, allowed_sources)
+        return {
+            "players": visible_players,
+            "entities": visible_entities,
+            "waypoints": visible_waypoints,
+        }
+
     async def send_snapshot_full_to_player(self, player_id: str) -> None:
         """向指定玩家推送完整快照（重同步场景）。"""
         ws = self.state.connections.get(player_id)
         if ws is None:
             return
+        visible = self._build_visible_state_for_player(player_id)
         message = {
             "type": "snapshot_full",
             "rev": self.state.revision,
-            "players": self.state.compact_state_map(self.state.players),
-            "entities": self.state.compact_state_map(self.state.entities),
-            "waypoints": self.state.compact_state_map(self.state.waypoints),
+            "players": self.state.compact_state_map(visible["players"]),
+            "entities": self.state.compact_state_map(visible["entities"]),
+            "waypoints": self.state.compact_state_map(visible["waypoints"]),
         }
         await ws.send_text(json.dumps(message, separators=(",", ":")))
 
-    async def maybe_send_digest(self, player_id: str) -> None:
+    async def maybe_send_digest(self, player_id: str, visible_state: dict | None = None) -> None:
         """按节流周期发送摘要，帮助客户端做状态一致性检测。"""
         ws = self.state.connections.get(player_id)
         caps = self.state.connection_caps.get(player_id)
@@ -47,10 +59,16 @@ class Broadcaster:
             return
 
         caps["lastDigestSent"] = now
+        if visible_state is None:
+            visible_state = self._build_visible_state_for_player(player_id)
         message = {
             "type": "digest",
             "rev": self.state.revision,
-            "hashes": self.state.build_digests(),
+            "hashes": {
+                "players": self.state.state_digest(visible_state["players"]),
+                "entities": self.state.state_digest(visible_state["entities"]),
+                "waypoints": self.state.state_digest(visible_state["waypoints"]),
+            },
         }
         await ws.send_text(json.dumps(message, separators=(",", ":")))
 
@@ -63,6 +81,7 @@ class Broadcaster:
             "entities": dict(self.state.entities),
             "waypoints": dict(self.state.waypoints),
             "playerMarks": dict(self.state.player_marks),
+            "tabState": self.state.build_admin_tab_snapshot(),
             "connections": list(self.state.connections.keys()),
             "connections_count": len(self.state.connections),
             "revision": self.state.revision,
@@ -88,19 +107,6 @@ class Broadcaster:
 
     async def broadcast_legacy_positions(self) -> None:
         """向 legacy 客户端广播全量 positions 消息。"""
-        message_data = {
-            "type": "positions",
-            "players": dict(self.state.players),
-            "entities": dict(self.state.entities),
-            "waypoints": dict(self.state.waypoints),
-        }
-
-        try:
-            message = json.dumps(message_data, separators=(",", ":"))
-        except Exception as e:
-            logger.error("Error serializing legacy positions data: %s", e)
-            return
-
         disconnected = []
         for player_uuid, ws in list(self.state.connections.items()):
             if self.state.is_delta_client(player_uuid):
@@ -113,7 +119,25 @@ class Broadcaster:
                 disconnected.append(player_uuid)
                 continue
             try:
-                await ws.send_text(message)
+                if self.state.same_server_filter_enabled:
+                    visible = self._build_visible_state_for_player(player_uuid)
+                    message_data = {
+                        "type": "positions",
+                        "players": dict(visible["players"]),
+                        "entities": dict(visible["entities"]),
+                        "waypoints": dict(visible["waypoints"]),
+                    }
+                    message = json.dumps(message_data, separators=(",", ":"))
+                    await ws.send_text(message)
+                else:
+                    message_data = {
+                        "type": "positions",
+                        "players": dict(self.state.players),
+                        "entities": dict(self.state.entities),
+                        "waypoints": dict(self.state.waypoints),
+                    }
+                    message = json.dumps(message_data, separators=(",", ":"))
+                    await ws.send_text(message)
             except Exception as e:
                 logger.warning(
                     f"Error sending legacy message to player={player_uuid} "
@@ -148,7 +172,19 @@ class Broadcaster:
 
             try:
                 if self.state.is_delta_client(player_id):
-                    if force_full_to_delta:
+                    if self.state.same_server_filter_enabled:
+                        visible = self._build_visible_state_for_player(player_id)
+                        if force_full_to_delta or changed:
+                            full_msg = {
+                                "type": "snapshot_full",
+                                "rev": rev,
+                                "players": self.state.compact_state_map(visible["players"]),
+                                "entities": self.state.compact_state_map(visible["entities"]),
+                                "waypoints": self.state.compact_state_map(visible["waypoints"]),
+                            }
+                            await ws.send_text(json.dumps(full_msg, separators=(",", ":")))
+                        await self.maybe_send_digest(player_id, visible)
+                    elif force_full_to_delta:
                         full_msg = {
                             "type": "snapshot_full",
                             "rev": rev,
@@ -167,7 +203,8 @@ class Broadcaster:
                         }
                         await ws.send_text(json.dumps(patch_msg, separators=(",", ":")))
 
-                    await self.maybe_send_digest(player_id)
+                    if not self.state.same_server_filter_enabled:
+                        await self.maybe_send_digest(player_id)
             except RuntimeError as e:
                 logger.warning(
                     f"RuntimeError sending delta update to player={player_id} "

@@ -6,12 +6,16 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.Team;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.EntityHitResult;
@@ -32,10 +36,7 @@ import person.professor_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScre
 import person.professor_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class StandaloneMultiPlayerESP implements ClientModInitializer {
@@ -64,10 +65,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	
 	// ESP settings
 	private static boolean espEnabled = false;
-	private static boolean useServerPositions = false;
-	private static boolean showNames = true;
-	
-	// 用于控制位置更新频率
+	private static final boolean useServerPositions = false;
+
+    // 用于控制位置更新频率
 	private static int tickCounter = 0;
 
 	// 鼠标中键双击报点
@@ -97,7 +97,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.multipleplayeresp.toggle",
 			InputUtil.Type.KEYSYM,
-			GLFW.GLFW_KEY_O, // 默认绑定O键
+			GLFW.GLFW_KEY_UNKNOWN, // 默认不绑定，玩家自行设置
 			"category.multipleplayeresp.general"
 		));
 		
@@ -105,7 +105,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		configKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.multipleplayeresp.config",
 			InputUtil.Type.KEYSYM,
-			GLFW.GLFW_KEY_P, // 默认绑定P键
+			GLFW.GLFW_KEY_O, // 默认绑定O键
 			"category.multipleplayeresp.general"
 		));
 
@@ -190,6 +190,62 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		MC.setScreen(new PlayerESPConfigScreen(MC.currentScreen));
 	}
 	
+	private Map<UUID, Map<String, Object>> collectPlayerData(MinecraftClient client) {
+		Map<UUID, Map<String, Object>> players = new HashMap<>();
+		if (client.world != null) {
+			for (AbstractClientPlayerEntity p : client.world.getPlayers()) {
+				UUID pid = p.getUuid();
+				Vec3d pos = p.getPos();
+				Vec3d vel = p.getVelocity();
+				Map<String, Object> data = new HashMap<>();
+				data.put("x", pos.x);
+				data.put("y", pos.y);
+				data.put("z", pos.z);
+				data.put("vx", vel.x);
+				data.put("vy", vel.y);
+				data.put("vz", vel.z);
+				data.put("dimension", p.getWorld().getRegistryKey().getValue().toString());
+				data.put("playerName", p.getName().getString());
+				data.put("playerUUID", pid.toString());
+				data.put("health", p.getHealth());
+				data.put("maxHealth", p.getMaxHealth());
+				data.put("armor", 0);
+				data.put("width", p.getWidth());
+				data.put("height", p.getHeight());
+				players.put(pid, data);
+			}
+		}
+		return players;
+	}
+	
+	private Map<String, Map<String, Object>> collectEntityData(MinecraftClient client) {
+		Map<String, Map<String, Object>> entities = new HashMap<>();
+		if (client.world != null) {
+			for (Entity entity : client.world.getEntities()) {
+				if (entity == client.player) continue;
+				String entityId = entity.getUuid().toString();
+				Vec3d ePos = entity.getPos();
+				Vec3d eVel = entity.getVelocity();
+				String eDim = entity.getWorld().getRegistryKey().getValue().toString();
+				String entityType = entity.getType().toString();
+				Map<String, Object> data = new HashMap<>();
+				data.put("x", ePos.x);
+				data.put("y", ePos.y);
+				data.put("z", ePos.z);
+				data.put("vx", eVel.x);
+				data.put("vy", eVel.y);
+				data.put("vz", eVel.z);
+				data.put("dimension", eDim);
+				data.put("entityType", entityType);
+				data.put("entityName", entity.hasCustomName() ? entity.getDisplayName().getString() : null);
+				data.put("width", entity.getWidth());
+				data.put("height", entity.getHeight());
+				entities.put(entityId, data);
+			}
+		}
+		return entities;
+	}
+	
 	private void updatePlayerPositions() {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.world != null && client.player != null) {
@@ -215,63 +271,95 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		if (networkManager.isConnected() && tickCounter >= config.getUpdateInterval()) {
 			tickCounter = 0;
 			UUID submitPlayerId = client.player.getUuid();
+			networkManager.sendTabPlayersUpdate(submitPlayerId, collectTabPlayers(client));
 
-			// 批量收集所有玩家（含本地）并上传，格式：playerId -> { x, y, z, vx, vy, vz, dimension, playerName, playerUUID, health, maxHealth, armor, width, height }
-			Map<UUID, Map<String, Object>> players = new HashMap<>();
-			if (client.world != null) {
-				for (AbstractClientPlayerEntity p : client.world.getPlayers()) {
-					UUID pid = p.getUuid();
-					Vec3d pos = p.getPos();
-					Vec3d vel = p.getVelocity();
-					Map<String, Object> data = new HashMap<>();
-					data.put("x", pos.x);
-					data.put("y", pos.y);
-					data.put("z", pos.z);
-					data.put("vx", vel.x);
-					data.put("vy", vel.y);
-					data.put("vz", vel.z);
-					data.put("dimension", p.getWorld().getRegistryKey().getValue().toString());
-					data.put("playerName", p.getName().getString());
-					data.put("playerUUID", pid.toString());
-					data.put("health", p.getHealth());
-					data.put("maxHealth", p.getMaxHealth());
-					data.put("armor", 0);
-					data.put("width", p.getWidth());
-					data.put("height", p.getHeight());
-					players.put(pid, data);
-				}
-			}
+			// 批量收集所有玩家（含本地）并上传
+			Map<UUID, Map<String, Object>> players = collectPlayerData(client);
 			networkManager.sendPlayersUpdate(submitPlayerId, players);
 
 			// 收集并上报当前世界中的实体（带 submitPlayerId）
 			if (config.isUploadEntities() && client.world != null) {
-				Map<String, Map<String, Object>> entities = new HashMap<>();
-				for (Entity entity : client.world.getEntities()) {
-					if (entity == client.player) continue;
-					String entityId = entity.getUuid().toString();
-					Vec3d ePos = entity.getPos();
-					Vec3d eVel = entity.getVelocity();
-					String eDim = entity.getWorld().getRegistryKey().getValue().toString();
-					String entityType = entity.getType().getRegistryEntry().registryKey().getValue().toString();
-					Map<String, Object> data = new HashMap<>();
-					data.put("x", ePos.x);
-					data.put("y", ePos.y);
-					data.put("z", ePos.z);
-					data.put("vx", eVel.x);
-					data.put("vy", eVel.y);
-					data.put("vz", eVel.z);
-					data.put("dimension", eDim);
-					data.put("entityType", entityType);
-					data.put("entityName", entity.hasCustomName() ? entity.getDisplayName().getString() : null);
-					data.put("width", entity.getWidth());
-					data.put("height", entity.getHeight());
-					entities.put(entityId, data);
-				}
+				Map<String, Map<String, Object>> entities = collectEntityData(client);
 				networkManager.sendEntitiesUpdate(submitPlayerId, entities);
 			}
 		}
 	}
-	
+
+	private List<Map<String, Object>> collectTabPlayers(MinecraftClient client) {
+		List<Map<String, Object>> result = new ArrayList<>();
+		if (client == null) return result;
+
+		ClientPlayNetworkHandler handler = client.getNetworkHandler();
+		if (handler == null) return result;
+
+		try {
+			Collection<PlayerListEntry> entries = handler.getPlayerList();
+			for (PlayerListEntry entry : entries) {
+				if (entry == null || entry.getProfile() == null) continue;
+
+				String playerId = entry.getProfile().getId() == null
+						? null
+						: entry.getProfile().getId().toString();
+
+				String profileName = entry.getProfile().getName();
+				if (profileName == null || profileName.isBlank()) continue;
+
+				Team team = resolvePlayerTeam(client, entry, profileName);
+
+				String prefixText = null;
+				String prefixColored = null;
+
+				if (team != null) {
+					prefixText = team.getName();
+					prefixColored = team.getPrefix().toString();
+				}
+
+				Map<String, Object> node = new HashMap<>();
+
+				if (playerId != null && !playerId.isBlank()) {
+					node.put("playerUUID", playerId);
+				}
+
+				node.put("name", profileName);
+
+				if (prefixText != null && !prefixText.isBlank()) {
+					node.put("prefixText", prefixText);
+				}
+
+				if (prefixColored != null && !prefixColored.isBlank()) {
+					node.put("prefixColored", prefixColored);
+				}
+
+				System.out.println(node);
+
+				result.add(node);
+			}
+		} catch (Exception e) {
+			LOGGER.debug("collectTabPlayers failed: {}", e.getMessage());
+		}
+
+		return result;
+	}
+
+	private Team resolvePlayerTeam(MinecraftClient client,
+								   PlayerListEntry entry,
+								   String profileName) {
+
+		// 1. 先用 PlayerListEntry 自带的（最准确）
+		Team team = entry.getScoreboardTeam();
+		if (team != null) return team;
+
+		// 2. fallback 到客户端 scoreboard
+		if (client != null && client.world != null) {
+			Scoreboard scoreboard = client.world.getScoreboard();
+			if (scoreboard != null) {
+				return scoreboard.getScoreHolderTeam(profileName);
+			}
+		}
+
+		return null;
+	}
+
 	private void renderESP(WorldRenderContext context) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) return;
@@ -601,7 +689,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		String targetEntityId = target.targetEntity() == null ? null : target.targetEntity().getUuidAsString();
 		String targetEntityType = target.targetEntity() == null
 				? null
-				: target.targetEntity().getType().getRegistryEntry().registryKey().getValue().toString();
+				: target.targetEntity().getType().toString();
 		String targetEntityName = target.targetEntity() == null
 				? null
 				: target.targetEntity().getDisplayName().getString();
@@ -690,7 +778,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			return List.of();
 		}
 
-		quickEntries.sort((left, right) -> Long.compare(left.getValue().createdAt(), right.getValue().createdAt()));
+		quickEntries.sort(Comparator.comparingLong(left -> left.getValue().createdAt()));
 		List<String> overflowIds = new java.util.ArrayList<>();
 		for (int index = 0; index < removeCount && index < quickEntries.size(); index++) {
 			overflowIds.add(quickEntries.get(index).getKey());
@@ -901,7 +989,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			return false;
 		}
 		String targetEntityType = waypoint.targetEntityType();
-		return targetEntityType != null && "minecraft:player".equalsIgnoreCase(targetEntityType);
+		return "minecraft:player".equalsIgnoreCase(targetEntityType);
 	}
 
 	private void renderWaypointMarkerStyle(WorldRenderContext context, Vec3d basePos, int color) {

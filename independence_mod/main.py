@@ -130,6 +130,18 @@ async def admin_ws(websocket: WebSocket):
                 await broadcaster.broadcast_snapshot()
                 continue
 
+            if msg_type == "command_same_server_filter_set":
+                enabled = bool(message.get("enabled"))
+                state.same_server_filter_enabled = enabled
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": True,
+                    "action": "command_same_server_filter_set",
+                    "enabled": state.same_server_filter_enabled,
+                }, separators=(",", ":")))
+                await broadcaster.broadcast_updates(force_full_to_delta=True)
+                continue
+
             await websocket.send_text(json.dumps({
                 "type": "admin_ack",
                 "ok": False,
@@ -211,6 +223,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.warning("Error validating player data for %s: %s", pid, e)
 
                 await broadcaster.broadcast_updates()
+                continue
+
+            if message_type == "tab_players_update":
+                if isinstance(submit_player_id, str) and submit_player_id:
+                    current_time = time.time()
+                    tab_players = data.get("tabPlayers", [])
+                    state.upsert_tab_player_report(submit_player_id, tab_players, current_time)
+                    await broadcaster.broadcast_snapshot()
                 continue
 
             if message_type == "players_patch":
@@ -467,6 +487,7 @@ async def snapshot():
         "entities": dict(state.entities),
         "waypoints": dict(state.waypoints),
         "playerMarks": dict(state.player_marks),
+        "tabState": state.build_admin_tab_snapshot(),
         "connections": list(state.connections.keys()),
         "connections_count": len(state.connections),
         "revision": state.revision,

@@ -178,6 +178,7 @@
 7. `waypoints_delete`
 8. `waypoints_entity_death_cancel`
 9. `resync_req`
+10. `tab_players_update`（仅上报给服务端，用于同服判定与管理端分析，不向游戏客户端广播）
 
 ### 6.2 服务端 -> 客户端
 
@@ -190,6 +191,37 @@
 ### 6.3 服务端 -> 管理端
 
 - 无 `type` 字段的状态快照 JSON（包含 players/entities/waypoints/connections/revision）
+- 快照新增 `tabState`：
+  - `enabled`：同服隔离开关状态
+  - `reports`：各上报源的 tab 玩家列表
+  - `groups`：服务端基于 tab 交集推导出的“同服分组”
+
+---
+
+## 6.4 tab 玩家列表上报
+
+客户端可周期上报当前 TAB 列表：
+
+```json
+{
+  "type": "tab_players_update",
+  "submitPlayerId": "<本地玩家UUID>",
+  "ackRev": 123,
+  "tabPlayers": [
+    {"id": "<玩家UUID>", "name": "PlayerA", "displayName": "PlayerA", "prefixedName": "[xxx]PlayerA"},
+    {"id": "<玩家UUID>", "name": "PlayerB", "displayName": "PlayerB", "prefixedName": "[yyy]PlayerB"}
+  ]
+}
+```
+
+用途：
+
+1. 服务端在启用同服隔离时，基于 tab 列表交集推导“同服组”，避免跨服互相广播。
+2. 管理端（含油猴脚本）可读取 `tabState.reports` / `tabState.groups` 做战术识别（如按名字标签自动敌我分类）。
+
+说明：
+- `name` 维持纯玩家名（用于同服分组 identityKey）。
+- `prefixedName` 用于携带服务器自定义前缀（用于前端自动敌我识别）。
 
 ---
 
