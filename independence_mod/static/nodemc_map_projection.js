@@ -17,8 +17,9 @@
   'use strict';
 
   const PAGE = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+  const STORAGE_KEY = 'nodemc_player_overlay_settings_v1';
 
-  const CONFIG = {
+  const DEFAULT_CONFIG = {
     SNAPSHOT_URL: 'http://127.0.0.1:8765/snapshot',
     POLL_INTERVAL_MS: 1000,
     REQUEST_TIMEOUT_MS: 5000,
@@ -26,6 +27,7 @@
     SHOW_COORDS: true,
     DEBUG: true,
   };
+  const CONFIG = { ...DEFAULT_CONFIG };
 
   let leafletRef = null;
   let capturedMap = null;
@@ -35,6 +37,8 @@
   let lastRevision = null;
   let lastErrorText = null;
   let latestSnapshot = null;
+  let uiMounted = false;
+  let panelVisible = false;
 
   function patchLeaflet(leafletObj) {
     if (!leafletObj || !leafletObj.Map || leafletObj.__nodemcProjectionPatched) {
@@ -48,6 +52,53 @@
       capturedMap = this;
       return originalInitialize.apply(this, args);
     };
+  }
+
+  function sanitizeConfig(candidate) {
+    const next = { ...DEFAULT_CONFIG };
+    if (!candidate || typeof candidate !== 'object') return next;
+
+    if (typeof candidate.SNAPSHOT_URL === 'string' && candidate.SNAPSHOT_URL.trim()) {
+      next.SNAPSHOT_URL = candidate.SNAPSHOT_URL.trim();
+    }
+
+    const poll = Number(candidate.POLL_INTERVAL_MS);
+    if (Number.isFinite(poll)) {
+      next.POLL_INTERVAL_MS = Math.max(200, Math.min(60000, Math.round(poll)));
+    }
+
+    const timeout = Number(candidate.REQUEST_TIMEOUT_MS);
+    if (Number.isFinite(timeout)) {
+      next.REQUEST_TIMEOUT_MS = Math.max(500, Math.min(60000, Math.round(timeout)));
+    }
+
+    if (typeof candidate.TARGET_DIMENSION === 'string' && candidate.TARGET_DIMENSION.trim()) {
+      next.TARGET_DIMENSION = candidate.TARGET_DIMENSION.trim();
+    }
+
+    next.SHOW_COORDS = Boolean(candidate.SHOW_COORDS);
+    next.DEBUG = Boolean(candidate.DEBUG);
+    return next;
+  }
+
+  function loadConfigFromStorage() {
+    try {
+      const raw = PAGE.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const normalized = sanitizeConfig(parsed);
+      Object.assign(CONFIG, normalized);
+    } catch (error) {
+      console.warn('[NodeMC Player Overlay] load settings failed:', error);
+    }
+  }
+
+  function saveConfigToStorage() {
+    try {
+      PAGE.localStorage.setItem(STORAGE_KEY, JSON.stringify(CONFIG));
+    } catch (error) {
+      console.warn('[NodeMC Player Overlay] save settings failed:', error);
+    }
   }
 
   function installLeafletHook() {
@@ -210,6 +261,224 @@
     };
   }
 
+  function updateUiStatus() {
+    const status = document.getElementById('nodemc-overlay-status');
+    if (!status) return;
+
+    const lastErr = lastErrorText ? `错误: ${lastErrorText}` : '正常';
+    const players = markersById.size;
+    const revText = lastRevision === null || lastRevision === undefined ? '-' : String(lastRevision);
+    status.textContent = `状态: ${lastErr} | 标记: ${players} | Rev: ${revText}`;
+  }
+
+  function setPanelVisible(visible) {
+    const panel = document.getElementById('nodemc-overlay-panel');
+    if (!panel) return;
+    panelVisible = Boolean(visible);
+    panel.style.display = panelVisible ? 'block' : 'none';
+  }
+
+  function fillFormFromConfig() {
+    const urlInput = document.getElementById('nodemc-overlay-url');
+    const pollInput = document.getElementById('nodemc-overlay-poll');
+    const timeoutInput = document.getElementById('nodemc-overlay-timeout');
+    const dimInput = document.getElementById('nodemc-overlay-dim');
+    const coordsInput = document.getElementById('nodemc-overlay-coords');
+    const debugInput = document.getElementById('nodemc-overlay-debug');
+
+    if (urlInput) urlInput.value = CONFIG.SNAPSHOT_URL;
+    if (pollInput) pollInput.value = String(CONFIG.POLL_INTERVAL_MS);
+    if (timeoutInput) timeoutInput.value = String(CONFIG.REQUEST_TIMEOUT_MS);
+    if (dimInput) dimInput.value = CONFIG.TARGET_DIMENSION;
+    if (coordsInput) coordsInput.checked = CONFIG.SHOW_COORDS;
+    if (debugInput) debugInput.checked = CONFIG.DEBUG;
+  }
+
+  function applyFormToConfig() {
+    const urlInput = document.getElementById('nodemc-overlay-url');
+    const pollInput = document.getElementById('nodemc-overlay-poll');
+    const timeoutInput = document.getElementById('nodemc-overlay-timeout');
+    const dimInput = document.getElementById('nodemc-overlay-dim');
+    const coordsInput = document.getElementById('nodemc-overlay-coords');
+    const debugInput = document.getElementById('nodemc-overlay-debug');
+
+    const next = sanitizeConfig({
+      SNAPSHOT_URL: urlInput ? urlInput.value : CONFIG.SNAPSHOT_URL,
+      POLL_INTERVAL_MS: pollInput ? pollInput.value : CONFIG.POLL_INTERVAL_MS,
+      REQUEST_TIMEOUT_MS: timeoutInput ? timeoutInput.value : CONFIG.REQUEST_TIMEOUT_MS,
+      TARGET_DIMENSION: dimInput ? dimInput.value : CONFIG.TARGET_DIMENSION,
+      SHOW_COORDS: coordsInput ? coordsInput.checked : CONFIG.SHOW_COORDS,
+      DEBUG: debugInput ? debugInput.checked : CONFIG.DEBUG,
+    });
+
+    Object.assign(CONFIG, next);
+    saveConfigToStorage();
+    updateUiStatus();
+  }
+
+  function injectSettingsUi() {
+    if (uiMounted || !document.body) return;
+    uiMounted = true;
+
+    const style = document.createElement('style');
+    style.id = 'nodemc-overlay-ui-style';
+    style.textContent = `
+      #nodemc-overlay-fab {
+        position: fixed;
+        right: 18px;
+        bottom: 96px;
+        width: 54px;
+        height: 54px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.35);
+        background: radial-gradient(circle at 30% 30%, #60a5fa, #1d4ed8 70%);
+        color: #fff;
+        font-size: 23px;
+        line-height: 54px;
+        text-align: center;
+        cursor: pointer;
+        z-index: 2147483000;
+        box-shadow: 0 8px 18px rgba(0,0,0,.35);
+        user-select: none;
+      }
+      #nodemc-overlay-panel {
+        position: fixed;
+        right: 18px;
+        bottom: 160px;
+        width: 320px;
+        background: rgba(15, 23, 42, .97);
+        border: 1px solid rgba(148, 163, 184, .4);
+        border-radius: 12px;
+        color: #e2e8f0;
+        z-index: 2147483000;
+        box-shadow: 0 12px 28px rgba(0,0,0,.45);
+        padding: 12px;
+        font-size: 12px;
+        display: none;
+      }
+      #nodemc-overlay-panel .n-title {
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      #nodemc-overlay-panel .n-row {
+        margin-bottom: 8px;
+      }
+      #nodemc-overlay-panel label {
+        display: block;
+        margin-bottom: 4px;
+        color: #bfdbfe;
+      }
+      #nodemc-overlay-panel input[type="text"],
+      #nodemc-overlay-panel input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 8px;
+        border: 1px solid rgba(148,163,184,.45);
+        background: rgba(30,41,59,.9);
+        color: #e2e8f0;
+        padding: 7px 8px;
+      }
+      #nodemc-overlay-panel .n-check {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+      #nodemc-overlay-panel .n-btns {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      #nodemc-overlay-panel button {
+        border: 1px solid rgba(147,197,253,.45);
+        background: rgba(30,64,175,.9);
+        color: #fff;
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      #nodemc-overlay-status {
+        margin-top: 8px;
+        color: #93c5fd;
+        word-break: break-word;
+      }
+    `;
+    document.head.appendChild(style);
+
+    const fab = document.createElement('div');
+    fab.id = 'nodemc-overlay-fab';
+    fab.textContent = '⚙';
+    fab.title = 'NodeMC Overlay 设置';
+
+    const panel = document.createElement('div');
+    panel.id = 'nodemc-overlay-panel';
+    panel.innerHTML = `
+      <div class="n-title">NodeMC Overlay 设置</div>
+      <div class="n-row">
+        <label>Snapshot URL</label>
+        <input id="nodemc-overlay-url" type="text" />
+      </div>
+      <div class="n-row">
+        <label>轮询间隔(ms)</label>
+        <input id="nodemc-overlay-poll" type="number" min="200" max="60000" step="100" />
+      </div>
+      <div class="n-row">
+        <label>请求超时(ms)</label>
+        <input id="nodemc-overlay-timeout" type="number" min="500" max="60000" step="100" />
+      </div>
+      <div class="n-row">
+        <label>维度过滤</label>
+        <input id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
+      </div>
+      <label class="n-check"><input id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
+      <label class="n-check"><input id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
+      <div class="n-btns">
+        <button id="nodemc-overlay-save" type="button">保存</button>
+        <button id="nodemc-overlay-reset" type="button">重置</button>
+        <button id="nodemc-overlay-refresh" type="button">立即拉取</button>
+      </div>
+      <div id="nodemc-overlay-status"></div>
+    `;
+
+    document.body.appendChild(fab);
+    document.body.appendChild(panel);
+
+    fillFormFromConfig();
+    updateUiStatus();
+
+    fab.addEventListener('click', () => setPanelVisible(!panelVisible));
+
+    document.getElementById('nodemc-overlay-save')?.addEventListener('click', async () => {
+      applyFormToConfig();
+      await pollOnce();
+      applyLatestSnapshotIfPossible();
+    });
+
+    document.getElementById('nodemc-overlay-reset')?.addEventListener('click', async () => {
+      Object.assign(CONFIG, DEFAULT_CONFIG);
+      saveConfigToStorage();
+      fillFormFromConfig();
+      await pollOnce();
+      applyLatestSnapshotIfPossible();
+      updateUiStatus();
+    });
+
+    document.getElementById('nodemc-overlay-refresh')?.addEventListener('click', async () => {
+      await pollOnce();
+      applyLatestSnapshotIfPossible();
+      updateUiStatus();
+    });
+  }
+
+  function mountUiWhenReady() {
+    if (uiMounted) return;
+    if (!document.body || !document.head) {
+      PAGE.requestAnimationFrame(mountUiWhenReady);
+      return;
+    }
+    injectSettingsUi();
+  }
+
   function requestJson(url) {
     const gmRequest =
       (typeof GM_xmlhttpRequest === 'function' && GM_xmlhttpRequest) ||
@@ -278,12 +547,14 @@
         const count = snapshot?.players && typeof snapshot.players === 'object' ? Object.keys(snapshot.players).length : 0;
         console.debug('[NodeMC Player Overlay] snapshot ok', { rev, players: count, url: CONFIG.SNAPSHOT_URL });
       }
+      updateUiStatus();
     } catch (error) {
       const text = String(error && error.message ? error.message : error);
       if (text !== lastErrorText) {
         lastErrorText = text;
         console.warn('[NodeMC Player Overlay] snapshot pull failed:', text, CONFIG.SNAPSHOT_URL);
       }
+      updateUiStatus();
     } finally {
       inFlight = false;
     }
@@ -338,8 +609,10 @@
   }
 
   function boot() {
+    loadConfigFromStorage();
     installLeafletHook();
     startPolling();
+    mountUiWhenReady();
 
     if (CONFIG.DEBUG) {
       console.log('[NodeMC Player Overlay] boot', {
