@@ -27,6 +27,9 @@
     AUTO_TEAM_FROM_NAME: true,
     FRIENDLY_TAGS: '[xxx]',
     ENEMY_TAGS: '[yyy]',
+    TEAM_COLOR_FRIENDLY: '#3b82f6',
+    TEAM_COLOR_ENEMY: '#ef4444',
+    TEAM_COLOR_NEUTRAL: '#94a3b8',
     DEBUG: false,
   };
   const CONFIG = { ...DEFAULT_CONFIG };
@@ -45,11 +48,37 @@
   let manualWsClose = false;
   let latestPlayerMarks = {};
   let sameServerFilterEnabled = false;
+  let panelPage = 'main';
 
   const TEAM_DEFAULT_COLORS = {
     friendly: '#3b82f6',
     enemy: '#ef4444',
     neutral: '#94a3b8',
+  };
+
+  const TEAM_CONFIG_COLOR_FIELD = {
+    friendly: 'TEAM_COLOR_FRIENDLY',
+    enemy: 'TEAM_COLOR_ENEMY',
+    neutral: 'TEAM_COLOR_NEUTRAL',
+  };
+
+  const MC_COLOR_CODE_MAP = {
+    '0': '#000000',
+    '1': '#0000aa',
+    '2': '#00aa00',
+    '3': '#00aaaa',
+    '4': '#aa0000',
+    '5': '#aa00aa',
+    '6': '#ffaa00',
+    '7': '#aaaaaa',
+    '8': '#555555',
+    '9': '#5555ff',
+    a: '#55ff55',
+    b: '#55ffff',
+    c: '#ff5555',
+    d: '#ff55ff',
+    e: '#ffff55',
+    f: '#ffffff',
   };
 
   function patchLeaflet(leafletObj) {
@@ -98,6 +127,9 @@
     if (typeof candidate.ENEMY_TAGS === 'string') {
       next.ENEMY_TAGS = candidate.ENEMY_TAGS.trim();
     }
+    next.TEAM_COLOR_FRIENDLY = normalizeColor(candidate.TEAM_COLOR_FRIENDLY, DEFAULT_CONFIG.TEAM_COLOR_FRIENDLY);
+    next.TEAM_COLOR_ENEMY = normalizeColor(candidate.TEAM_COLOR_ENEMY, DEFAULT_CONFIG.TEAM_COLOR_ENEMY);
+    next.TEAM_COLOR_NEUTRAL = normalizeColor(candidate.TEAM_COLOR_NEUTRAL, DEFAULT_CONFIG.TEAM_COLOR_NEUTRAL);
     next.DEBUG = Boolean(candidate.DEBUG);
     return next;
   }
@@ -140,13 +172,20 @@
     return `#${raw.toLowerCase()}`;
   }
 
+  function getConfiguredTeamColor(team) {
+    const normalizedTeam = normalizeTeam(team);
+    const configKey = TEAM_CONFIG_COLOR_FIELD[normalizedTeam];
+    const fallback = TEAM_DEFAULT_COLORS[normalizedTeam] || TEAM_DEFAULT_COLORS.neutral;
+    return normalizeColor(configKey ? CONFIG[configKey] : '', fallback);
+  }
+
   function getPlayerMark(playerId) {
     if (!latestPlayerMarks || typeof latestPlayerMarks !== 'object') return null;
     const entry = latestPlayerMarks[playerId];
     if (!entry || typeof entry !== 'object') return null;
 
     const team = normalizeTeam(entry.team);
-    const color = normalizeColor(entry.color, TEAM_DEFAULT_COLORS[team]);
+    const color = normalizeColor(entry.color, getConfiguredTeamColor(team));
     const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : null;
     return { team, color, label };
   }
@@ -161,21 +200,58 @@
     if (friendlyTags.some((tag) => name.includes(tag))) {
       return {
         team: 'friendly',
-        color: TEAM_DEFAULT_COLORS.friendly,
-        label: '自动识别:友军',
+        color: getConfiguredTeamColor('friendly'),
+        label: '自动识别',
       };
     }
     if (enemyTags.some((tag) => name.includes(tag))) {
       return {
         team: 'enemy',
-        color: TEAM_DEFAULT_COLORS.enemy,
-        label: '自动识别:敌军',
+        color: getConfiguredTeamColor('enemy'),
+        label: '自动识别',
       };
     }
     return null;
   }
 
   function getTabPlayerName(playerId) {
+    const info = getTabPlayerInfo(playerId);
+    return info ? info.autoName : null;
+  }
+
+  function parseMcDisplayName(rawText) {
+    const original = String(rawText || '').trim();
+    if (!original) {
+      return {
+        plain: '',
+        teamText: '',
+        color: null,
+      };
+    }
+
+    let text = original;
+    if (text.startsWith('literal{') && text.endsWith('}')) {
+      text = text.slice('literal{'.length, -1);
+    }
+
+    let color = null;
+    const firstColorMatch = text.match(/§([0-9a-fA-F])/);
+    if (firstColorMatch) {
+      color = MC_COLOR_CODE_MAP[String(firstColorMatch[1]).toLowerCase()] || null;
+    }
+
+    const plain = text.replace(/§[0-9a-fk-orA-FK-OR]/g, '').trim();
+    const teamMatch = plain.match(/\[[^\]]+\]/);
+    const teamText = teamMatch ? teamMatch[0] : '';
+
+    return {
+      plain,
+      teamText,
+      color,
+    };
+  }
+
+  function getTabPlayerInfo(playerId) {
     const tabState = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot.tabState : null;
     const reports = tabState && typeof tabState.reports === 'object' ? tabState.reports : null;
     if (!reports) return null;
@@ -187,12 +263,18 @@
         if (!node || typeof node !== 'object') continue;
         const nodeId = String(node.uuid || node.id || '').trim();
         if (!nodeId || nodeId !== String(playerId)) continue;
+
         const prefixedName = String(node.prefixedName || '').trim();
-        const displayName = String(node.displayName || '').trim();
+        const displayNameRaw = String(node.displayName || '').trim();
         const name = String(node.name || '').trim();
-        if (prefixedName) return prefixedName;
-        if (displayName) return displayName;
-        if (name) return name;
+        const parsedDisplay = parseMcDisplayName(displayNameRaw || prefixedName);
+
+        return {
+          name,
+          teamText: parsedDisplay.teamText,
+          teamColor: parsedDisplay.color,
+          autoName: prefixedName || parsedDisplay.plain || name || null,
+        };
       }
     }
 
@@ -294,9 +376,16 @@
     for (const [playerId, rawNode] of Object.entries(snapshotPlayers)) {
       const data = getPlayerDataNode(rawNode);
       const name = String((data && data.playerName) || (data && data.playerUUID) || playerId || '').trim();
+      const tabInfo = getTabPlayerInfo(playerId);
+      const playerName = (tabInfo && tabInfo.name) ? tabInfo.name : (name || String(playerId));
+      const displayLabel = tabInfo && tabInfo.teamText
+        ? `${tabInfo.teamText} ${playerName}`
+        : playerName;
       players.push({
         playerId: String(playerId),
-        playerName: name || String(playerId),
+        playerName,
+        displayLabel,
+        teamColor: tabInfo && tabInfo.teamColor ? tabInfo.teamColor : null,
       });
     }
 
@@ -320,7 +409,10 @@
     for (const item of players) {
       const option = document.createElement('option');
       option.value = item.playerId;
-      option.textContent = `${item.playerName} ｜ ${item.playerId}`;
+      option.textContent = item.displayLabel || item.playerName;
+      if (item.teamColor) {
+        option.style.color = item.teamColor;
+      }
       select.appendChild(option);
     }
 
@@ -355,8 +447,9 @@
     }
 
     const team = mark ? normalizeTeam(mark.team) : 'neutral';
-    const color = mark ? normalizeColor(mark.color, TEAM_DEFAULT_COLORS[team]) : TEAM_DEFAULT_COLORS.neutral;
-    const teamText = mark && mark.label ? mark.label : (team === 'friendly' ? '友军' : team === 'enemy' ? '敌军' : '中立');
+    const color = mark ? normalizeColor(mark.color, getConfiguredTeamColor(team)) : getConfiguredTeamColor(team);
+    const teamText = team === 'friendly' ? '友军' : team === 'enemy' ? '敌军' : '中立';
+    const noteText = mark && mark.label ? String(mark.label) : '';
     const safeName = String(text).replace(/[&<>"']/g, (ch) => ({
       '&': '&amp;',
       '<': '&lt;',
@@ -371,8 +464,17 @@
       '"': '&quot;',
       "'": '&#39;',
     }[ch]));
+    const safeNote = String(noteText).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
 
-    return `<div class="nodemc-player-label" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;"><span class="n-team" style="color:${color}">[${safeTeam}]</span> ${safeName}</div>`;
+    const noteHtml = safeNote ? `<span class="n-note"> · ${safeNote}</span>` : '';
+
+    return `<div class="nodemc-player-label" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;"><span class="n-team" style="color:${color}">[${safeTeam}]</span>${noteHtml} ${safeName}</div>`;
   }
 
   function upsertMarker(map, playerId, payload) {
@@ -484,6 +586,9 @@
     const autoTeamInput = document.getElementById('nodemc-overlay-auto-team');
     const friendlyTagsInput = document.getElementById('nodemc-overlay-friendly-tags');
     const enemyTagsInput = document.getElementById('nodemc-overlay-enemy-tags');
+    const teamFriendlyColorInput = document.getElementById('nodemc-overlay-team-friendly-color');
+    const teamNeutralColorInput = document.getElementById('nodemc-overlay-team-neutral-color');
+    const teamEnemyColorInput = document.getElementById('nodemc-overlay-team-enemy-color');
     const debugInput = document.getElementById('nodemc-overlay-debug');
 
     if (urlInput) urlInput.value = CONFIG.ADMIN_WS_URL;
@@ -493,6 +598,9 @@
     if (autoTeamInput) autoTeamInput.checked = CONFIG.AUTO_TEAM_FROM_NAME;
     if (friendlyTagsInput) friendlyTagsInput.value = CONFIG.FRIENDLY_TAGS;
     if (enemyTagsInput) enemyTagsInput.value = CONFIG.ENEMY_TAGS;
+    if (teamFriendlyColorInput) teamFriendlyColorInput.value = getConfiguredTeamColor('friendly');
+    if (teamNeutralColorInput) teamNeutralColorInput.value = getConfiguredTeamColor('neutral');
+    if (teamEnemyColorInput) teamEnemyColorInput.value = getConfiguredTeamColor('enemy');
     if (debugInput) debugInput.checked = CONFIG.DEBUG;
   }
 
@@ -504,6 +612,9 @@
     const autoTeamInput = document.getElementById('nodemc-overlay-auto-team');
     const friendlyTagsInput = document.getElementById('nodemc-overlay-friendly-tags');
     const enemyTagsInput = document.getElementById('nodemc-overlay-enemy-tags');
+    const teamFriendlyColorInput = document.getElementById('nodemc-overlay-team-friendly-color');
+    const teamNeutralColorInput = document.getElementById('nodemc-overlay-team-neutral-color');
+    const teamEnemyColorInput = document.getElementById('nodemc-overlay-team-enemy-color');
     const debugInput = document.getElementById('nodemc-overlay-debug');
 
     const next = sanitizeConfig({
@@ -514,6 +625,9 @@
       AUTO_TEAM_FROM_NAME: autoTeamInput ? autoTeamInput.checked : CONFIG.AUTO_TEAM_FROM_NAME,
       FRIENDLY_TAGS: friendlyTagsInput ? friendlyTagsInput.value : CONFIG.FRIENDLY_TAGS,
       ENEMY_TAGS: enemyTagsInput ? enemyTagsInput.value : CONFIG.ENEMY_TAGS,
+      TEAM_COLOR_FRIENDLY: teamFriendlyColorInput ? teamFriendlyColorInput.value : CONFIG.TEAM_COLOR_FRIENDLY,
+      TEAM_COLOR_NEUTRAL: teamNeutralColorInput ? teamNeutralColorInput.value : CONFIG.TEAM_COLOR_NEUTRAL,
+      TEAM_COLOR_ENEMY: teamEnemyColorInput ? teamEnemyColorInput.value : CONFIG.TEAM_COLOR_ENEMY,
       DEBUG: debugInput ? debugInput.checked : CONFIG.DEBUG,
     });
 
@@ -552,7 +666,7 @@
     const playerId = resolved.playerId;
 
     const team = normalizeTeam(teamInput ? teamInput.value : 'neutral');
-    const color = normalizeColor(colorInput ? colorInput.value : TEAM_DEFAULT_COLORS[team], TEAM_DEFAULT_COLORS[team]);
+    const color = normalizeColor(colorInput ? colorInput.value : getConfiguredTeamColor(team), getConfiguredTeamColor(team));
     const label = labelInput ? String(labelInput.value || '').trim() : '';
 
     const ok = sendAdminCommand({
@@ -653,6 +767,12 @@
         cursor: move;
         user-select: none;
       }
+      #nodemc-overlay-panel .n-page {
+        display: none;
+      }
+      #nodemc-overlay-panel .n-page.active {
+        display: block;
+      }
       #nodemc-overlay-panel .n-row {
         margin-bottom: 8px;
       }
@@ -691,6 +811,18 @@
         padding: 6px 10px;
         cursor: pointer;
       }
+      #nodemc-overlay-panel .n-link-btn {
+        border: 1px solid rgba(148,163,184,.5);
+        background: rgba(15,23,42,.75);
+        color: #dbeafe;
+      }
+      #nodemc-overlay-panel .n-nav-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        gap: 8px;
+      }
       #nodemc-overlay-status {
         margin-top: 8px;
         color: #93c5fd;
@@ -723,63 +855,94 @@
     panel.id = 'nodemc-overlay-panel';
     panel.innerHTML = `
       <div class="n-title" id="nodemc-overlay-title">NodeMC Overlay 设置（可拖动）</div>
-      <div class="n-row">
-        <label>Admin WS URL</label>
-        <input id="nodemc-overlay-url" type="text" />
+      <div class="n-page active" id="nodemc-overlay-page-main">
+        <div class="n-row">
+          <label>Admin WS URL</label>
+          <input id="nodemc-overlay-url" type="text" />
+        </div>
+        <label class="n-check"><input id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
+        <div class="n-row">
+          <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
+          <input id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
+        </div>
+        <div class="n-row">
+          <label>敌军标签（逗号分隔，按游戏中的前缀识别）</label>
+          <input id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
+        </div>
+        <label class="n-check"><input id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
+        <div class="n-btns">
+          <button id="nodemc-overlay-save" type="button">保存</button>
+          <button id="nodemc-overlay-reset" type="button">重置</button>
+          <button id="nodemc-overlay-refresh" type="button">立即重连</button>
+        </div>
+        <div class="n-btns">
+          <button id="nodemc-overlay-open-advanced" type="button" class="n-link-btn">高级设置</button>
+        </div>
       </div>
-      <div class="n-row">
-        <label>重连间隔(ms)</label>
-        <input id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
+
+      <div class="n-page" id="nodemc-overlay-page-advanced">
+        <div class="n-nav-row">
+          <div class="n-subtitle" style="margin:0;">高级设置</div>
+          <button id="nodemc-overlay-back-main" type="button" class="n-link-btn">返回基础设置</button>
+        </div>
+        <div class="n-row">
+          <label>重连间隔(ms)</label>
+          <input id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
+        </div>
+        <div class="n-row">
+          <label>维度过滤</label>
+          <input id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
+        </div>
+        <label class="n-check"><input id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
+        <label class="n-check"><input id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
+
+        <div class="n-subtitle">阵营颜色</div>
+        <div class="n-row">
+          <label>友军颜色(#RRGGBB)</label>
+          <input id="nodemc-overlay-team-friendly-color" type="text" placeholder="#3b82f6" />
+        </div>
+        <div class="n-row">
+          <label>中立颜色(#RRGGBB)</label>
+          <input id="nodemc-overlay-team-neutral-color" type="text" placeholder="#94a3b8" />
+        </div>
+        <div class="n-row">
+          <label>敌军颜色(#RRGGBB)</label>
+          <input id="nodemc-overlay-team-enemy-color" type="text" placeholder="#ef4444" />
+        </div>
+
+        <div class="n-subtitle">定向玩家标记/颜色</div>
+        <div class="n-row">
+          <label>在线玩家列表（推荐）</label>
+          <select id="nodemc-mark-player-select">
+            <option value="">暂无在线玩家</option>
+          </select>
+        </div>
+        <div class="n-row">
+          <label>阵营</label>
+          <select id="nodemc-mark-team">
+            <option value="friendly">友军</option>
+            <option value="enemy">敌军</option>
+            <option value="neutral" selected>中立</option>
+          </select>
+        </div>
+        <div class="n-row">
+          <label>颜色(#RRGGBB)</label>
+          <input id="nodemc-mark-color" type="text" placeholder="#ef4444" />
+        </div>
+        <div class="n-row">
+          <label>标签(可选)</label>
+          <input id="nodemc-mark-label" type="text" placeholder="例如：突击组/重点观察" />
+        </div>
+        <div class="n-btns">
+          <button id="nodemc-mark-apply" type="button">应用标记</button>
+          <button id="nodemc-mark-clear" type="button">清除该玩家</button>
+          <button id="nodemc-mark-clear-all" type="button">清空全部标记</button>
+        </div>
+        <div class="n-btns">
+          <button id="nodemc-overlay-save-advanced" type="button">保存高级设置</button>
+        </div>
       </div>
-      <div class="n-row">
-        <label>维度过滤</label>
-        <input id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
-      </div>
-      <label class="n-check"><input id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
-      <label class="n-check"><input id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
-      <div class="n-row">
-        <label>友军标签（逗号分隔）</label>
-        <input id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
-      </div>
-      <div class="n-row">
-        <label>敌军标签（逗号分隔）</label>
-        <input id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
-      </div>
-      <label class="n-check"><input id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
-      <label class="n-check"><input id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
-      <div class="n-btns">
-        <button id="nodemc-overlay-save" type="button">保存</button>
-        <button id="nodemc-overlay-reset" type="button">重置</button>
-        <button id="nodemc-overlay-refresh" type="button">立即重连</button>
-      </div>
-      <div class="n-subtitle">战略指挥：玩家标记</div>
-      <div class="n-row">
-        <label>在线玩家列表（推荐）</label>
-        <select id="nodemc-mark-player-select">
-          <option value="">暂无在线玩家</option>
-        </select>
-      </div>
-      <div class="n-row">
-        <label>阵营</label>
-        <select id="nodemc-mark-team">
-          <option value="friendly">友军</option>
-          <option value="enemy">敌军</option>
-          <option value="neutral" selected>中立</option>
-        </select>
-      </div>
-      <div class="n-row">
-        <label>颜色(#RRGGBB)</label>
-        <input id="nodemc-mark-color" type="text" placeholder="#ef4444" />
-      </div>
-      <div class="n-row">
-        <label>标签(可选)</label>
-        <input id="nodemc-mark-label" type="text" placeholder="例如：突击组/重点观察" />
-      </div>
-      <div class="n-btns">
-        <button id="nodemc-mark-apply" type="button">应用标记</button>
-        <button id="nodemc-mark-clear" type="button">清除该玩家</button>
-        <button id="nodemc-mark-clear-all" type="button">清空全部标记</button>
-      </div>
+
       <div id="nodemc-overlay-status"></div>
     `;
 
@@ -934,6 +1097,19 @@
     fillFormFromConfig();
     updateUiStatus();
 
+    const setPanelPage = (nextPage) => {
+      panelPage = nextPage === 'advanced' ? 'advanced' : 'main';
+      const mainPage = document.getElementById('nodemc-overlay-page-main');
+      const advancedPage = document.getElementById('nodemc-overlay-page-advanced');
+      if (mainPage) {
+        mainPage.classList.toggle('active', panelPage === 'main');
+      }
+      if (advancedPage) {
+        advancedPage.classList.toggle('active', panelPage === 'advanced');
+      }
+    };
+    setPanelPage('main');
+
     fab.addEventListener('click', () => {
       if (dragMoved) return;
       setPanelVisible(!panelVisible);
@@ -942,7 +1118,20 @@
       }
     });
 
+    document.getElementById('nodemc-overlay-open-advanced')?.addEventListener('click', () => {
+      setPanelPage('advanced');
+    });
+
+    document.getElementById('nodemc-overlay-back-main')?.addEventListener('click', () => {
+      setPanelPage('main');
+    });
+
     document.getElementById('nodemc-overlay-save')?.addEventListener('click', () => {
+      applyFormToConfig();
+      reconnectAdminWs();
+    });
+
+    document.getElementById('nodemc-overlay-save-advanced')?.addEventListener('click', () => {
       applyFormToConfig();
       reconnectAdminWs();
     });
@@ -965,9 +1154,9 @@
     if (teamInput && colorInput) {
       teamInput.addEventListener('change', () => {
         const team = normalizeTeam(teamInput.value);
-        colorInput.value = TEAM_DEFAULT_COLORS[team];
+        colorInput.value = getConfiguredTeamColor(team);
       });
-      colorInput.value = TEAM_DEFAULT_COLORS[normalizeTeam(teamInput.value)];
+      colorInput.value = getConfiguredTeamColor(normalizeTeam(teamInput.value));
     }
 
     if (selectInput) {
