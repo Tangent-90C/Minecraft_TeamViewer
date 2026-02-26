@@ -1,11 +1,16 @@
 import hashlib
 import json
+import logging
 import math
+import os
 import time
 from typing import Dict, Optional
 
 from fastapi import WebSocket
 from pydantic import ValidationError
+
+
+logger = logging.getLogger("teamviewer.state")
 
 
 class ServerState:
@@ -19,11 +24,22 @@ class ServerState:
     """
 
     # 默认超时配置（秒）
-    PLAYER_TIMEOUT = 5
-    ENTITY_TIMEOUT = 5
-    WAYPOINT_TIMEOUT = 120
-    ONLINE_OWNER_TIMEOUT_MULTIPLIER = 8
+    # - PLAYER_TIMEOUT / ENTITY_TIMEOUT / WAYPOINT_TIMEOUT: 对象在“没有新上报”时的基础生存时间。
+    #   现在所有来源统一按基础超时处理，不再因连接在线与否额外放宽超时。
+    PLAYER_TIMEOUT = 30
+    ENTITY_TIMEOUT = 30
+    WAYPOINT_TIMEOUT = 60
+    # 多来源切换阈值：仅当候选来源显著更新（领先该阈值秒）才切换来源，减少抖动。
     SOURCE_SWITCH_THRESHOLD_SEC = 0.35
+    # 超时清理日志输出节流：避免高频刷屏。
+    TIMEOUT_LOG_INTERVAL_SEC = 2.0
+    TIMEOUT_LOG_SAMPLE_LIMIT = 20
+    # refresh_req 下发节流：同一来源两次请求最小间隔。
+    REFRESH_REQUEST_COOLDOWN_SEC = 1.5
+    # 提前量窗口：对象距离超时 <= 该值时，会触发 pre-expiry refresh_req。
+    REFRESH_REQUEST_LEAD_SEC = 1.2
+    # 单次 refresh_req 每个 scope 最多携带多少对象，避免包过大。
+    REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = 64
 
     # 协议配置
     PROTOCOL_V2 = 2
@@ -54,6 +70,41 @@ class ServerState:
         self.waypoint_selected_sources: Dict[str, str] = {}
 
         self.revision = 0
+        self._last_timeout_log_ts = 0.0
+        self._last_refresh_request_ts: Dict[str, float] = {}
+
+        self.PLAYER_TIMEOUT = self._get_env_int("TEAMVIEWER_PLAYER_TIMEOUT_SEC", self.PLAYER_TIMEOUT, 1, 3600)
+        self.ENTITY_TIMEOUT = self._get_env_int("TEAMVIEWER_ENTITY_TIMEOUT_SEC", self.ENTITY_TIMEOUT, 1, 3600)
+        self.WAYPOINT_TIMEOUT = self._get_env_int("TEAMVIEWER_WAYPOINT_TIMEOUT_SEC", self.WAYPOINT_TIMEOUT, 5, 86400)
+        self.TIMEOUT_LOG_INTERVAL_SEC = float(
+            self._get_env_int("TEAMVIEWER_TIMEOUT_LOG_INTERVAL_SEC", int(self.TIMEOUT_LOG_INTERVAL_SEC), 1, 600)
+        )
+        self.REFRESH_REQUEST_COOLDOWN_SEC = float(
+            self._get_env_int("TEAMVIEWER_REFRESH_REQ_COOLDOWN_SEC", int(self.REFRESH_REQUEST_COOLDOWN_SEC), 1, 120)
+        )
+        self.REFRESH_REQUEST_LEAD_SEC = float(
+            self._get_env_int("TEAMVIEWER_REFRESH_REQ_LEAD_SEC", int(self.REFRESH_REQUEST_LEAD_SEC), 1, 30)
+        )
+
+        logger.info(
+            "ServerState timeout config "
+            f"player={self.PLAYER_TIMEOUT}s entity={self.ENTITY_TIMEOUT}s waypoint={self.WAYPOINT_TIMEOUT}s"
+        )
+
+    @staticmethod
+    def _get_env_int(key: str, default: int, min_value: int, max_value: int) -> int:
+        raw = os.getenv(key)
+        if raw is None:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        if value < min_value:
+            return min_value
+        if value > max_value:
+            return max_value
+        return value
 
     @staticmethod
     def normalize_mark_color(color_value: Optional[str]) -> Optional[str]:
@@ -461,15 +512,12 @@ class ServerState:
     def cleanup_timeouts(self) -> None:
         """按来源维度清理超时上报，避免脏数据长期占用最终视图。"""
         current_time = time.time()
-
-        def is_owner_online(node: dict) -> bool:
-            owner_id = node.get("submitPlayerId") if isinstance(node, dict) else None
-            return isinstance(owner_id, str) and owner_id in self.connections
-
-        def effective_timeout(base_timeout: int, node: dict) -> int:
-            if is_owner_online(node):
-                return base_timeout * self.ONLINE_OWNER_TIMEOUT_MULTIPLIER
-            return base_timeout
+        removed_summary = {
+            "players": 0,
+            "entities": 0,
+            "waypoints": 0,
+        }
+        removed_samples = []
 
         def effective_waypoint_timeout(node: dict) -> int:
             if not isinstance(node, dict):
@@ -485,7 +533,7 @@ class ServerState:
                 return min(ttl_int, 86400)
             return self.WAYPOINT_TIMEOUT
 
-        def cleanup_report_map(report_map: Dict[str, Dict[str, dict]], timeout_resolver) -> None:
+        def cleanup_report_map(report_name: str, report_map: Dict[str, Dict[str, dict]], timeout_resolver) -> None:
             for object_id in list(report_map.keys()):
                 source_bucket = report_map.get(object_id)
                 if not isinstance(source_bucket, dict):
@@ -496,22 +544,132 @@ class ServerState:
                     node = source_bucket.get(source_id)
                     if not isinstance(node, dict):
                         del source_bucket[source_id]
+                        removed_summary[report_name] += 1
+                        if len(removed_samples) < self.TIMEOUT_LOG_SAMPLE_LIMIT:
+                            removed_samples.append(
+                                f"scope={report_name} objectId={object_id} sourceId={source_id!r} reason=invalid_node"
+                            )
                         continue
                     timestamp = node.get("timestamp")
                     if not isinstance(timestamp, (int, float)):
                         del source_bucket[source_id]
+                        removed_summary[report_name] += 1
+                        if len(removed_samples) < self.TIMEOUT_LOG_SAMPLE_LIMIT:
+                            removed_samples.append(
+                                f"scope={report_name} objectId={object_id} sourceId={source_id!r} reason=invalid_timestamp"
+                            )
                         continue
 
                     timeout_seconds = timeout_resolver(node)
-                    if current_time - float(timestamp) > timeout_seconds:
+                    age_seconds = current_time - float(timestamp)
+                    if age_seconds > timeout_seconds:
+                        owner_id = node.get("submitPlayerId") if isinstance(node, dict) else None
+                        owner_online = isinstance(owner_id, str) and owner_id in self.connections
+                        payload = node.get("data") if isinstance(node, dict) else None
+                        payload_keys = sorted(payload.keys()) if isinstance(payload, dict) else []
                         del source_bucket[source_id]
+                        removed_summary[report_name] += 1
+                        if len(removed_samples) < self.TIMEOUT_LOG_SAMPLE_LIMIT:
+                            removed_samples.append(
+                                f"scope={report_name} objectId={object_id} sourceId={source_id!r} "
+                                f"reason=timeout age={age_seconds:.2f}s timeout={timeout_seconds}s "
+                                f"owner={owner_id} ownerOnline={owner_online} dataKeys={payload_keys}"
+                            )
 
                 if not source_bucket:
                     del report_map[object_id]
 
-        cleanup_report_map(self.player_reports, lambda node: effective_timeout(self.PLAYER_TIMEOUT, node))
-        cleanup_report_map(self.entity_reports, lambda node: effective_timeout(self.ENTITY_TIMEOUT, node))
-        cleanup_report_map(self.waypoint_reports, effective_waypoint_timeout)
+        cleanup_report_map("players", self.player_reports, lambda node: self.PLAYER_TIMEOUT)
+        cleanup_report_map("entities", self.entity_reports, lambda node: self.ENTITY_TIMEOUT)
+        cleanup_report_map("waypoints", self.waypoint_reports, effective_waypoint_timeout)
+
+        total_removed = removed_summary["players"] + removed_summary["entities"] + removed_summary["waypoints"]
+        if total_removed > 0 and (current_time - self._last_timeout_log_ts) >= self.TIMEOUT_LOG_INTERVAL_SEC:
+            logger.debug(
+                "Timeout cleanup removed sources "
+                f"players={removed_summary['players']} entities={removed_summary['entities']} "
+                f"waypoints={removed_summary['waypoints']} total={total_removed}"
+            )
+            for sample in removed_samples:
+                logger.debug("  - %s", sample)
+            self._last_timeout_log_ts = current_time
+
+    def collect_preexpiry_refresh_requests(self, current_time: float) -> Dict[str, dict]:
+        """
+        收集“即将过期”的来源对象，供广播层向对应客户端发起 refresh_req。
+
+        返回结构：
+        {
+          submit_player_id: {
+            "players": [player_id, ...],
+            "entities": [entity_id, ...],
+          }
+        }
+        """
+        requests: Dict[str, dict] = {}
+
+        def maybe_add(scope: str, source_id: str, object_id: str) -> None:
+            payload = requests.setdefault(source_id, {"players": [], "entities": []})
+            items = payload[scope]
+            if len(items) >= self.REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE:
+                return
+            if object_id not in items:
+                items.append(object_id)
+
+        def scan_scope(scope: str, report_map: Dict[str, Dict[str, dict]], timeout_resolver) -> None:
+            for object_id, source_bucket in report_map.items():
+                if not isinstance(source_bucket, dict):
+                    continue
+
+                for source_id, node in source_bucket.items():
+                    if not isinstance(source_id, str) or not source_id:
+                        continue
+                    if source_id not in self.connections:
+                        continue
+                    if not isinstance(node, dict):
+                        continue
+
+                    timestamp = node.get("timestamp")
+                    if not isinstance(timestamp, (int, float)):
+                        continue
+
+                    timeout_seconds = timeout_resolver(node)
+                    age_seconds = current_time - float(timestamp)
+                    if age_seconds < 0:
+                        continue
+
+                    remaining = timeout_seconds - age_seconds
+                    if remaining <= 0:
+                        continue
+                    if remaining > self.REFRESH_REQUEST_LEAD_SEC:
+                        continue
+
+                    last_sent = float(self._last_refresh_request_ts.get(source_id, 0.0))
+                    if current_time - last_sent < self.REFRESH_REQUEST_COOLDOWN_SEC:
+                        continue
+
+                    maybe_add(scope, source_id, object_id)
+
+        scan_scope("players", self.player_reports, lambda node: self.PLAYER_TIMEOUT)
+        scan_scope("entities", self.entity_reports, lambda node: self.ENTITY_TIMEOUT)
+
+        # 过滤空 payload
+        filtered: Dict[str, dict] = {}
+        for source_id, payload in requests.items():
+            if payload["players"] or payload["entities"]:
+                filtered[source_id] = payload
+
+        return filtered
+
+    def mark_refresh_request_sent(self, source_id: str, current_time: float) -> None:
+        if isinstance(source_id, str) and source_id:
+            self._last_refresh_request_ts[source_id] = current_time
+
+    def can_send_refresh_request(self, source_id: str, current_time: float) -> bool:
+        if not isinstance(source_id, str) or not source_id:
+            return False
+        last_sent = float(self._last_refresh_request_ts.get(source_id, 0.0))
+        return (current_time - last_sent) >= self.REFRESH_REQUEST_COOLDOWN_SEC
 
     def remove_connection(self, player_id: str) -> None:
         """连接断开时，移除该来源在所有上报池中的数据。"""

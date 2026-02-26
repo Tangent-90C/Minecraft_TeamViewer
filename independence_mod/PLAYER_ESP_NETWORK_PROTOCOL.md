@@ -326,11 +326,7 @@ Waypoints 当前策略：
 - `PLAYER_TIMEOUT = 5s`
 - `ENTITY_TIMEOUT = 5s`
 
-若该节点创建者仍在线：
-
-- 有效超时 = `base * ONLINE_OWNER_TIMEOUT_MULTIPLIER`（当前为 8）
-
-即在线提交者的数据最多约 40 秒才会被超时移除。
+玩家与实体均按统一基础超时处理，不再根据提交者是否在线额外放宽。
 
 ### 10.2 哪些会超时
 
@@ -338,7 +334,6 @@ Waypoints 当前策略：
 - 路标：会按 `effective_waypoint_timeout()` 清理
   - 若带 `ttlSeconds`：使用该值（并夹紧到 5~86400）
   - 若未带 `ttlSeconds`：回退到 `WAYPOINT_TIMEOUT = 120s`
-  - 不套用 `ONLINE_OWNER_TIMEOUT_MULTIPLIER`
 
 ### 10.3 断连清理
 

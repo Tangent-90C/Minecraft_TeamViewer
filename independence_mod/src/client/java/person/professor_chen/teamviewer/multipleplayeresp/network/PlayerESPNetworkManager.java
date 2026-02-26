@@ -31,9 +31,11 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.Queue;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -102,6 +104,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private volatile long lastResyncRequestMs = 0L;
 	private volatile long lastPlayersPacketSentMs = 0L;
 	private volatile long lastEntitiesPacketSentMs = 0L;
+	private final Set<String> pendingPlayerRefreshIds = new HashSet<>();
+	private final Set<String> pendingEntityRefreshIds = new HashSet<>();
 	/**
 	 * 主线程任务队列。
 	 * <p>
@@ -268,6 +272,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 		}
 
+		applyPendingPlayerRefresh(currentSnapshot, upsert, delete);
+
 		if (upsert.isEmpty() && delete.isEmpty()) {
 			return;
 		}
@@ -326,6 +332,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				delete.add(previousId);
 			}
 		}
+
+		applyPendingEntityRefresh(currentSnapshot, upsert, delete);
 
 		if (upsert.isEmpty() && delete.isEmpty()) {
 			return;
@@ -557,6 +565,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 			if ("digest".equals(messageType)) {
 				handleDigest(json);
+				return;
+			}
+
+			if ("refresh_req".equals(messageType)) {
+				handleRefreshRequest(json);
 				return;
 			}
 
@@ -1142,6 +1155,84 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return now - lastEntitiesPacketSentMs >= FORCE_FULL_REFRESH_MS;
 	}
 
+	private void handleRefreshRequest(JsonObject json) {
+		List<String> players = parseStringArrayField(json, "players");
+		List<String> entities = parseStringArrayField(json, "entities");
+
+		pendingPlayerRefreshIds.addAll(players);
+		pendingEntityRefreshIds.addAll(entities);
+
+		if (!players.isEmpty() || !entities.isEmpty()) {
+			LOGGER.info("Received refresh_req: players={}, entities={}", players.size(), entities.size());
+		}
+	}
+
+	private List<String> parseStringArrayField(JsonObject json, String fieldName) {
+		if (!json.has(fieldName) || !json.get(fieldName).isJsonArray()) {
+			return List.of();
+		}
+
+		List<String> result = new ArrayList<>();
+		for (JsonElement element : json.getAsJsonArray(fieldName)) {
+			if (element == null || !element.isJsonPrimitive()) {
+				continue;
+			}
+			String value = element.getAsString();
+			if (value != null && !value.isBlank()) {
+				result.add(value);
+			}
+		}
+		return result;
+	}
+
+	private void applyPendingPlayerRefresh(
+			Map<String, Map<String, Object>> currentSnapshot,
+			Map<String, Map<String, Object>> upsert,
+			List<String> delete
+	) {
+		if (pendingPlayerRefreshIds.isEmpty()) {
+			return;
+		}
+
+		Set<String> deleteSet = new HashSet<>(delete);
+		for (String playerId : new ArrayList<>(pendingPlayerRefreshIds)) {
+			Map<String, Object> fullData = currentSnapshot.get(playerId);
+			if (fullData != null) {
+				upsert.put(playerId, fullData);
+			} else {
+				deleteSet.add(playerId);
+			}
+			pendingPlayerRefreshIds.remove(playerId);
+		}
+
+		delete.clear();
+		delete.addAll(deleteSet);
+	}
+
+	private void applyPendingEntityRefresh(
+			Map<String, Map<String, Object>> currentSnapshot,
+			Map<String, Map<String, Object>> upsert,
+			List<String> delete
+	) {
+		if (pendingEntityRefreshIds.isEmpty()) {
+			return;
+		}
+
+		Set<String> deleteSet = new HashSet<>(delete);
+		for (String entityId : new ArrayList<>(pendingEntityRefreshIds)) {
+			Map<String, Object> fullData = currentSnapshot.get(entityId);
+			if (fullData != null) {
+				upsert.put(entityId, fullData);
+			} else {
+				deleteSet.add(entityId);
+			}
+			pendingEntityRefreshIds.remove(entityId);
+		}
+
+		delete.clear();
+		delete.addAll(deleteSet);
+	}
+
 	private JsonObject extractDataNode(JsonObject node) {
 		if (node.has("data") && node.get("data").isJsonObject()) {
 			return node.getAsJsonObject("data");
@@ -1445,6 +1536,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
+		pendingPlayerRefreshIds.clear();
+		pendingEntityRefreshIds.clear();
 		remotePlayerDataCache.clear();
 		remoteEntityDataCache.clear();
 		remoteWaypointDataCache.clear();

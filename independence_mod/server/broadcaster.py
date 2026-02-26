@@ -1,7 +1,11 @@
 import json
+import logging
 import time
 
 from .state import ServerState
+
+
+logger = logging.getLogger("teamviewer.broadcaster")
 
 
 class Broadcaster:
@@ -67,7 +71,7 @@ class Broadcaster:
         try:
             message = json.dumps(snapshot_data, separators=(",", ":"))
         except Exception as e:
-            print(f"Error serializing snapshot data: {e}")
+            logger.error("Error serializing snapshot data: %s", e)
             return
 
         disconnected = []
@@ -75,7 +79,7 @@ class Broadcaster:
             try:
                 await ws.send_text(message)
             except Exception as e:
-                print(f"Error sending snapshot to admin {admin_id}: {e}")
+                logger.warning("Error sending snapshot to admin %s: %s", admin_id, e)
                 disconnected.append(admin_id)
 
         for admin_id in disconnected:
@@ -94,7 +98,7 @@ class Broadcaster:
         try:
             message = json.dumps(message_data, separators=(",", ":"))
         except Exception as e:
-            print(f"Error serializing legacy positions data: {e}")
+            logger.error("Error serializing legacy positions data: %s", e)
             return
 
         disconnected = []
@@ -102,7 +106,7 @@ class Broadcaster:
             if self.state.is_delta_client(player_uuid):
                 continue
             if not self.state.websocket_is_connected(ws):
-                print(
+                logger.debug(
                     f"Skip legacy broadcast to disconnected websocket player={player_uuid} "
                     f"state=({self.state.websocket_state_label(ws)})"
                 )
@@ -111,7 +115,7 @@ class Broadcaster:
             try:
                 await ws.send_text(message)
             except Exception as e:
-                print(
+                logger.warning(
                     f"Error sending legacy message to player={player_uuid} "
                     f"state=({self.state.websocket_state_label(ws)}): {e}"
                 )
@@ -122,6 +126,7 @@ class Broadcaster:
 
     async def broadcast_updates(self, force_full_to_delta: bool = False) -> None:
         """统一广播入口：清理超时、计算 patch、按能力下发。"""
+        await self.request_preexpiry_refreshes()
         self.state.cleanup_timeouts()
         changes = self.state.refresh_resolved_states()
 
@@ -134,7 +139,7 @@ class Broadcaster:
         disconnected = []
         for player_id, ws in list(self.state.connections.items()):
             if not self.state.websocket_is_connected(ws):
-                print(
+                logger.debug(
                     f"Skip delta broadcast to disconnected websocket player={player_id} "
                     f"state=({self.state.websocket_state_label(ws)}) rev={rev} changed={changed}"
                 )
@@ -164,14 +169,14 @@ class Broadcaster:
 
                     await self.maybe_send_digest(player_id)
             except RuntimeError as e:
-                print(
+                logger.warning(
                     f"RuntimeError sending delta update to player={player_id} "
                     f"state=({self.state.websocket_state_label(ws)}) rev={rev} changed={changed} "
                     f"force_full={force_full_to_delta}: {e}"
                 )
                 disconnected.append(player_id)
             except Exception as e:
-                print(
+                logger.warning(
                     f"Error sending delta update to player={player_id} "
                     f"state=({self.state.websocket_state_label(ws)}) rev={rev} changed={changed} "
                     f"force_full={force_full_to_delta}: {e}"
@@ -185,3 +190,70 @@ class Broadcaster:
             await self.broadcast_legacy_positions()
 
         await self.broadcast_snapshot()
+
+    async def request_preexpiry_refreshes(self) -> None:
+        """在对象即将超时前，向对应来源客户端请求该范围内的全量确认。"""
+        current_time = time.time()
+        refresh_targets = self.state.collect_preexpiry_refresh_requests(current_time)
+        if not refresh_targets:
+            return
+
+        for source_id, payload in refresh_targets.items():
+            await self.send_refresh_request_to_source(
+                source_id,
+                players=payload.get("players", []),
+                entities=payload.get("entities", []),
+                reason="expiry_soon",
+                current_time=current_time,
+                bypass_cooldown=False,
+            )
+
+    async def send_refresh_request_to_source(
+        self,
+        source_id: str,
+        players: list,
+        entities: list,
+        reason: str,
+        current_time: float | None = None,
+        bypass_cooldown: bool = False,
+    ) -> None:
+        if not isinstance(source_id, str) or not source_id:
+            return
+
+        players = [item for item in players if isinstance(item, str) and item]
+        entities = [item for item in entities if isinstance(item, str) and item]
+        if not players and not entities:
+            return
+
+        now = time.time() if current_time is None else current_time
+        if not bypass_cooldown and not self.state.can_send_refresh_request(source_id, now):
+            return
+
+        ws = self.state.connections.get(source_id)
+        if ws is None:
+            return
+        if not self.state.websocket_is_connected(ws):
+            self.state.remove_connection(source_id)
+            return
+
+        message = {
+            "type": "refresh_req",
+            "reason": reason,
+            "serverTime": now,
+            "rev": self.state.revision,
+            "players": players,
+            "entities": entities,
+        }
+        try:
+            await ws.send_text(json.dumps(message, separators=(",", ":")))
+            self.state.mark_refresh_request_sent(source_id, now)
+            logger.debug(
+                "Sent refresh_req "
+                f"source={source_id} players={len(players)} entities={len(entities)} reason={reason}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Error sending refresh_req to source={source_id} "
+                f"state=({self.state.websocket_state_label(ws)}): {e}"
+            )
+            self.state.remove_connection(source_id)

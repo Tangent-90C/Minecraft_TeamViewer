@@ -1,6 +1,7 @@
 import json
+import logging
+import os
 import time
-import traceback
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -10,6 +11,22 @@ from pydantic import ValidationError
 from server.broadcaster import Broadcaster
 from server.models import EntityData, PlayerData, WaypointData
 from server.state import ServerState
+
+
+def configure_logging() -> None:
+    if logging.getLogger().handlers:
+        return
+
+    level_name = os.getenv("TEAMVIEWER_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+
+
+configure_logging()
+logger = logging.getLogger("teamviewer.main")
 
 # 进程级单例：承载内存态与广播能力。
 state = ServerState()
@@ -122,7 +139,7 @@ async def admin_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        print(f"Admin websocket error: {e}")
+        logger.exception("Admin websocket error: %s", e)
     finally:
         if admin_id in state.admin_connections:
             del state.admin_connections[admin_id]
@@ -147,7 +164,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = json.loads(message)
             except json.JSONDecodeError as e:
-                print(f"Error decoding JSON message: {e}")
+                logger.debug("Error decoding JSON message: %s", e)
                 continue
 
             submit_player_id = data.get("submitPlayerId")
@@ -161,7 +178,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     client_delta = bool(data.get("supportsDelta", False))
                     state.mark_player_capability(submit_player_id, client_protocol, client_delta)
 
-                    print(f"Client {submit_player_id} connected (protocol {client_protocol})")
+                    logger.info("Client %s connected (protocol %s)", submit_player_id, client_protocol)
                     ack = {
                         "type": "handshake_ack",
                         "ready": True,
@@ -179,7 +196,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 兼容旧客户端：未显式握手也可接入，但按 legacy 能力处理。
                 state.connections[submit_player_id] = websocket
                 state.mark_player_capability(submit_player_id, 1, False)
-                print(f"Client {submit_player_id} connected (legacy)")
+                logger.info("Client %s connected (legacy)", submit_player_id)
 
             if message_type == "players_update":
                 # 玩家全量：语义为“该来源本轮玩家状态完整快照”。
@@ -191,7 +208,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         node = state.build_state_node(submit_player_id, current_time, normalized)
                         state.upsert_report(state.player_reports, pid, submit_player_id, node)
                     except Exception as e:
-                        print(f"Error validating player data for {pid}: {e}")
+                        logger.warning("Error validating player data for %s: %s", pid, e)
 
                 await broadcaster.broadcast_updates()
                 continue
@@ -201,6 +218,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 current_time = time.time()
                 upsert = data.get("upsert", {})
                 delete = data.get("delete", [])
+                missing_baseline_players = []
 
                 for pid, player_data in upsert.items():
                     source_key = submit_player_id if isinstance(submit_player_id, str) else ""
@@ -213,7 +231,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         missing_fields = state.missing_fields_from_validation_error(e)
                         existing_data = existing_node.get("data") if isinstance(existing_node, dict) else None
                         existing_keys = sorted(existing_data.keys()) if isinstance(existing_data, dict) else []
-                        print(
+                        if not isinstance(existing_data, dict):
+                            missing_baseline_players.append(pid)
+                        logger.warning(
                             "Player patch validation failed "
                             f"pid={pid} submitPlayerId={submit_player_id} sourceKey={source_key!r} "
                             f"hasExistingSnapshot={bool(isinstance(existing_data, dict))} "
@@ -222,17 +242,25 @@ async def websocket_endpoint(websocket: WebSocket):
                             f"errors={state.payload_preview(e.errors(), 480)}"
                         )
                     except Exception as e:
-                        print(
+                        logger.exception(
                             "Unexpected error validating player patch "
                             f"pid={pid} submitPlayerId={submit_player_id} payload={state.payload_preview(player_data)}: {e}"
                         )
-                        traceback.print_exc()
 
                 if isinstance(delete, list):
                     for pid in delete:
                         if not isinstance(pid, str):
                             continue
                         state.delete_report(state.player_reports, pid, submit_player_id)
+
+                if missing_baseline_players and isinstance(submit_player_id, str) and submit_player_id:
+                    await broadcaster.send_refresh_request_to_source(
+                        submit_player_id,
+                        players=missing_baseline_players,
+                        entities=[],
+                        reason="missing_baseline_patch",
+                        bypass_cooldown=False,
+                    )
 
                 await broadcaster.broadcast_updates()
                 continue
@@ -254,7 +282,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         node = state.build_state_node(submit_player_id, current_time, normalized)
                         state.upsert_report(state.entity_reports, entity_id, submit_player_id, node)
                     except Exception as e:
-                        print(f"Error validating entity data for {entity_id}: {e}")
+                        logger.warning("Error validating entity data for %s: %s", entity_id, e)
 
                 await broadcaster.broadcast_updates()
                 continue
@@ -264,22 +292,50 @@ async def websocket_endpoint(websocket: WebSocket):
                 current_time = time.time()
                 upsert = data.get("upsert", {})
                 delete = data.get("delete", [])
+                missing_baseline_entities = []
 
                 for entity_id, entity_data in upsert.items():
+                    source_key = submit_player_id if isinstance(submit_player_id, str) else ""
+                    existing_node = state.entity_reports.get(entity_id, {}).get(source_key)
                     try:
-                        source_key = submit_player_id if isinstance(submit_player_id, str) else ""
-                        existing_node = state.entity_reports.get(entity_id, {}).get(source_key)
                         normalized = state.merge_patch_and_validate(EntityData, existing_node, entity_data)
                         node = state.build_state_node(submit_player_id, current_time, normalized)
                         state.upsert_report(state.entity_reports, entity_id, submit_player_id, node)
+                    except ValidationError as e:
+                        missing_fields = state.missing_fields_from_validation_error(e)
+                        existing_data = existing_node.get("data") if isinstance(existing_node, dict) else None
+                        existing_keys = sorted(existing_data.keys()) if isinstance(existing_data, dict) else []
+                        if not isinstance(existing_data, dict):
+                            missing_baseline_entities.append(entity_id)
+                        logger.warning(
+                            "Entity patch validation failed "
+                            f"entityId={entity_id} submitPlayerId={submit_player_id} sourceKey={source_key!r} "
+                            f"hasExistingSnapshot={bool(isinstance(existing_data, dict))} "
+                            f"missingFields={missing_fields or '[]'} "
+                            f"existingKeys={existing_keys} payload={state.payload_preview(entity_data)} "
+                            f"errors={state.payload_preview(e.errors(), 480)}"
+                        )
                     except Exception as e:
-                        print(f"Error validating entity patch for {entity_id}: {e}")
+                        logger.exception(
+                            "Unexpected error validating entity patch "
+                            f"entityId={entity_id} submitPlayerId={submit_player_id} "
+                            f"payload={state.payload_preview(entity_data)}: {e}"
+                        )
 
                 if isinstance(delete, list):
                     for entity_id in delete:
                         if not isinstance(entity_id, str):
                             continue
                         state.delete_report(state.entity_reports, entity_id, submit_player_id)
+
+                if missing_baseline_entities and isinstance(submit_player_id, str) and submit_player_id:
+                    await broadcaster.send_refresh_request_to_source(
+                        submit_player_id,
+                        players=[],
+                        entities=missing_baseline_entities,
+                        reason="missing_baseline_patch",
+                        bypass_cooldown=False,
+                    )
 
                 await broadcaster.broadcast_updates()
                 continue
@@ -324,7 +380,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         node = state.build_state_node(submit_player_id, current_time, normalized)
                         state.upsert_report(state.waypoint_reports, waypoint_id, submit_player_id, node)
                     except Exception as e:
-                        print(f"Error validating waypoint data for {waypoint_id}: {e}")
+                        logger.warning("Error validating waypoint data for %s: %s", waypoint_id, e)
 
                 await broadcaster.broadcast_updates()
                 continue
@@ -381,17 +437,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     await broadcaster.send_snapshot_full_to_player(submit_player_id)
                 except Exception as e:
-                    print(f"Error sending snapshot_full to {submit_player_id}: {e}")
+                    logger.warning("Error sending snapshot_full to %s: %s", submit_player_id, e)
                 continue
 
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        print(f"Error handling player message: {e}")
+        logger.exception("Error handling player message: %s", e)
     finally:
         if submit_player_id:
             state.remove_connection(submit_player_id)
-            print(f"Client {submit_player_id} disconnected")
+            logger.info("Client %s disconnected", submit_player_id)
             await broadcaster.broadcast_updates()
 
 

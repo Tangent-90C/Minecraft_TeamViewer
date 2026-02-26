@@ -263,42 +263,12 @@
   }
 
   function resolvePlayerIdFromInput() {
-    const queryInput = document.getElementById('nodemc-mark-player-query');
     const select = document.getElementById('nodemc-mark-player-select');
     const selectedPlayerId = select ? String(select.value || '').trim() : '';
     if (selectedPlayerId) {
       return { ok: true, playerId: selectedPlayerId };
     }
-
-    const query = queryInput ? String(queryInput.value || '').trim() : '';
-    if (!query) {
-      return { ok: false, error: '请先从列表选择玩家，或输入玩家名/玩家ID' };
-    }
-
-    const players = getOnlinePlayers();
-    const byId = players.find((item) => item.playerId === query);
-    if (byId) {
-      return { ok: true, playerId: byId.playerId };
-    }
-
-    const lowerQuery = query.toLowerCase();
-    const exactNameMatches = players.filter((item) => item.playerName.toLowerCase() === lowerQuery);
-    if (exactNameMatches.length === 1) {
-      return { ok: true, playerId: exactNameMatches[0].playerId };
-    }
-    if (exactNameMatches.length > 1) {
-      return { ok: false, error: '匹配到多个同名玩家，请使用下拉列表选择' };
-    }
-
-    const fuzzyNameMatches = players.filter((item) => item.playerName.toLowerCase().includes(lowerQuery));
-    if (fuzzyNameMatches.length === 1) {
-      return { ok: true, playerId: fuzzyNameMatches[0].playerId };
-    }
-    if (fuzzyNameMatches.length > 1) {
-      return { ok: false, error: '匹配到多个玩家，请使用下拉列表选择' };
-    }
-
-    return { ok: true, playerId: query };
+    return { ok: false, error: '请先从在线玩家列表选择目标玩家' };
   }
 
   function readNumber(value) {
@@ -585,6 +555,8 @@
       #nodemc-overlay-panel .n-title {
         font-weight: 700;
         margin-bottom: 8px;
+        cursor: move;
+        user-select: none;
       }
       #nodemc-overlay-panel .n-row {
         margin-bottom: 8px;
@@ -655,7 +627,7 @@
     const panel = document.createElement('div');
     panel.id = 'nodemc-overlay-panel';
     panel.innerHTML = `
-      <div class="n-title">NodeMC Overlay 设置</div>
+      <div class="n-title" id="nodemc-overlay-title">NodeMC Overlay 设置（可拖动）</div>
       <div class="n-row">
         <label>Admin WS URL</label>
         <input id="nodemc-overlay-url" type="text" />
@@ -681,10 +653,6 @@
         <select id="nodemc-mark-player-select">
           <option value="">暂无在线玩家</option>
         </select>
-      </div>
-      <div class="n-row">
-        <label>玩家名 / 玩家ID（备选）</label>
-        <input id="nodemc-mark-player-query" type="text" placeholder="输入玩家名或玩家ID" />
       </div>
       <div class="n-row">
         <label>阵营</label>
@@ -747,15 +715,39 @@
       };
     };
 
-    const setFabPosition = (left, top) => {
+    const clampPanelPosition = (left, top) => {
+      const width = panel.offsetWidth || 320;
+      const height = panel.offsetHeight || 280;
+      const margin = 6;
+      const minLeft = margin;
+      const minTop = margin;
+      const maxLeft = Math.max(minLeft, window.innerWidth - width - margin);
+      const maxTop = Math.max(minTop, window.innerHeight - height - margin);
+      return {
+        left: Math.min(maxLeft, Math.max(minLeft, left)),
+        top: Math.min(maxTop, Math.max(minTop, top)),
+      };
+    };
+
+    const setPanelPosition = (left, top) => {
+      const clamped = clampPanelPosition(left, top);
+      panel.style.left = `${Math.round(clamped.left)}px`;
+      panel.style.top = `${Math.round(clamped.top)}px`;
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      return clamped;
+    };
+
+    const setFabPosition = (left, top, syncPanel = true) => {
       const clamped = clampFabPosition(left, top);
       fab.style.left = `${Math.round(clamped.left)}px`;
       fab.style.top = `${Math.round(clamped.top)}px`;
       fab.style.right = 'auto';
       fab.style.bottom = 'auto';
-      if (panelVisible) {
+      if (panelVisible && syncPanel) {
         updatePanelPositionNearFab();
       }
+      return clamped;
     };
 
     const initialRect = fab.getBoundingClientRect();
@@ -763,34 +755,46 @@
 
     let dragState = null;
     let dragMoved = false;
-    fab.addEventListener('pointerdown', (event) => {
+
+    const beginDrag = (event, kind) => {
       dragState = {
         pointerId: event.pointerId,
+        kind,
         startX: event.clientX,
         startY: event.clientY,
-        originLeft: fab.offsetLeft,
-        originTop: fab.offsetTop,
+        fabLeft: fab.offsetLeft,
+        fabTop: fab.offsetTop,
+        panelLeft: panel.offsetLeft,
+        panelTop: panel.offsetTop,
       };
       dragMoved = false;
-      try {
-        fab.setPointerCapture(event.pointerId);
-      } catch (_) {}
-    });
+    };
 
-    fab.addEventListener('pointermove', (event) => {
+    const moveDrag = (event) => {
       if (!dragState || event.pointerId !== dragState.pointerId) return;
       const dx = event.clientX - dragState.startX;
       const dy = event.clientY - dragState.startY;
       if (!dragMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
         dragMoved = true;
       }
-      setFabPosition(dragState.originLeft + dx, dragState.originTop + dy);
-    });
 
-    const endDrag = (event) => {
+      if (dragState.kind === 'fab') {
+        setFabPosition(dragState.fabLeft + dx, dragState.fabTop + dy, true);
+        return;
+      }
+
+      if (dragState.kind === 'panel') {
+        const appliedFab = setFabPosition(dragState.fabLeft + dx, dragState.fabTop + dy, false);
+        const appliedDx = appliedFab.left - dragState.fabLeft;
+        const appliedDy = appliedFab.top - dragState.fabTop;
+        setPanelPosition(dragState.panelLeft + appliedDx, dragState.panelTop + appliedDy);
+      }
+    };
+
+    const endDrag = (event, sourceElement) => {
       if (!dragState || event.pointerId !== dragState.pointerId) return;
       try {
-        fab.releasePointerCapture(event.pointerId);
+        sourceElement.releasePointerCapture(event.pointerId);
       } catch (_) {}
       dragState = null;
       setTimeout(() => {
@@ -798,8 +802,29 @@
       }, 0);
     };
 
-    fab.addEventListener('pointerup', endDrag);
-    fab.addEventListener('pointercancel', endDrag);
+    fab.addEventListener('pointerdown', (event) => {
+      beginDrag(event, 'fab');
+      try {
+        fab.setPointerCapture(event.pointerId);
+      } catch (_) {}
+    });
+
+    fab.addEventListener('pointermove', moveDrag);
+
+    const titleBar = panel.querySelector('#nodemc-overlay-title');
+    titleBar?.addEventListener('pointerdown', (event) => {
+      beginDrag(event, 'panel');
+      try {
+        titleBar.setPointerCapture(event.pointerId);
+      } catch (_) {}
+    });
+
+    titleBar?.addEventListener('pointermove', moveDrag);
+
+    fab.addEventListener('pointerup', (event) => endDrag(event, fab));
+    fab.addEventListener('pointercancel', (event) => endDrag(event, fab));
+    titleBar?.addEventListener('pointerup', (event) => endDrag(event, titleBar));
+    titleBar?.addEventListener('pointercancel', (event) => endDrag(event, titleBar));
 
     fillFormFromConfig();
     updateUiStatus();
@@ -832,7 +857,6 @@
     const teamInput = document.getElementById('nodemc-mark-team');
     const colorInput = document.getElementById('nodemc-mark-color');
     const selectInput = document.getElementById('nodemc-mark-player-select');
-    const queryInput = document.getElementById('nodemc-mark-player-query');
     if (teamInput && colorInput) {
       teamInput.addEventListener('change', () => {
         const team = normalizeTeam(teamInput.value);
@@ -841,13 +865,10 @@
       colorInput.value = TEAM_DEFAULT_COLORS[normalizeTeam(teamInput.value)];
     }
 
-    if (selectInput && queryInput) {
+    if (selectInput) {
       selectInput.addEventListener('change', () => {
-        const selectedId = String(selectInput.value || '').trim();
-        if (!selectedId) return;
-        const players = getOnlinePlayers();
-        const selected = players.find((item) => item.playerId === selectedId);
-        queryInput.value = selected ? selected.playerName : selectedId;
+        lastErrorText = null;
+        updateUiStatus();
       });
     }
 
