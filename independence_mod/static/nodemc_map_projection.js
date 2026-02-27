@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         NodeMC Projection Test
+// @name         地图玩家投影 - NodeMC 版
 // @namespace    https://map.nodemc.cc/
 // @version      0.2.0
 // @description  将本地 MultiplePlayerESP 后台玩家信息投影到 NodeMC 地图
-// @author       You
+// @author       Prof. Chen
 // @match        https://map.nodemc.cc/*
 // @match        http://map.nodemc.cc/*
 // @match        file:///*NodeMC*时局图*.html*
@@ -56,6 +56,7 @@
   let latestSnapshot = null;
   let uiMounted = false;
   let panelVisible = false;
+  let overlayStarted = false;
   let adminWs = null;
   let wsConnected = false;
   let reconnectTimer = null;
@@ -845,16 +846,22 @@
     }
 
     if (existing) {
-      existing.setLatLng(latLng);
-      existing.setIcon(
-        leafletRef.divIcon({
-          className: '',
-          html,
-          iconSize: [0, 0],
-          iconAnchor: [0, 0],
-        })
-      );
-      return;
+      try {
+        existing.setLatLng(latLng);
+        existing.setIcon(
+          leafletRef.divIcon({
+            className: '',
+            html,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          })
+        );
+        return;
+      } catch (e) {
+        try { existing.remove(); } catch (_) {}
+        try { markersById.delete(playerId); } catch (_) {}
+        // fallthrough to recreate marker
+      }
     }
 
     const marker = leafletRef.marker(latLng, {
@@ -939,6 +946,8 @@
         );
         return;
       } catch (e) {
+        try { existing.remove(); } catch (_) {}
+        try { waypointsById.delete(waypointId); } catch (_) {}
         // recreate below on failure
       }
     }
@@ -1839,6 +1848,10 @@
       adminWs = null;
     }
     wsConnected = false;
+    if (reconnectTimer !== null) {
+      try { clearTimeout(reconnectTimer); } catch (_) {}
+      reconnectTimer = null;
+    }
   }
 
   function reconnectAdminWs() {
@@ -2118,6 +2131,39 @@
     PAGE.nodemcDebug = debugApi;
   }
 
+  function cleanupAll() {
+    try {
+      // remove markers
+      for (const m of markersById.values()) {
+        try { m.remove(); } catch (_) {}
+      }
+      markersById.clear();
+      for (const m of waypointsById.values()) {
+        try { m.remove(); } catch (_) {}
+      }
+      waypointsById.clear();
+
+      // remove injected UI and styles
+      try { const s = document.getElementById('nodemc-overlay-ui-style'); if (s) s.remove(); } catch (_) {}
+      try { const s2 = document.getElementById('nodemc-projection-style'); if (s2) s2.remove(); } catch (_) {}
+      try { const fab = document.getElementById('nodemc-overlay-fab'); if (fab) fab.remove(); } catch (_) {}
+      try { const panel = document.getElementById('nodemc-overlay-panel'); if (panel) panel.remove(); } catch (_) {}
+
+      // clear globals
+      try { delete PAGE.__NODEMC_OVERLAY_DEBUG__; } catch (_) {}
+      try { delete PAGE.__NODEMC_PLAYER_OVERLAY__; } catch (_) {}
+
+      // cleanup websocket and timers
+      cleanupWs();
+
+      uiMounted = false;
+      overlayStarted = false;
+    } catch (_) {}
+  }
+
+  // cleanup on page unload
+  try { window.addEventListener('beforeunload', cleanupAll); } catch (_) {}
+
   function initOverlay() {
     ensureOverlayStyles();
     applyLatestSnapshotIfPossible();
@@ -2142,8 +2188,10 @@
       const map = capturedMap || findMapByDom();
       if (map && leafletRef) {
         initOverlay();
+        overlayStarted = true;
+        return;
       }
-      PAGE.requestAnimationFrame(tryStart);
+      if (!overlayStarted) PAGE.requestAnimationFrame(tryStart);
     };
 
     tryStart();
