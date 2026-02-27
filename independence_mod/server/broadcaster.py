@@ -20,6 +20,90 @@ class Broadcaster:
 
     def __init__(self, state: ServerState) -> None:
         self.state = state
+        self._admin_last_state: dict | None = None
+
+    @staticmethod
+    def _snapshot_scope_from_state_map(state_map: dict) -> dict:
+        if not isinstance(state_map, dict):
+            return {}
+        return {object_id: node.get("data", {}) for object_id, node in state_map.items() if isinstance(node, dict)}
+
+    def _build_admin_view_state(self) -> dict:
+        return {
+            "players": self._snapshot_scope_from_state_map(self.state.players),
+            "entities": self._snapshot_scope_from_state_map(self.state.entities),
+            "waypoints": self._snapshot_scope_from_state_map(self.state.waypoints),
+            "playerMarks": dict(self.state.player_marks),
+            "tabState": self.state.build_admin_tab_snapshot(),
+            "connections": list(self.state.connections.keys()),
+            "connections_count": len(self.state.connections),
+        }
+
+    @staticmethod
+    def _wrap_plain_scope(scope_map: dict) -> dict:
+        if not isinstance(scope_map, dict):
+            return {}
+        return {
+            object_id: {"data": value}
+            for object_id, value in scope_map.items()
+        }
+
+    def _compute_admin_patch(self, old_state: dict, new_state: dict) -> dict:
+        players_patch = self.state.compute_scope_patch(
+            self._wrap_plain_scope(old_state.get("players", {})),
+            self._wrap_plain_scope(new_state.get("players", {})),
+        )
+        entities_patch = self.state.compute_scope_patch(
+            self._wrap_plain_scope(old_state.get("entities", {})),
+            self._wrap_plain_scope(new_state.get("entities", {})),
+        )
+        waypoints_patch = self.state.compute_scope_patch(
+            self._wrap_plain_scope(old_state.get("waypoints", {})),
+            self._wrap_plain_scope(new_state.get("waypoints", {})),
+        )
+        marks_patch = self.state.compute_scope_patch(
+            self._wrap_plain_scope(old_state.get("playerMarks", {})),
+            self._wrap_plain_scope(new_state.get("playerMarks", {})),
+        )
+
+        meta_patch = {}
+        if old_state.get("tabState") != new_state.get("tabState"):
+            meta_patch["tabState"] = new_state.get("tabState")
+        if old_state.get("connections") != new_state.get("connections"):
+            meta_patch["connections"] = new_state.get("connections", [])
+            meta_patch["connections_count"] = new_state.get("connections_count", 0)
+
+        return {
+            "players": players_patch,
+            "entities": entities_patch,
+            "waypoints": waypoints_patch,
+            "playerMarks": marks_patch,
+            "meta": meta_patch,
+        }
+
+    @staticmethod
+    def _has_admin_patch_changes(patch: dict) -> bool:
+        for scope in ("players", "entities", "waypoints", "playerMarks"):
+            if patch.get(scope, {}).get("upsert") or patch.get(scope, {}).get("delete"):
+                return True
+        return bool(patch.get("meta"))
+
+    async def send_admin_snapshot_full(self, admin_id: str) -> None:
+        ws = self.state.admin_connections.get(admin_id)
+        if ws is None:
+            return
+
+        view_state = self._build_admin_view_state()
+        self._admin_last_state = view_state
+        message = {
+            "type": "snapshot_full",
+            "channel": "admin",
+            "server_time": time.time(),
+            "revision": self.state.revision,
+            **view_state,
+        }
+
+        await ws.send_text(json.dumps(message, separators=(",", ":")))
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
         allowed_sources = self.state.get_allowed_sources_for_player(player_id)
@@ -72,38 +156,55 @@ class Broadcaster:
         }
         await ws.send_text(json.dumps(message, separators=(",", ":")))
 
-    async def broadcast_snapshot(self) -> None:
-        """向管理端广播当前服务端总览。"""
-        current_time = time.time()
-        snapshot_data = {
-            "server_time": current_time,
-            "players": dict(self.state.players),
-            "entities": dict(self.state.entities),
-            "waypoints": dict(self.state.waypoints),
-            "playerMarks": dict(self.state.player_marks),
-            "tabState": self.state.build_admin_tab_snapshot(),
-            "connections": list(self.state.connections.keys()),
-            "connections_count": len(self.state.connections),
-            "revision": self.state.revision,
-        }
+    async def broadcast_admin_updates(self, force_full: bool = False) -> None:
+        """向管理端广播增量（必要时全量）。"""
+        if not self.state.admin_connections:
+            self._admin_last_state = self._build_admin_view_state()
+            return
+
+        current_state = self._build_admin_view_state()
+        previous_state = self._admin_last_state
+
+        if force_full or previous_state is None:
+            message = {
+                "type": "snapshot_full",
+                "channel": "admin",
+                "server_time": time.time(),
+                "revision": self.state.revision,
+                **current_state,
+            }
+        else:
+            patch = self._compute_admin_patch(previous_state, current_state)
+            if not self._has_admin_patch_changes(patch):
+                self._admin_last_state = current_state
+                return
+            message = {
+                "type": "patch",
+                "channel": "admin",
+                "server_time": time.time(),
+                "revision": self.state.revision,
+                **patch,
+            }
 
         try:
-            message = json.dumps(snapshot_data, separators=(",", ":"))
+            encoded = json.dumps(message, separators=(",", ":"))
         except Exception as e:
-            logger.error("Error serializing snapshot data: %s", e)
+            logger.error("Error serializing admin update payload: %s", e)
             return
 
         disconnected = []
         for admin_id, ws in list(self.state.admin_connections.items()):
             try:
-                await ws.send_text(message)
+                await ws.send_text(encoded)
             except Exception as e:
-                logger.warning("Error sending snapshot to admin %s: %s", admin_id, e)
+                logger.warning("Error sending admin update to %s: %s", admin_id, e)
                 disconnected.append(admin_id)
 
         for admin_id in disconnected:
             if admin_id in self.state.admin_connections:
                 del self.state.admin_connections[admin_id]
+
+        self._admin_last_state = current_state
 
     async def broadcast_legacy_positions(self) -> None:
         """向 legacy 客户端广播全量 positions 消息。"""
@@ -226,7 +327,7 @@ class Broadcaster:
         if changed:
             await self.broadcast_legacy_positions()
 
-        await self.broadcast_snapshot()
+        await self.broadcast_admin_updates()
 
     async def request_preexpiry_refreshes(self) -> None:
         """在对象即将超时前，向对应来源客户端请求该范围内的全量确认。"""

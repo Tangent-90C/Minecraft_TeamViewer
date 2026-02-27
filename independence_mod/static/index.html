@@ -41,6 +41,131 @@
 	</div>
 
 	<script>
+		let adminSocket = null;
+		let lastAdminResyncRequestAt = 0;
+		let adminState = {
+			players: {},
+			entities: {},
+			waypoints: {},
+			connections: [],
+			connections_count: 0,
+			server_time: '-',
+			revision: 0,
+		};
+
+		function applyScopePatch(target, scopePatch, requiredKeysForNew = null) {
+			if (!target || typeof target !== 'object') return {};
+			if (!scopePatch || typeof scopePatch !== 'object') return target;
+
+			const upsert = scopePatch.upsert && typeof scopePatch.upsert === 'object' ? scopePatch.upsert : {};
+			const remove = Array.isArray(scopePatch.delete) ? scopePatch.delete : [];
+
+			for (const [key, value] of Object.entries(upsert)) {
+				const prev = target[key];
+				const existed = prev && typeof prev === 'object' && !Array.isArray(prev);
+				if (!existed && requiredKeysForNew && Array.isArray(requiredKeysForNew)) {
+					if (!value || typeof value !== 'object' || Array.isArray(value)) {
+						continue;
+					}
+					if (!hasAllKeys(value, requiredKeysForNew)) {
+						continue;
+					}
+				}
+				if (value && typeof value === 'object' && !Array.isArray(value)) {
+					target[key] = existed
+						? { ...prev, ...value }
+						: { ...value };
+				} else {
+					target[key] = value;
+				}
+			}
+			for (const key of remove) {
+				delete target[key];
+			}
+			return target;
+		}
+
+		function hasAllKeys(obj, keys) {
+			if (!obj || typeof obj !== 'object') return false;
+			return keys.every((key) => Object.prototype.hasOwnProperty.call(obj, key));
+		}
+
+		function shouldResyncForScopeMissingBaseline(currentMap, scopePatch, requiredKeys) {
+			if (!scopePatch || typeof scopePatch !== 'object') return false;
+			const upsert = scopePatch.upsert && typeof scopePatch.upsert === 'object' ? scopePatch.upsert : {};
+			for (const [key, delta] of Object.entries(upsert)) {
+				const existed = currentMap && typeof currentMap === 'object'
+					? Object.prototype.hasOwnProperty.call(currentMap, key)
+					: false;
+				if (existed) continue;
+				if (!delta || typeof delta !== 'object' || Array.isArray(delta)) {
+					return true;
+				}
+				if (!hasAllKeys(delta, requiredKeys)) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		function requestAdminResync(reason) {
+			if (!adminSocket || adminSocket.readyState !== WebSocket.OPEN) return;
+			const now = Date.now();
+			if (now - lastAdminResyncRequestAt < 1500) return;
+			lastAdminResyncRequestAt = now;
+			try {
+				adminSocket.send(JSON.stringify({ type: 'resync_req', reason: reason || 'baseline_missing' }));
+			} catch (e) {
+				console.warn('resync_req failed', e);
+			}
+		}
+
+		function applyAdminMessage(message) {
+			if (!message || typeof message !== 'object') return;
+
+			if (message.type === 'snapshot_full') {
+				adminState = {
+					players: message.players && typeof message.players === 'object' ? message.players : {},
+					entities: message.entities && typeof message.entities === 'object' ? message.entities : {},
+					waypoints: message.waypoints && typeof message.waypoints === 'object' ? message.waypoints : {},
+					connections: Array.isArray(message.connections) ? message.connections : [],
+					connections_count: Number.isFinite(message.connections_count) ? message.connections_count : 0,
+					server_time: message.server_time ?? '-',
+					revision: message.revision ?? 0,
+				};
+				return;
+			}
+
+			if (message.type !== 'patch') return;
+
+			if (!adminState || typeof adminState !== 'object') {
+				requestAdminResync('patch_before_full_snapshot');
+				return;
+			}
+
+			const needResync =
+				shouldResyncForScopeMissingBaseline(adminState.players || {}, message.players, ['x', 'y', 'z', 'dimension']) ||
+				shouldResyncForScopeMissingBaseline(adminState.entities || {}, message.entities, ['x', 'y', 'z', 'dimension']);
+			if (needResync) {
+				requestAdminResync('patch_missing_baseline');
+			}
+
+			adminState.players = applyScopePatch(adminState.players || {}, message.players, ['x', 'y', 'z', 'dimension']);
+			adminState.entities = applyScopePatch(adminState.entities || {}, message.entities, ['x', 'y', 'z', 'dimension']);
+			adminState.waypoints = applyScopePatch(adminState.waypoints || {}, message.waypoints);
+
+			const meta = message.meta && typeof message.meta === 'object' ? message.meta : {};
+			if (Array.isArray(meta.connections)) {
+				adminState.connections = meta.connections;
+			}
+			if (Number.isFinite(meta.connections_count)) {
+				adminState.connections_count = meta.connections_count;
+			}
+
+			adminState.server_time = message.server_time ?? adminState.server_time;
+			adminState.revision = message.revision ?? adminState.revision;
+		}
+
 		function renderSnapshot(data) {
 			document.getElementById('conn-count').textContent = data.connections_count ?? 0;
 			document.getElementById('conn-list').textContent = JSON.stringify(data.connections ?? [], null, 2);
@@ -52,17 +177,34 @@
 		function connectAdminWs() {
 			const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
 			const ws = new WebSocket(`${scheme}://${window.location.host}/adminws`);
+			adminSocket = ws;
+
+			ws.onopen = () => {
+				ws.send(JSON.stringify({
+					type: 'handshake',
+					protocolVersion: 2,
+					supportsDelta: true,
+					channel: 'admin',
+				}));
+			};
 
 			ws.onmessage = (event) => {
 				try {
 					const data = JSON.parse(event.data);
-					renderSnapshot(data);
+					if (data && (data.type === 'handshake_ack' || data.type === 'admin_ack' || data.type === 'pong')) {
+						return;
+					}
+					applyAdminMessage(data);
+					renderSnapshot(adminState);
 				} catch (e) {
 					console.error(e);
 				}
 			};
 
 			ws.onclose = () => {
+				if (adminSocket === ws) {
+					adminSocket = null;
+				}
 				setTimeout(connectAdminWs, 50);
 			};
 

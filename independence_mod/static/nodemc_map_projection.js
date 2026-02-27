@@ -58,6 +58,10 @@
   let latestPlayerMarks = {};
   let sameServerFilterEnabled = false;
   let panelPage = 'main';
+  let lastAdminResyncRequestAt = 0;
+  let lastAdminMessageType = null;
+  let lastAdminMessageAt = 0;
+  let lastAdminMessageRevision = null;
 
   const TEAM_DEFAULT_COLORS = {
     friendly: '#3b82f6',
@@ -480,6 +484,162 @@
   function readNumber(value) {
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
+  }
+
+  function createEmptyAdminSnapshot() {
+    return {
+      players: {},
+      entities: {},
+      waypoints: {},
+      playerMarks: {},
+      tabState: { enabled: false, reports: {}, groups: [] },
+      connections: [],
+      connections_count: 0,
+      revision: 0,
+      server_time: null,
+    };
+  }
+
+  function applyScopePatchMap(baseMap, scopePatch, requiredKeysForNew = null) {
+    const next = (baseMap && typeof baseMap === 'object') ? { ...baseMap } : {};
+    if (!scopePatch || typeof scopePatch !== 'object') {
+      return next;
+    }
+
+    const upsert = (scopePatch.upsert && typeof scopePatch.upsert === 'object') ? scopePatch.upsert : {};
+    const remove = Array.isArray(scopePatch.delete) ? scopePatch.delete : [];
+
+    for (const [objectId, value] of Object.entries(upsert)) {
+      const prev = next[objectId];
+      const existed = prev && typeof prev === 'object' && !Array.isArray(prev);
+      if (!existed && requiredKeysForNew && Array.isArray(requiredKeysForNew)) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          continue;
+        }
+        if (!hasAllKeys(value, requiredKeysForNew)) {
+          continue;
+        }
+      }
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        next[objectId] = existed
+          ? { ...prev, ...value }
+          : { ...value };
+      } else {
+        next[objectId] = value;
+      }
+    }
+    for (const objectId of remove) {
+      delete next[objectId];
+    }
+    return next;
+  }
+
+  function hasAllKeys(obj, keys) {
+    if (!obj || typeof obj !== 'object') {
+      return false;
+    }
+    return keys.every((key) => Object.prototype.hasOwnProperty.call(obj, key));
+  }
+
+  function shouldResyncForScopeMissingBaseline(currentMap, scopePatch, requiredKeys) {
+    if (!scopePatch || typeof scopePatch !== 'object') {
+      return false;
+    }
+
+    const upsert = (scopePatch.upsert && typeof scopePatch.upsert === 'object') ? scopePatch.upsert : {};
+    for (const [objectId, delta] of Object.entries(upsert)) {
+      const existed = currentMap && typeof currentMap === 'object'
+        ? Object.prototype.hasOwnProperty.call(currentMap, objectId)
+        : false;
+      if (existed) {
+        continue;
+      }
+      if (!delta || typeof delta !== 'object' || Array.isArray(delta)) {
+        return true;
+      }
+      if (!hasAllKeys(delta, requiredKeys)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function requestAdminResync(reason = 'baseline_missing') {
+    if (!adminWs || adminWs.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastAdminResyncRequestAt < 1500) {
+      return;
+    }
+    lastAdminResyncRequestAt = now;
+    try {
+      adminWs.send(JSON.stringify({ type: 'resync_req', reason }));
+    } catch (error) {
+      if (CONFIG.DEBUG) {
+        console.warn('[NodeMC Player Overlay] resync_req send failed:', error);
+      }
+    }
+  }
+
+  function applyAdminDeltaMessage(message) {
+    if (!message || typeof message !== 'object') {
+      return;
+    }
+
+    if (message.type === 'snapshot_full') {
+      latestSnapshot = {
+        players: (message.players && typeof message.players === 'object') ? message.players : {},
+        entities: (message.entities && typeof message.entities === 'object') ? message.entities : {},
+        waypoints: (message.waypoints && typeof message.waypoints === 'object') ? message.waypoints : {},
+        playerMarks: (message.playerMarks && typeof message.playerMarks === 'object') ? message.playerMarks : {},
+        tabState: (message.tabState && typeof message.tabState === 'object') ? message.tabState : { enabled: false, reports: {}, groups: [] },
+        connections: Array.isArray(message.connections) ? message.connections : [],
+        connections_count: Number.isFinite(message.connections_count) ? message.connections_count : 0,
+        revision: message.revision,
+        server_time: message.server_time,
+      };
+      return;
+    }
+
+    if (message.type !== 'patch') {
+      return;
+    }
+
+    if (!latestSnapshot || typeof latestSnapshot !== 'object') {
+      requestAdminResync('patch_before_full_snapshot');
+      return;
+    }
+
+    const needResync =
+      shouldResyncForScopeMissingBaseline(latestSnapshot.players, message.players, ['x', 'y', 'z', 'dimension']) ||
+      shouldResyncForScopeMissingBaseline(latestSnapshot.entities, message.entities, ['x', 'y', 'z', 'dimension']);
+    if (needResync) {
+      requestAdminResync('patch_missing_baseline');
+    }
+
+    latestSnapshot.players = applyScopePatchMap(latestSnapshot.players, message.players, ['x', 'y', 'z', 'dimension']);
+    latestSnapshot.entities = applyScopePatchMap(latestSnapshot.entities, message.entities, ['x', 'y', 'z', 'dimension']);
+    latestSnapshot.waypoints = applyScopePatchMap(latestSnapshot.waypoints, message.waypoints);
+    latestSnapshot.playerMarks = applyScopePatchMap(latestSnapshot.playerMarks, message.playerMarks);
+
+    const meta = (message.meta && typeof message.meta === 'object') ? message.meta : {};
+    if (meta.tabState && typeof meta.tabState === 'object') {
+      latestSnapshot.tabState = meta.tabState;
+    }
+    if (Array.isArray(meta.connections)) {
+      latestSnapshot.connections = meta.connections;
+    }
+    if (Number.isFinite(meta.connections_count)) {
+      latestSnapshot.connections_count = meta.connections_count;
+    }
+
+    if (message.revision !== undefined) {
+      latestSnapshot.revision = message.revision;
+    }
+    if (message.server_time !== undefined) {
+      latestSnapshot.server_time = message.server_time;
+    }
   }
 
   function getMarkerVisualConfig(markerKind) {
@@ -1460,6 +1620,16 @@
     ws.onopen = () => {
       wsConnected = true;
       lastErrorText = null;
+      try {
+        ws.send(JSON.stringify({
+          type: 'handshake',
+          protocolVersion: 2,
+          supportsDelta: true,
+          channel: 'admin',
+        }));
+      } catch (error) {
+        lastErrorText = String(error && error.message ? error.message : error);
+      }
       updateUiStatus();
 
       if (CONFIG.DEBUG) {
@@ -1471,6 +1641,11 @@
       if (typeof event?.data !== 'string') return;
       try {
         const snapshot = JSON.parse(event.data);
+        lastAdminMessageType = snapshot && snapshot.type ? String(snapshot.type) : 'unknown';
+        lastAdminMessageAt = Date.now();
+        lastAdminMessageRevision = snapshot && snapshot.revision !== undefined
+          ? snapshot.revision
+          : (snapshot && snapshot.rev !== undefined ? snapshot.rev : null);
         if (snapshot && snapshot.type === 'admin_ack') {
           if (snapshot.ok) {
             lastErrorText = null;
@@ -1487,17 +1662,23 @@
           return;
         }
 
-        latestSnapshot = snapshot;
-        sameServerFilterEnabled = Boolean(snapshot?.tabState?.enabled);
+        if (snapshot && snapshot.type === 'handshake_ack') {
+          lastErrorText = null;
+          updateUiStatus();
+          return;
+        }
+
+        applyAdminDeltaMessage(snapshot);
+        sameServerFilterEnabled = Boolean(latestSnapshot?.tabState?.enabled);
         const serverFilterInput = document.getElementById('nodemc-overlay-server-filter');
         if (serverFilterInput) {
           serverFilterInput.checked = sameServerFilterEnabled;
         }
-        latestPlayerMarks = snapshot && typeof snapshot.playerMarks === 'object' && snapshot.playerMarks
-          ? snapshot.playerMarks
+        latestPlayerMarks = latestSnapshot && typeof latestSnapshot.playerMarks === 'object' && latestSnapshot.playerMarks
+          ? latestSnapshot.playerMarks
           : {};
         refreshPlayerSelector();
-        lastRevision = snapshot?.revision;
+        lastRevision = latestSnapshot?.revision;
         lastErrorText = null;
         applyLatestSnapshotIfPossible();
         updateUiStatus();
@@ -1611,12 +1792,84 @@
     document.head.appendChild(style);
   }
 
+  function installDebugConsoleApi() {
+    const debugApi = {
+      help() {
+        const commands = {
+          help: '显示可用命令',
+          summary: '查看连接状态/对象数量/最近消息',
+          snapshot: '输出最新内存快照',
+          markers: '输出当前地图 marker id 列表',
+          ws: '输出 websocket 状态',
+          last: '输出最近一条 ws 消息元信息',
+          resync: '手动发送 resync_req 请求全量',
+          ping: '手动发送 ping',
+        };
+        console.table(commands);
+        return commands;
+      },
+      summary() {
+        const snapshot = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot : {};
+        return {
+          wsConnected,
+          wsReadyState: adminWs ? adminWs.readyState : -1,
+          revision: lastRevision,
+          lastErrorText,
+          sameServerFilterEnabled,
+          playersCount: snapshot.players ? Object.keys(snapshot.players).length : 0,
+          entitiesCount: snapshot.entities ? Object.keys(snapshot.entities).length : 0,
+          waypointsCount: snapshot.waypoints ? Object.keys(snapshot.waypoints).length : 0,
+          markersOnMap: markersById.size,
+          lastAdminMessageType,
+          lastAdminMessageAt,
+          lastAdminMessageRevision,
+        };
+      },
+      snapshot() {
+        return latestSnapshot;
+      },
+      markers() {
+        return Array.from(markersById.keys());
+      },
+      ws() {
+        return {
+          url: CONFIG.ADMIN_WS_URL,
+          connected: wsConnected,
+          readyState: adminWs ? adminWs.readyState : -1,
+          reconnectTimerPending: reconnectTimer !== null,
+        };
+      },
+      last() {
+        return {
+          type: lastAdminMessageType,
+          at: lastAdminMessageAt,
+          revision: lastAdminMessageRevision,
+        };
+      },
+      resync(reason = 'manual_console_debug') {
+        requestAdminResync(reason);
+        return { requested: true, reason };
+      },
+      ping() {
+        if (!adminWs || adminWs.readyState !== WebSocket.OPEN) {
+          return { sent: false, reason: 'ws_not_open' };
+        }
+        adminWs.send(JSON.stringify({ type: 'ping', from: 'console_debug' }));
+        return { sent: true };
+      },
+    };
+
+    PAGE.__NODEMC_OVERLAY_DEBUG__ = debugApi;
+    PAGE.nodemcDebug = debugApi;
+  }
+
   function initOverlay() {
     ensureOverlayStyles();
     applyLatestSnapshotIfPossible();
   }
 
   function boot() {
+    installDebugConsoleApi();
     loadConfigFromStorage();
     CONFIG.ADMIN_WS_URL = normalizeWsUrl(CONFIG.ADMIN_WS_URL);
     installLeafletHook();

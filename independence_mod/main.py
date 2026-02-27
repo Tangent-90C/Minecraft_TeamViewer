@@ -46,7 +46,6 @@ async def admin_ws(websocket: WebSocket):
     admin_id = str(id(websocket))
     state.admin_connections[admin_id] = websocket
     try:
-        await broadcaster.broadcast_snapshot()
         while True:
             raw_text = await websocket.receive_text()
             if not raw_text:
@@ -72,12 +71,27 @@ async def admin_ws(websocket: WebSocket):
 
             msg_type = str(message.get("type") or "").strip()
 
+            if msg_type == "handshake":
+                await websocket.send_text(json.dumps({
+                    "type": "handshake_ack",
+                    "ready": True,
+                    "protocolVersion": state.PROTOCOL_V2,
+                    "deltaEnabled": True,
+                    "revision": state.revision,
+                }, separators=(",", ":")))
+                await broadcaster.send_admin_snapshot_full(admin_id)
+                continue
+
             if msg_type in ("ping", "health"):
                 await websocket.send_text(json.dumps({
                     "type": "pong",
                     "serverTime": time.time(),
                     "revision": state.revision,
                 }, separators=(",", ":")))
+                continue
+
+            if msg_type == "resync_req":
+                await broadcaster.send_admin_snapshot_full(admin_id)
                 continue
 
             if msg_type == "command_player_mark_set":
@@ -104,7 +118,7 @@ async def admin_ws(websocket: WebSocket):
                     "playerId": str(target_player_id).strip() if isinstance(target_player_id, str) else target_player_id,
                     "mark": updated_mark,
                 }, separators=(",", ":")))
-                await broadcaster.broadcast_snapshot()
+                await broadcaster.broadcast_admin_updates()
                 continue
 
             if msg_type == "command_player_mark_clear":
@@ -118,7 +132,7 @@ async def admin_ws(websocket: WebSocket):
                     "error": None if removed else "mark_not_found",
                 }, separators=(",", ":")))
                 if removed:
-                    await broadcaster.broadcast_snapshot()
+                    await broadcaster.broadcast_admin_updates()
                 continue
 
             if msg_type == "command_player_mark_clear_all":
@@ -129,7 +143,7 @@ async def admin_ws(websocket: WebSocket):
                     "action": "command_player_mark_clear_all",
                     "removedCount": removed_count,
                 }, separators=(",", ":")))
-                await broadcaster.broadcast_snapshot()
+                await broadcaster.broadcast_admin_updates()
                 continue
 
             if msg_type == "command_same_server_filter_set":
@@ -232,7 +246,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     current_time = time.time()
                     tab_players = data.get("tabPlayers", [])
                     state.upsert_tab_player_report(submit_player_id, tab_players, current_time)
-                    await broadcaster.broadcast_snapshot()
+                    await broadcaster.broadcast_admin_updates()
                 continue
 
             if message_type == "players_patch":
