@@ -387,6 +387,7 @@ class ServerState:
         team: Optional[str],
         color: Optional[str],
         label: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Optional[dict]:
         if not isinstance(player_id, str) or not player_id.strip():
             return None
@@ -408,10 +409,17 @@ class ServerState:
             if stripped:
                 normalized_label = stripped[:64]
 
+        normalized_source = "manual"
+        if isinstance(source, str):
+            source_text = source.strip().lower()
+            if source_text in ("auto", "manual"):
+                normalized_source = source_text
+
         mark = {
             "team": normalized_team,
             "color": normalized_color,
             "label": normalized_label,
+            "source": normalized_source,
             "updatedAt": int(time.time() * 1000),
         }
         self.player_marks[normalized_player_id] = mark

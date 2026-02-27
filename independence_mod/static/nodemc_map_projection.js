@@ -225,6 +225,11 @@
     return 'neutral';
   }
 
+  function normalizeMarkSource(sourceValue) {
+    const text = String(sourceValue || '').trim().toLowerCase();
+    return text === 'auto' ? 'auto' : 'manual';
+  }
+
   function normalizeColor(colorValue, fallbackColor) {
     const fallback = typeof fallbackColor === 'string' && fallbackColor ? fallbackColor : TEAM_DEFAULT_COLORS.neutral;
     if (colorValue === undefined || colorValue === null || colorValue === '') return fallback;
@@ -267,7 +272,10 @@
     const team = normalizeTeam(entry.team);
     const color = normalizeColor(entry.color, getConfiguredTeamColor(team));
     const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : null;
-    return { team, color, label };
+    const sourceRaw = typeof entry.source === 'string' ? entry.source.trim().toLowerCase() : '';
+    const source = normalizeMarkSource(sourceRaw);
+    const hasExplicitSource = sourceRaw === 'auto' || sourceRaw === 'manual';
+    return { team, color, label, source, hasExplicitSource };
   }
 
   function autoTeamFromName(nameText) {
@@ -309,21 +317,40 @@
       const playerId = String(item.playerId || '').trim();
       if (!playerId) continue;
 
-      const team = normalizeTeam(item.team);
-      if (team !== 'friendly' && team !== 'enemy') continue;
+      const action = String(item.action || '').trim().toLowerCase();
+      if (action !== 'set' && action !== 'clear') continue;
 
-      const color = normalizeColor(item.color, getConfiguredTeamColor(team));
-      const cacheKey = `${team}|${color}`;
-      if (autoMarkSyncCache.get(playerId) === cacheKey) {
-        continue;
+      let cacheKey = '__clear__';
+      let ok = false;
+
+      if (action === 'set') {
+        const team = normalizeTeam(item.team);
+        if (team !== 'friendly' && team !== 'enemy') continue;
+
+        const color = normalizeColor(item.color, getConfiguredTeamColor(team));
+        cacheKey = `set|${team}|${color}`;
+
+        if (autoMarkSyncCache.get(playerId) === cacheKey) {
+          continue;
+        }
+
+        ok = sendAdminCommand({
+          type: 'command_player_mark_set',
+          playerId,
+          team,
+          color,
+          source: 'auto',
+        });
+      } else {
+        if (autoMarkSyncCache.get(playerId) === cacheKey) {
+          continue;
+        }
+
+        ok = sendAdminCommand({
+          type: 'command_player_mark_clear',
+          playerId,
+        });
       }
-
-      const ok = sendAdminCommand({
-        type: 'command_player_mark_set',
-        playerId,
-        team,
-        color,
-      });
 
       if (!ok) {
         continue;
@@ -1053,18 +1080,49 @@
 
       const health = readNumber(data.health);
       const name = String(data.playerName || data.playerUUID || playerId);
-      const mark = getPlayerMark(playerId);
+      const existingMark = getPlayerMark(playerId);
       const tabInfo = getTabPlayerInfo(playerId);
       const autoName = getTabPlayerName(playerId) || name;
-      const autoMark = mark ? null : autoTeamFromName(autoName);
+      const autoMark = autoTeamFromName(autoName);
+      const existingMarkSource = existingMark ? normalizeMarkSource(existingMark.source) : 'manual';
+      const isLegacyUnknownMark = Boolean(existingMark) && !Boolean(existingMark.hasExplicitSource);
+      const legacyLikelyAuto = Boolean(isLegacyUnknownMark && autoMark)
+        && normalizeTeam(existingMark.team) === normalizeTeam(autoMark.team);
+      const existingActsAsAuto = Boolean(existingMark) && (existingMarkSource === 'auto' || legacyLikelyAuto);
+      const isManualMark = Boolean(existingMark) && !existingActsAsAuto;
 
-      if (autoMark && !mark && (autoMark.team === 'friendly' || autoMark.team === 'enemy')) {
-        autoMarkSyncCandidates.push({
-          playerId,
-          team: autoMark.team,
-          color: autoMark.color,
-        });
+      if (isManualMark) {
+        autoMarkSyncCache.delete(playerId);
       }
+
+      if (!isManualMark) {
+        if (autoMark && (autoMark.team === 'friendly' || autoMark.team === 'enemy')) {
+          const desiredTeam = normalizeTeam(autoMark.team);
+          const desiredColor = normalizeColor(autoMark.color, getConfiguredTeamColor(desiredTeam));
+          const hasSameAutoMark = Boolean(existingMark)
+            && existingActsAsAuto
+            && normalizeTeam(existingMark.team) === desiredTeam
+            && normalizeColor(existingMark.color, getConfiguredTeamColor(desiredTeam)) === desiredColor;
+
+          if (!hasSameAutoMark) {
+            autoMarkSyncCandidates.push({
+              action: 'set',
+              playerId,
+              team: desiredTeam,
+              color: desiredColor,
+            });
+          }
+        } else if (existingActsAsAuto) {
+          autoMarkSyncCandidates.push({
+            action: 'clear',
+            playerId,
+          });
+        }
+      }
+
+      const effectiveMark = isManualMark
+        ? existingMark
+        : (autoMark || (existingActsAsAuto ? null : existingMark));
 
       const townInfo = tabInfo && tabInfo.teamText
         ? {
@@ -1074,7 +1132,7 @@
         : null;
 
       nextIds.add(playerId);
-      upsertMarker(map, playerId, { x, z, health, name, mark: mark || autoMark, townInfo });
+      upsertMarker(map, playerId, { x, z, health, name, mark: effectiveMark, townInfo });
     }
 
     const entities = snapshot && typeof snapshot === 'object' ? snapshot.entities : null;
@@ -1316,6 +1374,7 @@
       team,
       color,
       label,
+      source: 'manual',
     });
     if (ok) {
       lastErrorText = null;
