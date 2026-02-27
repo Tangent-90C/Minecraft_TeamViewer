@@ -419,26 +419,123 @@
 
   function getOnlinePlayers() {
     const snapshotPlayers = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot.players : null;
-    if (!snapshotPlayers || typeof snapshotPlayers !== 'object') return [];
+    const tabState = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot.tabState : null;
+    const reports = tabState && typeof tabState.reports === 'object' ? tabState.reports : null;
 
-    const players = [];
-    for (const [playerId, rawNode] of Object.entries(snapshotPlayers)) {
-      const data = getPlayerDataNode(rawNode);
-      const name = String((data && data.playerName) || (data && data.playerUUID) || playerId || '').trim();
-      const tabInfo = getTabPlayerInfo(playerId);
-      const playerName = (tabInfo && tabInfo.name) ? tabInfo.name : (name || String(playerId));
-      const displayLabel = tabInfo && tabInfo.teamText
-        ? `${tabInfo.teamText} ${playerName}`
-        : playerName;
-      players.push({
-        playerId: String(playerId),
-        playerName,
-        displayLabel,
-        teamColor: tabInfo && tabInfo.teamColor ? tabInfo.teamColor : null,
+    const mergedById = new Map();
+
+    const composeDisplayLabel = (rawLabel, rawPlayerName) => {
+      const label = String(rawLabel || '').trim();
+      const playerName = String(rawPlayerName || '').trim();
+      if (!label) return playerName;
+      if (!playerName) return label;
+      if (label === playerName) return label;
+      if (label.includes(playerName)) return label;
+      return `${label} ${playerName}`;
+    };
+
+    const labelContainsName = (labelText, playerName) => {
+      const label = String(labelText || '').trim();
+      const name = String(playerName || '').trim();
+      if (!label || !name) return false;
+      return label.includes(name);
+    };
+
+    const upsertPlayer = (entry) => {
+      if (!entry || !entry.playerId) return;
+      const playerId = String(entry.playerId).trim();
+      if (!playerId) return;
+
+      const prev = mergedById.get(playerId);
+      if (!prev) {
+        const playerName = String(entry.playerName || '').trim();
+        const displayLabel = composeDisplayLabel(entry.displayLabel, playerName);
+        mergedById.set(playerId, {
+          playerId,
+          playerName,
+          displayLabel,
+          teamColor: entry.teamColor || null,
+        });
+        return;
+      }
+
+      const nextName = String(entry.playerName || '').trim();
+      const nextDisplay = String(entry.displayLabel || '').trim();
+      const keepName = prev.playerName || nextName;
+
+      const prevDisplayWithName = composeDisplayLabel(prev.displayLabel, keepName);
+      const nextDisplayWithName = composeDisplayLabel(nextDisplay, nextName || keepName);
+      const prevHasName = labelContainsName(prevDisplayWithName, keepName);
+      const nextHasName = labelContainsName(nextDisplayWithName, keepName);
+
+      let keepDisplay = prevDisplayWithName || nextDisplayWithName || keepName;
+      if ((!prevHasName && nextHasName) || (!prevDisplayWithName && nextDisplayWithName)) {
+        keepDisplay = nextDisplayWithName;
+      }
+      const keepColor = prev.teamColor || entry.teamColor || null;
+
+      mergedById.set(playerId, {
+        playerId,
+        playerName: keepName,
+        displayLabel: keepDisplay,
+        teamColor: keepColor,
       });
+    };
+
+    if (reports) {
+      for (const report of Object.values(reports)) {
+        if (!report || typeof report !== 'object') continue;
+        const tabPlayers = Array.isArray(report.players) ? report.players : [];
+        for (const node of tabPlayers) {
+          if (!node || typeof node !== 'object') continue;
+          const playerId = String(node.uuid || node.id || '').trim();
+          if (!playerId) continue;
+
+          const prefixedName = String(node.prefixedName || '').trim();
+          const displayNameRaw = String(node.displayName || '').trim();
+          const plainName = String(node.name || '').trim();
+          const parsedDisplay = parseMcDisplayName(displayNameRaw || prefixedName);
+          const playerName = plainName || parsedDisplay.plain || prefixedName || playerId;
+          const displayLabel = composeDisplayLabel(prefixedName || parsedDisplay.plain, playerName);
+
+          upsertPlayer({
+            playerId,
+            playerName,
+            displayLabel,
+            teamColor: parsedDisplay.color || null,
+          });
+        }
+      }
     }
 
-    players.sort((a, b) => a.playerName.localeCompare(b.playerName, 'zh-Hans-CN'));
+    if (snapshotPlayers && typeof snapshotPlayers === 'object') {
+      for (const [playerId, rawNode] of Object.entries(snapshotPlayers)) {
+        const data = getPlayerDataNode(rawNode);
+        const fallbackName = String((data && data.playerName) || (data && data.playerUUID) || playerId || '').trim();
+        const tabInfo = getTabPlayerInfo(playerId);
+        const playerName = (tabInfo && tabInfo.name) ? tabInfo.name : (fallbackName || String(playerId));
+        const displayLabel = composeDisplayLabel(tabInfo && tabInfo.teamText ? tabInfo.teamText : '', playerName);
+
+        upsertPlayer({
+          playerId: String(playerId),
+          playerName,
+          displayLabel,
+          teamColor: tabInfo && tabInfo.teamColor ? tabInfo.teamColor : null,
+        });
+      }
+    }
+
+    const players = Array.from(mergedById.values()).map((item) => ({
+      ...item,
+      playerName: item.playerName || item.displayLabel || item.playerId,
+      displayLabel: item.displayLabel || item.playerName || item.playerId,
+    }));
+
+    players.sort((a, b) => {
+      const textA = String(a.displayLabel || a.playerName || a.playerId || '');
+      const textB = String(b.displayLabel || b.playerName || b.playerId || '');
+      return textA.localeCompare(textB, 'zh-Hans-CN');
+    });
     return players;
   }
 
