@@ -7,6 +7,7 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.Vec3d;
@@ -70,7 +71,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
-	private static final int CLIENT_PROTOCOL_VERSION = 2;
+	private static final String CLIENT_PROTOCOL_VERSION = "0.1.0";
+	private static final String CLIENT_PROGRAM_VERSION = resolveLocalProgramVersion();
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
 	private static final long FORCE_FULL_REFRESH_MS = 25_000L;
 
@@ -98,7 +100,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private volatile String lastConnectionError = "";
 	private volatile boolean serverSupportsDelta = false;
-	private volatile int serverProtocolVersion = 1;
+	private volatile String serverProtocolVersion = "0.0.0";
+	private volatile String serverProgramVersion = "unknown";
 	private volatile int digestIntervalSec = 10;
 	private volatile long lastServerRevision = 0;
 	private volatile long lastResyncRequestMs = 0L;
@@ -1005,7 +1008,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		try {
 			JsonObject handshake = new JsonObject();
 			handshake.addProperty("type", "handshake");
+			handshake.addProperty("networkProtocolVersion", CLIENT_PROTOCOL_VERSION);
 			handshake.addProperty("protocolVersion", CLIENT_PROTOCOL_VERSION);
+			handshake.addProperty("localProgramVersion", CLIENT_PROGRAM_VERSION);
 			handshake.addProperty("supportsDelta", true);
 
 			MinecraftClient client = MinecraftClient.getInstance();
@@ -1022,14 +1027,67 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private void handleHandshakeAck(JsonObject json) {
 		if (json.has("ready") && json.get("ready").getAsBoolean()) {
-			serverProtocolVersion = json.has("protocolVersion") ? json.get("protocolVersion").getAsInt() : 1;
+			serverProtocolVersion = readProtocolVersionFromHandshakeAck(json);
+			serverProgramVersion = readProgramVersionFromHandshakeAck(json);
 			serverSupportsDelta = json.has("deltaEnabled") && json.get("deltaEnabled").getAsBoolean();
 			digestIntervalSec = json.has("digestIntervalSec") ? json.get("digestIntervalSec").getAsInt() : 10;
 			if (json.has("rev") && !json.get("rev").isJsonNull()) {
 				lastServerRevision = json.get("rev").getAsLong();
 			}
-			LOGGER.info("Handshake completed: protocol={}, delta={}, digestInterval={}s",
-					serverProtocolVersion, serverSupportsDelta, digestIntervalSec);
+			LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, delta={}, digestInterval={}s",
+					serverProtocolVersion, serverProgramVersion, serverSupportsDelta, digestIntervalSec);
+		}
+	}
+
+	private String readProtocolVersionFromHandshakeAck(JsonObject json) {
+		try {
+			if (json.has("networkProtocolVersion") && !json.get("networkProtocolVersion").isJsonNull()) {
+				String value = json.get("networkProtocolVersion").getAsString();
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			}
+			if (json.has("protocolVersion") && !json.get("protocolVersion").isJsonNull()) {
+				String value = json.get("protocolVersion").getAsString();
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			}
+		} catch (Exception ignored) {
+		}
+		return "0.0.0";
+	}
+
+	private String readProgramVersionFromHandshakeAck(JsonObject json) {
+		if (json.has("localProgramVersion") && !json.get("localProgramVersion").isJsonNull()) {
+			try {
+				String value = json.get("localProgramVersion").getAsString();
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			} catch (Exception ignored) {
+			}
+		}
+		if (json.has("programVersion") && !json.get("programVersion").isJsonNull()) {
+			try {
+				String value = json.get("programVersion").getAsString();
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			} catch (Exception ignored) {
+			}
+		}
+		return "unknown";
+	}
+
+	private static String resolveLocalProgramVersion() {
+		try {
+			return FabricLoader.getInstance()
+					.getModContainer("teamviewer")
+					.map(container -> container.getMetadata().getVersion().getFriendlyString())
+					.orElse("teamviewer-mod-dev");
+		} catch (Exception ignored) {
+			return "teamviewer-mod-dev";
 		}
 	}
 
@@ -1579,7 +1637,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private void resetNegotiationState() {
 		serverSupportsDelta = false;
-		serverProtocolVersion = 1;
+		serverProtocolVersion = "0.0.0";
+		serverProgramVersion = "unknown";
 		digestIntervalSec = 10;
 		lastServerRevision = 0;
 		lastResyncRequestMs = 0L;

@@ -41,6 +41,9 @@
 	</div>
 
 	<script>
+		const ADMIN_NETWORK_PROTOCOL_VERSION = '0.1.0';
+		const ADMIN_PROGRAM_VERSION = 'admin-ui-dev';
+
 		let adminSocket = null;
 		let lastAdminResyncRequestAt = 0;
 		let adminState = {
@@ -182,7 +185,9 @@
 			ws.onopen = () => {
 				ws.send(JSON.stringify({
 					type: 'handshake',
-					protocolVersion: 2,
+					networkProtocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
+					protocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
+					localProgramVersion: ADMIN_PROGRAM_VERSION,
 					supportsDelta: true,
 					channel: 'admin',
 				}));

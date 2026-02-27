@@ -18,6 +18,8 @@
 
   const PAGE = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
   const STORAGE_KEY = 'nodemc_player_overlay_settings_v1';
+  const ADMIN_NETWORK_PROTOCOL_VERSION = '0.1.0';
+  const LOCAL_PROGRAM_VERSION = 'nodemc-overlay-0.2.0';
 
   const DEFAULT_CONFIG = {
     ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
@@ -1874,7 +1876,9 @@
       try {
         ws.send(JSON.stringify({
           type: 'handshake',
-          protocolVersion: 2,
+          networkProtocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
+          protocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
+          localProgramVersion: LOCAL_PROGRAM_VERSION,
           supportsDelta: true,
           channel: 'admin',
         }));

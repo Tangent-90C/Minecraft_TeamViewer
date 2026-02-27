@@ -42,7 +42,7 @@ class ServerState:
     REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = 64
 
     # 协议配置
-    PROTOCOL_V2 = 2
+    PROTOCOL_V2 = "0.1.0"
     DIGEST_INTERVAL_SEC = 10
     TAB_REPORT_TIMEOUT_SEC = 45
 
@@ -737,11 +737,43 @@ class ServerState:
             "waypoints": self.compute_scope_patch(old_waypoints, self.waypoints),
         }
 
-    def mark_player_capability(self, player_id: str, protocol_version: int, delta_enabled: bool) -> None:
+    @staticmethod
+    def _normalize_protocol_version(version) -> str:
+        text = str(version or "").strip()
+        return text or "0.0.0"
+
+    @classmethod
+    def _parse_protocol_version(cls, version) -> tuple[int, int, int]:
+        text = cls._normalize_protocol_version(version)
+        if "." not in text:
+            try:
+                legacy_num = int(text)
+                return 0, 0, max(legacy_num, 0)
+            except ValueError:
+                return 0, 0, 0
+
+        parts = text.split(".")
+        normalized_parts = []
+        for part in parts[:3]:
+            try:
+                normalized_parts.append(max(int(part), 0))
+            except ValueError:
+                normalized_parts.append(0)
+
+        while len(normalized_parts) < 3:
+            normalized_parts.append(0)
+        return tuple(normalized_parts)
+
+    @classmethod
+    def _protocol_at_least(cls, current, minimum) -> bool:
+        return cls._parse_protocol_version(current) >= cls._parse_protocol_version(minimum)
+
+    def mark_player_capability(self, player_id: str, protocol_version, delta_enabled: bool) -> None:
         """记录客户端能力，决定后续是否发送 patch/digest。"""
+        normalized_protocol = self._normalize_protocol_version(protocol_version)
         self.connection_caps[player_id] = {
-            "protocol": protocol_version,
-            "delta": bool(protocol_version >= self.PROTOCOL_V2 and delta_enabled),
+            "protocol": normalized_protocol,
+            "delta": bool(self._protocol_at_least(normalized_protocol, self.PROTOCOL_V2) and delta_enabled),
             "lastDigestSent": 0.0,
         }
 

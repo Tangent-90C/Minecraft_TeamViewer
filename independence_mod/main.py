@@ -29,6 +29,25 @@ def configure_logging() -> None:
 configure_logging()
 logger = logging.getLogger("teamviewer.main")
 
+NETWORK_PROTOCOL_VERSION = "0.1.0"
+SERVER_PROGRAM_VERSION = os.getenv("TEAMVIEWER_SERVER_VERSION", "teamviewer-server-dev")
+
+
+def read_protocol_version(payload: dict, fallback: str = "0.0.1") -> str:
+    raw = payload.get("networkProtocolVersion", payload.get("protocolVersion", fallback))
+    if raw is None:
+        return fallback
+    text = str(raw).strip()
+    return text or fallback
+
+
+def read_program_version(payload: dict, fallback: str = "unknown") -> str:
+    raw = payload.get("localProgramVersion", payload.get("programVersion", fallback))
+    if raw is None:
+        return fallback
+    text = str(raw).strip()
+    return text or fallback
+
 # 进程级单例：承载内存态与广播能力。
 state = ServerState()
 broadcaster = Broadcaster(state)
@@ -72,10 +91,19 @@ async def admin_ws(websocket: WebSocket):
             msg_type = str(message.get("type") or "").strip()
 
             if msg_type == "handshake":
+                client_protocol = read_protocol_version(message)
+                client_program_version = read_program_version(message)
+                logger.info(
+                    "Admin connected (clientProtocol=%s, clientProgramVersion=%s)",
+                    client_protocol,
+                    client_program_version,
+                )
                 await websocket.send_text(json.dumps({
                     "type": "handshake_ack",
                     "ready": True,
+                    "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
                     "protocolVersion": state.PROTOCOL_V2,
+                    "localProgramVersion": SERVER_PROGRAM_VERSION,
                     "deltaEnabled": True,
                     "revision": state.revision,
                 }, separators=(",", ":")))
@@ -202,15 +230,23 @@ async def websocket_endpoint(websocket: WebSocket):
             if message_type == "handshake":
                 if submit_player_id:
                     state.connections[submit_player_id] = websocket
-                    client_protocol = int(data.get("protocolVersion", 1))
+                    client_protocol = read_protocol_version(data)
+                    client_program_version = read_program_version(data)
                     client_delta = bool(data.get("supportsDelta", False))
                     state.mark_player_capability(submit_player_id, client_protocol, client_delta)
 
-                    logger.info("Client %s connected (protocol %s)", submit_player_id, client_protocol)
+                    logger.info(
+                        "Client %s connected (protocol=%s, programVersion=%s)",
+                        submit_player_id,
+                        client_protocol,
+                        client_program_version,
+                    )
                     ack = {
                         "type": "handshake_ack",
                         "ready": True,
+                        "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
                         "protocolVersion": state.PROTOCOL_V2,
+                        "localProgramVersion": SERVER_PROGRAM_VERSION,
                         "deltaEnabled": state.is_delta_client(submit_player_id),
                         "digestIntervalSec": state.DIGEST_INTERVAL_SEC,
                         "rev": state.revision,
