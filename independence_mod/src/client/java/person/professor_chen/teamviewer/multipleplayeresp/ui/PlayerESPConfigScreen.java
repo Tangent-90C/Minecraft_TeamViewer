@@ -16,6 +16,7 @@ import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetwo
 public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
+    private TextFieldWidget roomCodeField;
     private ButtonWidget connectButton;
     private ButtonWidget displaySettingsButton;
     private ButtonWidget networkSettingsButton;
@@ -27,6 +28,7 @@ public class PlayerESPConfigScreen extends Screen {
     private String currentConnectionStatus = "Unknown";
     // 保存原始值，用于取消时恢复
     private final String originalURL;
+    private final String originalRoomCode;
     private final int originalRenderDistance;
     private final int originalUpdateInterval;
     private final boolean originalShowBoxes;
@@ -45,6 +47,7 @@ public class PlayerESPConfigScreen extends Screen {
     private static final int LABEL_SPACING = 12;
     private static final int BUTTON_SPACING = 25;
     private static final int URL_MAX_LENGTH = 2048;
+    private static final int ROOM_CODE_MAX_LENGTH = 64;
     private int startY;
     private int currentY;
     
@@ -52,6 +55,7 @@ public class PlayerESPConfigScreen extends Screen {
         super(Text.translatable("screen.multipleplayeresp.config.title"));
         this.parent = parent;
         this.originalURL = PlayerESPNetworkManager.getServerURL();
+        this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
         this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
         this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
         this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
@@ -74,6 +78,7 @@ public class PlayerESPConfigScreen extends Screen {
         int totalHeight = 0;
         totalHeight += COMPONENT_SPACING; // 标题间距
         totalHeight += COMPONENT_SPACING; // URL输入框组
+        totalHeight += COMPONENT_SPACING; // 房间号输入框组
         totalHeight += BUTTON_SPACING;    // 显示设置/网络设置按钮行
         totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
@@ -145,6 +150,28 @@ public class PlayerESPConfigScreen extends Screen {
         this.addDrawableChild(
             new TextWidget(componentX, urlY - LABEL_SPACING, COMPONENT_WIDTH, 12, 
                 Text.translatable("screen.multipleplayeresp.config.url"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+
+        // 房间号输入框
+        int roomCodeY = getNextY();
+        this.roomCodeField = new TextFieldWidget(
+            this.textRenderer,
+            componentX,
+            roomCodeY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.multipleplayeresp.config.room_code")
+        );
+        this.roomCodeField.setMaxLength(ROOM_CODE_MAX_LENGTH);
+        this.roomCodeField.setText(PlayerESPNetworkManager.getRoomCode());
+        this.roomCodeField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.room_code_hint"));
+        this.addDrawableChild(this.roomCodeField);
+
+        this.addDrawableChild(
+            new TextWidget(componentX, roomCodeY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.multipleplayeresp.config.room_code"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
@@ -239,6 +266,7 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 恢复原始值
         PlayerESPNetworkManager.setServerURL(this.originalURL);
+        PlayerESPNetworkManager.setRoomCode(this.originalRoomCode);
         StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
         StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
         StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
@@ -260,6 +288,8 @@ public class PlayerESPConfigScreen extends Screen {
             if (!url.isEmpty()) {
                 PlayerESPNetworkManager.setServerURL(url);
             }
+            String roomCode = this.roomCodeField.getText().trim();
+            PlayerESPNetworkManager.setRoomCode(roomCode);
             
             // 显示/网络开关设置在二级页面中实时保存
             // 保存配置到文件

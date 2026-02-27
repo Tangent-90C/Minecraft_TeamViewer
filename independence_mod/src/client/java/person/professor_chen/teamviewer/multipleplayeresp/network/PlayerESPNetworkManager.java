@@ -999,6 +999,16 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+		public static String getRoomCode() {
+			return config != null ? config.getRoomCode() : "default";
+		}
+
+		public static void setRoomCode(String roomCode) {
+			if (config != null) {
+				config.setRoomCode(roomCode);
+			}
+		}
+
 	public static boolean isUseSystemProxy() {
 		return config == null || config.isUseSystemProxy();
 	}
@@ -1147,6 +1157,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			handshake.addProperty("networkProtocolVersion", CLIENT_PROTOCOL_VERSION);
 			handshake.addProperty("protocolVersion", CLIENT_PROTOCOL_VERSION);
 			handshake.addProperty("localProgramVersion", CLIENT_PROGRAM_VERSION);
+			handshake.addProperty("roomCode", getRoomCode());
 			handshake.addProperty("supportsDelta", true);
 
 			MinecraftClient client = MinecraftClient.getInstance();

@@ -25,6 +25,7 @@
 
   const DEFAULT_CONFIG = {
     ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
+    ROOM_CODE: 'default',
     RECONNECT_INTERVAL_MS: 1000,
     TARGET_DIMENSION: 'minecraft:overworld',
     SHOW_PLAYER_ICON: true,
@@ -130,6 +131,7 @@
     if (wsUrlCandidate) {
       next.ADMIN_WS_URL = normalizeWsUrl(wsUrlCandidate);
     }
+    next.ROOM_CODE = normalizeRoomCode(candidate.ROOM_CODE ?? candidate.ROOM_ID ?? candidate.roomCode);
 
     const reconnect = Number(candidate.RECONNECT_INTERVAL_MS ?? candidate.POLL_INTERVAL_MS);
     if (Number.isFinite(reconnect)) {
@@ -216,6 +218,12 @@
     if (next.startsWith('https://')) next = 'wss://' + next.slice('https://'.length);
     if (next.endsWith('/snapshot')) next = next.slice(0, -('/snapshot'.length)) + '/adminws';
     return next;
+  }
+
+  function normalizeRoomCode(rawRoomCode) {
+    const text = String(rawRoomCode ?? '').trim();
+    if (!text) return DEFAULT_CONFIG.ROOM_CODE;
+    return text.slice(0, 64);
   }
 
   function normalizeTeam(teamValue) {
@@ -1235,6 +1243,7 @@
 
   function fillFormFromConfig() {
     const urlInput = document.getElementById('nodemc-overlay-url');
+    const roomCodeInput = document.getElementById('nodemc-overlay-room-code');
     const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
     const showIconInput = document.getElementById('nodemc-overlay-show-icon');
@@ -1258,6 +1267,7 @@
     const wpTextInput = document.getElementById('nodemc-overlay-show-waypoint-text');
 
     if (urlInput) urlInput.value = CONFIG.ADMIN_WS_URL;
+    if (roomCodeInput) roomCodeInput.value = CONFIG.ROOM_CODE;
     if (reconnectInput) reconnectInput.value = String(CONFIG.RECONNECT_INTERVAL_MS);
     if (dimInput) dimInput.value = CONFIG.TARGET_DIMENSION;
     if (showIconInput) showIconInput.checked = CONFIG.SHOW_PLAYER_ICON;
@@ -1283,6 +1293,7 @@
 
   function applyFormToConfig() {
     const urlInput = document.getElementById('nodemc-overlay-url');
+    const roomCodeInput = document.getElementById('nodemc-overlay-room-code');
     const reconnectInput = document.getElementById('nodemc-overlay-reconnect');
     const dimInput = document.getElementById('nodemc-overlay-dim');
     const showIconInput = document.getElementById('nodemc-overlay-show-icon');
@@ -1307,6 +1318,7 @@
 
     const next = sanitizeConfig({
       ADMIN_WS_URL: urlInput ? urlInput.value : CONFIG.ADMIN_WS_URL,
+      ROOM_CODE: roomCodeInput ? roomCodeInput.value : CONFIG.ROOM_CODE,
       RECONNECT_INTERVAL_MS: reconnectInput ? reconnectInput.value : CONFIG.RECONNECT_INTERVAL_MS,
       TARGET_DIMENSION: dimInput ? dimInput.value : CONFIG.TARGET_DIMENSION,
       SHOW_PLAYER_ICON: showIconInput ? showIconInput.checked : CONFIG.SHOW_PLAYER_ICON,
@@ -1585,6 +1597,10 @@
         <div class="n-row">
           <label>Admin WS URL</label>
           <input id="nodemc-overlay-url" type="text" />
+        </div>
+        <div class="n-row">
+          <label>房间号 Room Code</label>
+          <input id="nodemc-overlay-room-code" type="text" placeholder="default" />
         </div>
         <div class="n-row">
           <label>重连间隔(ms)</label>
@@ -2013,6 +2029,7 @@
           networkProtocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
           protocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
           localProgramVersion: LOCAL_PROGRAM_VERSION,
+          roomCode: normalizeRoomCode(CONFIG.ROOM_CODE),
           supportsDelta: true,
           channel: 'admin',
         }));
@@ -2296,6 +2313,7 @@
     installDebugConsoleApi();
     loadConfigFromStorage();
     CONFIG.ADMIN_WS_URL = normalizeWsUrl(CONFIG.ADMIN_WS_URL);
+    CONFIG.ROOM_CODE = normalizeRoomCode(CONFIG.ROOM_CODE);
     installLeafletHook();
     connectAdminWs();
     mountUiWhenReady();

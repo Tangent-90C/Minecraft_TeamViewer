@@ -15,6 +15,12 @@
 1. 游戏客户端：通过 `/playeresp` WebSocket 收发增量或全量数据
 2. 管理端页面：通过 `/adminws` 接收服务端状态快照
 
+新增机制（`0.2.x` 迭代）：
+
+- 握手支持 `roomCode`（房间号）。
+- 服务端按房间号隔离广播：只有 `roomCode` 相同的连接互相可见。
+- 未显式传入 `roomCode` 的旧客户端，默认进入 `default` 房间。
+
 此外保留了旧版兼容通道（`positions` 消息），确保不支持增量协议的客户端仍可工作。
 
 ---
@@ -132,6 +138,7 @@
   "type": "handshake",
   "networkProtocolVersion": "0.2.0",
   "protocolVersion": "0.2.0",
+  "roomCode": "default",
   "supportsDelta": true,
   "submitPlayerId": "<可选，玩家UUID>"
 }
@@ -147,6 +154,7 @@
   "ready": true,
   "networkProtocolVersion": "0.2.0",
   "protocolVersion": "0.2.0",
+  "roomCode": "default",
   "deltaEnabled": true,
   "digestIntervalSec": 10,
   "rev": <当前revision>
@@ -201,6 +209,7 @@
 - 无 `type` 字段的状态快照 JSON（包含 players/entities/waypoints/connections/revision）
 - 快照新增 `tabState`：
   - `enabled`：同服隔离开关状态
+  - `roomCode`：当前管理端所在房间
   - `reports`：各上报源的 tab 玩家列表
   - `groups`：服务端基于 tab 交集推导出的“同服分组”
 

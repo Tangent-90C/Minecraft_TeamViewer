@@ -7,6 +7,8 @@
   "screen.multipleplayeresp.config.title": "多人玩家ESP配置",
   "screen.multipleplayeresp.config.url": "服务器URL",
   "screen.multipleplayeresp.config.url_hint": "例如: ws://127.0.0.1:8080/playeresp",
+  "screen.multipleplayeresp.config.room_code": "房间号",
+  "screen.multipleplayeresp.config.room_code_hint": "例如: default 或 pvp-1",
   "screen.multipleplayeresp.config.render_distance": "渲染距离",
   "screen.multipleplayeresp.config.render_distance_hint": "例如: 64",
   "screen.multipleplayeresp.config.waypoint_timeout": "报点超时(秒)",

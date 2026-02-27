@@ -45,6 +45,7 @@ class ServerState:
     PROTOCOL_V2 = "0.2.0"
     DIGEST_INTERVAL_SEC = 10
     TAB_REPORT_TIMEOUT_SEC = 45
+    DEFAULT_ROOM_CODE = "default"
 
     def __init__(self) -> None:
         # 已仲裁后的最终视图，供广播层直接下发。
@@ -60,7 +61,9 @@ class ServerState:
         # 连接与能力信息。
         self.connections: Dict[str, WebSocket] = {}
         self.connection_caps: Dict[str, dict] = {}
+        self.connection_rooms: Dict[str, str] = {}
         self.admin_connections: Dict[str, WebSocket] = {}
+        self.admin_connection_rooms: Dict[str, str] = {}
 
         # 管理端指挥态：用于玩家敌我/颜色标记。
         self.player_marks: Dict[str, dict] = {}
@@ -149,6 +152,47 @@ class ServerState:
             return None
         return text[:64]
 
+    @classmethod
+    def normalize_room_code(cls, value) -> str:
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                return text[:64]
+        return cls.DEFAULT_ROOM_CODE
+
+    def set_player_room(self, player_id: str, room_code) -> str:
+        normalized = self.normalize_room_code(room_code)
+        if isinstance(player_id, str) and player_id:
+            self.connection_rooms[player_id] = normalized
+        return normalized
+
+    def get_player_room(self, player_id: str) -> str:
+        room_code = self.connection_rooms.get(player_id)
+        if isinstance(room_code, str) and room_code.strip():
+            return room_code
+        return self.DEFAULT_ROOM_CODE
+
+    def set_admin_room(self, admin_id: str, room_code) -> str:
+        normalized = self.normalize_room_code(room_code)
+        if isinstance(admin_id, str) and admin_id:
+            self.admin_connection_rooms[admin_id] = normalized
+        return normalized
+
+    def get_admin_room(self, admin_id: str) -> str:
+        room_code = self.admin_connection_rooms.get(admin_id)
+        if isinstance(room_code, str) and room_code.strip():
+            return room_code
+        return self.DEFAULT_ROOM_CODE
+
+    def get_active_sources_in_room(self, room_code: str) -> set[str]:
+        normalized_room = self.normalize_room_code(room_code)
+        return {
+            source_id for source_id in self.connections.keys()
+            if isinstance(source_id, str)
+            and source_id
+            and self.get_player_room(source_id) == normalized_room
+        }
+
     def upsert_tab_player_report(self, submit_player_id: str, tab_players: list, current_time: float) -> dict:
         normalized_entries: list[dict] = []
         identity_keys: set[str] = set()
@@ -210,13 +254,19 @@ class ServerState:
             if now - float(ts) > self.TAB_REPORT_TIMEOUT_SEC:
                 del self.tab_player_reports[source_id]
 
-    def _build_same_server_groups(self, current_time: Optional[float] = None) -> dict:
+    def _build_same_server_groups(
+        self,
+        current_time: Optional[float] = None,
+        allowed_sources: Optional[set[str]] = None,
+    ) -> dict:
         self.cleanup_tab_reports(current_time)
 
         active_sources = [
             source_id for source_id in self.connections.keys()
             if isinstance(source_id, str) and source_id
         ]
+        if isinstance(allowed_sources, set):
+            active_sources = [source_id for source_id in active_sources if source_id in allowed_sources]
         if not active_sources:
             return {
                 "sourceToGroup": {},
@@ -297,24 +347,36 @@ class ServerState:
         }
 
     def get_allowed_sources_for_player(self, player_id: str) -> set[str]:
-        all_sources = {
-            source_id for source_id in self.connections.keys()
-            if isinstance(source_id, str) and source_id
-        }
-        if not self.same_server_filter_enabled or player_id not in all_sources:
-            return all_sources
+        if not isinstance(player_id, str) or not player_id:
+            return set()
 
-        grouping = self._build_same_server_groups()
+        player_room = self.get_player_room(player_id)
+        room_sources = self.get_active_sources_in_room(player_room)
+        if player_id not in room_sources:
+            return room_sources
+
+        if not self.same_server_filter_enabled:
+            return room_sources
+
+        grouping = self._build_same_server_groups(allowed_sources=room_sources)
         source_to_group = grouping.get("sourceToGroup", {})
         group_id = source_to_group.get(player_id)
         if not isinstance(group_id, str) or not group_id:
-            return all_sources
+            return room_sources
 
         allowed = {
             source_id for source_id, source_group in source_to_group.items()
             if source_group == group_id
         }
-        return allowed if allowed else all_sources
+        return allowed if allowed else room_sources
+
+    def requires_scoped_delivery(self, player_id: str) -> bool:
+        allowed_sources = self.get_allowed_sources_for_player(player_id)
+        all_sources = {
+            source_id for source_id in self.connections.keys()
+            if isinstance(source_id, str) and source_id
+        }
+        return allowed_sources != all_sources
 
     @staticmethod
     def filter_state_map_by_sources(state_map: Dict[str, dict], allowed_sources: set[str]) -> Dict[str, dict]:
@@ -331,12 +393,16 @@ class ServerState:
             filtered[object_id] = node
         return filtered
 
-    def build_admin_tab_snapshot(self) -> dict:
+    def build_admin_tab_snapshot(self, room_code: Optional[str] = None) -> dict:
         self.cleanup_tab_reports()
-        grouping = self._build_same_server_groups()
+        normalized_room = self.normalize_room_code(room_code)
+        room_sources = self.get_active_sources_in_room(normalized_room)
+        grouping = self._build_same_server_groups(allowed_sources=room_sources)
         reports = {}
         for source_id, report in self.tab_player_reports.items():
             if not isinstance(report, dict):
+                continue
+            if source_id not in room_sources:
                 continue
             reports[source_id] = {
                 "timestamp": report.get("timestamp"),
@@ -344,6 +410,7 @@ class ServerState:
             }
         return {
             "enabled": self.same_server_filter_enabled,
+            "roomCode": normalized_room,
             "reports": reports,
             "groups": grouping.get("groups", []),
         }
@@ -960,6 +1027,8 @@ class ServerState:
             del self.connections[player_id]
         if player_id in self.connection_caps:
             del self.connection_caps[player_id]
+        if player_id in self.connection_rooms:
+            del self.connection_rooms[player_id]
         if player_id in self.tab_player_reports:
             del self.tab_player_reports[player_id]
 

@@ -48,6 +48,14 @@ def read_program_version(payload: dict, fallback: str = "unknown") -> str:
     text = str(raw).strip()
     return text or fallback
 
+
+def read_room_code(payload: dict, fallback: str = "default") -> str:
+    raw = payload.get("roomCode", payload.get("roomId", fallback))
+    if raw is None:
+        return fallback
+    text = str(raw).strip()
+    return text or fallback
+
 # 进程级单例：承载内存态与广播能力。
 state = ServerState()
 broadcaster = Broadcaster(state)
@@ -93,10 +101,12 @@ async def admin_ws(websocket: WebSocket):
             if msg_type == "handshake":
                 client_protocol = read_protocol_version(message)
                 client_program_version = read_program_version(message)
+                admin_room = state.set_admin_room(admin_id, read_room_code(message, state.DEFAULT_ROOM_CODE))
                 logger.info(
-                    "Admin connected (clientProtocol=%s, clientProgramVersion=%s)",
+                    "Admin connected (clientProtocol=%s, clientProgramVersion=%s, roomCode=%s)",
                     client_protocol,
                     client_program_version,
+                    admin_room,
                 )
                 await websocket.send_text(json.dumps({
                     "type": "handshake_ack",
@@ -104,6 +114,7 @@ async def admin_ws(websocket: WebSocket):
                     "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
                     "protocolVersion": state.PROTOCOL_V2,
                     "localProgramVersion": SERVER_PROGRAM_VERSION,
+                    "roomCode": admin_room,
                     "deltaEnabled": True,
                     "revision": state.revision,
                 }, separators=(",", ":")))
@@ -200,6 +211,8 @@ async def admin_ws(websocket: WebSocket):
     finally:
         if admin_id in state.admin_connections:
             del state.admin_connections[admin_id]
+        if admin_id in state.admin_connection_rooms:
+            del state.admin_connection_rooms[admin_id]
 
 
 @app.websocket("/playeresp")
@@ -233,14 +246,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     state.connections[submit_player_id] = websocket
                     client_protocol = read_protocol_version(data)
                     client_program_version = read_program_version(data)
+                    client_room = state.set_player_room(submit_player_id, read_room_code(data, state.DEFAULT_ROOM_CODE))
                     client_delta = bool(data.get("supportsDelta", False))
                     state.mark_player_capability(submit_player_id, client_protocol, client_delta)
 
                     logger.info(
-                        "Client %s connected (protocol=%s, programVersion=%s)",
+                        "Client %s connected (protocol=%s, programVersion=%s, roomCode=%s)",
                         submit_player_id,
                         client_protocol,
                         client_program_version,
+                        client_room,
                     )
                     ack = {
                         "type": "handshake_ack",
@@ -248,6 +263,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
                         "protocolVersion": state.PROTOCOL_V2,
                         "localProgramVersion": SERVER_PROGRAM_VERSION,
+                        "roomCode": client_room,
                         "deltaEnabled": state.is_delta_client(submit_player_id),
                         "digestIntervalSec": state.DIGEST_INTERVAL_SEC,
                         "rev": state.revision,
@@ -260,6 +276,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if submit_player_id and submit_player_id not in state.connections:
                 # 兼容旧客户端：未显式握手也可接入，但按 legacy 能力处理。
                 state.connections[submit_player_id] = websocket
+                state.set_player_room(submit_player_id, state.DEFAULT_ROOM_CODE)
                 state.mark_player_capability(submit_player_id, 1, False)
                 logger.info("Client %s connected (legacy)", submit_player_id)
 
@@ -531,18 +548,58 @@ async def health_check():
 
 
 @app.get("/snapshot")
-async def snapshot():
+async def snapshot(roomCode: str | None = None):
     """调试快照：返回当前最终视图与连接状态。"""
     current_time = time.time()
+
+    connections_by_room: dict[str, list[str]] = {}
+    for player_id in state.connections.keys():
+        if not isinstance(player_id, str) or not player_id:
+            continue
+        room = state.get_player_room(player_id)
+        connections_by_room.setdefault(room, []).append(player_id)
+
+    for room in list(connections_by_room.keys()):
+        connections_by_room[room].sort()
+
+    active_rooms = sorted(connections_by_room.keys())
+    requested_room = state.normalize_room_code(roomCode) if roomCode is not None else None
+    selected_room = requested_room if requested_room is not None else state.DEFAULT_ROOM_CODE
+    selected_sources = state.get_active_sources_in_room(selected_room)
+
+    selected_players = state.filter_state_map_by_sources(state.players, selected_sources)
+    selected_entities = state.filter_state_map_by_sources(state.entities, selected_sources)
+    selected_waypoints = state.filter_state_map_by_sources(state.waypoints, selected_sources)
+
+    room_digests = {
+        "players": state.state_digest(selected_players),
+        "entities": state.state_digest(selected_entities),
+        "waypoints": state.state_digest(selected_waypoints),
+    }
+
     return JSONResponse({
         "server_time": current_time,
         "players": dict(state.players),
         "entities": dict(state.entities),
         "waypoints": dict(state.waypoints),
         "playerMarks": dict(state.player_marks),
-        "tabState": state.build_admin_tab_snapshot(),
+        "tabState": state.build_admin_tab_snapshot(selected_room),
         "connections": list(state.connections.keys()),
         "connections_count": len(state.connections),
+        "activeRooms": active_rooms,
+        "connectionsByRoom": connections_by_room,
+        "requestedRoomCode": requested_room,
+        "selectedRoomCode": selected_room,
+        "roomView": {
+            "roomCode": selected_room,
+            "connections": sorted(selected_sources),
+            "connections_count": len(selected_sources),
+            "players": dict(selected_players),
+            "entities": dict(selected_entities),
+            "waypoints": dict(selected_waypoints),
+            "tabState": state.build_admin_tab_snapshot(selected_room),
+            "digests": room_digests,
+        },
         "revision": state.revision,
         "digests": state.build_digests(),
     })

@@ -7,6 +7,8 @@
   "screen.multipleplayeresp.config.title": "MultiPlayer ESP Configuration",
   "screen.multipleplayeresp.config.url": "Server URL",
   "screen.multipleplayeresp.config.url_hint": "e.g. ws://127.0.0.1:8080/playeresp",
+  "screen.multipleplayeresp.config.room_code": "Room Code",
+  "screen.multipleplayeresp.config.room_code_hint": "e.g. default or pvp-1",
   "screen.multipleplayeresp.config.render_distance": "Render Distance",
   "screen.multipleplayeresp.config.render_distance_hint": "e.g. 64",
   "screen.multipleplayeresp.config.waypoint_timeout": "Mark Timeout (sec)",

@@ -74,15 +74,21 @@ class Broadcaster:
             return {}
         return {object_id: node.get("data", {}) for object_id, node in state_map.items() if isinstance(node, dict)}
 
-    def _build_admin_view_state(self) -> dict:
+    def _build_admin_view_state(self, admin_room: str | None = None) -> dict:
+        normalized_room = self.state.normalize_room_code(admin_room)
+        allowed_sources = self.state.get_active_sources_in_room(normalized_room)
+        room_players = self.state.filter_state_map_by_sources(self.state.players, allowed_sources)
+        room_entities = self.state.filter_state_map_by_sources(self.state.entities, allowed_sources)
+        room_waypoints = self.state.filter_state_map_by_sources(self.state.waypoints, allowed_sources)
         return {
-            "players": self._snapshot_scope_from_state_map(self.state.players),
-            "entities": self._snapshot_scope_from_state_map(self.state.entities),
-            "waypoints": self._snapshot_scope_from_state_map(self.state.waypoints),
+            "players": self._snapshot_scope_from_state_map(room_players),
+            "entities": self._snapshot_scope_from_state_map(room_entities),
+            "waypoints": self._snapshot_scope_from_state_map(room_waypoints),
             "playerMarks": dict(self.state.player_marks),
-            "tabState": self.state.build_admin_tab_snapshot(),
-            "connections": list(self.state.connections.keys()),
-            "connections_count": len(self.state.connections),
+            "tabState": self.state.build_admin_tab_snapshot(normalized_room),
+            "roomCode": normalized_room,
+            "connections": sorted(allowed_sources),
+            "connections_count": len(allowed_sources),
         }
 
     @staticmethod
@@ -138,8 +144,8 @@ class Broadcaster:
         if ws is None:
             return
 
-        view_state = self._build_admin_view_state()
-        self._admin_last_state = view_state
+        admin_room = self.state.get_admin_room(admin_id)
+        view_state = self._build_admin_view_state(admin_room)
         message = self._build_full_message(
             self.state.revision,
             view_state,
@@ -200,43 +206,21 @@ class Broadcaster:
     async def broadcast_admin_updates(self, force_full: bool = False) -> None:
         """向管理端广播增量（必要时全量）。"""
         if not self.state.admin_connections:
-            self._admin_last_state = self._build_admin_view_state()
-            return
-
-        current_state = self._build_admin_view_state()
-        previous_state = self._admin_last_state
-
-        if force_full or previous_state is None:
-            message = self._build_full_message(
-                self.state.revision,
-                current_state,
-                revision_key="revision",
-                channel="admin",
-                extra={"server_time": time.time()},
-            )
-        else:
-            patch = self._compute_admin_patch(previous_state, current_state)
-            if not self._has_admin_patch_changes(patch):
-                self._admin_last_state = current_state
-                return
-            message = self._build_patch_message(
-                self.state.revision,
-                patch,
-                revision_key="revision",
-                channel="admin",
-                extra={"server_time": time.time()},
-            )
-
-        try:
-            encoded = self._encode_message(message)
-        except Exception as e:
-            logger.error("Error serializing admin update payload: %s", e)
+            self._admin_last_state = None
             return
 
         disconnected = []
         for admin_id, ws in list(self.state.admin_connections.items()):
             try:
-                await ws.send_text(encoded)
+                current_state = self._build_admin_view_state(self.state.get_admin_room(admin_id))
+                message = self._build_full_message(
+                    self.state.revision,
+                    current_state,
+                    revision_key="revision",
+                    channel="admin",
+                    extra={"server_time": time.time()},
+                )
+                await ws.send_text(self._encode_message(message))
             except Exception as e:
                 logger.warning("Error sending admin update to %s: %s", admin_id, e)
                 disconnected.append(admin_id)
@@ -244,8 +228,10 @@ class Broadcaster:
         for admin_id in disconnected:
             if admin_id in self.state.admin_connections:
                 del self.state.admin_connections[admin_id]
+            if admin_id in self.state.admin_connection_rooms:
+                del self.state.admin_connection_rooms[admin_id]
 
-        self._admin_last_state = current_state
+        self._admin_last_state = None
 
     async def broadcast_legacy_positions(self) -> None:
         """向 legacy 客户端广播全量 positions 消息。"""
@@ -261,27 +247,16 @@ class Broadcaster:
                 disconnected.append(player_uuid)
                 continue
             try:
-                if self.state.same_server_filter_enabled:
-                    visible = self._build_visible_state_for_player(player_uuid)
-                    message_data = {
-                        "type": "positions",
-                        "players": dict(visible["players"]),
-                        "entities": dict(visible["entities"]),
-                        "waypoints": dict(visible["waypoints"]),
-                        "playerMarks": dict(self.state.player_marks),
-                    }
-                    message = json.dumps(message_data, separators=(",", ":"))
-                    await ws.send_text(message)
-                else:
-                    message_data = {
-                        "type": "positions",
-                        "players": dict(self.state.players),
-                        "entities": dict(self.state.entities),
-                        "waypoints": dict(self.state.waypoints),
-                        "playerMarks": dict(self.state.player_marks),
-                    }
-                    message = json.dumps(message_data, separators=(",", ":"))
-                    await ws.send_text(message)
+                visible = self._build_visible_state_for_player(player_uuid)
+                message_data = {
+                    "type": "positions",
+                    "players": dict(visible["players"]),
+                    "entities": dict(visible["entities"]),
+                    "waypoints": dict(visible["waypoints"]),
+                    "playerMarks": dict(self.state.player_marks),
+                }
+                message = json.dumps(message_data, separators=(",", ":"))
+                await ws.send_text(message)
             except Exception as e:
                 logger.warning(
                     f"Error sending legacy message to player={player_uuid} "
@@ -316,7 +291,8 @@ class Broadcaster:
 
             try:
                 if self.state.is_delta_client(player_id):
-                    if self.state.same_server_filter_enabled:
+                    requires_scoped = self.state.requires_scoped_delivery(player_id)
+                    if requires_scoped:
                         visible = self._build_visible_state_for_player(player_id)
                         if force_full_to_delta or changed:
                             compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
@@ -345,7 +321,7 @@ class Broadcaster:
                         patch_msg = self._build_patch_message(rev, patch_state, revision_key="rev")
                         await ws.send_text(self._encode_message(patch_msg))
 
-                    if not self.state.same_server_filter_enabled:
+                    if not requires_scoped:
                         await self.maybe_send_digest(player_id)
             except RuntimeError as e:
                 logger.warning(

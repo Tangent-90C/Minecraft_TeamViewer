@@ -22,6 +22,7 @@ public class Config {
     private static final int DEFAULT_ENEMY_TEAM_COLOR = 0xFFEF4444;
     
     private String serverURL = "ws://localhost:8080/playeresp";
+    private String roomCode = "default";
     private int renderDistance = 128000;
     private boolean showLines = true;
     private boolean showBoxes = true;
@@ -81,6 +82,33 @@ public class Config {
     
     public void setServerURL(String serverURL) {
         this.serverURL = serverURL;
+    }
+
+    public String getRoomCode() {
+        if (roomCode == null) {
+            return "default";
+        }
+        String normalized = roomCode.trim();
+        if (normalized.isEmpty()) {
+            return "default";
+        }
+        if (normalized.length() > 64) {
+            return normalized.substring(0, 64);
+        }
+        return normalized;
+    }
+
+    public void setRoomCode(String roomCode) {
+        if (roomCode == null) {
+            this.roomCode = "default";
+            return;
+        }
+        String normalized = roomCode.trim();
+        if (normalized.isEmpty()) {
+            this.roomCode = "default";
+            return;
+        }
+        this.roomCode = normalized.length() > 64 ? normalized.substring(0, 64) : normalized;
     }
     
     public int getRenderDistance() {
