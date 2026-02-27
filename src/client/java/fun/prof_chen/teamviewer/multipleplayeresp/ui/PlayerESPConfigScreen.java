@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp.ui;
+package fun.prof_chen.teamviewer.multipleplayeresp.ui;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -9,9 +9,9 @@ import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
 import java.util.ArrayList;
 import java.util.List;
-import person.professor_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
-import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
-import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager.ConnectionStatusListener;
+import fun.prof_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager.ConnectionStatusListener;
 
 public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;

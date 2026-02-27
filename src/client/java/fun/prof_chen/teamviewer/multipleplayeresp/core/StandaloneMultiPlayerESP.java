@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp.core;
+package fun.prof_chen.teamviewer.multipleplayeresp.core;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -26,14 +26,14 @@ import net.minecraft.world.RaycastContext;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import person.professor_chen.teamviewer.multipleplayeresp.bridge.XaeroWaypointShareBridge;
-import person.professor_chen.teamviewer.multipleplayeresp.bridge.XaeroWorldMapBridge;
-import person.professor_chen.teamviewer.multipleplayeresp.config.Config;
-import person.professor_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
-import person.professor_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import person.professor_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
-import person.professor_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
-import person.professor_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.XaeroWaypointShareBridge;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.XaeroWorldMapBridge;
+import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
+import fun.prof_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
+import fun.prof_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;

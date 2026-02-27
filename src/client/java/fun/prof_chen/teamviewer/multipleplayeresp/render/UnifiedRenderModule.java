@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp.render;
+package fun.prof_chen.teamviewer.multipleplayeresp.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexFormat;

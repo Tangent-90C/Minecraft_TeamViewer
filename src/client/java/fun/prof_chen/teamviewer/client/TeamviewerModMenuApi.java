@@ -1,8 +1,8 @@
-package person.professor_chen.teamviewer.client;
+package fun.prof_chen.teamviewer.client;
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
-import person.professor_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
+import fun.prof_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
 
 public class TeamviewerModMenuApi implements ModMenuApi {
     @Override

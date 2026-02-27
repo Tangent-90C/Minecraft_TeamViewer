@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.client;
+package fun.prof_chen.teamviewer.client;
 
 import net.fabricmc.fabric.api.datagen.v1.DataGeneratorEntrypoint;
 import net.fabricmc.fabric.api.datagen.v1.FabricDataGenerator;

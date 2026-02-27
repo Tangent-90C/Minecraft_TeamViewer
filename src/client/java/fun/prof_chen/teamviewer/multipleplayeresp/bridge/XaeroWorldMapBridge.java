@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp.bridge;
+package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
@@ -6,7 +6,7 @@ import net.minecraft.registry.RegistryKey;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import person.professor_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;

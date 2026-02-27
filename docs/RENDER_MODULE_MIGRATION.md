@@ -54,7 +54,7 @@ RenderUtils.drawLine(matrixStack, start, end, color);
 ### 新代码
 
 ```java
-import person.professor_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
+import render.multipleplayeresp.fun.prof_chen.teamviewer.UnifiedRenderModule;
 
 // 使用方式 (完全相同的API)
 UnifiedRenderModule.drawOutlinedBox(matrixStack, box, color, depthTest);

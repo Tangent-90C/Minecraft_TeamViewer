@@ -1,7 +1,7 @@
-package person.professor_chen.teamviewer.client;
+package fun.prof_chen.teamviewer.client;
 
 import net.fabricmc.api.ClientModInitializer;
-import person.professor_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
+import fun.prof_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
 
 public class TeamviewerClient implements ClientModInitializer {
 

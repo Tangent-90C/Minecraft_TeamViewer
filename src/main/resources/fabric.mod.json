@@ -9,13 +9,19 @@
   "contact": {},
 
   "license": "MIT",
-  "icon": "assets/teamviewer/icon.png",
+  "icon": "assets/teamviewer/icon.ico",
 
   "environment": "*",
   "entrypoints": {
-    "fabric-datagen": ["person.professor_chen.teamviewer.client.TeamviewerDataGenerator"],
-    "client": ["person.professor_chen.teamviewer.client.TeamviewerClient"],
-    "modmenu": ["person.professor_chen.teamviewer.client.TeamviewerModMenuApi"]
+    "fabric-datagen": [
+      "fun.prof_chen.teamviewer.client.TeamviewerDataGenerator"
+    ],
+    "client": [
+      "fun.prof_chen.teamviewer.client.TeamviewerClient"
+    ],
+    "modmenu": [
+      "fun.prof_chen.teamviewer.client.TeamviewerModMenuApi"
+    ]
   },
 
   "mixins": [

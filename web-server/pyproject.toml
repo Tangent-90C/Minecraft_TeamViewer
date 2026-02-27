@@ -1,7 +1,7 @@
 [project]
-name = "mc-server"
-version = "0.1.0"
-description = "Add your description here"
+name = "TeamViewer-web-server"
+version = "0.2.0"
+description = "一个用于共享团队视野的服务端网页代码"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -1,4 +1,4 @@
-package person.professor_chen.teamviewer.multipleplayeresp.model;
+package fun.prof_chen.teamviewer.multipleplayeresp.model;
 
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
