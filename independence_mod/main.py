@@ -29,7 +29,7 @@ def configure_logging() -> None:
 configure_logging()
 logger = logging.getLogger("teamviewer.main")
 
-NETWORK_PROTOCOL_VERSION = "0.1.0"
+NETWORK_PROTOCOL_VERSION = "0.2.0"
 SERVER_PROGRAM_VERSION = os.getenv("TEAMVIEWER_SERVER_VERSION", "teamviewer-server-dev")
 
 
@@ -146,7 +146,7 @@ async def admin_ws(websocket: WebSocket):
                     "playerId": str(target_player_id).strip() if isinstance(target_player_id, str) else target_player_id,
                     "mark": updated_mark,
                 }, separators=(",", ":")))
-                await broadcaster.broadcast_admin_updates()
+                await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             if msg_type == "command_player_mark_clear":
@@ -160,7 +160,7 @@ async def admin_ws(websocket: WebSocket):
                     "error": None if removed else "mark_not_found",
                 }, separators=(",", ":")))
                 if removed:
-                    await broadcaster.broadcast_admin_updates()
+                    await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             if msg_type == "command_player_mark_clear_all":
@@ -171,7 +171,7 @@ async def admin_ws(websocket: WebSocket):
                     "action": "command_player_mark_clear_all",
                     "removedCount": removed_count,
                 }, separators=(",", ":")))
-                await broadcaster.broadcast_admin_updates()
+                await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             if msg_type == "command_same_server_filter_set":

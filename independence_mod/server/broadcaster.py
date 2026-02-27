@@ -168,6 +168,7 @@ class Broadcaster:
             return
         visible = self._build_visible_state_for_player(player_id)
         compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
+        compact_scopes["playerMarks"] = dict(self.state.player_marks)
         message = self._build_full_message(self.state.revision, compact_scopes, revision_key="rev")
         await ws.send_text(self._encode_message(message))
 
@@ -267,6 +268,7 @@ class Broadcaster:
                         "players": dict(visible["players"]),
                         "entities": dict(visible["entities"]),
                         "waypoints": dict(visible["waypoints"]),
+                        "playerMarks": dict(self.state.player_marks),
                     }
                     message = json.dumps(message_data, separators=(",", ":"))
                     await ws.send_text(message)
@@ -276,6 +278,7 @@ class Broadcaster:
                         "players": dict(self.state.players),
                         "entities": dict(self.state.entities),
                         "waypoints": dict(self.state.waypoints),
+                        "playerMarks": dict(self.state.player_marks),
                     }
                     message = json.dumps(message_data, separators=(",", ":"))
                     await ws.send_text(message)
@@ -317,6 +320,7 @@ class Broadcaster:
                         visible = self._build_visible_state_for_player(player_id)
                         if force_full_to_delta or changed:
                             compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
+                            compact_scopes["playerMarks"] = dict(self.state.player_marks)
                             full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
                             await ws.send_text(self._encode_message(full_msg))
                         await self.maybe_send_digest(player_id, visible)
@@ -329,6 +333,7 @@ class Broadcaster:
                             },
                             self._player_sync_scopes,
                         )
+                        compact_scopes["playerMarks"] = dict(self.state.player_marks)
                         full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
                         await ws.send_text(self._encode_message(full_msg))
                     elif changed:

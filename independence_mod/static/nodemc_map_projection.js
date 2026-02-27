@@ -18,8 +18,10 @@
 
   const PAGE = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
   const STORAGE_KEY = 'nodemc_player_overlay_settings_v1';
-  const ADMIN_NETWORK_PROTOCOL_VERSION = '0.1.0';
+  const ADMIN_NETWORK_PROTOCOL_VERSION = '0.2.0';
   const LOCAL_PROGRAM_VERSION = 'nodemc-overlay-0.2.0';
+  const AUTO_MARK_SYNC_INTERVAL_MS = 1200;
+  const AUTO_MARK_SYNC_MAX_PER_TICK = 12;
 
   const DEFAULT_CONFIG = {
     ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
@@ -68,6 +70,8 @@
   let lastAdminMessageType = null;
   let lastAdminMessageAt = 0;
   let lastAdminMessageRevision = null;
+  let lastAutoMarkSyncAt = 0;
+  let autoMarkSyncCache = new Map();
 
   const TEAM_DEFAULT_COLORS = {
     friendly: '#3b82f6',
@@ -288,6 +292,53 @@
       };
     }
     return null;
+  }
+
+  function maybeSyncAutoDetectedMarks(candidates) {
+    if (!adminWs || adminWs.readyState !== WebSocket.OPEN) return;
+    if (!Array.isArray(candidates) || candidates.length === 0) return;
+
+    const now = Date.now();
+    if (now - lastAutoMarkSyncAt < AUTO_MARK_SYNC_INTERVAL_MS) {
+      return;
+    }
+
+    let sent = 0;
+    for (const item of candidates) {
+      if (!item || typeof item !== 'object') continue;
+      const playerId = String(item.playerId || '').trim();
+      if (!playerId) continue;
+
+      const team = normalizeTeam(item.team);
+      if (team !== 'friendly' && team !== 'enemy') continue;
+
+      const color = normalizeColor(item.color, getConfiguredTeamColor(team));
+      const cacheKey = `${team}|${color}`;
+      if (autoMarkSyncCache.get(playerId) === cacheKey) {
+        continue;
+      }
+
+      const ok = sendAdminCommand({
+        type: 'command_player_mark_set',
+        playerId,
+        team,
+        color,
+      });
+
+      if (!ok) {
+        continue;
+      }
+
+      autoMarkSyncCache.set(playerId, cacheKey);
+      sent += 1;
+      if (sent >= AUTO_MARK_SYNC_MAX_PER_TICK) {
+        break;
+      }
+    }
+
+    if (sent > 0) {
+      lastAutoMarkSyncAt = now;
+    }
   }
 
   function getTabPlayerName(playerId) {
@@ -987,6 +1038,7 @@
 
     const wantedDim = normalizeDimension(CONFIG.TARGET_DIMENSION);
     const nextIds = new Set();
+    const autoMarkSyncCandidates = [];
 
     for (const [playerId, rawNode] of Object.entries(players)) {
       const data = getPlayerDataNode(rawNode);
@@ -1005,6 +1057,15 @@
       const tabInfo = getTabPlayerInfo(playerId);
       const autoName = getTabPlayerName(playerId) || name;
       const autoMark = mark ? null : autoTeamFromName(autoName);
+
+      if (autoMark && !mark && (autoMark.team === 'friendly' || autoMark.team === 'enemy')) {
+        autoMarkSyncCandidates.push({
+          playerId,
+          team: autoMark.team,
+          color: autoMark.color,
+        });
+      }
+
       const townInfo = tabInfo && tabInfo.teamText
         ? {
             text: tabInfo.teamText,
@@ -1082,6 +1143,7 @@
 
     removeMissingMarkers(nextIds);
     removeMissingWaypoints(nextWaypointIds);
+    maybeSyncAutoDetectedMarks(autoMarkSyncCandidates);
 
     PAGE.__NODEMC_PLAYER_OVERLAY__ = {
       revision: snapshot.revision,
@@ -2155,6 +2217,8 @@
 
       // cleanup websocket and timers
       cleanupWs();
+      autoMarkSyncCache.clear();
+      lastAutoMarkSyncAt = 0;
 
       uiMounted = false;
       overlayStarted = false;

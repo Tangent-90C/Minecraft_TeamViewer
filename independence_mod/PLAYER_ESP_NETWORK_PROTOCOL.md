@@ -130,7 +130,8 @@
 ```json
 {
   "type": "handshake",
-  "protocolVersion": 2,
+  "networkProtocolVersion": "0.2.0",
+  "protocolVersion": "0.2.0",
   "supportsDelta": true,
   "submitPlayerId": "<可选，玩家UUID>"
 }
@@ -144,7 +145,8 @@
 {
   "type": "handshake_ack",
   "ready": true,
-  "protocolVersion": 2,
+  "networkProtocolVersion": "0.2.0",
+  "protocolVersion": "0.2.0",
   "deltaEnabled": true,
   "digestIntervalSec": 10,
   "rev": <当前revision>
@@ -153,7 +155,7 @@
 
 `deltaEnabled` 计算规则：
 
-- `protocolVersion >= 2` 且客户端 `supportsDelta=true`
+- `networkProtocolVersion >= 0.2.0` 且客户端 `supportsDelta=true`
 
 ### 5.3 握手后首轮同步
 
@@ -188,6 +190,12 @@
 4. `digest`
 5. `positions`（兼容模式）
 
+说明：
+
+- `snapshot_full`（全量）和 `positions`（兼容全量）现在都会携带 `playerMarks`。
+- `playerMarks` 结构为：`playerId -> { team, color, label, updatedAt }`。
+- 客户端按 `team`（friendly / neutral / enemy）映射本地配置颜色，用于玩家框与追踪线渲染。
+
 ### 6.3 服务端 -> 管理端
 
 - 无 `type` 字段的状态快照 JSON（包含 players/entities/waypoints/connections/revision）
@@ -220,6 +228,7 @@
 2. 管理端（含油猴脚本）可读取 `tabState.reports` / `tabState.groups` 做战术识别（如按名字标签自动敌我分类）。
 
 说明：
+
 - `name` 维持纯玩家名（用于同服分组 identityKey）。
 - `prefixedName` 用于携带服务器自定义前缀（用于前端自动敌我识别）。
 
@@ -345,7 +354,8 @@ Waypoints 当前策略：
   "type": "positions",
   "players": {"id": {"timestamp":..., "submitPlayerId":..., "data": {...}}},
   "entities": {"id": {"timestamp":..., "submitPlayerId":..., "data": {...}}},
-  "waypoints": {"id": {"timestamp":..., "submitPlayerId":..., "data": {...}}}
+  "waypoints": {"id": {"timestamp":..., "submitPlayerId":..., "data": {...}}},
+  "playerMarks": {"player-uuid": {"team": "friendly", "color": "#3b82f6", "label": "友军", "updatedAt": 1700000000000}}
 }
 ```
 

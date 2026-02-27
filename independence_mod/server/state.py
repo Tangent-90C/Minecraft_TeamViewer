@@ -42,7 +42,7 @@ class ServerState:
     REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = 64
 
     # 协议配置
-    PROTOCOL_V2 = "0.1.0"
+    PROTOCOL_V2 = "0.2.0"
     DIGEST_INTERVAL_SEC = 10
     TAB_REPORT_TIMEOUT_SEC = 45
 

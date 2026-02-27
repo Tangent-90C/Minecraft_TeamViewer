@@ -17,6 +17,9 @@ public class Config {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
+    private static final int DEFAULT_FRIENDLY_TEAM_COLOR = 0xFF3B82F6;
+    private static final int DEFAULT_NEUTRAL_TEAM_COLOR = 0xFFEAB308;
+    private static final int DEFAULT_ENEMY_TEAM_COLOR = 0xFFEF4444;
     
     private String serverURL = "ws://localhost:8080/playeresp";
     private int renderDistance = 128000;
@@ -24,6 +27,9 @@ public class Config {
     private boolean showBoxes = true;
     private int boxColor = 0x80FF0000; // 50%不透明红色
     private int lineColor = 0xFFFF0000; // 不透明红色
+    private int friendlyTeamColor = DEFAULT_FRIENDLY_TEAM_COLOR;
+    private int neutralTeamColor = DEFAULT_NEUTRAL_TEAM_COLOR;
+    private int enemyTeamColor = DEFAULT_ENEMY_TEAM_COLOR;
     private String tracerStartMode = TRACER_START_CROSSHAIR; // 追踪线起始点模式：crosshair 或 top
     private double tracerTopOffset = 0.42; // 顶部模式上抬偏移
     private boolean enableCompression = true; // 是否启用WebSocket压缩
@@ -115,6 +121,39 @@ public class Config {
     
     public void setLineColor(int lineColor) {
         this.lineColor = lineColor;
+    }
+
+    public int getFriendlyTeamColor() {
+        if (friendlyTeamColor == 0) {
+            return DEFAULT_FRIENDLY_TEAM_COLOR;
+        }
+        return friendlyTeamColor;
+    }
+
+    public void setFriendlyTeamColor(int friendlyTeamColor) {
+        this.friendlyTeamColor = friendlyTeamColor;
+    }
+
+    public int getNeutralTeamColor() {
+        if (neutralTeamColor == 0) {
+            return DEFAULT_NEUTRAL_TEAM_COLOR;
+        }
+        return neutralTeamColor;
+    }
+
+    public void setNeutralTeamColor(int neutralTeamColor) {
+        this.neutralTeamColor = neutralTeamColor;
+    }
+
+    public int getEnemyTeamColor() {
+        if (enemyTeamColor == 0) {
+            return DEFAULT_ENEMY_TEAM_COLOR;
+        }
+        return enemyTeamColor;
+    }
+
+    public void setEnemyTeamColor(int enemyTeamColor) {
+        this.enemyTeamColor = enemyTeamColor;
     }
 
     public String getTracerStartMode() {

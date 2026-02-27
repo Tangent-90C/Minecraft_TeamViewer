@@ -330,8 +330,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 					node.put("prefixColored", prefixColored);
 				}
 
-				System.out.println(node);
-
 				result.add(node);
 			}
 		} catch (Exception e) {
@@ -373,6 +371,10 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				continue; // 跳过自己
 			}
 
+			String markedTeam = networkManager == null ? null : networkManager.getPlayerMarkTeam(entry.getKey());
+			int boxRenderColor = resolveRenderColorByTeam(markedTeam, config.getBoxColor());
+			int tracerRenderColor = resolveRenderColorByTeam(markedTeam, config.getLineColor());
+
 			Vec3d playerPos = entry.getValue();
 			
 			// 检查距离
@@ -388,7 +390,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				
 				// 绘制包围盒
 				if (config.isShowBoxes()) {
-					UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), box, config.getBoxColor(), true);
+					UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), box, boxRenderColor, true);
 				}
 				
 				// 绘制连线
@@ -408,12 +410,30 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 					} else {
 						tracerStart = lookVec.multiply(0.6);
 					}
-					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, config.getLineColor());
+					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, tracerRenderColor);
 				}
 			}
 		}
 
 		renderSharedWaypointMarkers(context, cameraPos);
+	}
+
+	private int resolveRenderColorByTeam(String teamTag, int fallbackColor) {
+		if (teamTag == null || teamTag.isBlank()) {
+			return fallbackColor;
+		}
+
+		String normalized = teamTag.trim().toLowerCase();
+		if ("friendly".equals(normalized) || "friend".equals(normalized) || "ally".equals(normalized)) {
+			return config.getFriendlyTeamColor();
+		}
+		if ("enemy".equals(normalized) || "hostile".equals(normalized)) {
+			return config.getEnemyTeamColor();
+		}
+		if ("neutral".equals(normalized)) {
+			return config.getNeutralTeamColor();
+		}
+		return fallbackColor;
 	}
 
 	private void registerWaypointSyncListener() {

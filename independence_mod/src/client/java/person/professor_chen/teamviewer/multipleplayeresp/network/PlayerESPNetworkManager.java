@@ -71,7 +71,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
-	private static final String CLIENT_PROTOCOL_VERSION = "0.1.0";
+	private static final String CLIENT_PROTOCOL_VERSION = "0.2.0";
 	private static final String CLIENT_PROGRAM_VERSION = resolveLocalProgramVersion();
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
 	private static final long FORCE_FULL_REFRESH_MS = 25_000L;
@@ -84,6 +84,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
 	private final Map<String, Map<String, Object>> remoteWaypointDataCache = new HashMap<>();
 	private final Map<String, SharedWaypointInfo> remoteWaypointCache = new HashMap<>();
+	private final Map<String, PlayerMarkState> remotePlayerMarks = new HashMap<>();
 	private final Map<String, Map<String, Object>> lastSentPlayersSnapshot = new HashMap<>();
 	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
 
@@ -118,6 +119,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * 这样可确保对 lastSent*Snapshot、remote*Cache 等共享集合的读写在同一线程完成。
 	 */
 	private final Queue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
+
+	private record PlayerMarkState(String team, Integer color, String label) {
+	}
 
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
 		this.playerPositions = playerPositions;
@@ -677,6 +681,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				notifyWaypointsReceived(receivedWaypoints);
 			}
 		}
+
+		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
+			replacePlayerMarks(json.getAsJsonObject("playerMarks"));
+		}
 	}
 
 	private void applySnapshot(JsonObject json) {
@@ -697,6 +705,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			if (!receivedWaypoints.isEmpty()) {
 				notifyWaypointsReceived(receivedWaypoints);
 			}
+		}
+
+		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
+			replacePlayerMarks(json.getAsJsonObject("playerMarks"));
 		}
 	}
 
@@ -772,6 +784,122 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				}
 			}
 		}
+
+		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
+			JsonObject playerMarksNode = json.getAsJsonObject("playerMarks");
+			if (playerMarksNode.has("upsert") || playerMarksNode.has("delete")) {
+				applyPlayerMarksPatch(playerMarksNode);
+			} else {
+				replacePlayerMarks(playerMarksNode);
+			}
+		}
+	}
+
+	private void replacePlayerMarks(JsonObject marksJson) {
+		remotePlayerMarks.clear();
+		mergePlayerMarkUpserts(marksJson);
+	}
+
+	private void applyPlayerMarksPatch(JsonObject patchNode) {
+		if (patchNode.has("delete") && patchNode.get("delete").isJsonArray()) {
+			for (JsonElement idElement : patchNode.getAsJsonArray("delete")) {
+				if (idElement == null || !idElement.isJsonPrimitive()) {
+					continue;
+				}
+				String normalized = normalizePlayerMarkId(idElement.getAsString());
+				if (normalized != null) {
+					remotePlayerMarks.remove(normalized);
+				}
+			}
+		}
+
+		if (patchNode.has("upsert") && patchNode.get("upsert").isJsonObject()) {
+			mergePlayerMarkUpserts(patchNode.getAsJsonObject("upsert"));
+		}
+	}
+
+	private void mergePlayerMarkUpserts(JsonObject upsertNode) {
+		for (Map.Entry<String, JsonElement> entry : upsertNode.entrySet()) {
+			try {
+				if (entry.getValue() == null || !entry.getValue().isJsonObject()) {
+					continue;
+				}
+				String normalizedId = normalizePlayerMarkId(entry.getKey());
+				if (normalizedId == null) {
+					continue;
+				}
+
+				JsonObject markNode = extractDataNode(entry.getValue().getAsJsonObject());
+				String team = normalizeMarkTeam(getOptionalString(markNode, "team"));
+				Integer color = parseColorValue(markNode.get("color"));
+				String label = getOptionalString(markNode, "label");
+				if (label != null && label.isBlank()) {
+					label = null;
+				}
+
+				remotePlayerMarks.put(normalizedId, new PlayerMarkState(team, color, label));
+			} catch (Exception e) {
+				LOGGER.warn("Failed to parse player mark {}: {}", entry.getKey(), e.getMessage());
+			}
+		}
+	}
+
+	private String normalizePlayerMarkId(String value) {
+		if (value == null || value.isBlank()) {
+			return null;
+		}
+		try {
+			return UUID.fromString(value.trim()).toString().toLowerCase();
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private String normalizeMarkTeam(String value) {
+		if (value == null) {
+			return "neutral";
+		}
+		String text = value.trim().toLowerCase();
+		if ("friendly".equals(text) || "friend".equals(text) || "ally".equals(text) || "blue".equals(text)) {
+			return "friendly";
+		}
+		if ("enemy".equals(text) || "hostile".equals(text) || "red".equals(text)) {
+			return "enemy";
+		}
+		return "neutral";
+	}
+
+	private Integer parseColorValue(JsonElement element) {
+		if (element == null || element.isJsonNull()) {
+			return null;
+		}
+		try {
+			if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+				return element.getAsInt();
+			}
+			if (element.isJsonPrimitive()) {
+				String text = element.getAsString();
+				if (text == null || text.isBlank()) {
+					return null;
+				}
+				String normalized = text.trim();
+				if (normalized.startsWith("#")) {
+					String hex = normalized.substring(1);
+					if (hex.length() == 6) {
+						return (0xFF << 24) | Integer.parseInt(hex, 16);
+					}
+					if (hex.length() == 8) {
+						return (int) Long.parseLong(hex, 16);
+					}
+				}
+				if (normalized.startsWith("0x") || normalized.startsWith("0X")) {
+					return (int) Long.parseLong(normalized.substring(2), 16);
+				}
+				return (int) Long.parseLong(normalized, 16);
+			}
+		} catch (Exception ignored) {
+		}
+		return null;
 	}
 
 	private void handleDigest(JsonObject json) {
@@ -939,6 +1067,14 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 
 		return null;
+	}
+
+	public String getPlayerMarkTeam(UUID playerId) {
+		if (playerId == null) {
+			return null;
+		}
+		PlayerMarkState mark = remotePlayerMarks.get(playerId.toString().toLowerCase());
+		return mark == null ? null : mark.team();
 	}
 
 	private boolean isRemotePlayerMatch(RemotePlayerInfo info, String expectedPlayerName, String expectedDimension) {
@@ -1657,5 +1793,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		remoteEntityDataCache.clear();
 		remoteWaypointDataCache.clear();
 		remoteWaypointCache.clear();
+		remotePlayerMarks.clear();
 	}
 }

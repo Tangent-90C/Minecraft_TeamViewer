@@ -49,6 +49,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private final int originalMaxQuickMarkCount;
     private final int originalBoxColor;
     private final int originalLineColor;
+    private final int originalFriendlyTeamColor;
+    private final int originalNeutralTeamColor;
+    private final int originalEnemyTeamColor;
 
     private static final int COMPONENT_WIDTH = 170;
     private static final int COMPONENT_HEIGHT = 20;
@@ -79,6 +82,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.originalMaxQuickMarkCount = StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount();
         this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
         this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
+        this.originalFriendlyTeamColor = StandaloneMultiPlayerESP.getConfig().getFriendlyTeamColor();
+        this.originalNeutralTeamColor = StandaloneMultiPlayerESP.getConfig().getNeutralTeamColor();
+        this.originalEnemyTeamColor = StandaloneMultiPlayerESP.getConfig().getEnemyTeamColor();
     }
 
     private void calculateLayout() {
@@ -458,6 +464,9 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(this.originalMaxQuickMarkCount);
         StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
         StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
+        StandaloneMultiPlayerESP.getConfig().setFriendlyTeamColor(this.originalFriendlyTeamColor);
+        StandaloneMultiPlayerESP.getConfig().setNeutralTeamColor(this.originalNeutralTeamColor);
+        StandaloneMultiPlayerESP.getConfig().setEnemyTeamColor(this.originalEnemyTeamColor);
 
         MinecraftClient.getInstance().setScreen(this.parent);
     }
