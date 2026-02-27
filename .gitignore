@@ -24,18 +24,9 @@ hs_err_pid*
 replay_pid*
 
 
-independence_mod/.gradle/
-independence_mod/.idea
-independence_mod/build/
-independence_mod/run/
-
-
-wurst-plugin/.gradle/
-wurst-plugin/.idea/
-wurst-plugin/build/
-wurst-plugin/run/
-
-.idea
-independence_mod/offline-web
+.gradle/
+.idea/
+build/
+run/
 
 **/__pycache__
