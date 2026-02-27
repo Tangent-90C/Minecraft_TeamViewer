@@ -21,6 +21,52 @@ class Broadcaster:
     def __init__(self, state: ServerState) -> None:
         self.state = state
         self._admin_last_state: dict | None = None
+        self._player_sync_scopes = ("players", "entities", "waypoints")
+        self._admin_sync_scopes = ("players", "entities", "waypoints", "playerMarks")
+
+    @staticmethod
+    def _encode_message(message: dict) -> str:
+        return json.dumps(message, separators=(",", ":"))
+
+    def _build_full_message(
+        self,
+        revision: int,
+        scope_state: dict,
+        *,
+        revision_key: str,
+        channel: str | None = None,
+        extra: dict | None = None,
+    ) -> dict:
+        message = {
+            "type": "snapshot_full",
+            revision_key: revision,
+            **scope_state,
+        }
+        if channel:
+            message["channel"] = channel
+        if isinstance(extra, dict) and extra:
+            message.update(extra)
+        return message
+
+    def _build_patch_message(
+        self,
+        revision: int,
+        scope_patch: dict,
+        *,
+        revision_key: str,
+        channel: str | None = None,
+        extra: dict | None = None,
+    ) -> dict:
+        message = {
+            "type": "patch",
+            revision_key: revision,
+            **scope_patch,
+        }
+        if channel:
+            message["channel"] = channel
+        if isinstance(extra, dict) and extra:
+            message.update(extra)
+        return message
 
     @staticmethod
     def _snapshot_scope_from_state_map(state_map: dict) -> dict:
@@ -48,23 +94,24 @@ class Broadcaster:
             for object_id, value in scope_map.items()
         }
 
+    def _compute_scope_patch_for_scopes(self, old_state: dict, new_state: dict, scopes: tuple[str, ...]) -> dict:
+        patch = {}
+        for scope in scopes:
+            patch[scope] = self.state.compute_scope_patch(
+                self._wrap_plain_scope(old_state.get(scope, {})),
+                self._wrap_plain_scope(new_state.get(scope, {})),
+            )
+        return patch
+
+    @staticmethod
+    def _has_scope_patch_changes(patch: dict, scopes: tuple[str, ...]) -> bool:
+        for scope in scopes:
+            if patch.get(scope, {}).get("upsert") or patch.get(scope, {}).get("delete"):
+                return True
+        return False
+
     def _compute_admin_patch(self, old_state: dict, new_state: dict) -> dict:
-        players_patch = self.state.compute_scope_patch(
-            self._wrap_plain_scope(old_state.get("players", {})),
-            self._wrap_plain_scope(new_state.get("players", {})),
-        )
-        entities_patch = self.state.compute_scope_patch(
-            self._wrap_plain_scope(old_state.get("entities", {})),
-            self._wrap_plain_scope(new_state.get("entities", {})),
-        )
-        waypoints_patch = self.state.compute_scope_patch(
-            self._wrap_plain_scope(old_state.get("waypoints", {})),
-            self._wrap_plain_scope(new_state.get("waypoints", {})),
-        )
-        marks_patch = self.state.compute_scope_patch(
-            self._wrap_plain_scope(old_state.get("playerMarks", {})),
-            self._wrap_plain_scope(new_state.get("playerMarks", {})),
-        )
+        scope_patch = self._compute_scope_patch_for_scopes(old_state, new_state, self._admin_sync_scopes)
 
         meta_patch = {}
         if old_state.get("tabState") != new_state.get("tabState"):
@@ -73,20 +120,18 @@ class Broadcaster:
             meta_patch["connections"] = new_state.get("connections", [])
             meta_patch["connections_count"] = new_state.get("connections_count", 0)
 
-        return {
-            "players": players_patch,
-            "entities": entities_patch,
-            "waypoints": waypoints_patch,
-            "playerMarks": marks_patch,
-            "meta": meta_patch,
-        }
+        scope_patch["meta"] = meta_patch
+        return scope_patch
 
     @staticmethod
-    def _has_admin_patch_changes(patch: dict) -> bool:
-        for scope in ("players", "entities", "waypoints", "playerMarks"):
-            if patch.get(scope, {}).get("upsert") or patch.get(scope, {}).get("delete"):
-                return True
-        return bool(patch.get("meta"))
+    def _compact_scope_state(node_scope_state: dict, scopes: tuple[str, ...]) -> dict:
+        return {
+            scope: ServerState.compact_state_map(node_scope_state.get(scope, {}))
+            for scope in scopes
+        }
+
+    def _has_admin_patch_changes(self, patch: dict) -> bool:
+        return self._has_scope_patch_changes(patch, self._admin_sync_scopes) or bool(patch.get("meta"))
 
     async def send_admin_snapshot_full(self, admin_id: str) -> None:
         ws = self.state.admin_connections.get(admin_id)
@@ -95,15 +140,15 @@ class Broadcaster:
 
         view_state = self._build_admin_view_state()
         self._admin_last_state = view_state
-        message = {
-            "type": "snapshot_full",
-            "channel": "admin",
-            "server_time": time.time(),
-            "revision": self.state.revision,
-            **view_state,
-        }
+        message = self._build_full_message(
+            self.state.revision,
+            view_state,
+            revision_key="revision",
+            channel="admin",
+            extra={"server_time": time.time()},
+        )
 
-        await ws.send_text(json.dumps(message, separators=(",", ":")))
+        await ws.send_text(self._encode_message(message))
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
         allowed_sources = self.state.get_allowed_sources_for_player(player_id)
@@ -122,14 +167,9 @@ class Broadcaster:
         if ws is None:
             return
         visible = self._build_visible_state_for_player(player_id)
-        message = {
-            "type": "snapshot_full",
-            "rev": self.state.revision,
-            "players": self.state.compact_state_map(visible["players"]),
-            "entities": self.state.compact_state_map(visible["entities"]),
-            "waypoints": self.state.compact_state_map(visible["waypoints"]),
-        }
-        await ws.send_text(json.dumps(message, separators=(",", ":")))
+        compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
+        message = self._build_full_message(self.state.revision, compact_scopes, revision_key="rev")
+        await ws.send_text(self._encode_message(message))
 
     async def maybe_send_digest(self, player_id: str, visible_state: dict | None = None) -> None:
         """按节流周期发送摘要，帮助客户端做状态一致性检测。"""
@@ -166,28 +206,28 @@ class Broadcaster:
         previous_state = self._admin_last_state
 
         if force_full or previous_state is None:
-            message = {
-                "type": "snapshot_full",
-                "channel": "admin",
-                "server_time": time.time(),
-                "revision": self.state.revision,
-                **current_state,
-            }
+            message = self._build_full_message(
+                self.state.revision,
+                current_state,
+                revision_key="revision",
+                channel="admin",
+                extra={"server_time": time.time()},
+            )
         else:
             patch = self._compute_admin_patch(previous_state, current_state)
             if not self._has_admin_patch_changes(patch):
                 self._admin_last_state = current_state
                 return
-            message = {
-                "type": "patch",
-                "channel": "admin",
-                "server_time": time.time(),
-                "revision": self.state.revision,
-                **patch,
-            }
+            message = self._build_patch_message(
+                self.state.revision,
+                patch,
+                revision_key="revision",
+                channel="admin",
+                extra={"server_time": time.time()},
+            )
 
         try:
-            encoded = json.dumps(message, separators=(",", ":"))
+            encoded = self._encode_message(message)
         except Exception as e:
             logger.error("Error serializing admin update payload: %s", e)
             return
@@ -276,33 +316,29 @@ class Broadcaster:
                     if self.state.same_server_filter_enabled:
                         visible = self._build_visible_state_for_player(player_id)
                         if force_full_to_delta or changed:
-                            full_msg = {
-                                "type": "snapshot_full",
-                                "rev": rev,
-                                "players": self.state.compact_state_map(visible["players"]),
-                                "entities": self.state.compact_state_map(visible["entities"]),
-                                "waypoints": self.state.compact_state_map(visible["waypoints"]),
-                            }
-                            await ws.send_text(json.dumps(full_msg, separators=(",", ":")))
+                            compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
+                            full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
+                            await ws.send_text(self._encode_message(full_msg))
                         await self.maybe_send_digest(player_id, visible)
                     elif force_full_to_delta:
-                        full_msg = {
-                            "type": "snapshot_full",
-                            "rev": rev,
-                            "players": self.state.compact_state_map(self.state.players),
-                            "entities": self.state.compact_state_map(self.state.entities),
-                            "waypoints": self.state.compact_state_map(self.state.waypoints),
-                        }
-                        await ws.send_text(json.dumps(full_msg, separators=(",", ":")))
+                        compact_scopes = self._compact_scope_state(
+                            {
+                                "players": self.state.players,
+                                "entities": self.state.entities,
+                                "waypoints": self.state.waypoints,
+                            },
+                            self._player_sync_scopes,
+                        )
+                        full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
+                        await ws.send_text(self._encode_message(full_msg))
                     elif changed:
-                        patch_msg = {
-                            "type": "patch",
-                            "rev": rev,
+                        patch_state = {
                             "players": changes["players"],
                             "entities": changes["entities"],
                             "waypoints": changes["waypoints"],
                         }
-                        await ws.send_text(json.dumps(patch_msg, separators=(",", ":")))
+                        patch_msg = self._build_patch_message(rev, patch_state, revision_key="rev")
+                        await ws.send_text(self._encode_message(patch_msg))
 
                     if not self.state.same_server_filter_enabled:
                         await self.maybe_send_digest(player_id)
