@@ -827,17 +827,7 @@ public final class XaeroWaypointShareBridge {
 			}
 			return "报点";
 		}
-
-		String nameWithoutAt = baseName.replaceFirst("\\s*@\\s*-?\\d+\\s+-?\\d+\\s+-?\\d+\\s*$", "").trim();
-		if (!nameWithoutAt.isBlank()) {
-			baseName = nameWithoutAt;
-		}
-
-		String nameWithoutTrailingCoords = baseName.replaceFirst("\\s+-?\\d+\\s+-?\\d+\\s+-?\\d+\\s*$", "").trim();
-		if (!nameWithoutTrailingCoords.isBlank()) {
-			baseName = nameWithoutTrailingCoords;
-		}
-
+		
 		return baseName;
 	}
 

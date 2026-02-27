@@ -28,6 +28,8 @@
     SHOW_HORSE_ENTITIES: true,
     SHOW_LABEL_TEAM_INFO: true,
     SHOW_LABEL_TOWN_INFO: true,
+    SHOW_WAYPOINT_ICON: true,
+    SHOW_WAYPOINT_TEXT: true,
     PLAYER_ICON_SIZE: 10,
     PLAYER_TEXT_SIZE: 12,
     HORSE_ICON_SIZE: 14,
@@ -46,6 +48,7 @@
   let leafletRef = null;
   let capturedMap = null;
   let markersById = new Map();
+  let waypointsById = new Map();
   let lastRevision = null;
   let lastErrorText = null;
   let latestSnapshot = null;
@@ -145,6 +148,12 @@
     next.SHOW_LABEL_TOWN_INFO = candidate.SHOW_LABEL_TOWN_INFO === undefined
       ? DEFAULT_CONFIG.SHOW_LABEL_TOWN_INFO
       : Boolean(candidate.SHOW_LABEL_TOWN_INFO);
+    next.SHOW_WAYPOINT_ICON = candidate.SHOW_WAYPOINT_ICON === undefined
+      ? DEFAULT_CONFIG.SHOW_WAYPOINT_ICON
+      : Boolean(candidate.SHOW_WAYPOINT_ICON);
+    next.SHOW_WAYPOINT_TEXT = candidate.SHOW_WAYPOINT_TEXT === undefined
+      ? DEFAULT_CONFIG.SHOW_WAYPOINT_TEXT
+      : Boolean(candidate.SHOW_WAYPOINT_TEXT);
 
     const playerIconSize = Number(candidate.PLAYER_ICON_SIZE);
     if (Number.isFinite(playerIconSize)) {
@@ -211,14 +220,29 @@
 
   function normalizeColor(colorValue, fallbackColor) {
     const fallback = typeof fallbackColor === 'string' && fallbackColor ? fallbackColor : TEAM_DEFAULT_COLORS.neutral;
+    if (colorValue === undefined || colorValue === null || colorValue === '') return fallback;
+    // accept numeric color (integer), convert to hex
+    if (typeof colorValue === 'number' && Number.isFinite(colorValue)) {
+      const v = Math.max(0, Math.min(0xFFFFFF, Math.floor(colorValue)));
+      const hex = v.toString(16).padStart(6, '0');
+      return `#${hex}`;
+    }
     const text = String(colorValue || '').trim();
     if (!text) return fallback;
-
     const raw = text.startsWith('#') ? text.slice(1) : text;
-    if (!/^[0-9a-fA-F]{6}$/.test(raw)) {
-      return fallback;
+    if (/^[0-9a-fA-F]{6}$/.test(raw)) {
+      return `#${raw.toLowerCase()}`;
     }
-    return `#${raw.toLowerCase()}`;
+    // try parsing decimal integer string
+    if (/^[0-9]+$/.test(text)) {
+      const num = Number.parseInt(text, 10);
+      if (!Number.isNaN(num)) {
+        const v = Math.max(0, Math.min(0xFFFFFF, Math.floor(num)));
+        const hex = v.toString(16).padStart(6, '0');
+        return `#${hex}`;
+      }
+    }
+    return fallback;
   }
 
   function getConfiguredTeamColor(team) {
@@ -846,11 +870,100 @@
     markersById.set(playerId, marker);
   }
 
+  function buildWaypointHtml(name, x, z, waypoint) {
+
+    let safeName = (name && String(name)) ? String(name) : '标点';
+    if (CONFIG.SHOW_COORDS) {
+      safeName += ` (${Math.round(x)}, ${Math.round(z)})`;
+    }
+    if (Number.isFinite(waypoint && waypoint.health) && waypoint.health > 0) {
+      safeName += ` ❤${Math.round(waypoint.health)}`;
+    }
+
+    const color = normalizeColor(waypoint && waypoint.color, '#f97316');
+    const owner = (waypoint && (waypoint.ownerName || waypoint.ownerId)) ? (waypoint.ownerName || waypoint.ownerId) : null;
+    const escapeHtml = (raw) => String(raw).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+
+    const visual = getMarkerVisualConfig('waypoint');
+    const showIcon = Boolean(CONFIG.SHOW_WAYPOINT_ICON);
+    const showText = Boolean(CONFIG.SHOW_WAYPOINT_TEXT);
+    if (!showIcon && !showText) return '';
+
+    // Container: left edge corresponds to map point. Text left edge should align to point.
+    // If icon present, icon will be absolutely positioned so its center aligns to the point (left edge of container),
+    // and text box will have padding-left so visible text does not overlap the icon. If icon absent, no padding.
+    const ownerHtml = owner ? `<span class="n-wp-owner" style="font-weight:600;display:inline-block;margin-right:6px;color:${color};">${escapeHtml(String(owner))}</span>` : '';
+
+    const paddingLeft = showIcon ? Math.max(0, Math.round(visual.iconSize / 2) + 6) : 0;
+
+    const textBg = `background:rgba(255,255,255,0.85);color:#0f172a;padding:4px 6px;border-radius:6px;display:inline-block;`; // 浅色半透明背景
+
+    const textHtml = showText
+      ? `<span class="n-waypoint-label" style="direction:ltr;white-space:nowrap;padding-left:${paddingLeft}px;${textBg};font-size:${visual.textSize}px;">${ownerHtml}${escapeHtml(safeName)}</span>`
+      : '';
+
+    const iconHtml = showIcon
+      ? `<span class="n-waypoint-icon" style="position:absolute;left:0;top:50%;transform:translate(-50%,-50%);background:${color};width:${visual.iconSize}px;height:${visual.iconSize}px;display:inline-block;border-radius:50%;line-height:${visual.iconSize}px;text-align:center;font-size:${Math.max(10, Math.round(visual.iconSize*0.7))}px;z-index:2;">📍</span>`
+      : '';
+
+    return `<div class="nodemc-waypoint-anchor" style="position:relative;display:inline-block;white-space:nowrap;">${textHtml}${iconHtml}</div>`;
+  }
+
+  function upsertWaypoint(map, waypointId, payload) {
+    const existing = waypointsById.get(waypointId);
+    if (!payload || typeof payload !== 'object') return;
+    const latLng = worldToLatLng(map, payload.x, payload.z);
+    const html = buildWaypointHtml(payload.label || payload.name || waypointId, payload.x, payload.z, payload);
+
+    if (!html) {
+      if (existing) {
+        existing.remove();
+        waypointsById.delete(waypointId);
+      }
+      return;
+    }
+
+    if (existing) {
+      try {
+        existing.setLatLng(latLng);
+        existing.setIcon(
+          leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] })
+        );
+        return;
+      } catch (e) {
+        // recreate below on failure
+      }
+    }
+
+    const marker = leafletRef.marker(latLng, {
+      icon: leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] }),
+      interactive: false,
+      keyboard: false,
+    });
+
+    marker.addTo(map);
+    waypointsById.set(waypointId, marker);
+  }
+
   function removeMissingMarkers(nextIds) {
     for (const [playerId, marker] of markersById.entries()) {
       if (nextIds.has(playerId)) continue;
       marker.remove();
       markersById.delete(playerId);
+    }
+  }
+
+  function removeMissingWaypoints(nextIds) {
+    for (const [wpId, marker] of waypointsById.entries()) {
+      if (nextIds.has(wpId)) continue;
+      try { marker.remove(); } catch (e) {}
+      waypointsById.delete(wpId);
     }
   }
 
@@ -927,11 +1040,42 @@
       }
     }
 
+    // waypoints: display user-submitted marks (非玩家实体)
+    const waypoints = snapshot && typeof snapshot === 'object' ? snapshot.waypoints : null;
+    const nextWaypointIds = new Set();
+    if (waypoints && typeof waypoints === 'object') {
+      for (const [wpId, rawNode] of Object.entries(waypoints)) {
+        if (!rawNode) continue;
+        const data = (rawNode.data && typeof rawNode.data === 'object') ? rawNode.data : rawNode;
+        if (!data) continue;
+
+        const dim = normalizeDimension(data.dimension);
+        if (wantedDim && dim !== wantedDim) continue;
+
+        const x = readNumber(data.x);
+        const z = readNumber(data.z);
+        if (x === null || z === null) continue;
+
+        nextWaypointIds.add(wpId);
+        upsertWaypoint(map, wpId, {
+          x,
+          z,
+          label: data.label || data.name || data.title || data.name || wpId,
+          color: data.color || (data.colorHex ? data.colorHex : null) || null,
+          kind: data.waypointKind || null,
+          ownerName: data.ownerName || null,
+          ownerId: data.ownerId || null,
+        });
+      }
+    }
+
     removeMissingMarkers(nextIds);
+    removeMissingWaypoints(nextWaypointIds);
 
     PAGE.__NODEMC_PLAYER_OVERLAY__ = {
       revision: snapshot.revision,
       playersOnMap: markersById.size,
+      waypointsOnMap: waypointsById.size,
       source: CONFIG.ADMIN_WS_URL,
       dimension: CONFIG.TARGET_DIMENSION,
       wsConnected,
@@ -979,6 +1123,8 @@
     const teamNeutralColorInput = document.getElementById('nodemc-overlay-team-neutral-color');
     const teamEnemyColorInput = document.getElementById('nodemc-overlay-team-enemy-color');
     const debugInput = document.getElementById('nodemc-overlay-debug');
+    const wpIconInput = document.getElementById('nodemc-overlay-show-waypoint-icon');
+    const wpTextInput = document.getElementById('nodemc-overlay-show-waypoint-text');
 
     if (urlInput) urlInput.value = CONFIG.ADMIN_WS_URL;
     if (reconnectInput) reconnectInput.value = String(CONFIG.RECONNECT_INTERVAL_MS);
@@ -994,6 +1140,8 @@
     if (horseTextSizeInput) horseTextSizeInput.value = String(CONFIG.HORSE_TEXT_SIZE);
     if (coordsInput) coordsInput.checked = CONFIG.SHOW_COORDS;
     if (autoTeamInput) autoTeamInput.checked = CONFIG.AUTO_TEAM_FROM_NAME;
+    if (wpIconInput) wpIconInput.checked = CONFIG.SHOW_WAYPOINT_ICON;
+    if (wpTextInput) wpTextInput.checked = CONFIG.SHOW_WAYPOINT_TEXT;
     if (friendlyTagsInput) friendlyTagsInput.value = CONFIG.FRIENDLY_TAGS;
     if (enemyTagsInput) enemyTagsInput.value = CONFIG.ENEMY_TAGS;
     if (teamFriendlyColorInput) teamFriendlyColorInput.value = getConfiguredTeamColor('friendly');
@@ -1023,6 +1171,8 @@
     const teamNeutralColorInput = document.getElementById('nodemc-overlay-team-neutral-color');
     const teamEnemyColorInput = document.getElementById('nodemc-overlay-team-enemy-color');
     const debugInput = document.getElementById('nodemc-overlay-debug');
+    const wpIconInput = document.getElementById('nodemc-overlay-show-waypoint-icon');
+    const wpTextInput = document.getElementById('nodemc-overlay-show-waypoint-text');
 
     const next = sanitizeConfig({
       ADMIN_WS_URL: urlInput ? urlInput.value : CONFIG.ADMIN_WS_URL,
@@ -1044,6 +1194,8 @@
       TEAM_COLOR_FRIENDLY: teamFriendlyColorInput ? teamFriendlyColorInput.value : CONFIG.TEAM_COLOR_FRIENDLY,
       TEAM_COLOR_NEUTRAL: teamNeutralColorInput ? teamNeutralColorInput.value : CONFIG.TEAM_COLOR_NEUTRAL,
       TEAM_COLOR_ENEMY: teamEnemyColorInput ? teamEnemyColorInput.value : CONFIG.TEAM_COLOR_ENEMY,
+      SHOW_WAYPOINT_ICON: wpIconInput ? wpIconInput.checked : CONFIG.SHOW_WAYPOINT_ICON,
+      SHOW_WAYPOINT_TEXT: wpTextInput ? wpTextInput.checked : CONFIG.SHOW_WAYPOINT_TEXT,
       DEBUG: debugInput ? debugInput.checked : CONFIG.DEBUG,
     });
 
@@ -1312,6 +1464,8 @@
         </div>
         <label class="n-check"><input id="nodemc-overlay-show-icon" type="checkbox" />显示玩家图标（图标中心对准玩家坐标）</label>
         <label class="n-check"><input id="nodemc-overlay-show-text" type="checkbox" />显示玩家文字信息（仅文字时左端对准玩家坐标）</label>
+        <label class="n-check"><input id="nodemc-overlay-show-waypoint-icon" type="checkbox" />显示报点图标（图标中心对准报点坐标）</label>
+        <label class="n-check"><input id="nodemc-overlay-show-waypoint-text" type="checkbox" />显示报点文字（文字左端对准报点坐标，带浅色半透明背景）</label>
         <label class="n-check"><input id="nodemc-overlay-show-horse-entities" type="checkbox" />是否显示马实体</label>
         <label class="n-check"><input id="nodemc-overlay-show-team-info" type="checkbox" />地图文字显示阵营信息</label>
         <label class="n-check"><input id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>

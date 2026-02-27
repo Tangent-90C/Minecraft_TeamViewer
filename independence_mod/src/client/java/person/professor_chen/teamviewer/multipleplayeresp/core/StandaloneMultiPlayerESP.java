@@ -697,9 +697,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		String markName;
 		if (target.targetEntity() != null) {
 			String displayName = targetEntityName == null || targetEntityName.isBlank() ? "Entity" : targetEntityName;
-			markName = "报点[实体] " + displayName + " @ " + markX + " " + markY + " " + markZ;
+			markName = "报点[实体] " + displayName;
 		} else {
-			markName = "报点 " + markX + " " + markY + " " + markZ;
+			markName = "报点";
 		}
 
 		SharedWaypointInfo waypoint = new SharedWaypointInfo(
