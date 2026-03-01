@@ -10,7 +10,12 @@
   },
   "devDependencies": {
     "typescript": "^5.9.3",
-    "vite": "^5.4.21",
-    "vite-plugin-monkey": "^4.0.6"
+    "vite": "^7.3.1",
+    "vite-plugin-monkey": "^7.1.9"
+  }
+  ,"pnpm": {
+    "overrides": {
+      "minimatch": ">3.1.4"
+    }
   }
 }

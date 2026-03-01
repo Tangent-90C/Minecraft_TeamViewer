@@ -5,7 +5,7 @@ export const AUTO_MARK_SYNC_INTERVAL_MS = 1200;
 export const AUTO_MARK_SYNC_MAX_PER_TICK = 12;
 
 export const DEFAULT_CONFIG = {
-  ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
+  ADMIN_WS_URL: 'wss://127.0.0.1:8765/adminws',
   ROOM_CODE: 'default',
   RECONNECT_INTERVAL_MS: 1000,
   TARGET_DIMENSION: 'minecraft:overworld',

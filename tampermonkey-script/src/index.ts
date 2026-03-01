@@ -149,15 +149,39 @@ declare const unsafeWindow: Window | undefined;
       .slice(0, 12);
   }
 
+  function isLocalWebSocketHost(hostname) {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  }
+
   function normalizeWsUrl(rawUrl) {
     const text = String(rawUrl || '').trim();
     if (!text) return DEFAULT_CONFIG.ADMIN_WS_URL;
 
     let next = text;
-    if (next.startsWith('http://')) next = 'ws://' + next.slice('http://'.length);
-    if (next.startsWith('https://')) next = 'wss://' + next.slice('https://'.length);
     if (next.endsWith('/snapshot')) next = next.slice(0, -('/snapshot'.length)) + '/adminws';
-    return next;
+
+    try {
+      const parsed = new URL(next);
+      const protocol = String(parsed.protocol || '').toLowerCase();
+      const isLocalHost = isLocalWebSocketHost(parsed.hostname);
+
+      if (protocol === 'http:') {
+        parsed.protocol = isLocalHost ? 'ws:' : 'wss:';
+      } else if (protocol === 'https:') {
+        parsed.protocol = 'wss:';
+      } else if (protocol === 'ws:') {
+        parsed.protocol = isLocalHost ? 'ws:' : 'wss:';
+      } else if (protocol === 'wss:') {
+        parsed.protocol = 'wss:';
+      } else {
+        return DEFAULT_CONFIG.ADMIN_WS_URL;
+      }
+
+      return parsed.toString();
+    } catch (_) {
+      return DEFAULT_CONFIG.ADMIN_WS_URL;
+    }
   }
 
   function normalizeRoomCode(rawRoomCode) {
@@ -598,7 +622,9 @@ declare const unsafeWindow: Window | undefined;
 
     const players = getOnlinePlayers();
     const previousValue = select.value;
-    select.innerHTML = '';
+    while (select.firstChild) {
+      select.removeChild(select.firstChild);
+    }
 
     const placeholder = document.createElement('option');
     placeholder.value = '';
@@ -1388,7 +1414,12 @@ declare const unsafeWindow: Window | undefined;
 
     const panel = document.createElement('div');
     panel.id = 'nodemc-overlay-panel';
-    panel.innerHTML = PANEL_HTML;
+
+    const parsedPanel = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
+    const panelNodes = Array.from(parsedPanel.body.childNodes);
+    for (const node of panelNodes) {
+      panel.appendChild(node.cloneNode(true));
+    }
 
     document.body.appendChild(fab);
     document.body.appendChild(panel);
