@@ -1,0 +1,172 @@
+# Minecraft Mod 编译的 GitHub Actions 配置
+name: Minecraft Mod CI
+
+# 触发条件：推送到main分支、创建PR到main分支
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    # 使用最新的Ubuntu系统
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # 1. 检出代码仓库
+      - uses: actions/checkout@v4
+        # 如果你使用了git子模块（比如Fabric API），需要添加这行
+        with:
+          submodules: true
+
+      # 2. 设置Java环境（关键：匹配你的MC版本要求）
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle' # 自动缓存Gradle依赖
+          cache-dependency-path: 'minecraft-mod/build.gradle' # 指定Mod的Gradle文件
+
+      # 3. 赋予Gradle可执行权限（Linux系统必需）
+      - name: Make Gradle wrapper executable
+        working-directory: ./minecraft-mod # 切换到Mod目录执行编译
+        run: chmod +x ./gradlew
+
+      # 4. 编译Minecraft模组（核心步骤）
+      - name: Build Minecraft Mod
+        working-directory: ./minecraft-mod # 切换到Mod目录执行编译
+        run: ./gradlew build --refresh-dependencies
+
+      # 打包后端代码
+      - name: Package Backend Code
+        working-directory: ./
+        run: |
+          # 压缩为zip包
+          zip -r backend-server.zip backend-server/
+
+      # 上传FastAPI产物包
+      - name: Upload Backend Package
+        id: upload-backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-server-package
+          path: ./backend-server.zip
+
+      # 上传油猴脚本
+      - name: Upload Monkey
+        id: upload-monkey
+        uses: actions/upload-artifact@v4
+        with:
+          name: upload-monkey-script
+          path: ./tampermonkey-script/*.js
+
+      # 5. 上传编译产物（可选，方便下载）
+      - name: Upload built mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jar
+          # 匹配Minecraft模组编译后的输出路径（通用路径）
+          path: |
+            minecraft-mod/build/libs/*.jar
+            # 排除临时文件（如有）
+            !minecraft-mod/build/libs/*-sources.jar
+            !minecraft-mod/build/libs/*-dev.jar
+            !minecraft-mod/build/libs/*-javadoc.jar
+
+
+
+# 完整的依赖监控配置（放在jobs中）
+  dependency-submission-gradle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4 # 先初始化Gradle环境
+        with:
+          gradle-version: '8.14.1' # 匹配你的Mod项目Gradle版本（可改）
+      - name: Submit Gradle dependencies
+        working-directory: ./minecraft-mod # 指定Mod子目录
+        # 手动执行依赖提交命令（核心修复点）
+        run: ./gradlew build --scan -Dgradle.dependency.verification=strict
+        env:
+          # 必须设置这个环境变量，让Gradle提交依赖图谱
+          GRADLE_DEPENDENCY_SUBMISSION_ENABLED: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+
+  # 2. Python（uv）依赖提交
+  dependency-submission-python:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+  
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          # 缓存uv和依赖，加速后续运行
+          cache: 'pip'
+  
+      - name: Install uv (并配置环境变量)
+        run: |
+          # 安装uv包管理器
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          # 关键：将uv加入当前step的环境变量（单步export不生效）
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+  
+      - name: 验证uv安装 & 同步依赖（核心补充步骤）
+        working-directory: ./backend-server
+        run: |
+          # 验证uv是否安装成功
+          uv --version
+          # 关键：执行uv sync，拉取并安装所有依赖（和你本地操作一致）
+          # 如果有uv.lock，会严格按锁文件安装；没有则按pyproject.toml安装
+          uv sync
+          # 可选：检查已安装的依赖，确认同步成功
+          uv pip list
+  
+      - name: 导出完整的uv依赖清单
+        working-directory: ./backend-server
+        run: |
+          # 导出所有已安装的依赖（包括间接依赖）到标准格式
+          uv pip freeze > requirements-uv.txt
+          # 打印清单内容，方便调试（可选）
+          cat requirements-uv.txt
+  
+      - name: 提交Python依赖到GitHub依赖图谱
+        uses: advanced-security/pip-dependency-submission-action@v1
+        with:
+          filepath: ./backend-server/requirements-uv.txt
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # 可选：指定依赖生态为pip，避免识别错误
+          ecosystem: pip
+
+  # 3. 油猴脚本依赖检查
+  check-tampermonkey-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency review for Tampermonkey script
+        uses: actions/dependency-review-action@v4
+        with:
+          files: ./tampermonkey-script/main.user.js
+          enable_non_production_checks: true
+
+
+            
