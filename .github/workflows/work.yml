@@ -9,24 +9,6 @@ on:
 
 jobs:
 
-  dependency-submission:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-    - name: Checkout sources
-      uses: actions/checkout@v6
-    - name: Setup Java
-      uses: actions/setup-java@v5
-      with:
-        distribution: 'temurin'
-        java-version: 21
-    - name: Generate and submit dependency graph
-      uses: gradle/actions/dependency-submission@v5
-      with:
-        # The gradle project is not in the root of the repository.
-        build-root-directory: minecraft-mod
-
 
   build:
     # 使用最新的Ubuntu系统
@@ -65,49 +47,24 @@ jobs:
         id: upload-backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-server.zip
+          name: backend-server
           path: backend-server/  # Github会自动打包为.zip
           if-no-files-found: error  # 若文件夹为空则报错（避免上传空artifact）
-
-      # 先获取带.js后缀的油猴脚本完整文件名
-      - name: Get actual Monkey script filename (with suffix)
-        id: get_monkey_name
-        run: |
-          # 找到目标JS文件（如果有多个取第一个）
-          JS_FILE=$(find ./tampermonkey-script -name "*.js" | head -n 1)
-          # 提取纯文件名（保留.js后缀，仅去掉路径）
-          JS_NAME=$(basename "$JS_FILE")
-          # 设置为输出变量
-          echo "script_name=$JS_NAME" >> $GITHUB_OUTPUT
-        shell: bash
       
-      # 上传油猴脚本（名称带.js后缀）
+      # 上传油猴脚本
       - name: Upload Monkey
         id: upload-monkey
         uses: actions/upload-artifact@v4
         with:
           # 名称包含.js后缀，比如 "my-script.js"
-          name: ${{ steps.get_monkey_name.outputs.script_name }}
+          name: tampermonkey-script
           path: ./tampermonkey-script/*.js
-
-      # 5.1 先获取带.jar后缀的实际JAR完整文件名
-      - name: Get actual JAR filename (with suffix)
-        id: get_jar_name
-        run: |
-          # 找到目标JAR文件（排除临时文件）
-          JAR_FILE=$(find minecraft-mod/build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" ! -name "*-javadoc.jar" | head -n 1)
-          # 提取纯文件名（保留.jar后缀，仅去掉路径）
-          JAR_NAME=$(basename "$$JAR_FILE")
-          # 设置为输出变量
-          echo "jar_name=$JAR_NAME" >> $GITHUB_OUTPUT
-        shell: bash
       
-      # 5.2 上传编译产物（名称带.jar后缀）
+      # 5.2 上传编译产物
       - name: Upload built mod JAR
         uses: actions/upload-artifact@v4
         with:
-          # 名称包含.jar后缀，比如 "my-mod-1.0.0.jar"
-          name: ${{ steps.get_jar_name.outputs.jar_name }}
+          name: mod-build
           path: |
             minecraft-mod/build/libs/*.jar
             !minecraft-mod/build/libs/*-sources.jar

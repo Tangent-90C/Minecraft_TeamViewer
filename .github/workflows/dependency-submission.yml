@@ -1,0 +1,29 @@
+name: dependency-submission
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+
+  java-dependency-submission:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout sources
+      uses: actions/checkout@v6
+    - name: Setup Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'temurin'
+        java-version: 21
+    - name: Generate and submit dependency graph
+      uses: gradle/actions/dependency-submission@v5
+      with:
+        # The gradle project is not in the root of the repository.
+        build-root-directory: minecraft-mod
+
+
