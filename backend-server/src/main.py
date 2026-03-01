@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import tqdm
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
