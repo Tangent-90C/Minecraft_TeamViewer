@@ -27,3 +27,16 @@ jobs:
         build-root-directory: minecraft-mod
 
 
+  python-dependency-submission:
+      runs-on: ubuntu-latest
+      permissions:
+        contents: write # 必须有写入权限
+      steps:
+        - name: Checkout Code
+          uses: actions/checkout@v4
+  
+        - name: Submit Dependencies
+          uses: advanced-security/python-dependency-submission-action@v1
+          with:
+            # 该 Action 会自动检测并提交当前环境中的依赖
+            requirements-files: 'requirements.txt'
