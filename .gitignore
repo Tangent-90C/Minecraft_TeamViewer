@@ -24,10 +24,10 @@ hs_err_pid*
 replay_pid*
 
 
-.gradle/
+minecraft-mod/.gradle/
 .idea/
-build/
-run/
+minecraft-mod/build/
+minecraft-mod/run/
 .vscode/
 
 **/__pycache__
