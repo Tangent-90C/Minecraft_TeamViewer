@@ -1,0 +1,49 @@
+name: dependency-submission
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+
+  java-dependency-submission:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout sources
+      uses: actions/checkout@v6
+    - name: Setup Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'temurin'
+        java-version: 21
+    - name: Generate and submit dependency graph
+      uses: gradle/actions/dependency-submission@v5
+      with:
+        # The gradle project is not in the root of the repository.
+        build-root-directory: minecraft-mod
+
+
+  dependency-submission:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+  
+    steps:
+      - uses: actions/checkout@v6
+  
+      - uses: actions/setup-python@v6
+  
+      - name: Install uv
+        run: pip install uv
+  
+      - name: Export dependencies
+        run: uv export --format requirements.txt > requirements.txt
+  
+      - name: Submit dependency graph
+        uses: github/dependency-submission-action@v4
+        with:
+          manifest-path: requirements.txt
