@@ -1,3 +1,5 @@
+// 玩家ESP网络通信管理器
+// 负责处理与服务器的WebSocket连接和数据同步
 package fun.prof_chen.teamviewer.multipleplayeresp.network;
 
 import com.google.gson.Gson;
@@ -47,97 +49,214 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * PlayerESP 网络层管理器。
- * <p>
- * 业务职责：
- * 1) 维护与服务端的 WebSocket 连接（握手、重连、断线恢复）；
- * 2) 负责玩家/实体/共享路标的数据收发、增量同步与校验重同步；
- * 3) 维护本地缓存与上行快照，供渲染与业务模块读取。
- * <p>
- * 线程模型：
- * - OkHttp 的 WebSocket 回调不在 Minecraft 渲染主线程执行；
- * - 所有会修改共享缓存的逻辑必须切回主线程执行，避免并发修改异常。
+ * PlayerESP 网络层管理器 - 核心网络通信组件
+ * 
+ * ## 核心功能
+ * 1) WebSocket连接管理：建立、维护、重连、断开连接
+ * 2) 数据双向同步：玩家位置、实体信息、路标数据的上传下载
+ * 3) 增量更新机制：支持差分同步，减少网络流量
+ * 4) 数据一致性保障：通过摘要校验和强制刷新机制确保数据同步
+ * 
+ * ## 协议特性
+ * - 支持版本协商和协议兼容性检测
+ * - 实现心跳保活和自动重连机制
+ * - 提供完整的错误处理和状态监控
+ * 
+ * ## 线程安全设计
+ * - 网络回调在OkHttp工作线程执行
+ * - 状态变更通过任务队列串行化到Minecraft主线程
+ * - 避免跨线程直接修改共享数据结构
  */
+// 网络管理器主类，继承WebSocketListener处理网络事件
 public class PlayerESPNetworkManager extends WebSocketListener {
+	/**
+	 * 连接状态监听器接口
+	 * 用于通知UI和其他模块网络连接状态变化
+	 */
 	public interface ConnectionStatusListener {
 		void onConnectionStatusChanged(boolean connected);
 	}
 
+	/**
+	 * 路标更新监听器接口
+	 * 处理远程路标数据的接收和删除事件
+	 */
 	public interface WaypointUpdateListener {
+		/**
+		 * 当接收到新的路标数据时调用
+		 * @param waypoints 新增或更新的路标映射
+		 */
 		void onWaypointsReceived(Map<String, SharedWaypointInfo> waypoints);
 
+		/**
+		 * 当路标被删除时调用
+		 * @param waypointIds 被删除的路标ID列表
+		 */
 		default void onWaypointsDeleted(List<String> waypointIds) {
 		}
 	}
 
+	// 日志记录器
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
+	
+	// 客户端协议版本号 - 用于服务端兼容性检查
 	private static final String CLIENT_PROTOCOL_VERSION = "0.2.0";
+	
+	// 客户端程序版本 - 从Mod元数据中获取
 	private static final String CLIENT_PROGRAM_VERSION = resolveLocalProgramVersion();
+	
+	// 重同步冷却时间(毫秒) - 防止频繁重同步请求
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
+	
+	// 强制全量刷新间隔(毫秒) - 确保数据最终一致性
 	private static final long FORCE_FULL_REFRESH_MS = 25_000L;
 
+	// 全局配置引用
 	private static Config config;
 
+	// 本地玩家位置缓存 - 用于快速查找玩家坐标
 	private final Map<UUID, Vec3d> playerPositions;
+	
+	// 远程玩家信息缓存 - 存储其他客户端玩家的位置和维度信息
 	private final Map<UUID, RemotePlayerInfo> remotePlayers;
+	
+	// 远程玩家数据缓存 - 存储玩家的完整属性数据
 	private final Map<UUID, Map<String, Object>> remotePlayerDataCache = new HashMap<>();
+	
+	// 远程实体数据缓存 - 存储世界中实体的位置和属性
 	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
+	
+	// 远程路标原始数据缓存 - 存储路标的完整数据结构
 	private final Map<String, Map<String, Object>> remoteWaypointDataCache = new HashMap<>();
+	
+	// 远程路标对象缓存 - 存储解析后的SharedWaypointInfo对象
 	private final Map<String, SharedWaypointInfo> remoteWaypointCache = new HashMap<>();
+	
+	// 玩家标记状态缓存 - 存储玩家的队伍归属和颜色标记
 	private final Map<String, PlayerMarkState> remotePlayerMarks = new HashMap<>();
+	
+	// 上次发送的玩家快照 - 用于计算增量更新
 	private final Map<String, Map<String, Object>> lastSentPlayersSnapshot = new HashMap<>();
+	
+	// 上次发送的实体快照 - 用于计算增量更新
 	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
 
+	// WebSocket连接实例
 	private WebSocket webSocket;
+	
+	// 重连调度器 - 负责连接失败后的自动重连
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
+	
+	// 连接状态标志 - 表示当前是否与服务器保持连接
 	private volatile boolean isConnected = false;
+	
+	// 重连意愿标志 - 控制是否应该尝试重连
 	private volatile boolean shouldReconnect = false;
+	
+	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
+	
+	// HTTP客户端 - 用于创建WebSocket连接
 	private OkHttpClient httpClient;
+	
+	// 代理设置状态 - 记录当前是否使用系统代理
 	private volatile boolean currentUseSystemProxy = true;
 
+	// 连接状态监听器列表 - 线程安全的监听器注册表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
+	
+	// 路标更新监听器列表 - 线程安全的监听器注册表
 	private final List<WaypointUpdateListener> waypointListeners = new CopyOnWriteArrayList<>();
 
+	// 最近一次连接错误信息 - 用于诊断连接问题
 	private volatile String lastConnectionError = "";
+	
+	// 服务端是否支持增量更新 - 影响数据传输策略
 	private volatile boolean serverSupportsDelta = false;
+	
+	// 服务端协议版本 - 用于版本兼容性判断
 	private volatile String serverProtocolVersion = "0.0.0";
+	
+	// 服务端程序版本 - 用于版本对比和调试
 	private volatile String serverProgramVersion = "unknown";
+	
+	// 摘要校验间隔(秒) - 控制数据一致性检查频率
 	private volatile int digestIntervalSec = 10;
+	
+	// 服务端最新修订版本号 - 用于增量同步
 	private volatile long lastServerRevision = 0;
+	
+	// 上次重同步请求时间戳 - 防止重复请求
 	private volatile long lastResyncRequestMs = 0L;
+	
+	// 上次发送玩家数据包的时间 - 用于强制刷新判断
 	private volatile long lastPlayersPacketSentMs = 0L;
+	
+	// 上次发送实体数据包的时间 - 用于强制刷新判断
 	private volatile long lastEntitiesPacketSentMs = 0L;
+	
+	// 上次发送Tab玩家列表的时间 - 用于去重优化
 	private volatile long lastTabPlayersPacketSentMs = 0L;
+	
+	// 上次发送Tab玩家列表的签名 - 用于内容变化检测
 	private volatile String lastTabPlayersSignature = "";
+	
+	// 待刷新的玩家ID集合 - 响应服务端刷新请求
 	private final Set<String> pendingPlayerRefreshIds = new HashSet<>();
+	
+	// 待刷新的实体ID集合 - 响应服务端刷新请求
 	private final Set<String> pendingEntityRefreshIds = new HashSet<>();
 	/**
-	 * 主线程任务队列。
-	 * <p>
-	 * WebSocket 回调线程只负责“投递任务”，真正的状态变更在客户端 tick 中统一执行。
-	 * 这样可确保对 lastSent*Snapshot、remote*Cache 等共享集合的读写在同一线程完成。
+	 * 主线程任务队列 - 线程安全的任务传递机制
+	 * 
+	 * 设计原理：
+	 * - WebSocket回调在线程池中异步执行
+	 * - 通过队列将任务传递给Minecraft主线程
+	 * - 在客户端tick循环中顺序处理这些任务
+	 * 
+	 * 优势：
+	 * - 避免跨线程直接修改共享数据结构
+	 * - 确保所有状态变更在同一线程中执行
+	 * - 防止并发修改异常和数据不一致
 	 */
 	private final Queue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
+	/**
+	 * 玩家标记状态记录类
+	 * 存储玩家的队伍归属、颜色标记和自定义标签
+	 */
 	private record PlayerMarkState(String team, Integer color, String label) {
 	}
 
+	/**
+	 * 构造函数
+	 * @param playerPositions 本地玩家位置映射的引用
+	 * @param remotePlayers 远程玩家信息映射的引用
+	 */
 	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
 		this.playerPositions = playerPositions;
 		this.remotePlayers = remotePlayers;
-		this.httpClient = createHttpClient(true);
+		this.httpClient = createHttpClient(true); // 默认启用系统代理
 	}
 
+	/**
+	 * 设置全局配置实例
+	 * @param config 配置对象引用
+	 */
 	public static void setConfig(Config config) {
 		PlayerESPNetworkManager.config = config;
 	}
 
 	/**
-	 * 在客户端主线程中消费网络任务队列。
-	 * <p>
-	 * 调用方：StandaloneMultiPlayerESP 的 END_CLIENT_TICK。
-	 * 职责：把网络回调产生的状态更新串行化，避免跨线程修改共享集合。
+	 * 处理主线程任务队列 - 核心线程同步机制
+	 * 
+	 * 执行时机：在StandaloneMultiPlayerESP的END_CLIENT_TICK事件中调用
+	 * 功能说明：
+	 * - 顺序执行所有排队的网络任务
+	 * - 将异步网络回调的结果应用到主线程状态
+	 * - 确保对共享数据结构的操作是线程安全的
+	 * 
+	 * 异常处理：捕获并记录任务执行中的错误，防止队列处理中断
 	 */
 	public void pumpMainThreadTasks() {
 		Runnable task;
@@ -151,7 +270,14 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	/**
-	 * 由网络回调线程调用，将需要主线程执行的任务入队。
+	 * 将任务加入主线程执行队列
+	 * 
+	 * 使用场景：
+	 * - WebSocket事件回调中需要修改共享状态时
+	 * - 网络数据解析完成后需要更新UI时
+	 * - 需要确保在主线程执行的任何操作
+	 * 
+	 * 线程安全：使用ConcurrentLinkedQueue保证多线程环境下的安全入队
 	 */
 	private void enqueueMainThreadTask(Runnable task) {
 		if (task != null) {
@@ -159,6 +285,21 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 建立WebSocket连接 - 网络通信入口点
+	 * 
+	 * 连接流程：
+	 * 1. 检查配置有效性
+	 * 2. 设置重连标志
+	 * 3. 根据代理配置创建HTTP客户端
+	 * 4. 构建WebSocket连接请求
+	 * 5. 发起连接并注册回调监听器
+	 * 
+	 * 错误处理：
+	 * - 连接失败时记录错误信息
+	 * - 通知监听器连接状态变化
+	 * - 自动调度重连机制
+	 */
 	public void connect() {
 		if (config == null) {
 			return;
@@ -185,6 +326,18 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 创建HTTP客户端实例
+	 * 
+	 * 代理配置选项：
+	 * - useSystemProxy=true: 使用系统默认代理设置
+	 * - useSystemProxy=false: 不使用代理直接连接
+	 * 
+	 * 应用场景：
+	 * - 初始连接时根据配置创建客户端
+	 * - 代理设置改变时重新创建客户端
+	 * - 重连时可能需要更新代理配置
+	 */
 	private OkHttpClient createHttpClient(boolean useSystemProxy) {
 		OkHttpClient.Builder builder = new OkHttpClient.Builder();
 		if (useSystemProxy) {
@@ -195,6 +348,18 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return builder.build();
 	}
 
+	/**
+	 * 调度自动重连任务
+	 * 
+	 * 重连策略：
+	 * - 延迟5秒后尝试重新连接
+	 * - 只在shouldReconnect为true时执行
+	 * - 使用单线程调度器避免并发重连
+	 * 
+	 * 异常处理：
+	 * - 捕获调度器不可用的情况
+	 * - 记录警告日志但不影响主流程
+	 */
 	private void scheduleReconnect() {
 		if (!shouldReconnect) {
 			return;
@@ -206,6 +371,19 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 断开WebSocket连接 - 主动关闭连接
+	 * 
+	 * 清理流程：
+	 * 1. 取消重连意愿
+	 * 2. 关闭WebSocket连接(状态码1000表示正常关闭)
+	 * 3. 重置协议协商状态
+	 * 4. 清空本地快照缓存
+	 * 5. 更新连接状态标志
+	 * 6. 通知监听器状态变化
+	 * 
+	 * 注意事项：这是一个干净的关闭过程，不会触发重连机制
+	 */
 	public void disconnect() {
 		shouldReconnect = false;
 		if (webSocket != null) {
@@ -219,30 +397,74 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		notifyConnectionStatusChanged(false);
 	}
 
+	/**
+	 * 注册连接状态监听器
+	 * @param listener 连接状态变化监听器实例
+	 */
 	public void addConnectionStatusListener(ConnectionStatusListener listener) {
 		if (listener != null) {
 			statusListeners.add(listener);
 		}
 	}
 
+	/**
+	 * 移除连接状态监听器
+	 * @param listener 要移除的监听器实例
+	 */
 	public void removeConnectionStatusListener(ConnectionStatusListener listener) {
 		if (listener != null) {
 			statusListeners.remove(listener);
 		}
 	}
 
+	/**
+	 * 注册路标更新监听器
+	 * @param listener 路标数据更新监听器实例
+	 */
 	public void addWaypointUpdateListener(WaypointUpdateListener listener) {
 		if (listener != null) {
 			waypointListeners.add(listener);
 		}
 	}
 
+	/**
+	 * 移除路标更新监听器
+	 * @param listener 要移除的监听器实例
+	 */
 	public void removeWaypointUpdateListener(WaypointUpdateListener listener) {
 		if (listener != null) {
 			waypointListeners.remove(listener);
 		}
 	}
 
+	/**
+	 * 发送玩家位置更新数据 - 核心上行数据传输方法
+	 * 
+	 * 协议选择逻辑：
+	 * - 如果服务端支持增量更新：使用players_patch协议发送差分数据
+	 * - 如果服务端不支持增量更新：降级使用players_update协议发送全量数据
+	 * 
+	 * 增量更新算法：
+	 * 1. 构建当前玩家状态快照
+	 * 2. 与上次发送的快照进行比较
+	 * 3. 识别新增、修改、删除的玩家记录
+	 * 4. 处理服务端的刷新请求
+	 * 5. 只发送发生变化的数据以节省带宽
+	 * 
+	 * 协议格式(players_patch)：
+	 * {
+	 *   "type": "players_patch",
+	 *   "submitPlayerId": "发送者UUID",
+	 *   "ackRev": 服务端修订版本号,
+	 *   "upsert": {玩家ID: 变更字段},
+	 *   "delete": [要删除的玩家ID列表]
+	 * }
+	 * 
+	 * 性能优化：
+	 * - 25秒强制全量刷新防止数据漂移
+	 * - 快照机制避免重复发送相同数据
+	 * - 批量处理提高网络效率
+	 */
 	public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
 		if (webSocket == null || !isConnected || submitPlayerId == null || players == null) {
 			return;
@@ -304,6 +526,28 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 发送实体位置更新数据 - 实体信息同步方法
+	 * 
+	 * 功能说明：
+	 * 与sendPlayersUpdate类似的增量更新机制，专门处理世界实体数据
+	 * 包括怪物、掉落物、载具等非玩家实体的位置和状态信息
+	 * 
+	 * 协议格式(entities_patch)：
+	 * {
+	 *   "type": "entities_patch",
+	 *   "submitPlayerId": "发送者UUID",
+	 *   "ackRev": 服务端修订版本号,
+	 *   "upsert": {实体ID: 实体数据变更},
+	 *   "delete": [要删除的实体ID列表]
+	 * }
+	 * 
+	 * 优化特点：
+	 * - 实体数据通常变化频率较低
+	 * - 使用相同的快照和差分算法
+	 * - 25秒强制刷新确保数据一致性
+	 * - 支持服务端主动刷新请求
+	 */
 	public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
 		if (webSocket == null || !isConnected || submitPlayerId == null || entities == null) {
 			return;
@@ -365,6 +609,34 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 发送路标更新数据 - 路标信息上传方法
+	 * 
+	 * 功能说明：
+	 * 上传本地创建或修改的路标信息到服务器
+	 * 路标包括坐标点、名称、颜色、所属玩家等信息
+	 * 
+	 * 协议格式(waypoints_update)：
+	 * {
+	 *   "type": "waypoints_update",
+	 *   "submitPlayerId": "发送者UUID",
+	 *   "waypoints": {
+	 *     "路标ID": {
+	 *       "x": 坐标X,
+	 *       "y": 坐标Y,
+	 *       "z": 坐标Z,
+	 *       "name": "路标名称",
+	 *       "color": 颜色值,
+	 *       ...
+	 *     }
+	 *   }
+	 * }
+	 * 
+	 * 特点：
+	 * - 目前采用全量更新方式(未来可优化为增量更新)
+	 * - 每个路标都有唯一ID标识
+	 * - 支持多种路标类型和属性
+	 */
 	public void sendWaypointsUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> waypoints) {
 		if (webSocket == null || !isConnected)
 			return;
@@ -381,6 +653,37 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 发送Tab玩家列表更新 - 玩家列表信息同步
+	 * 
+	 * 功能说明：
+	 * 同步当前可见玩家的列表信息，包括UUID、名称、显示名等
+	 * 主要用于玩家标记和队伍识别功能
+	 * 
+	 * 优化策略：
+	 * - 内容签名去重：相同内容不重复发送
+	 * - 时间间隔控制：避免过于频繁的更新
+	 * - 数据标准化：提取必要的字段信息
+	 * 
+	 * 协议格式(tab_players_update)：
+	 * {
+	 *   "type": "tab_players_update",
+	 *   "submitPlayerId": "发送者UUID",
+	 *   "ackRev": 服务端修订版本号,
+	 *   "tabPlayers": [
+	 *     {
+	 *       "id": "玩家UUID",
+	 *       "name": "玩家名",
+	 *       "displayName": "显示名称"
+	 *     }
+	 *   ]
+	 * }
+	 * 
+	 * 性能考虑：
+	 * - 25秒强制刷新确保数据新鲜度
+	 * - JSON签名比较避免网络浪费
+	 * - 只传输必要字段减少数据量
+	 */
 	public void sendTabPlayersUpdate(UUID submitPlayerId, List<Map<String, Object>> tabPlayers) {
 		if (webSocket == null || !isConnected || submitPlayerId == null || tabPlayers == null) {
 			return;
@@ -433,6 +736,25 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 发送路标删除请求 - 路标移除通知
+	 * 
+	 * 功能说明：
+	 * 通知服务器删除指定的路标记录
+	 * 通常在玩家删除本地路标时调用
+	 * 
+	 * 协议格式(waypoints_delete)：
+	 * {
+	 *   "type": "waypoints_delete",
+	 *   "submitPlayerId": "发送者UUID",
+	 *   "waypointIds": ["路标ID1", "路标ID2", ...]
+	 * }
+	 * 
+	 * 数据验证：
+	 * - 过滤空值和空白字符串
+	 * - 确保至少有一个有效ID才发送
+	 * - 批量删除提高效率
+	 */
 	public void sendWaypointsDelete(UUID submitPlayerId, List<String> waypointIds) {
 		if (webSocket == null || !isConnected)
 			return;
@@ -458,6 +780,25 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 发送实体死亡取消请求 - 路标关联实体保护
+	 * 
+	 * 功能说明：
+	 * 当路标关联的实体即将死亡时，发送此请求阻止路标自动删除
+	 * 用于保护重要的目标实体路标
+	 * 
+	 * 应用场景：
+	 * - 玩家设置了追踪特定实体的路标
+	 * - 该实体受到攻击但玩家希望保留路标
+	 * - 防止因实体死亡导致的路标意外删除
+	 * 
+	 * 协议格式(waypoints_entity_death_cancel)：
+	 * {
+	 *   "type": "waypoints_entity_death_cancel",
+	 *   "submitPlayerId": "发送者UUID",
+	 *   "targetEntityIds": ["实体ID1", "实体ID2", ...]
+	 * }
+	 */
 	public void sendWaypointEntityDeathCancel(UUID submitPlayerId, List<String> targetEntityIds) {
 		if (webSocket == null || !isConnected)
 			return;
@@ -551,6 +892,22 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return array;
 	}
 
+	/**
+	 * WebSocket连接成功回调 - 协议握手启动点
+	 * 
+	 * 执行流程：
+	 * 1. 通过任务队列切换到主线程执行
+	 * 2. 更新连接状态标志
+	 * 3. 清理之前的协商状态和快照数据
+	 * 4. 记录连接成功日志
+	 * 5. 检查WebSocket扩展支持情况
+	 * 6. 通知所有监听器连接已建立
+	 * 7. 发送握手消息开始协议协商
+	 * 
+	 * 线程安全：
+	 * - 使用enqueueMainThreadTask确保状态变更在主线程执行
+	 * - 避免在回调线程直接修改共享数据结构
+	 */
 	@Override
 	public void onOpen(WebSocket webSocket, Response response) {
 		// 连接建立事件来自 OkHttp 线程，这里只投递任务，避免直接跨线程改共享状态。
@@ -571,6 +928,19 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		});
 	}
 
+	/**
+	 * WebSocket消息接收回调 - 下行数据处理入口
+	 * 
+	 * 处理逻辑：
+	 * 1. 接收服务端发送的JSON文本消息
+	 * 2. 通过任务队列转发到主线程处理
+	 * 3. 调用processCompleteMessage进行完整的消息解析
+	 * 
+	 * 设计原则：
+	 * - 所有消息处理都在主线程执行
+	 * - 保证与游戏渲染循环的一致性
+	 * - 避免并发访问共享数据结构
+	 */
 	@Override
 	public void onMessage(WebSocket webSocket, String text) {
 		// 消息解析与缓存更新在主线程执行，确保与渲染/tick 读写同线程。
@@ -578,12 +948,47 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	/**
-	 * 处理服务端完整消息。
-	 * <p>
-	 * 业务任务：
-	 * - 根据 type 分发到握手、全量快照、增量补丁、摘要校验、路标同步等分支；
-	 * - 更新本地 revision 与缓存；
-	 * - 触发上层监听器通知 UI/功能模块。
+	 * 处理服务端完整消息 - 核心下行消息分发器
+	 * 
+	 * 消息类型分类处理：
+	 * 
+	 * 1. 握手确认(handshake_ack)：
+	 *    - 处理服务端协议版本协商
+	 *    - 获取服务端能力支持情况
+	 *    - 初始化连接参数
+	 * 
+	 * 2. 全量快照(snapshot_full)：
+	 *    - 接收服务端完整的玩家/实体/路标数据
+	 *    - 替换本地缓存实现同步
+	 *    - 用于初始同步或强制刷新
+	 * 
+	 * 3. 增量补丁(patch)：
+	 *    - 接收服务端发送的差分更新
+	 *    - 高效更新本地缓存
+	 *    - 支持upsert(更新插入)和delete(删除)操作
+	 * 
+	 * 4. 摘要校验(digest)：
+	 *    - 接收服务端数据摘要哈希
+	 *    - 对比本地数据一致性
+	 *    - 发现不一致时请求重同步
+	 * 
+	 * 5. 刷新请求(refresh_req)：
+	 *    - 服务端要求客户端刷新特定数据
+	 *    - 标记待刷新的玩家/实体ID
+	 *    - 在下次更新时强制发送完整数据
+	 * 
+	 * 6. 路标相关消息：
+	 *    - waypoints_update: 接收新的路标数据
+	 *    - waypoints_delete: 处理路标删除通知
+	 * 
+	 * 7. 兼容性消息(positions)：
+	 *    - 处理旧版本协议的遗留消息格式
+	 *    - 确保向后兼容性
+	 * 
+	 * 通用处理：
+	 * - 解析消息中的修订版本号(rev)
+	 * - 更新本地版本跟踪
+	 * - 统一的错误处理和日志记录
 	 */
 	private void processCompleteMessage(String message) {
 		try {
@@ -687,6 +1092,41 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 应用全量快照数据 - 数据同步核心方法
+	 * 
+	 * 快照应用场景：
+	 * 1. 初始连接后的首次数据同步
+	 * 2. 强制重同步请求的响应
+	 * 3. 协议版本升级后的数据重建
+	 * 4. 检测到数据不一致时的恢复
+	 * 
+	 * 处理的数据类型：
+	 * 
+	 * 玩家数据(players):
+	 * - 解析并替换所有远程玩家信息
+	 * - 更新玩家位置缓存
+	 * - 同步玩家维度和名称信息
+	 * 
+	 * 实体数据(entities):
+	 * - 替换整个实体缓存
+	 * - 包含怪物、物品、载具等世界实体
+	 * - 更新实体位置和状态信息
+	 * 
+	 * 路标数据(waypoints):
+	 * - 清空现有路标缓存
+	 * - 解析新的路标数据
+	 * - 通知监听器路标更新
+	 * 
+	 * 玩家标记(playerMarks):
+	 * - 更新玩家队伍归属信息
+	 * - 同步颜色标记和标签设置
+	 * 
+	 * 设计特点：
+	 * - 完整替换而非增量更新
+	 * - 确保数据的完整性和一致性
+	 * - 适用于需要完全同步的场景
+	 */
 	private void applySnapshot(JsonObject json) {
 		if (json.has("players") && json.get("players").isJsonObject()) {
 			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"), true);
@@ -712,6 +1152,58 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 应用增量补丁数据 - 高效数据更新机制
+	 * 
+	 * 补丁协议优势：
+	 * - 只传输变化的数据，大幅减少网络流量
+	 * - 支持细粒度的增删改操作
+	 * - 保持数据同步的同时提升性能
+	 * 
+	 * 支持的操作类型：
+	 * 
+	 * 删除操作(delete):
+	 * - 从缓存中移除指定ID的记录
+	 * - 清理相关的快照和位置数据
+	 * - 释放内存资源
+	 * 
+	 * 更新插入操作(upsert):
+	 * - 对于新记录：执行插入操作
+	 * - 对于现有记录：执行更新操作
+	 * - 智能合并字段变更
+	 * 
+	 * 处理的数据类别：
+	 * 
+	 * 玩家补丁(players):
+	 * - 删除离线或退出的玩家
+	 * - 更新在线玩家的位置和状态
+	 * - 维护玩家缓存的一致性
+	 * 
+	 * 实体补丁(entities):
+	 * - 处理实体生成、移动、销毁
+	 * - 更新实体属性和位置信息
+	 * - 保持世界状态同步
+	 * 
+	 * 路标补丁(waypoints):
+	 * - 添加新的路标记录
+	 * - 删除被移除的路标
+	 * - 通知UI层更新显示
+	 * 
+	 * 玩家标记补丁(playerMarks):
+	 * - 更新队伍归属关系
+	 * - 修改颜色标记设置
+	 * - 同步玩家分组信息
+	 * 
+	 * 协议格式示例：
+	 * {
+	 *   "players": {
+	 *     "delete": ["玩家ID1", "玩家ID2"],
+	 *     "upsert": {
+	 *       "玩家ID3": {"x": 100, "y": 64, "z": 200}
+	 *     }
+	 *   }
+	 * }
+	 */
 	private void applyPatch(JsonObject json) {
 		if (json.has("players") && json.get("players").isJsonObject()) {
 			JsonObject playersPatch = json.getAsJsonObject("players");
@@ -902,6 +1394,34 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return null;
 	}
 
+	/**
+	 * 处理数据摘要校验消息 - 数据一致性保障机制
+	 * 
+	 * 工作原理：
+	 * 1. 服务端定期发送各类数据的SHA-1摘要哈希
+	 * 2. 客户端计算本地对应数据的摘要哈希
+	 * 3. 对比双方哈希值是否一致
+	 * 4. 发现不一致时请求强制重同步
+	 * 
+	 * 校验的数据类型：
+	 * - players: 玩家位置数据摘要
+	 * - entities: 实体位置数据摘要
+	 * - waypoints: 路标数据摘要
+	 * 
+	 * 防抖机制：
+	 * - 3秒冷却时间防止频繁重同步请求
+	 * - 避免网络拥塞和服务端压力
+	 * 
+	 * 重同步触发条件：
+	 * - 任一类型数据哈希不匹配
+	 * - 超过冷却时间限制
+	 * - 通过resync_req消息请求全量数据
+	 * 
+	 * 优势：
+	 * - 及早发现数据不同步问题
+	 * - 自动恢复数据一致性
+	 * - 减少手动干预需求
+	 */
 	private void handleDigest(JsonObject json) {
 		if (!json.has("hashes") || !json.get("hashes").isJsonObject()) {
 			return;
@@ -952,6 +1472,25 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * WebSocket连接关闭回调 - 连接终止处理
+	 * 
+	 * 状态码含义：
+	 * - 1000: 正常关闭(客户端主动断开)
+	 * - 其他: 异常关闭(网络问题、服务端关闭等)
+	 * 
+	 * 处理流程：
+	 * 1. 通过任务队列切换到主线程
+	 * 2. 更新连接状态为断开
+	 * 3. 记录关闭原因(异常关闭时)
+	 * 4. 重置协议协商状态
+	 * 5. 清空本地快照缓存
+	 * 6. 通知所有监听器连接已断开
+	 * 7. 记录断开日志
+	 * 8. 如需重连则调度重连任务
+	 * 
+	 * 线程安全：与onOpen保持一致的处理模式
+	 */
 	@Override
 	public void onClosed(WebSocket webSocket, int statusCode, String reason) {
 		// 关闭事件也切回主线程，统一处理状态重置与重连调度。
@@ -973,6 +1512,30 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		});
 	}
 
+	/**
+	 * WebSocket连接失败回调 - 网络异常处理
+	 * 
+	 * 错误类型包括：
+	 * - 网络连接超时
+	 * - DNS解析失败
+	 * - SSL/TLS握手失败
+	 * - 代理配置错误
+	 * - 服务端拒绝连接
+	 * 
+	 * 处理策略：
+	 * 1. 通过任务队列确保主线程处理
+	 * 2. 记录详细的错误信息
+	 * 3. 设置连接状态为断开
+	 * 4. 格式化错误原因便于诊断
+	 * 5. 重置所有网络状态
+	 * 6. 通知监听器连接失败
+	 * 7. 如需重连则启动重连机制
+	 * 
+	 * 错误信息格式化：
+	 * - 提取异常链中的关键信息
+	 * - 合并多个异常的原因描述
+	 * - 提供清晰的错误诊断信息
+	 */
 	@Override
 	public void onFailure(WebSocket webSocket, Throwable error, Response response) {
 		// 失败事件在网络线程触发，这里只入队，保证状态清理和通知时序一致。
@@ -1147,6 +1710,29 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return World.OVERWORLD;
 	}
 
+	/**
+	 * 发送握手消息 - 协议协商初始化
+	 * 
+	 * 握手协议格式：
+	 * {
+	 *   "type": "handshake",
+	 *   "networkProtocolVersion": "客户端协议版本",
+	 *   "protocolVersion": "协议版本(冗余字段)",
+	 *   "localProgramVersion": "客户端程序版本",
+	 *   "roomCode": "房间代码",
+	 *   "supportsDelta": true,
+	 *   "submitPlayerId": "玩家UUID"
+	 * }
+	 * 
+	 * 协商目的：
+	 * 1. 向服务端声明客户端能力
+	 * 2. 协商双方支持的协议版本
+	 * 3. 确认是否支持增量更新功能
+	 * 4. 建立房间归属关系
+	 * 5. 交换客户端标识信息
+	 * 
+	 * 服务端响应：handshake_ack消息确认协商结果
+	 */
 	private void sendHandshake() {
 		if (webSocket == null || !isConnected)
 			return;
@@ -1172,6 +1758,31 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
+	/**
+	 * 处理握手确认消息 - 协议协商完成
+	 * 
+	 * 从服务端响应中提取的关键信息：
+	 * 
+	 * 1. 协议版本兼容性：
+	 *    - serverProtocolVersion: 服务端协议版本
+	 *    - 用于后续功能兼容性判断
+	 * 
+	 * 2. 增量更新支持：
+	 *    - serverSupportsDelta: 是否支持差分同步
+	 *    - 影响数据传输策略选择
+	 * 
+	 * 3. 数据一致性配置：
+	 *    - digestIntervalSec: 摘要校验间隔时间
+	 *    - 控制数据同步频率
+	 * 
+	 * 4. 初始状态同步：
+	 *    - lastServerRevision: 服务端初始修订版本
+	 *    - 作为后续增量更新的基准版本
+	 * 
+	 * 5. 程序版本信息：
+	 *    - serverProgramVersion: 服务端程序版本
+	 *    - 用于调试和版本对比
+	 */
 	private void handleHandshakeAck(JsonObject json) {
 		if (json.has("ready") && json.get("ready").getAsBoolean()) {
 			serverProtocolVersion = readProtocolVersionFromHandshakeAck(json);
