@@ -108,65 +108,65 @@ jobs:
 
 
 
-  # 2. Python（uv）依赖提交
-  dependency-submission-python:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
+  # # 2. Python（uv）依赖提交
+  # dependency-submission-python:
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #   steps:
+  #     - uses: actions/checkout@v4
   
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-          # 缓存uv和依赖，加速后续运行
-          cache: 'pip'
+  #     - name: Set up Python 3.13
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.13'
+  #         # 缓存uv和依赖，加速后续运行
+  #         cache: 'pip'
   
-      - name: Install uv (并配置环境变量)
-        run: |
-          # 安装uv包管理器
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          # 关键：将uv加入当前step的环境变量（单步export不生效）
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+  #     - name: Install uv (并配置环境变量)
+  #       run: |
+  #         # 安装uv包管理器
+  #         curl -LsSf https://astral.sh/uv/install.sh | sh
+  #         # 关键：将uv加入当前step的环境变量（单步export不生效）
+  #         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
   
-      - name: 验证uv安装 & 同步依赖（核心补充步骤）
-        working-directory: ./backend-server
-        run: |
-          # 验证uv是否安装成功
-          uv --version
-          # 关键：执行uv sync，拉取并安装所有依赖（和你本地操作一致）
-          # 如果有uv.lock，会严格按锁文件安装；没有则按pyproject.toml安装
-          uv sync
-          # 可选：检查已安装的依赖，确认同步成功
-          uv pip list
+  #     - name: 验证uv安装 & 同步依赖（核心补充步骤）
+  #       working-directory: ./backend-server
+  #       run: |
+  #         # 验证uv是否安装成功
+  #         uv --version
+  #         # 关键：执行uv sync，拉取并安装所有依赖（和你本地操作一致）
+  #         # 如果有uv.lock，会严格按锁文件安装；没有则按pyproject.toml安装
+  #         uv sync
+  #         # 可选：检查已安装的依赖，确认同步成功
+  #         uv pip list
   
-      - name: 导出完整的uv依赖清单
-        working-directory: ./backend-server
-        run: |
-          # 导出所有已安装的依赖（包括间接依赖）到标准格式
-          uv pip freeze > requirements-uv.txt
-          # 打印清单内容，方便调试（可选）
-          cat requirements-uv.txt
+  #     - name: 导出完整的uv依赖清单
+  #       working-directory: ./backend-server
+  #       run: |
+  #         # 导出所有已安装的依赖（包括间接依赖）到标准格式
+  #         uv pip freeze > requirements-uv.txt
+  #         # 打印清单内容，方便调试（可选）
+  #         cat requirements-uv.txt
   
-      - name: 提交Python依赖到GitHub依赖图谱
-        uses: advanced-security/pip-dependency-submission-action@v1
-        with:
-          filepath: ./backend-server/requirements-uv.txt
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          # 可选：指定依赖生态为pip，避免识别错误
-          ecosystem: pip
+  #     - name: 提交Python依赖到GitHub依赖图谱
+  #       uses: advanced-security/pip-dependency-submission-action@v1
+  #       with:
+  #         filepath: ./backend-server/requirements-uv.txt
+  #         repo-token: ${{ secrets.GITHUB_TOKEN }}
+  #         # 可选：指定依赖生态为pip，避免识别错误
+  #         ecosystem: pip
 
-  # 3. 油猴脚本依赖检查
-  check-tampermonkey-deps:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Dependency review for Tampermonkey script
-        uses: actions/dependency-review-action@v4
-        with:
-          files: ./tampermonkey-script/main.user.js
-          enable_non_production_checks: true
+  # # 3. 油猴脚本依赖检查
+  # check-tampermonkey-deps:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Dependency review for Tampermonkey script
+  #       uses: actions/dependency-review-action@v4
+  #       with:
+  #         files: ./tampermonkey-script/main.user.js
+  #         enable_non_production_checks: true
 
 
             
