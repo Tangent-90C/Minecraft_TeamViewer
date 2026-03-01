@@ -1,53 +1,24 @@
-// ==UserScript==
-// @name         地图玩家投影 - NodeMC 版
-// @namespace    https://map.nodemc.cc/
-// @version      0.2.0
-// @description  将本地 MultiplePlayerESP 后台玩家信息投影到 NodeMC 地图
-// @author       Prof. Chen
-// @match        https://map.nodemc.cc/*
-// @match        http://map.nodemc.cc/*
-// @match        file:///*NodeMC*时局图*.html*
-// @run-at       document-start
-// @grant        GM_xmlhttpRequest
-// @grant        unsafeWindow
-// @connect      *
-// ==/UserScript==
+// @ts-nocheck
+import {
+  ADMIN_NETWORK_PROTOCOL_VERSION,
+  AUTO_MARK_SYNC_INTERVAL_MS,
+  AUTO_MARK_SYNC_MAX_PER_TICK,
+  DEFAULT_CONFIG,
+  LOCAL_PROGRAM_VERSION,
+  MC_COLOR_CODE_MAP,
+  STORAGE_KEY,
+  TEAM_CONFIG_COLOR_FIELD,
+  TEAM_DEFAULT_COLORS,
+} from './constants';
+import { PANEL_HTML } from './panelTemplate';
+import { OVERLAY_STYLE_TEXT, UI_STYLE_TEXT } from './styles';
+
+declare const unsafeWindow: Window | undefined;
 
 (function () {
   'use strict';
 
   const PAGE = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
-  const STORAGE_KEY = 'nodemc_player_overlay_settings_v1';
-  const ADMIN_NETWORK_PROTOCOL_VERSION = '0.2.0';
-  const LOCAL_PROGRAM_VERSION = 'nodemc-overlay-0.2.0';
-  const AUTO_MARK_SYNC_INTERVAL_MS = 1200;
-  const AUTO_MARK_SYNC_MAX_PER_TICK = 12;
-
-  const DEFAULT_CONFIG = {
-    ADMIN_WS_URL: 'ws://127.0.0.1:8765/adminws',
-    ROOM_CODE: 'default',
-    RECONNECT_INTERVAL_MS: 1000,
-    TARGET_DIMENSION: 'minecraft:overworld',
-    SHOW_PLAYER_ICON: true,
-    SHOW_PLAYER_TEXT: true,
-    SHOW_HORSE_ENTITIES: true,
-    SHOW_LABEL_TEAM_INFO: true,
-    SHOW_LABEL_TOWN_INFO: true,
-    SHOW_WAYPOINT_ICON: true,
-    SHOW_WAYPOINT_TEXT: true,
-    PLAYER_ICON_SIZE: 10,
-    PLAYER_TEXT_SIZE: 12,
-    HORSE_ICON_SIZE: 14,
-    HORSE_TEXT_SIZE: 12,
-    SHOW_COORDS: false,
-    AUTO_TEAM_FROM_NAME: true,
-    FRIENDLY_TAGS: '[xxx]',
-    ENEMY_TAGS: '[yyy]',
-    TEAM_COLOR_FRIENDLY: '#3b82f6',
-    TEAM_COLOR_ENEMY: '#ef4444',
-    TEAM_COLOR_NEUTRAL: '#94a3b8',
-    DEBUG: false,
-  };
   const CONFIG = { ...DEFAULT_CONFIG };
 
   let leafletRef = null;
@@ -73,37 +44,6 @@
   let lastAdminMessageRevision = null;
   let lastAutoMarkSyncAt = 0;
   let autoMarkSyncCache = new Map();
-
-  const TEAM_DEFAULT_COLORS = {
-    friendly: '#3b82f6',
-    enemy: '#ef4444',
-    neutral: '#94a3b8',
-  };
-
-  const TEAM_CONFIG_COLOR_FIELD = {
-    friendly: 'TEAM_COLOR_FRIENDLY',
-    enemy: 'TEAM_COLOR_ENEMY',
-    neutral: 'TEAM_COLOR_NEUTRAL',
-  };
-
-  const MC_COLOR_CODE_MAP = {
-    '0': '#000000',
-    '1': '#0000aa',
-    '2': '#00aa00',
-    '3': '#00aaaa',
-    '4': '#aa0000',
-    '5': '#aa00aa',
-    '6': '#ffaa00',
-    '7': '#aaaaaa',
-    '8': '#555555',
-    '9': '#5555ff',
-    a: '#55ff55',
-    b: '#55ffff',
-    c: '#ff5555',
-    d: '#ff55ff',
-    e: '#ffff55',
-    f: '#ffffff',
-  };
 
   function patchLeaflet(leafletObj) {
     if (!leafletObj || !leafletObj.Map || leafletObj.__nodemcProjectionPatched) {
@@ -209,15 +149,39 @@
       .slice(0, 12);
   }
 
+  function isLocalWebSocketHost(hostname) {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  }
+
   function normalizeWsUrl(rawUrl) {
     const text = String(rawUrl || '').trim();
     if (!text) return DEFAULT_CONFIG.ADMIN_WS_URL;
 
     let next = text;
-    if (next.startsWith('http://')) next = 'ws://' + next.slice('http://'.length);
-    if (next.startsWith('https://')) next = 'wss://' + next.slice('https://'.length);
     if (next.endsWith('/snapshot')) next = next.slice(0, -('/snapshot'.length)) + '/adminws';
-    return next;
+
+    try {
+      const parsed = new URL(next);
+      const protocol = String(parsed.protocol || '').toLowerCase();
+      const isLocalHost = isLocalWebSocketHost(parsed.hostname);
+
+      if (protocol === 'http:') {
+        parsed.protocol = isLocalHost ? 'ws:' : 'wss:';
+      } else if (protocol === 'https:') {
+        parsed.protocol = 'wss:';
+      } else if (protocol === 'ws:') {
+        parsed.protocol = isLocalHost ? 'ws:' : 'wss:';
+      } else if (protocol === 'wss:') {
+        parsed.protocol = 'wss:';
+      } else {
+        return DEFAULT_CONFIG.ADMIN_WS_URL;
+      }
+
+      return parsed.toString();
+    } catch (_) {
+      return DEFAULT_CONFIG.ADMIN_WS_URL;
+    }
   }
 
   function normalizeRoomCode(rawRoomCode) {
@@ -658,7 +622,9 @@
 
     const players = getOnlinePlayers();
     const previousValue = select.value;
-    select.innerHTML = '';
+    while (select.firstChild) {
+      select.removeChild(select.firstChild);
+    }
 
     const placeholder = document.createElement('option');
     placeholder.value = '';
@@ -1438,124 +1404,7 @@
 
     const style = document.createElement('style');
     style.id = 'nodemc-overlay-ui-style';
-    style.textContent = `
-      #nodemc-overlay-fab {
-        position: fixed;
-        right: 18px;
-        bottom: 96px;
-        width: 34px;
-        height: 34px;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,.35);
-        background: radial-gradient(circle at 30% 30%, #60a5fa, #1d4ed8 70%);
-        color: #fff;
-        font-size: 15px;
-        line-height: 34px;
-        text-align: center;
-        cursor: pointer;
-        z-index: 2147483000;
-        box-shadow: 0 8px 18px rgba(0,0,0,.35);
-        user-select: none;
-        touch-action: none;
-      }
-      #nodemc-overlay-panel {
-        position: fixed;
-        right: 18px;
-        bottom: 160px;
-        width: 320px;
-        background: rgba(15, 23, 42, .97);
-        border: 1px solid rgba(148, 163, 184, .4);
-        border-radius: 12px;
-        color: #e2e8f0;
-        z-index: 2147483000;
-        box-shadow: 0 12px 28px rgba(0,0,0,.45);
-        padding: 12px;
-        font-size: 12px;
-        display: none;
-      }
-      #nodemc-overlay-panel .n-title {
-        font-weight: 700;
-        margin-bottom: 8px;
-        cursor: move;
-        user-select: none;
-      }
-      #nodemc-overlay-panel .n-page {
-        display: none;
-      }
-      #nodemc-overlay-panel .n-page.active {
-        display: block;
-      }
-      #nodemc-overlay-panel .n-row {
-        margin-bottom: 8px;
-      }
-      #nodemc-overlay-panel label {
-        display: block;
-        margin-bottom: 4px;
-        color: #bfdbfe;
-      }
-      #nodemc-overlay-panel input[type="text"],
-      #nodemc-overlay-panel input[type="number"] {
-        width: 100%;
-        box-sizing: border-box;
-        border-radius: 8px;
-        border: 1px solid rgba(148,163,184,.45);
-        background: rgba(30,41,59,.9);
-        color: #e2e8f0;
-        padding: 7px 8px;
-      }
-      #nodemc-overlay-panel .n-check {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        margin-bottom: 6px;
-      }
-      #nodemc-overlay-panel .n-btns {
-        display: flex;
-        gap: 8px;
-        margin-top: 10px;
-        flex-wrap: wrap;
-      }
-      #nodemc-overlay-panel button {
-        border: 1px solid rgba(147,197,253,.45);
-        background: rgba(30,64,175,.9);
-        color: #fff;
-        border-radius: 8px;
-        padding: 6px 10px;
-        cursor: pointer;
-      }
-      #nodemc-overlay-panel .n-link-btn {
-        border: 1px solid rgba(148,163,184,.5);
-        background: rgba(15,23,42,.75);
-        color: #dbeafe;
-      }
-      #nodemc-overlay-panel .n-nav-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-        gap: 8px;
-      }
-      #nodemc-overlay-status {
-        margin-top: 8px;
-        color: #93c5fd;
-        word-break: break-word;
-      }
-      #nodemc-overlay-panel .n-subtitle {
-        margin-top: 10px;
-        margin-bottom: 6px;
-        font-weight: 700;
-        color: #bfdbfe;
-      }
-      #nodemc-overlay-panel select {
-        width: 100%;
-        box-sizing: border-box;
-        border-radius: 8px;
-        border: 1px solid rgba(148,163,184,.45);
-        background: rgba(30,41,59,.9);
-        color: #e2e8f0;
-        padding: 7px 8px;
-      }
-    `;
+    style.textContent = UI_STYLE_TEXT;
     document.head.appendChild(style);
 
     const fab = document.createElement('div');
@@ -1565,135 +1414,12 @@
 
     const panel = document.createElement('div');
     panel.id = 'nodemc-overlay-panel';
-    panel.innerHTML = `
-      <div class="n-title" id="nodemc-overlay-title">NodeMC Overlay 设置（可拖动）</div>
-      <div class="n-page active" id="nodemc-overlay-page-main">
-        <label class="n-check"><input id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
-        <div class="n-row">
-          <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
-          <input id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
-        </div>
-        <div class="n-row">
-          <label>敌军标签（逗号分隔，按游戏中的前缀识别）</label>
-          <input id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
-        </div>
-        <label class="n-check"><input id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
-        <div class="n-btns">
-          <button id="nodemc-overlay-save" type="button">保存</button>
-          <button id="nodemc-overlay-reset" type="button">重置</button>
-          <button id="nodemc-overlay-refresh" type="button">立即重连</button>
-        </div>
-        <div class="n-btns">
-          <button id="nodemc-overlay-open-advanced" type="button" class="n-link-btn">高级设置</button>
-          <button id="nodemc-overlay-open-mark" type="button" class="n-link-btn">玩家标记/颜色</button>
-        </div>
-      </div>
 
-      <div class="n-page" id="nodemc-overlay-page-advanced">
-        <div class="n-nav-row">
-          <div class="n-subtitle" style="margin:0;">高级设置</div>
-          <button id="nodemc-overlay-back-main" type="button" class="n-link-btn">返回基础设置</button>
-        </div>
-        <div class="n-row">
-          <label>Admin WS URL</label>
-          <input id="nodemc-overlay-url" type="text" />
-        </div>
-        <div class="n-row">
-          <label>房间号 Room Code</label>
-          <input id="nodemc-overlay-room-code" type="text" placeholder="default" />
-        </div>
-        <div class="n-row">
-          <label>重连间隔(ms)</label>
-          <input id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
-        </div>
-        <div class="n-row">
-          <label>维度过滤</label>
-          <input id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
-        </div>
-        <label class="n-check"><input id="nodemc-overlay-show-icon" type="checkbox" />显示玩家图标（图标中心对准玩家坐标）</label>
-        <label class="n-check"><input id="nodemc-overlay-show-text" type="checkbox" />显示玩家文字信息（仅文字时左端对准玩家坐标）</label>
-        <label class="n-check"><input id="nodemc-overlay-show-waypoint-icon" type="checkbox" />显示报点图标（图标中心对准报点坐标）</label>
-        <label class="n-check"><input id="nodemc-overlay-show-waypoint-text" type="checkbox" />显示报点文字（文字左端对准报点坐标，带浅色半透明背景）</label>
-        <label class="n-check"><input id="nodemc-overlay-show-horse-entities" type="checkbox" />是否显示马实体</label>
-        <label class="n-check"><input id="nodemc-overlay-show-team-info" type="checkbox" />地图文字显示阵营信息</label>
-        <label class="n-check"><input id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>
-        <div class="n-subtitle">大小设置（玩家）</div>
-        <div class="n-row">
-          <label>玩家图标大小(px)</label>
-          <input id="nodemc-overlay-player-icon-size" type="number" min="6" max="40" step="1" />
-        </div>
-        <div class="n-row">
-          <label>玩家文字大小(px)</label>
-          <input id="nodemc-overlay-player-text-size" type="number" min="8" max="32" step="1" />
-        </div>
-        <div class="n-subtitle">大小设置（马）</div>
-        <div class="n-row">
-          <label>马图标大小(px)</label>
-          <input id="nodemc-overlay-horse-icon-size" type="number" min="6" max="40" step="1" />
-        </div>
-        <div class="n-row">
-          <label>马文字大小(px)</label>
-          <input id="nodemc-overlay-horse-text-size" type="number" min="8" max="32" step="1" />
-        </div>
-        <label class="n-check"><input id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
-        <label class="n-check"><input id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
-
-        <div class="n-subtitle">阵营颜色</div>
-        <div class="n-row">
-          <label>友军颜色(#RRGGBB)</label>
-          <input id="nodemc-overlay-team-friendly-color" type="text" placeholder="#3b82f6" />
-        </div>
-        <div class="n-btns">
-          <button id="nodemc-overlay-save-advanced" type="button">保存高级设置</button>
-        </div>
-        <div class="n-row">
-          <label>中立颜色(#RRGGBB)</label>
-          <input id="nodemc-overlay-team-neutral-color" type="text" placeholder="#94a3b8" />
-        </div>
-        <div class="n-row">
-          <label>敌军颜色(#RRGGBB)</label>
-          <input id="nodemc-overlay-team-enemy-color" type="text" placeholder="#ef4444" />
-        </div>
-
-      </div>
-
-      <div class="n-page" id="nodemc-overlay-page-mark">
-        <div class="n-nav-row">
-          <div class="n-subtitle" style="margin:0;">玩家标记/颜色</div>
-          <button id="nodemc-overlay-back-main-from-mark" type="button" class="n-link-btn">返回基础设置</button>
-        </div>
-        <div class="n-subtitle">定向玩家标记/颜色</div>
-        <div class="n-row">
-          <label>在线玩家列表（推荐）</label>
-          <select id="nodemc-mark-player-select">
-            <option value="">暂无在线玩家</option>
-          </select>
-        </div>
-        <div class="n-row">
-          <label>阵营</label>
-          <select id="nodemc-mark-team">
-            <option value="friendly">友军</option>
-            <option value="enemy">敌军</option>
-            <option value="neutral" selected>中立</option>
-          </select>
-        </div>
-        <div class="n-row">
-          <label>颜色(#RRGGBB)</label>
-          <input id="nodemc-mark-color" type="text" placeholder="#ef4444" />
-        </div>
-        <div class="n-row">
-          <label>标签(可选)</label>
-          <input id="nodemc-mark-label" type="text" placeholder="例如：突击组/重点观察" />
-        </div>
-        <div class="n-btns">
-          <button id="nodemc-mark-apply" type="button">应用标记</button>
-          <button id="nodemc-mark-clear" type="button">清除该玩家</button>
-          <button id="nodemc-mark-clear-all" type="button">清空全部标记</button>
-        </div>
-      </div>
-
-      <div id="nodemc-overlay-status"></div>
-    `;
+    const parsedPanel = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
+    const panelNodes = Array.from(parsedPanel.body.childNodes);
+    for (const node of panelNodes) {
+      panel.appendChild(node.cloneNode(true));
+    }
 
     document.body.appendChild(fab);
     document.body.appendChild(panel);
@@ -2125,76 +1851,7 @@
     }
     const style = document.createElement('style');
     style.id = 'nodemc-projection-style';
-    style.textContent = `
-      .nodemc-projection-label {
-        background: rgba(0, 0, 0, 0.78);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.22);
-        border-radius: 6px;
-        padding: 3px 7px;
-        font-size: 12px;
-        line-height: 1.2;
-        white-space: nowrap;
-      }
-      .nodemc-player-label {
-        background: rgba(15, 23, 42, 0.88);
-        color: #dbeafe;
-        border: 1px solid rgba(147, 197, 253, 0.5);
-        border-radius: 6px;
-        padding: 3px 7px;
-        font-size: 12px;
-        line-height: 1.2;
-        white-space: nowrap;
-      }
-      .nodemc-player-label .n-team {
-        font-weight: 700;
-      }
-      .nodemc-player-anchor {
-        position: relative;
-        width: 0;
-        height: 0;
-        pointer-events: none;
-      }
-      .nodemc-player-anchor .n-icon {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.9);
-        transform: translate(-50%, -50%);
-      }
-      .nodemc-player-anchor .n-icon.is-horse {
-        width: 14px;
-        height: 14px;
-        font-size: 10px;
-        line-height: 14px;
-        text-align: center;
-      }
-      .nodemc-player-anchor .n-label {
-        position: absolute;
-        top: 0;
-        transform: translateY(-50%);
-        background: rgba(15, 23, 42, 0.88);
-        color: #dbeafe;
-        border: 1px solid rgba(147, 197, 253, 0.5);
-        border-radius: 6px;
-        padding: 3px 7px;
-        font-size: 12px;
-        line-height: 1.2;
-        white-space: nowrap;
-      }
-      .nodemc-player-anchor .n-label[data-align="with-icon"] {
-        left: 10px;
-      }
-      .nodemc-player-anchor .n-label[data-align="left-anchor"] {
-        left: 0;
-      }
-      .nodemc-player-anchor .n-team {
-        font-weight: 700;
-      }
-    `;
+    style.textContent = OVERLAY_STYLE_TEXT;
     document.head.appendChild(style);
   }
 

@@ -30,4 +30,11 @@ minecraft-mod/build/
 minecraft-mod/run/
 .vscode/
 
+.gradle/
+
 **/__pycache__
+
+# Node / Vite (tampermonkey-script)
+tampermonkey-script/node_modules/
+tampermonkey-script/dist/
+tampermonkey-script/.vite/

@@ -42,6 +42,25 @@ jobs:
         working-directory: ./minecraft-mod # 切换到Mod目录执行编译
         run: ./gradlew build --refresh-dependencies
 
+      # 4.1 设置 Node 环境并构建油猴脚本（Vite） — 使用 pnpm
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '25'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Monkey deps (pnpm)
+        working-directory: ./tampermonkey-script
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Monkey script
+        working-directory: ./tampermonkey-script
+        run: pnpm run build
+
       # 上传Backend产物包
       - name: Upload Backend Package
         id: upload-backend
@@ -56,9 +75,9 @@ jobs:
         id: upload-monkey
         uses: actions/upload-artifact@v4
         with:
-          # 名称包含.js后缀，比如 "my-script.js"
-          name: tampermonkey-script
-          path: ./tampermonkey-script/*.js
+          name: tampermonkey-script-dist
+          path: ./tampermonkey-script/dist/*.user.js
+          if-no-files-found: error
       
       # 5.2 上传编译产物
       - name: Upload built mod JAR
