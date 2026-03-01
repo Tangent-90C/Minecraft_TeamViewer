@@ -66,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-server.zip
-          path: backend-server/
+          path: backend-server/  # Github会自动打包为.zip
           if-no-files-found: error  # 若文件夹为空则报错（避免上传空artifact）
 
       # 先获取带.js后缀的油猴脚本完整文件名
@@ -97,7 +97,7 @@ jobs:
           # 找到目标JAR文件（排除临时文件）
           JAR_FILE=$(find minecraft-mod/build/libs -name "*.jar" ! -name "*-sources.jar" ! -name "*-dev.jar" ! -name "*-javadoc.jar" | head -n 1)
           # 提取纯文件名（保留.jar后缀，仅去掉路径）
-          JAR_NAME=$(basename "$JS_FILE")  # 这里修正原笔误，应为 $JAR_FILE
+          JAR_NAME=$(basename "$$JAR_FILE")
           # 设置为输出变量
           echo "jar_name=$JAR_NAME" >> $GITHUB_OUTPUT
         shell: bash
