@@ -148,6 +148,9 @@ export function sanitizeConfig(candidate: Record<string, unknown> | null | undef
   next.BLOCK_MAP_LEFT_RIGHT_CLICK = candidate.BLOCK_MAP_LEFT_RIGHT_CLICK === undefined
     ? DEFAULT_CONFIG.BLOCK_MAP_LEFT_RIGHT_CLICK
     : Boolean(candidate.BLOCK_MAP_LEFT_RIGHT_CLICK);
+  next.BLOCK_MAP_HOVER_POPUP = candidate.BLOCK_MAP_HOVER_POPUP === undefined
+    ? DEFAULT_CONFIG.BLOCK_MAP_HOVER_POPUP
+    : Boolean(candidate.BLOCK_MAP_HOVER_POPUP);
 
   const playerIconSize = Number(candidate.PLAYER_ICON_SIZE);
   if (Number.isFinite(playerIconSize)) {

@@ -30,14 +30,29 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let capturedMap: any = null;
   let lastGlobalMapScanAt = 0;
   let guardedMapContainer: HTMLElement | null = null;
+  let hoverPopupBlockedContainer: HTMLElement | null = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
   const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
+
+  const MAP_HOVER_BLOCK_CLASS = 'nodemc-map-hover-popup-blocked';
+  const MAP_HOVER_BLOCK_STYLE = `
+.${MAP_HOVER_BLOCK_CLASS} .leaflet-tooltip-pane,
+.${MAP_HOVER_BLOCK_CLASS} .leaflet-tooltip,
+.${MAP_HOVER_BLOCK_CLASS} .leaflet-popup-pane,
+.${MAP_HOVER_BLOCK_CLASS} .leaflet-popup {
+  display: none !important;
+}
+`;
 
   const guardedMouseEvents: Array<keyof HTMLElementEventMap> = ['click', 'dblclick', 'auxclick', 'contextmenu'];
 
   function shouldBlockMapLeftRightClick() {
     return Boolean(CONFIG.BLOCK_MAP_LEFT_RIGHT_CLICK);
+  }
+
+  function shouldBlockMapHoverPopup() {
+    return Boolean(CONFIG.BLOCK_MAP_HOVER_POPUP);
   }
 
   function shouldInterceptMouseEvent(event: MouseEvent) {
@@ -75,23 +90,52 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const container = map && map._container instanceof HTMLElement ? map._container : null;
     if (!container || !container.isConnected) {
       detachMapInteractionGuard();
+      detachMapHoverPopupBlock();
       return;
     }
 
     if (!shouldBlockMapLeftRightClick()) {
       detachMapInteractionGuard();
+    } else if (guardedMapContainer !== container) {
+      detachMapInteractionGuard();
+      guardedMapContainer = container;
+      for (const eventName of guardedMouseEvents) {
+        guardedMapContainer.addEventListener(eventName, onGuardedMouseEvent, true);
+      }
+    }
+
+    if (!shouldBlockMapHoverPopup()) {
+      detachMapHoverPopupBlock();
       return;
     }
 
-    if (guardedMapContainer === container) {
+    if (hoverPopupBlockedContainer === container) {
       return;
     }
 
-    detachMapInteractionGuard();
-    guardedMapContainer = container;
-    for (const eventName of guardedMouseEvents) {
-      guardedMapContainer.addEventListener(eventName, onGuardedMouseEvent, true);
+    detachMapHoverPopupBlock();
+    hoverPopupBlockedContainer = container;
+    hoverPopupBlockedContainer.classList.add(MAP_HOVER_BLOCK_CLASS);
+  }
+
+  function detachMapHoverPopupBlock() {
+    if (!hoverPopupBlockedContainer) return;
+    hoverPopupBlockedContainer.classList.remove(MAP_HOVER_BLOCK_CLASS);
+    hoverPopupBlockedContainer = null;
+  }
+
+  function ensureMapHoverPopupStyles() {
+    const style = document.getElementById('nodemc-map-hover-popup-style') as HTMLStyleElement | null;
+    if (style) {
+      if (style.textContent !== MAP_HOVER_BLOCK_STYLE) {
+        style.textContent = MAP_HOVER_BLOCK_STYLE;
+      }
+      return;
     }
+    const blockStyle = document.createElement('style');
+    blockStyle.id = 'nodemc-map-hover-popup-style';
+    blockStyle.textContent = MAP_HOVER_BLOCK_STYLE;
+    document.head.appendChild(blockStyle);
   }
 
   function isLeafletMapCandidate(value: any) {
@@ -246,12 +290,14 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
   function ensureOverlayStyles() {
     if (document.getElementById('nodemc-projection-style')) {
+      ensureMapHoverPopupStyles();
       return;
     }
     const style = document.createElement('style');
     style.id = 'nodemc-projection-style';
     style.textContent = deps.overlayStyleText;
     document.head.appendChild(style);
+    ensureMapHoverPopupStyles();
   }
 
   function worldToLatLng(map: any, x: number, z: number) {
@@ -915,6 +961,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
   function cleanup() {
     detachMapInteractionGuard();
+    detachMapHoverPopupBlock();
 
     for (const m of markersById.values()) {
       try { m.remove(); } catch (_) {}
@@ -931,6 +978,11 @@ export function createMapProjection(deps: MapProjectionDeps) {
       try { layers.chunkArea?.remove(); } catch (_) {}
     }
     reporterEffectsById.clear();
+
+    try {
+      const blockStyle = document.getElementById('nodemc-map-hover-popup-style');
+      if (blockStyle) blockStyle.remove();
+    } catch (_) {}
   }
 
   return {
