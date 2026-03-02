@@ -40,6 +40,28 @@ repositories {
     mavenCentral()
 }
 
+configurations.all {
+    resolutionStrategy {
+        // 移除有问题的内部类调用，改用 Gradle 内置的版本范围管控
+        eachDependency { DependencyResolveDetails details ->
+            def group = details.requested.group
+            def name = details.requested.name
+            def requiredVersion = "2.25.3"
+
+            // 只管控 log4j-api 和 log4j-core
+            if (group == 'org.apache.logging.log4j' && (name == 'log4j-api' || name == 'log4j-core')) {
+                // 直接指定版本范围：>=2.25.3
+                details.useVersion "[2.25.3,)"
+
+                // 可选：简化的版本警告（避免内部类）
+                if (details.requested.version) {
+                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${requiredVersion}")
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
