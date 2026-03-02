@@ -3,16 +3,24 @@ import {
   DEFAULT_CONFIG,
   STORAGE_KEY,
 } from './constants';
+import {
+  buildExportFileName,
+  createConfigExportPayload,
+  getConfigCompatVersion,
+  parseImportedConfigText,
+} from './configTransfer';
 import { OVERLAY_STYLE_TEXT, UI_STYLE_TEXT } from './styles';
 import {
   getConfiguredTeamColor,
   normalizeColor,
+  normalizeDimension,
   normalizeMarkSource,
   normalizeRoomCode,
   normalizeTeam,
   normalizeWsUrl,
   parseMcDisplayName,
   parseTagList,
+  readNumber,
   sanitizeConfig,
   getPlayerDataNode,
 } from './overlayUtils';
@@ -243,6 +251,82 @@ declare const unsafeWindow: Window | undefined;
     return players;
   }
 
+  function getMapVisiblePlayersForList() {
+    const snapshotPlayers = latestSnapshot && typeof latestSnapshot === 'object' ? latestSnapshot.players : null;
+    if (!snapshotPlayers || typeof snapshotPlayers !== 'object') {
+      return [];
+    }
+
+    const wantedDim = normalizeDimension(CONFIG.TARGET_DIMENSION);
+    const teamLabelMap: Record<string, string> = {
+      friendly: '友军',
+      enemy: '敌军',
+      neutral: '中立',
+    };
+
+    const rows: Array<{
+      playerId: string;
+      playerName: string;
+      team: string;
+      teamColor: string;
+      town: string;
+      townColor: string;
+      health: string;
+      armor: string;
+      x: number;
+      z: number;
+    }> = [];
+
+    for (const [playerId, rawNode] of Object.entries(snapshotPlayers)) {
+      const data = getPlayerDataNode(rawNode);
+      if (!data) continue;
+
+      const dim = normalizeDimension(data.dimension);
+      if (wantedDim && dim !== wantedDim) continue;
+
+      const x = readNumber(data.x);
+      const z = readNumber(data.z);
+      if (x === null || z === null) continue;
+
+      const fallbackName = String(data.playerName || data.playerUUID || playerId || '').trim();
+      const autoName = getTabPlayerName(String(playerId)) || fallbackName || String(playerId);
+      const tabInfo = getTabPlayerInfo(String(playerId));
+      const existingMark = getPlayerMark(String(playerId));
+      const autoMark = autoTeamFromName(autoName);
+      const existingMarkSource = existingMark ? normalizeMarkSource(existingMark.source) : 'manual';
+      const isLegacyUnknownMark = Boolean(existingMark) && !Boolean(existingMark.hasExplicitSource);
+      const legacyLikelyAuto = Boolean(isLegacyUnknownMark && autoMark)
+        && normalizeTeam(existingMark.team) === normalizeTeam(autoMark.team);
+      const existingActsAsAuto = Boolean(existingMark) && (existingMarkSource === 'auto' || legacyLikelyAuto);
+      const isManualMark = Boolean(existingMark) && !existingActsAsAuto;
+      const effectiveMark = isManualMark
+        ? existingMark
+        : (autoMark || (existingActsAsAuto ? null : existingMark));
+
+      const team = normalizeTeam(effectiveMark && effectiveMark.team ? effectiveMark.team : 'neutral');
+      const teamColor = getConfiguredTeamColor(team, CONFIG);
+      const townColor = normalizeColor(tabInfo && tabInfo.teamColor, '#93c5fd');
+      const health = readNumber(data.health);
+      const armor = readNumber(data.armor);
+
+      rows.push({
+        playerId: String(playerId),
+        playerName: autoName,
+        team: teamLabelMap[team] || teamLabelMap.neutral,
+        teamColor,
+        town: (tabInfo && String(tabInfo.teamText || '').trim()) || '-',
+        townColor,
+        health: health === null ? '-' : String(Math.round(health)),
+        armor: armor === null ? '-' : String(Math.round(armor)),
+        x,
+        z,
+      });
+    }
+
+    rows.sort((a, b) => a.playerName.localeCompare(b.playerName, 'zh-Hans-CN'));
+    return rows;
+  }
+
   const mapProjection = createMapProjection({
     page: PAGE,
     config: CONFIG,
@@ -280,6 +364,86 @@ declare const unsafeWindow: Window | undefined;
     }
   }
 
+  function downloadTextFile(fileName: string, text: string) {
+    try {
+      const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+      return true;
+    } catch (error) {
+      console.warn('[NodeMC Player Overlay] export config failed:', error);
+      return false;
+    }
+  }
+
+  function exportConfig() {
+    const payload = createConfigExportPayload(CONFIG);
+    const fileName = buildExportFileName();
+    const ok = downloadTextFile(fileName, JSON.stringify(payload, null, 2));
+    if (!ok) {
+      lastErrorText = '配置导出失败，请查看控制台日志';
+      updateUiStatus();
+      return;
+    }
+    lastErrorText = null;
+    const compat = getConfigCompatVersion();
+    settingsUi.updateStatus(`状态: 配置已导出（兼容版本 ${compat}）`);
+  }
+
+  function importConfigFromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+
+    const cleanupInput = () => {
+      try {
+        input.remove();
+      } catch (_) {}
+    };
+
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      if (!file) {
+        cleanupInput();
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const parsed = parseImportedConfigText(text);
+        if (!parsed.ok || !parsed.config) {
+          lastErrorText = parsed.error || '配置导入失败';
+          updateUiStatus();
+          return;
+        }
+
+        Object.assign(CONFIG, parsed.config);
+        saveConfigToStorage();
+        settingsUi.fillFormFromConfig(CONFIG, (team) => getConfiguredTeamColor(team, CONFIG));
+        wsClient?.reconnect();
+        refreshPlayerLists();
+        lastErrorText = null;
+        updateUiStatus();
+      } catch (error) {
+        console.warn('[NodeMC Player Overlay] import config failed:', error);
+        lastErrorText = '配置导入失败：读取文件异常';
+        updateUiStatus();
+      } finally {
+        cleanupInput();
+      }
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  }
+
   function updateUiStatus() {
     const mapCounts = mapProjection.getCounts();
     const lastErr = lastErrorText ? `错误: ${lastErrorText}` : '正常';
@@ -298,8 +462,36 @@ declare const unsafeWindow: Window | undefined;
     return { ok: false, error: '请先从在线玩家列表选择目标玩家' };
   }
 
-  function refreshPlayerSelector() {
+  function refreshPlayerLists() {
     settingsUi.refreshPlayerSelector(getOnlinePlayers());
+    settingsUi.refreshMapPlayerList(getMapVisiblePlayersForList());
+  }
+
+  function focusMapPlayerById(playerId: string) {
+    const targetId = String(playerId || '').trim();
+    if (!targetId) {
+      lastErrorText = '玩家列表目标为空';
+      updateUiStatus();
+      return;
+    }
+
+    const mapPlayers = getMapVisiblePlayersForList();
+    const target = mapPlayers.find((item) => item.playerId === targetId);
+    if (!target) {
+      lastErrorText = '目标玩家当前不在地图显示列表中';
+      updateUiStatus();
+      return;
+    }
+
+    const ok = mapProjection.focusOnWorldPosition(target.x, target.z);
+    if (!ok) {
+      lastErrorText = '地图尚未就绪，无法定位到该玩家';
+      updateUiStatus();
+      return;
+    }
+
+    lastErrorText = null;
+    updateUiStatus();
   }
 
   function applyFormToConfig() {
@@ -402,6 +594,12 @@ declare const unsafeWindow: Window | undefined;
       applyFormToConfig();
       wsClient?.reconnect();
     },
+    onExportConfig: () => {
+      exportConfig();
+    },
+    onImportConfig: () => {
+      importConfigFromFile();
+    },
     onReset: () => {
       Object.assign(CONFIG, DEFAULT_CONFIG);
       saveConfigToStorage();
@@ -422,6 +620,15 @@ declare const unsafeWindow: Window | undefined;
     onPlayerSelectionChanged: () => {
       lastErrorText = null;
       updateUiStatus();
+    },
+    onTogglePlayerList: (visible) => {
+      settingsUi.setPlayerListVisible(Boolean(visible));
+      refreshPlayerLists();
+      lastErrorText = null;
+      updateUiStatus();
+    },
+    onFocusMapPlayer: (playerId) => {
+      focusMapPlayerById(playerId);
     },
   });
 
@@ -539,7 +746,7 @@ declare const unsafeWindow: Window | undefined;
         latestPlayerMarks = snapshot && typeof snapshot.playerMarks === 'object' && snapshot.playerMarks
           ? snapshot.playerMarks
           : {};
-        refreshPlayerSelector();
+        refreshPlayerLists();
         lastRevision = snapshot?.revision ?? lastRevision;
         lastErrorText = null;
         mapProjection.applyLatestSnapshotIfPossible(snapshot);
@@ -566,7 +773,7 @@ declare const unsafeWindow: Window | undefined;
         return;
       }
       settingsUi.fillFormFromConfig(CONFIG, (team) => getConfiguredTeamColor(team, CONFIG));
-      refreshPlayerSelector();
+      refreshPlayerLists();
       updateUiStatus();
     };
     syncUiOnReady();

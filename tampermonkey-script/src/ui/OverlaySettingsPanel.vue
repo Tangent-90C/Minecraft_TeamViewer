@@ -8,12 +8,25 @@ type PlayerOption = {
   teamColor: string | null;
 };
 
+type MapPlayerListItem = {
+  playerId: string;
+  playerName: string;
+  team: string;
+  teamColor: string;
+  town: string;
+  townColor: string;
+  health: string;
+  armor: string;
+};
+
 type OverlayUiState = {
   page: 'main' | 'advanced' | 'display' | 'mark' | 'connection';
   statusText: string;
   sameServerFilterEnabled: boolean;
   players: PlayerOption[];
+  mapPlayers: MapPlayerListItem[];
   selectedPlayerId: string;
+  playerListVisible: boolean;
   mark: {
     team: string;
     color: string;
@@ -60,6 +73,8 @@ type OverlayUiActions = {
   onSave: () => void;
   onSaveAdvanced: () => void;
   onSaveDisplay: () => void;
+  onExportConfig: () => void;
+  onImportConfig: () => void;
   onReset: () => void;
   onRefresh: () => void;
   onMarkApply: () => void;
@@ -68,6 +83,8 @@ type OverlayUiActions = {
   onServerFilterToggle: (enabled: boolean) => void;
   onTeamChanged: (team: string) => void;
   onPlayerSelectionChanged: () => void;
+  onTogglePlayerList: (visible: boolean) => void;
+  onFocusMapPlayer: (playerId: string) => void;
 };
 
 const props = defineProps<{
@@ -77,6 +94,7 @@ const props = defineProps<{
 }>();
 
 const hasPlayers = computed(() => props.state.players.length > 0);
+const hasMapPlayers = computed(() => props.state.mapPlayers.length > 0);
 
 function setPage(nextPage: OverlayUiState['page']) {
   props.state.page = nextPage;
@@ -97,18 +115,30 @@ function onServerFilterChange() {
 function onPlayerSelectionChanged() {
   props.actions.onPlayerSelectionChanged();
 }
+
+function togglePlayerList() {
+  props.actions.onTogglePlayerList(!props.state.playerListVisible);
+}
+
+function closePlayerList() {
+  props.actions.onTogglePlayerList(false);
+}
+
+function focusMapPlayer(playerId: string) {
+  props.actions.onFocusMapPlayer(playerId);
+}
 </script>
 
 <template>
   <div class="n-header">
-    <div class="n-title" id="nodemc-overlay-title">NodeMC Overlay 设置（可拖动）</div>
-    <div class="n-header-hint">支持拖动 · 实时生效</div>
+    <div class="n-title" id="nodemc-overlay-title">NodeMC Overlay 设置</div>
   </div>
 
   <div class="n-page" :class="{ active: state.page === 'main' }" id="nodemc-overlay-page-main">
     <div class="n-card">
       <div class="n-subtitle">基础策略</div>
       <label class="n-check"><input v-model="state.form.AUTO_TEAM_FROM_NAME" id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
+      <label class="n-check"><input v-model="state.sameServerFilterEnabled" @change="onServerFilterChange" id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
       <div class="n-row">
         <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
         <input v-model="state.form.FRIENDLY_TAGS" id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
@@ -117,17 +147,66 @@ function onPlayerSelectionChanged() {
         <label>敌军标签（逗号分隔，按游戏中的前缀识别）</label>
         <input v-model="state.form.ENEMY_TAGS" id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
       </div>
-      <label class="n-check"><input v-model="state.sameServerFilterEnabled" @change="onServerFilterChange" id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
     </div>
     <div class="n-btns">
       <button id="nodemc-overlay-save" type="button" class="n-btn-primary" @click="actions.onSave">保存</button>
       <button id="nodemc-overlay-reset" type="button" class="n-btn-ghost" @click="actions.onReset">重置</button>
     </div>
     <div class="n-btns">
+      <button id="nodemc-overlay-export-config" type="button" class="n-btn-ghost" @click="actions.onExportConfig">导出配置</button>
+      <button id="nodemc-overlay-import-config" type="button" class="n-btn-ghost" @click="actions.onImportConfig">导入配置</button>
+    </div>
+    <div class="n-btns">
       <button id="nodemc-overlay-open-advanced" type="button" class="n-link-btn" @click="setPage('advanced')">高级设置</button>
       <button id="nodemc-overlay-open-connection" type="button" class="n-link-btn" @click="setPage('connection')">连接设置</button>
       <button id="nodemc-overlay-open-display" type="button" class="n-link-btn" @click="setPage('display')">显示设置</button>
       <button id="nodemc-overlay-open-mark" type="button" class="n-link-btn" @click="setPage('mark')">玩家标记/颜色</button>
+      <button id="nodemc-overlay-open-player-list" type="button" class="n-link-btn" @click="togglePlayerList">玩家列表</button>
+    </div>
+
+    <div v-if="state.playerListVisible" class="n-player-list-popup" id="nodemc-overlay-player-list-popup">
+      <div class="n-player-list-header">
+        <div class="n-player-list-title">地图玩家列表</div>
+        <button id="nodemc-overlay-close-player-list" type="button" class="n-player-list-close" @click="closePlayerList">关闭</button>
+      </div>
+      <div class="n-player-list-table-wrap">
+        <table class="n-player-list-table">
+          <thead>
+            <tr>
+              <th>玩家名称</th>
+              <th>阵营</th>
+              <th>城镇</th>
+              <th>血量</th>
+              <th>盔甲值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in state.mapPlayers"
+              :key="item.playerId"
+              class="n-player-list-row"
+              @click="focusMapPlayer(item.playerId)"
+            >
+              <td>{{ item.playerName }}</td>
+              <td>
+                <span class="n-team-chip" :style="{ color: item.teamColor, borderColor: `${item.teamColor}66`, background: `${item.teamColor}20` }">
+                  {{ item.team }}
+                </span>
+              </td>
+              <td>
+                <span class="n-town-chip" :style="{ color: item.townColor, borderColor: `${item.townColor}66`, background: `${item.townColor}1f` }">
+                  {{ item.town }}
+                </span>
+              </td>
+              <td>{{ item.health }}</td>
+              <td>{{ item.armor }}</td>
+            </tr>
+            <tr v-if="!hasMapPlayers">
+              <td colspan="5" class="n-player-list-empty">当前地图暂无可显示玩家</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -199,6 +278,7 @@ function onPlayerSelectionChanged() {
       <div class="n-subtitle">上报玩家特殊显示</div>
       <label class="n-check"><input v-model="state.form.REPORTER_STAR_ICON" id="nodemc-overlay-reporter-star" type="checkbox" />上报玩家图标使用五角星（替换圆点）</label>
       <label class="n-check"><input v-model="state.form.REPORTER_VISION_CIRCLE_ENABLED" id="nodemc-overlay-reporter-vision-circle" type="checkbox" />显示上报玩家视野圆圈</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
       <div class="n-row">
         <label>视野圆圈半径 r（方块）</label>
         <input v-model="state.form.REPORTER_VISION_RADIUS" id="nodemc-overlay-reporter-vision-radius" type="number" min="8" max="4096" step="1" />
@@ -211,7 +291,6 @@ function onPlayerSelectionChanged() {
         <label>视野圆圈透明度（0.02 ~ 0.9）</label>
         <input v-model="state.form.REPORTER_VISION_OPACITY" id="nodemc-overlay-reporter-vision-opacity" type="number" min="0.02" max="0.9" step="0.01" />
       </div>
-      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
       <div class="n-row">
         <label>区块半径 l（按玩家所在区块向外）</label>
         <input v-model="state.form.REPORTER_CHUNK_RADIUS" id="nodemc-overlay-reporter-chunk-radius" type="number" min="0" max="64" step="1" />
@@ -236,7 +315,7 @@ function onPlayerSelectionChanged() {
       <button id="nodemc-overlay-back-main-from-connection" type="button" class="n-link-btn" @click="setPage('main')">返回基础设置</button>
     </div>
     <div class="n-card">
-      <div class="n-row">
+      <div class="n-row full-width">
         <label>Admin WS URL</label>
         <input v-model="state.form.ADMIN_WS_URL" id="nodemc-overlay-url" type="text" />
       </div>

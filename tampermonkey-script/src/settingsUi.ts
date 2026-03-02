@@ -8,12 +8,25 @@ type PlayerOption = {
   teamColor: string | null;
 };
 
+type MapPlayerListItem = {
+  playerId: string;
+  playerName: string;
+  team: string;
+  teamColor: string;
+  town: string;
+  townColor: string;
+  health: string;
+  armor: string;
+};
+
 type SettingsUiDeps = {
   page: Window;
   uiStyleText: string;
   onSave: () => void;
   onSaveAdvanced: () => void;
   onSaveDisplay: () => void;
+  onExportConfig: () => void;
+  onImportConfig: () => void;
   onReset: () => void;
   onRefresh: () => void;
   onMarkApply: () => void;
@@ -22,6 +35,8 @@ type SettingsUiDeps = {
   onServerFilterToggle: (enabled: boolean) => void;
   onTeamChanged: (team: string) => void;
   onPlayerSelectionChanged: () => void;
+  onTogglePlayerList: (visible: boolean) => void;
+  onFocusMapPlayer: (playerId: string) => void;
   getPlayerOptionColor?: (item: PlayerOption) => string | null;
 };
 
@@ -115,7 +130,9 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     statusText: '',
     sameServerFilterEnabled: false,
     players: [] as PlayerOption[],
+    mapPlayers: [] as MapPlayerListItem[],
     selectedPlayerId: '',
+    playerListVisible: false,
     mark: {
       team: 'neutral',
       color: '#94a3b8',
@@ -144,6 +161,9 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     if (!panel) return;
     panelVisible = Boolean(visible);
     panel.style.display = panelVisible ? 'block' : 'none';
+    if (!panelVisible) {
+      state.playerListVisible = false;
+    }
   }
 
   function updatePanelPositionNearFab() {
@@ -220,6 +240,8 @@ export function createSettingsUi(deps: SettingsUiDeps) {
         onSave: deps.onSave,
         onSaveAdvanced: deps.onSaveAdvanced,
         onSaveDisplay: deps.onSaveDisplay,
+        onExportConfig: deps.onExportConfig,
+        onImportConfig: deps.onImportConfig,
         onReset: deps.onReset,
         onRefresh: deps.onRefresh,
         onMarkApply: deps.onMarkApply,
@@ -228,6 +250,8 @@ export function createSettingsUi(deps: SettingsUiDeps) {
         onServerFilterToggle: deps.onServerFilterToggle,
         onTeamChanged: deps.onTeamChanged,
         onPlayerSelectionChanged: deps.onPlayerSelectionChanged,
+        onTogglePlayerList: deps.onTogglePlayerList,
+        onFocusMapPlayer: deps.onFocusMapPlayer,
       },
       getPlayerOptionColor: deps.getPlayerOptionColor,
     });
@@ -469,6 +493,25 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     return String(state.selectedPlayerId || '').trim();
   }
 
+  function refreshMapPlayerList(players: MapPlayerListItem[]) {
+    state.mapPlayers = Array.isArray(players) ? players : [];
+    if (state.playerListVisible && state.mapPlayers.length <= 0) {
+      state.playerListVisible = false;
+      deps.onTogglePlayerList(false);
+    }
+  }
+
+  function setPlayerListVisible(visible: boolean) {
+    const nextVisible = Boolean(visible);
+    if (nextVisible && state.mapPlayers.length <= 0) {
+      state.playerListVisible = false;
+      deps.onTogglePlayerList(false);
+      return;
+    }
+    state.playerListVisible = nextVisible;
+    deps.onTogglePlayerList(nextVisible);
+  }
+
   function getMarkForm() {
     return {
       playerId: getSelectedPlayerId(),
@@ -519,10 +562,12 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     fillFormFromConfig,
     readFormCandidate,
     refreshPlayerSelector,
+    refreshMapPlayerList,
     getSelectedPlayerId,
     getMarkForm,
     setMarkColor,
     setServerFilterEnabled,
+    setPlayerListVisible,
     setPanelVisible,
     cleanup,
   };

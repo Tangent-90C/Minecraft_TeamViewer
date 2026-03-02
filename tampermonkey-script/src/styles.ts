@@ -120,8 +120,52 @@ export const UI_STYLE_TEXT = `
     border: 1px solid var(--nmc-border-soft);
     background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
   }
+  #nodemc-overlay-panel .n-card {
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--nmc-border-soft);
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+    align-items: start;
+  }
   #nodemc-overlay-panel .n-row {
-    margin-bottom: 9px;
+    margin: 0;
+  }
+
+  /* allow explicit full-width rows (e.g. Admin WS URL) */
+  #nodemc-overlay-panel .n-row.full-width {
+    grid-column: 1 / -1;
+  }
+  /* subtitles should span full width */
+  #nodemc-overlay-panel .n-subtitle {
+    grid-column: 1 / -1;
+    margin-top: 0;
+    margin-bottom: 6px;
+  }
+  /* make nav, button groups and popups occupy full row so inputs pair only with inputs */
+  #nodemc-overlay-panel .n-card .n-btns,
+  #nodemc-overlay-panel .n-card .n-nav-row,
+  #nodemc-overlay-panel .n-card .n-player-list-popup {
+    grid-column: 1 / -1;
+  }
+  /* allow checks to be full width when needed via .full-width */
+  #nodemc-overlay-panel .n-card .n-check.full-width {
+    grid-column: 1 / -1;
+  }
+  /* ensure .n-row keeps label above control */
+  #nodemc-overlay-panel .n-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  /* compact spacing for small inputs when side-by-side */
+  #nodemc-overlay-panel .n-row input[type="number"],
+  #nodemc-overlay-panel .n-row input[type="text"],
+  #nodemc-overlay-panel .n-row select {
+    padding: 6px 8px;
   }
   #nodemc-overlay-panel label {
     display: block;
@@ -216,6 +260,82 @@ export const UI_STYLE_TEXT = `
     margin-bottom: 10px;
     gap: 8px;
     padding: 2px 2px 0;
+  }
+  #nodemc-overlay-panel .n-player-list-popup {
+    margin-top: 10px;
+    border: 1px solid var(--nmc-border-soft);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    overflow: hidden;
+  }
+  #nodemc-overlay-panel .n-player-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--nmc-border-soft);
+    background: rgba(191, 219, 254, 0.55);
+  }
+  #nodemc-overlay-panel .n-player-list-title {
+    font-weight: 700;
+    color: #1e3a8a;
+  }
+  #nodemc-overlay-panel .n-player-list-close {
+    border: 1px solid rgba(59, 130, 246, 0.46);
+    background: rgba(239, 246, 255, 0.96);
+    color: #1e40af;
+    box-shadow: none;
+    padding: 4px 9px;
+  }
+  #nodemc-overlay-panel .n-player-list-table-wrap {
+    max-height: 260px;
+    overflow: auto;
+  }
+  #nodemc-overlay-panel .n-player-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  #nodemc-overlay-panel .n-player-list-table th,
+  #nodemc-overlay-panel .n-player-list-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    text-align: left;
+    color: var(--nmc-text-main);
+    white-space: nowrap;
+  }
+  #nodemc-overlay-panel .n-player-list-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(219, 234, 254, 0.95);
+    color: #1e3a8a;
+    font-weight: 700;
+  }
+  #nodemc-overlay-panel .n-player-list-row {
+    cursor: pointer;
+    transition: background-color .15s ease;
+  }
+  #nodemc-overlay-panel .n-player-list-row:hover {
+    background: rgba(191, 219, 254, 0.45);
+  }
+  #nodemc-overlay-panel .n-player-list-empty {
+    text-align: center;
+    color: var(--nmc-text-muted);
+  }
+  #nodemc-overlay-panel .n-team-chip,
+  #nodemc-overlay-panel .n-town-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 120px;
+    padding: 2px 7px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   #nodemc-overlay-status {
     margin-top: 10px;

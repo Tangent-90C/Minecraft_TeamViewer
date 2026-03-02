@@ -706,6 +706,27 @@ export function createMapProjection(deps: MapProjectionDeps) {
     applySnapshotPlayers(map, snapshot);
   }
 
+  function focusOnWorldPosition(x: number, z: number) {
+    const map = capturedMap || findMapByDom();
+    if (!map || !leafletRef || !map._loaded) return false;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+
+    const target = worldToLatLng(map, x, z);
+    try {
+      if (typeof map.panTo === 'function') {
+        map.panTo(target, { animate: true, duration: 0.35 });
+      } else if (typeof map.setView === 'function') {
+        const zoom = typeof map.getZoom === 'function' ? map.getZoom() : undefined;
+        map.setView(target, zoom, { animate: true, duration: 0.35 });
+      } else {
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function getCounts() {
     return {
       markers: markersById.size,
@@ -736,6 +757,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     installLeafletHook,
     findMapByDom,
     applyLatestSnapshotIfPossible,
+    focusOnWorldPosition,
     getCounts,
     cleanup,
   };
