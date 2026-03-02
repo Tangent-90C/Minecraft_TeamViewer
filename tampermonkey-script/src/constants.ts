@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG = {
   TARGET_DIMENSION: 'minecraft:overworld',
   SHOW_PLAYER_ICON: true,
   SHOW_PLAYER_TEXT: true,
+  SHOW_HORSE_TEXT: true,
   SHOW_HORSE_ENTITIES: true,
   SHOW_LABEL_TEAM_INFO: true,
   SHOW_LABEL_TOWN_INFO: true,
