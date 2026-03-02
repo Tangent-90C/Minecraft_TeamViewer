@@ -1,14 +1,25 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.render.*;
+import net.minecraft.client.gl.Defines;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 统一的3D渲染模块 - 独立的ESP和追踪渲染工具
@@ -27,6 +38,32 @@ public class UnifiedRenderModule {
 	// 线条宽度常量
 	private static final float DEFAULT_LINE_WIDTH = 2.5F;
 	private static final float TRACER_LINE_WIDTH = 1.0F;
+	private static final Map<Double, RenderLayer> NO_DEPTH_DEBUG_LINE_LAYER_CACHE = new ConcurrentHashMap<>();
+
+	private static final Method RENDER_LAYER_FACTORY_METHOD;
+	private static final Field MULTI_PHASE_PIPELINE_FIELD;
+	private static final Field MULTI_PHASE_PHASES_FIELD;
+
+	static {
+		Method layerFactory = null;
+		Field pipelineField = null;
+		Field phasesField = null;
+		try {
+			Class<?> multiPhaseClass = Class.forName("net.minecraft.client.render.RenderLayer$MultiPhase");
+			Class<?> multiPhaseParametersClass = Class.forName("net.minecraft.client.render.RenderLayer$MultiPhaseParameters");
+			layerFactory = RenderLayer.class.getDeclaredMethod("of", String.class, int.class, RenderPipeline.class, multiPhaseParametersClass);
+			layerFactory.setAccessible(true);
+			pipelineField = multiPhaseClass.getDeclaredField("pipeline");
+			pipelineField.setAccessible(true);
+			phasesField = multiPhaseClass.getDeclaredField("phases");
+			phasesField.setAccessible(true);
+		} catch (Exception exception) {
+			LOGGER.warn("Failed to initialize no-depth RenderLayer reflection hooks: {}", exception.getMessage());
+		}
+		RENDER_LAYER_FACTORY_METHOD = layerFactory;
+		MULTI_PHASE_PIPELINE_FIELD = pipelineField;
+		MULTI_PHASE_PHASES_FIELD = phasesField;
+	}
 	
 	/**
 	 * 绘制方框轮廓
@@ -44,7 +81,7 @@ public class UnifiedRenderModule {
 		drawOutlinedBox(matrices, buffer, box, color);
 		
 		// 使用 RenderLayer 绘制缓冲区
-		RenderLayer.getDebugLineStrip(DEFAULT_LINE_WIDTH).draw(buffer.end());
+		getDebugLineStripLayer(DEFAULT_LINE_WIDTH, depthTest).draw(buffer.end());
 	}
 	
 	/**
@@ -128,6 +165,10 @@ public class UnifiedRenderModule {
 	 * @param color    颜色值（ARGB格式）
 	 */
 	public static void drawLine(MatrixStack matrices, Vec3d start, Vec3d end, int color) {
+		drawLine(matrices, start, end, color, true);
+	}
+
+	public static void drawLine(MatrixStack matrices, Vec3d start, Vec3d end, int color, boolean depthTest) {
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
 		
@@ -148,7 +189,7 @@ public class UnifiedRenderModule {
 		buffer.vertex(matrix4f, (float) end.x, (float) end.y, (float) end.z).color(r, g, b, a);
 		
 		// 绘制缓冲区
-		RenderLayer.getDebugLineStrip(TRACER_LINE_WIDTH).draw(buffer.end());
+		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
 	}
 	
 	/**
@@ -161,6 +202,10 @@ public class UnifiedRenderModule {
 	 * @param color      颜色值（ARGB格式）
 	 */
 	public static void drawTracerLine(MatrixStack matrices, Vec3d startPoint, Vec3d endPoint, int color) {
+		drawTracerLine(matrices, startPoint, endPoint, color, true);
+	}
+
+	public static void drawTracerLine(MatrixStack matrices, Vec3d startPoint, Vec3d endPoint, int color, boolean depthTest) {
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
 		
@@ -181,7 +226,100 @@ public class UnifiedRenderModule {
 		buffer.vertex(matrix4f, (float) endPoint.x, (float) endPoint.y, (float) endPoint.z).color(r, g, b, a);
 		
 		// 绘制缓冲区
-		RenderLayer.getDebugLineStrip(TRACER_LINE_WIDTH).draw(buffer.end());
+		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
+	}
+
+	private static RenderLayer getDebugLineStripLayer(double lineWidth, boolean depthTest) {
+		if (depthTest) {
+			return RenderLayer.getDebugLineStrip(lineWidth);
+		}
+		return NO_DEPTH_DEBUG_LINE_LAYER_CACHE.computeIfAbsent(lineWidth, width -> {
+			RenderLayer baseLayer = RenderLayer.getDebugLineStrip(width);
+			return createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_line_strip_" + sanitizeLineWidth(width));
+		});
+	}
+
+	private static RenderLayer createNoDepthLayer(RenderLayer baseLayer, String newLayerName) {
+		if (RENDER_LAYER_FACTORY_METHOD == null || MULTI_PHASE_PIPELINE_FIELD == null || MULTI_PHASE_PHASES_FIELD == null) {
+			return baseLayer;
+		}
+		try {
+			RenderPipeline basePipeline = (RenderPipeline) MULTI_PHASE_PIPELINE_FIELD.get(baseLayer);
+			Object basePhases = MULTI_PHASE_PHASES_FIELD.get(baseLayer);
+			RenderPipeline noDepthPipeline = clonePipelineWithNoDepth(basePipeline, newLayerName);
+			return (RenderLayer) RENDER_LAYER_FACTORY_METHOD.invoke(
+				null,
+				newLayerName,
+				baseLayer.getExpectedBufferSize(),
+				noDepthPipeline,
+				basePhases
+			);
+		} catch (Exception exception) {
+			LOGGER.warn("Failed to create no-depth RenderLayer '{}': {}", newLayerName, exception.getMessage());
+			return baseLayer;
+		}
+	}
+
+	private static RenderPipeline clonePipelineWithNoDepth(RenderPipeline basePipeline, String newPipelineName) {
+		RenderPipeline.Builder builder = RenderPipeline.builder();
+		builder.withLocation(newPipelineName);
+		builder.withVertexShader(basePipeline.getVertexShader());
+		builder.withFragmentShader(basePipeline.getFragmentShader());
+
+		Defines defines = basePipeline.getShaderDefines();
+		if (defines != null && !defines.isEmpty()) {
+			for (String flag : defines.flags()) {
+				builder.withShaderDefine(flag);
+			}
+			for (Map.Entry<String, String> defineEntry : defines.values().entrySet()) {
+				String key = defineEntry.getKey();
+				String value = defineEntry.getValue();
+				if (key == null || key.isBlank() || value == null || value.isBlank()) {
+					continue;
+				}
+				try {
+					builder.withShaderDefine(key, Integer.parseInt(value));
+					continue;
+				} catch (NumberFormatException ignored) {
+				}
+				try {
+					builder.withShaderDefine(key, Float.parseFloat(value));
+				} catch (NumberFormatException ignored) {
+					LOGGER.debug("Skip non-numeric shader define {}={} for no-depth pipeline clone", key, value);
+				}
+			}
+		}
+
+		for (String sampler : basePipeline.getSamplers()) {
+			builder.withSampler(sampler);
+		}
+		for (RenderPipeline.UniformDescription uniform : basePipeline.getUniforms()) {
+			if (uniform.textureFormat() != null && uniform.type() != null) {
+				builder.withUniform(uniform.name(), uniform.type(), uniform.textureFormat());
+			} else if (uniform.type() != null) {
+				builder.withUniform(uniform.name(), uniform.type());
+			}
+		}
+
+		builder.withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST);
+		builder.withPolygonMode(basePipeline.getPolygonMode());
+		builder.withCull(basePipeline.isCull());
+		Optional<BlendFunction> blendFunction = basePipeline.getBlendFunction();
+		if (blendFunction.isPresent()) {
+			builder.withBlend(blendFunction.get());
+		} else {
+			builder.withoutBlend();
+		}
+		builder.withColorWrite(basePipeline.isWriteColor(), basePipeline.isWriteAlpha());
+		builder.withDepthWrite(basePipeline.isWriteDepth());
+		builder.withColorLogic(basePipeline.getColorLogic());
+		builder.withVertexFormat(basePipeline.getVertexFormat(), basePipeline.getVertexFormatMode());
+		builder.withDepthBias(basePipeline.getDepthBiasScaleFactor(), basePipeline.getDepthBiasConstant());
+		return builder.build();
+	}
+
+	private static String sanitizeLineWidth(double lineWidth) {
+		return String.valueOf(lineWidth).replace('.', '_').replace('-', '_');
 	}
 	
 	/**

@@ -43,6 +43,8 @@
   "screen.multipleplayeresp.config.show_shared_waypoints.tooltip": "控制是否显示其他玩家共享过来的路标（含小地图）。",
   "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap": "在小地图显示自己的共享报点",
   "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap.tooltip": "开启后，你自己上报的共享报点（如快捷标点）也会显示在自己的小地图上。",
+  "screen.multipleplayeresp.config.xray_markers_and_boxes": "报点/方框穿墙可见",
+  "screen.multipleplayeresp.config.xray_markers_and_boxes.tooltip": "开启后，报点标记与玩家方框会忽略深度遮挡，可隔墙查看。",
   "screen.multipleplayeresp.config.use_system_proxy": "使用系统代理",
   "screen.multipleplayeresp.config.tracer_start_mode": "追踪线起点",
   "screen.multipleplayeresp.config.tracer_start_mode.tooltip": "切换追踪线从准心发出或从屏幕上方发出。",

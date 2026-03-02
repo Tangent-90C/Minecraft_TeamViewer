@@ -40,6 +40,7 @@ public class Config {
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
     private boolean showOwnSharedWaypointsOnMinimap = true; // 是否在小地图显示自己的共享报点
+    private boolean xrayMarkersAndBoxes = false; // 是否让报点标记与方框可穿墙显示
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
     private boolean enableMiddleClickCancelWaypoint = true; // 是否启用中键单击取消报点
     private boolean autoCancelWaypointOnEntityDeath = true; // 标记实体死亡后自动取消报点
@@ -282,6 +283,14 @@ public class Config {
 
     public void setShowOwnSharedWaypointsOnMinimap(boolean showOwnSharedWaypointsOnMinimap) {
         this.showOwnSharedWaypointsOnMinimap = showOwnSharedWaypointsOnMinimap;
+    }
+
+    public boolean isXrayMarkersAndBoxes() {
+        return xrayMarkersAndBoxes;
+    }
+
+    public void setXrayMarkersAndBoxes(boolean xrayMarkersAndBoxes) {
+        this.xrayMarkersAndBoxes = xrayMarkersAndBoxes;
     }
 
     public boolean isEnableMiddleDoubleClickMark() {
