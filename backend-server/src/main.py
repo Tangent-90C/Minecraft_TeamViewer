@@ -255,7 +255,7 @@ async def admin_ws(websocket: WebSocket):
                     "name": label,
                     "symbol": "T",
                     "color": normalize_waypoint_color_to_int(message.get("color"), 0xEF4444),
-                    "ownerId": "admin",
+                       "ownerId": None,
                     "ownerName": "Admin Tactical",
                     "createdAt": int(time.time() * 1000),
                     "ttlSeconds": ttl_seconds,

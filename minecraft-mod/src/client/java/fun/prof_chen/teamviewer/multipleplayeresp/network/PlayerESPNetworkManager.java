@@ -2136,10 +2136,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 					continue;
 				}
 
-				UUID ownerId = null;
-				if (data.has("ownerId") && !data.get("ownerId").isJsonNull()) {
-					ownerId = UUID.fromString(data.get("ownerId").getAsString());
-				}
+				UUID ownerId = parseOptionalUuid(data, "ownerId");
 
 				String name = data.has("name") ? data.get("name").getAsString() : "Waypoint";
 				String symbol = data.has("symbol") ? data.get("symbol").getAsString() : "W";
@@ -2187,6 +2184,24 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 
 		return result;
+	}
+
+	private UUID parseOptionalUuid(JsonObject json, String fieldName) {
+		if (json == null || fieldName == null || fieldName.isBlank()) {
+			return null;
+		}
+		if (!json.has(fieldName) || json.get(fieldName).isJsonNull()) {
+			return null;
+		}
+		try {
+			String raw = json.get(fieldName).getAsString();
+			if (raw == null || raw.isBlank()) {
+				return null;
+			}
+			return UUID.fromString(raw.trim());
+		} catch (Exception ignored) {
+			return null;
+		}
 	}
 
 	private List<String> parseWaypointDeleteIds(JsonObject json) {
