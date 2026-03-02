@@ -50,7 +50,7 @@ jobs:
         - language: javascript-typescript
           build-mode: none
         - language: python
-          build-mode: manual
+          build-mode: none
         # CodeQL supports the following values keywords for 'language': 'actions', 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'rust', 'swift'
         # Use `c-cpp` to analyze code written in C, C++ or both
         # Use 'java-kotlin' to analyze code written in Java, Kotlin or both
@@ -90,6 +90,18 @@ jobs:
     # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
 
 
+
+
+    # 2. 设置Java环境（关键：匹配你的MC版本要求）
+    - name: Set up JDK
+      if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'gradle' # 自动缓存Gradle依赖
+        cache-dependency-path: 'minecraft-mod/build.gradle' # 指定Mod的Gradle文件
+
     - name: Build Java/Kotlin manually
       if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
       working-directory: ./minecraft-mod
@@ -101,19 +113,19 @@ jobs:
 
     # 设置 Python 环境
     - name: Set up Python
-      if: matrix.build-mode == 'manual' && matrix.language == 'python'
+      if: matrix.language == 'python'
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
     
     # 安装 uv 包管理器
     - name: Install uv
-      if: matrix.build-mode == 'manual' && matrix.language == 'python'
+      if: matrix.language == 'python'
       uses: astral-sh/setup-uv@v7
     
     # 导出并安装依赖
     - name: Export and install Python dependencies
-      if: matrix.build-mode == 'manual' && matrix.language == 'python'
+      if: matrix.language == 'python'
       working-directory: ./backend-server
       run: |
         uv pip compile pyproject.toml -o requirements.txt
