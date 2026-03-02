@@ -507,7 +507,6 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     state.mapPlayers = Array.isArray(players) ? players : [];
     if (state.playerListVisible && state.mapPlayers.length <= 0) {
       state.playerListVisible = false;
-      deps.onTogglePlayerList(false);
     }
   }
 
@@ -515,11 +514,9 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     const nextVisible = Boolean(visible);
     if (nextVisible && state.mapPlayers.length <= 0) {
       state.playerListVisible = false;
-      deps.onTogglePlayerList(false);
       return;
     }
     state.playerListVisible = nextVisible;
-    deps.onTogglePlayerList(nextVisible);
   }
 
   function getMarkForm() {

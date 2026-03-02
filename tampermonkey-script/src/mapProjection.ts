@@ -381,10 +381,17 @@ export function createMapProjection(deps: MapProjectionDeps) {
     return `<div class="nodemc-player-anchor">${iconHtml}${textHtml}</div>`;
   }
 
+  function getMarkerZIndexOffset(markerKind: string) {
+    if (markerKind === 'horse') return -1000;
+    return 1000;
+  }
+
   function upsertMarker(map: any, playerId: string, payload: any) {
     const existing = markersById.get(playerId);
     const latLng = worldToLatLng(map, payload.x, payload.z);
-    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, payload.kind || 'player', Boolean(payload.isReporter));
+    const markerKind = payload.kind || 'player';
+    const zIndexOffset = getMarkerZIndexOffset(markerKind);
+    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, markerKind, Boolean(payload.isReporter));
 
     if (!html) {
       if (existing) {
@@ -397,6 +404,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     if (existing) {
       try {
         existing.setLatLng(latLng);
+        if (typeof existing.setZIndexOffset === 'function') {
+          existing.setZIndexOffset(zIndexOffset);
+        }
         existing.setIcon(
           leafletRef.divIcon({
             className: '',
@@ -419,6 +429,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
         iconSize: [0, 0],
         iconAnchor: [0, 0],
       }),
+      zIndexOffset,
       interactive: false,
       keyboard: false,
     });
