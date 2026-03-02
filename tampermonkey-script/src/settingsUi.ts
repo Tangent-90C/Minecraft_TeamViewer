@@ -1,6 +1,15 @@
+import { App, createApp, reactive } from 'vue';
+import OverlaySettingsPanel from './ui/OverlaySettingsPanel.vue';
+
+type PlayerOption = {
+  playerId: string;
+  playerName: string;
+  displayLabel: string;
+  teamColor: string | null;
+};
+
 type SettingsUiDeps = {
   page: Window;
-  panelHtml: string;
   uiStyleText: string;
   onSave: () => void;
   onSaveAdvanced: () => void;
@@ -13,8 +22,66 @@ type SettingsUiDeps = {
   onServerFilterToggle: (enabled: boolean) => void;
   onTeamChanged: (team: string) => void;
   onPlayerSelectionChanged: () => void;
-  getPlayerOptionColor?: (item: { playerId: string; playerName: string; displayLabel: string; teamColor: string | null }) => string | null;
+  getPlayerOptionColor?: (item: PlayerOption) => string | null;
 };
+
+type UiPage = 'main' | 'advanced' | 'display' | 'mark' | 'connection';
+
+type OverlayFormState = {
+  ADMIN_WS_URL: string;
+  ROOM_CODE: string;
+  RECONNECT_INTERVAL_MS: string;
+  TARGET_DIMENSION: string;
+  SHOW_PLAYER_ICON: boolean;
+  SHOW_PLAYER_TEXT: boolean;
+  SHOW_HORSE_TEXT: boolean;
+  SHOW_HORSE_ENTITIES: boolean;
+  SHOW_LABEL_TEAM_INFO: boolean;
+  SHOW_LABEL_TOWN_INFO: boolean;
+  PLAYER_ICON_SIZE: string;
+  PLAYER_TEXT_SIZE: string;
+  HORSE_ICON_SIZE: string;
+  HORSE_TEXT_SIZE: string;
+  SHOW_COORDS: boolean;
+  AUTO_TEAM_FROM_NAME: boolean;
+  FRIENDLY_TAGS: string;
+  ENEMY_TAGS: string;
+  TEAM_COLOR_FRIENDLY: string;
+  TEAM_COLOR_NEUTRAL: string;
+  TEAM_COLOR_ENEMY: string;
+  SHOW_WAYPOINT_ICON: boolean;
+  SHOW_WAYPOINT_TEXT: boolean;
+  DEBUG: boolean;
+};
+
+function createDefaultFormState(): OverlayFormState {
+  return {
+    ADMIN_WS_URL: '',
+    ROOM_CODE: '',
+    RECONNECT_INTERVAL_MS: '1000',
+    TARGET_DIMENSION: 'minecraft:overworld',
+    SHOW_PLAYER_ICON: true,
+    SHOW_PLAYER_TEXT: true,
+    SHOW_HORSE_TEXT: true,
+    SHOW_HORSE_ENTITIES: true,
+    SHOW_LABEL_TEAM_INFO: true,
+    SHOW_LABEL_TOWN_INFO: true,
+    PLAYER_ICON_SIZE: '10',
+    PLAYER_TEXT_SIZE: '12',
+    HORSE_ICON_SIZE: '14',
+    HORSE_TEXT_SIZE: '12',
+    SHOW_COORDS: false,
+    AUTO_TEAM_FROM_NAME: true,
+    FRIENDLY_TAGS: '',
+    ENEMY_TAGS: '',
+    TEAM_COLOR_FRIENDLY: '#3b82f6',
+    TEAM_COLOR_NEUTRAL: '#94a3b8',
+    TEAM_COLOR_ENEMY: '#ef4444',
+    SHOW_WAYPOINT_ICON: true,
+    SHOW_WAYPOINT_TEXT: true,
+    DEBUG: false,
+  };
+}
 
 export function createSettingsUi(deps: SettingsUiDeps) {
   const PAGE = deps.page;
@@ -22,7 +89,22 @@ export function createSettingsUi(deps: SettingsUiDeps) {
 
   let uiMounted = false;
   let panelVisible = false;
-  let panelPage = 'main';
+
+  let vueApp: App<Element> | null = null;
+
+  const state = reactive({
+    page: 'main' as UiPage,
+    statusText: '',
+    sameServerFilterEnabled: false,
+    players: [] as PlayerOption[],
+    selectedPlayerId: '',
+    mark: {
+      team: 'neutral',
+      color: '#94a3b8',
+      label: '',
+    },
+    form: createDefaultFormState(),
+  });
 
   function getRootHost() {
     return document.getElementById(ROOT_HOST_ID);
@@ -35,10 +117,8 @@ export function createSettingsUi(deps: SettingsUiDeps) {
 
   function byId<T extends HTMLElement = HTMLElement>(id: string) {
     const root = getShadowRoot();
-    if (root) {
-      return root.getElementById(id) as T | null;
-    }
-    return document.getElementById(id) as T | null;
+    if (!root) return null;
+    return root.getElementById(id) as T | null;
   }
 
   function setPanelVisible(visible: boolean) {
@@ -46,20 +126,6 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     if (!panel) return;
     panelVisible = Boolean(visible);
     panel.style.display = panelVisible ? 'block' : 'none';
-  }
-
-  function setPanelPage(nextPage: string) {
-    panelPage = nextPage === 'advanced' || nextPage === 'display' || nextPage === 'mark' || nextPage === 'connection' ? nextPage : 'main';
-    const mainPage = byId('nodemc-overlay-page-main');
-    const advancedPage = byId('nodemc-overlay-page-advanced');
-    const displayPage = byId('nodemc-overlay-page-display');
-    const markPage = byId('nodemc-overlay-page-mark');
-    const connectionPage = byId('nodemc-overlay-page-connection');
-    if (mainPage) mainPage.classList.toggle('active', panelPage === 'main');
-    if (advancedPage) advancedPage.classList.toggle('active', panelPage === 'advanced');
-    if (displayPage) displayPage.classList.toggle('active', panelPage === 'display');
-    if (markPage) markPage.classList.toggle('active', panelPage === 'mark');
-    if (connectionPage) connectionPage.classList.toggle('active', panelPage === 'connection');
   }
 
   function updatePanelPositionNearFab() {
@@ -123,6 +189,33 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     return clamped;
   }
 
+  function mountVueUi(shadowRoot: ShadowRoot) {
+    const mountPoint = document.createElement('div');
+    mountPoint.id = 'nodemc-overlay-vue-root';
+    const panel = byId('nodemc-overlay-panel');
+    if (!panel) return;
+
+    panel.appendChild(mountPoint);
+    vueApp = createApp(OverlaySettingsPanel, {
+      state,
+      actions: {
+        onSave: deps.onSave,
+        onSaveAdvanced: deps.onSaveAdvanced,
+        onSaveDisplay: deps.onSaveDisplay,
+        onReset: deps.onReset,
+        onRefresh: deps.onRefresh,
+        onMarkApply: deps.onMarkApply,
+        onMarkClear: deps.onMarkClear,
+        onMarkClearAll: deps.onMarkClearAll,
+        onServerFilterToggle: deps.onServerFilterToggle,
+        onTeamChanged: deps.onTeamChanged,
+        onPlayerSelectionChanged: deps.onPlayerSelectionChanged,
+      },
+      getPlayerOptionColor: deps.getPlayerOptionColor,
+    });
+    vueApp.mount(mountPoint);
+  }
+
   function injectSettingsUi() {
     if (uiMounted || !document.body) return;
     uiMounted = true;
@@ -148,19 +241,24 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     const panel = document.createElement('div');
     panel.id = 'nodemc-overlay-panel';
 
-    const parsedPanel = new DOMParser().parseFromString(deps.panelHtml, 'text/html');
-    const panelNodes = Array.from(parsedPanel.body.childNodes);
-    for (const node of panelNodes) {
-      panel.appendChild(node.cloneNode(true));
-    }
-
     shadowRoot.appendChild(fab);
     shadowRoot.appendChild(panel);
+
+    mountVueUi(shadowRoot);
 
     const initialRect = fab.getBoundingClientRect();
     setFabPosition(initialRect.left, initialRect.top);
 
-    let dragState: any = null;
+    let dragState: {
+      pointerId: number;
+      kind: 'fab' | 'panel';
+      startX: number;
+      startY: number;
+      fabLeft: number;
+      fabTop: number;
+      panelLeft: number;
+      panelTop: number;
+    } | null = null;
     let dragMoved = false;
 
     const beginDrag = (event: PointerEvent, kind: 'fab' | 'panel') => {
@@ -190,12 +288,10 @@ export function createSettingsUi(deps: SettingsUiDeps) {
         return;
       }
 
-      if (dragState.kind === 'panel') {
-        const appliedFab = setFabPosition(dragState.fabLeft + dx, dragState.fabTop + dy, false);
-        const appliedDx = appliedFab.left - dragState.fabLeft;
-        const appliedDy = appliedFab.top - dragState.fabTop;
-        setPanelPosition(dragState.panelLeft + appliedDx, dragState.panelTop + appliedDy);
-      }
+      const appliedFab = setFabPosition(dragState.fabLeft + dx, dragState.fabTop + dy, false);
+      const appliedDx = appliedFab.left - dragState.fabLeft;
+      const appliedDy = appliedFab.top - dragState.fabTop;
+      setPanelPosition(dragState.panelLeft + appliedDx, dragState.panelTop + appliedDy);
     };
 
     const endDrag = (event: PointerEvent, sourceElement: HTMLElement) => {
@@ -217,21 +313,27 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     });
     fab.addEventListener('pointermove', moveDrag);
 
-    const titleBar = byId('nodemc-overlay-title');
-    titleBar?.addEventListener('pointerdown', (event) => {
-      beginDrag(event, 'panel');
-      try {
-        titleBar.setPointerCapture(event.pointerId);
-      } catch (_) {}
-    });
-    titleBar?.addEventListener('pointermove', moveDrag);
+    const bindTitleDrag = () => {
+      const titleBar = byId('nodemc-overlay-title');
+      if (!titleBar) {
+        PAGE.requestAnimationFrame(bindTitleDrag);
+        return;
+      }
+      titleBar.addEventListener('pointerdown', (event) => {
+        beginDrag(event, 'panel');
+        try {
+          titleBar.setPointerCapture(event.pointerId);
+        } catch (_) {}
+      });
+      titleBar.addEventListener('pointermove', moveDrag);
+      titleBar.addEventListener('pointerup', (event) => endDrag(event, titleBar));
+      titleBar.addEventListener('pointercancel', (event) => endDrag(event, titleBar));
+    };
+
+    bindTitleDrag();
 
     fab.addEventListener('pointerup', (event) => endDrag(event, fab));
     fab.addEventListener('pointercancel', (event) => endDrag(event, fab));
-    titleBar?.addEventListener('pointerup', (event) => endDrag(event, titleBar));
-    titleBar?.addEventListener('pointercancel', (event) => endDrag(event, titleBar));
-
-    setPanelPage('main');
 
     fab.addEventListener('click', () => {
       if (dragMoved) return;
@@ -239,38 +341,7 @@ export function createSettingsUi(deps: SettingsUiDeps) {
       if (panelVisible) updatePanelPositionNearFab();
     });
 
-    byId('nodemc-overlay-open-advanced')?.addEventListener('click', () => setPanelPage('advanced'));
-    byId('nodemc-overlay-open-display')?.addEventListener('click', () => setPanelPage('display'));
-    byId('nodemc-overlay-open-mark')?.addEventListener('click', () => setPanelPage('mark'));
-    byId('nodemc-overlay-open-connection')?.addEventListener('click', () => setPanelPage('connection'));
-    byId('nodemc-overlay-back-main')?.addEventListener('click', () => setPanelPage('main'));
-    byId('nodemc-overlay-back-main-from-display')?.addEventListener('click', () => setPanelPage('main'));
-    byId('nodemc-overlay-back-main-from-mark')?.addEventListener('click', () => setPanelPage('main'));
-    byId('nodemc-overlay-back-main-from-connection')?.addEventListener('click', () => setPanelPage('main'));
-
-    byId('nodemc-overlay-save')?.addEventListener('click', deps.onSave);
-    byId('nodemc-overlay-save-advanced')?.addEventListener('click', deps.onSaveAdvanced);
-    byId('nodemc-overlay-save-connection')?.addEventListener('click', deps.onSaveAdvanced);
-    byId('nodemc-overlay-save-display')?.addEventListener('click', deps.onSaveDisplay);
-    byId('nodemc-overlay-reset')?.addEventListener('click', deps.onReset);
-    byId('nodemc-overlay-refresh')?.addEventListener('click', deps.onRefresh);
-
-    const teamInput = byId<HTMLInputElement>('nodemc-mark-team');
-    teamInput?.addEventListener('change', () => {
-      deps.onTeamChanged(String(teamInput.value || 'neutral'));
-    });
-
-    const selectInput = byId<HTMLSelectElement>('nodemc-mark-player-select');
-    selectInput?.addEventListener('change', deps.onPlayerSelectionChanged);
-
-    const serverFilterInput = byId<HTMLInputElement>('nodemc-overlay-server-filter');
-    serverFilterInput?.addEventListener('change', () => {
-      deps.onServerFilterToggle(Boolean(serverFilterInput.checked));
-    });
-
-    byId('nodemc-mark-apply')?.addEventListener('click', deps.onMarkApply);
-    byId('nodemc-mark-clear')?.addEventListener('click', deps.onMarkClear);
-    byId('nodemc-mark-clear-all')?.addEventListener('click', deps.onMarkClearAll);
+    state.page = 'main';
   }
 
   function mountWhenReady() {
@@ -287,153 +358,121 @@ export function createSettingsUi(deps: SettingsUiDeps) {
   }
 
   function updateStatus(text: string) {
-    const status = byId('nodemc-overlay-status');
-    if (status) status.textContent = text;
+    state.statusText = text;
   }
 
   function fillFormFromConfig(config: Record<string, any>, getConfiguredTeamColor: (team: string) => string) {
-    const setValue = (id: string, value: string) => {
-      const input = byId<HTMLInputElement>(id);
-      if (input) input.value = value;
-    };
-    const setChecked = (id: string, value: boolean) => {
-      const input = byId<HTMLInputElement>(id);
-      if (input) input.checked = value;
-    };
+    state.form.ADMIN_WS_URL = String(config.ADMIN_WS_URL ?? '');
+    state.form.ROOM_CODE = String(config.ROOM_CODE ?? '');
+    state.form.RECONNECT_INTERVAL_MS = String(config.RECONNECT_INTERVAL_MS ?? '1000');
+    state.form.TARGET_DIMENSION = String(config.TARGET_DIMENSION ?? 'minecraft:overworld');
+    state.form.SHOW_PLAYER_ICON = Boolean(config.SHOW_PLAYER_ICON);
+    state.form.SHOW_PLAYER_TEXT = Boolean(config.SHOW_PLAYER_TEXT);
+    state.form.SHOW_HORSE_TEXT = Boolean(config.SHOW_HORSE_TEXT);
+    state.form.SHOW_HORSE_ENTITIES = Boolean(config.SHOW_HORSE_ENTITIES);
+    state.form.SHOW_LABEL_TEAM_INFO = Boolean(config.SHOW_LABEL_TEAM_INFO);
+    state.form.SHOW_LABEL_TOWN_INFO = Boolean(config.SHOW_LABEL_TOWN_INFO);
+    state.form.PLAYER_ICON_SIZE = String(config.PLAYER_ICON_SIZE ?? 10);
+    state.form.PLAYER_TEXT_SIZE = String(config.PLAYER_TEXT_SIZE ?? 12);
+    state.form.HORSE_ICON_SIZE = String(config.HORSE_ICON_SIZE ?? 14);
+    state.form.HORSE_TEXT_SIZE = String(config.HORSE_TEXT_SIZE ?? 12);
+    state.form.SHOW_COORDS = Boolean(config.SHOW_COORDS);
+    state.form.AUTO_TEAM_FROM_NAME = Boolean(config.AUTO_TEAM_FROM_NAME);
+    state.form.SHOW_WAYPOINT_ICON = Boolean(config.SHOW_WAYPOINT_ICON);
+    state.form.SHOW_WAYPOINT_TEXT = Boolean(config.SHOW_WAYPOINT_TEXT);
+    state.form.FRIENDLY_TAGS = String(config.FRIENDLY_TAGS ?? '');
+    state.form.ENEMY_TAGS = String(config.ENEMY_TAGS ?? '');
+    state.form.TEAM_COLOR_FRIENDLY = String(getConfiguredTeamColor('friendly'));
+    state.form.TEAM_COLOR_NEUTRAL = String(getConfiguredTeamColor('neutral'));
+    state.form.TEAM_COLOR_ENEMY = String(getConfiguredTeamColor('enemy'));
+    state.form.DEBUG = Boolean(config.DEBUG);
 
-    setValue('nodemc-overlay-url', config.ADMIN_WS_URL);
-    setValue('nodemc-overlay-room-code', config.ROOM_CODE);
-    setValue('nodemc-overlay-reconnect', String(config.RECONNECT_INTERVAL_MS));
-    setValue('nodemc-overlay-dim', config.TARGET_DIMENSION);
-    setChecked('nodemc-overlay-show-icon', config.SHOW_PLAYER_ICON);
-    setChecked('nodemc-overlay-show-text', config.SHOW_PLAYER_TEXT);
-    setChecked('nodemc-overlay-show-horse-text', config.SHOW_HORSE_TEXT);
-    setChecked('nodemc-overlay-show-horse-entities', config.SHOW_HORSE_ENTITIES);
-    setChecked('nodemc-overlay-show-team-info', config.SHOW_LABEL_TEAM_INFO);
-    setChecked('nodemc-overlay-show-town-info', config.SHOW_LABEL_TOWN_INFO);
-    setValue('nodemc-overlay-player-icon-size', String(config.PLAYER_ICON_SIZE));
-    setValue('nodemc-overlay-player-text-size', String(config.PLAYER_TEXT_SIZE));
-    setValue('nodemc-overlay-horse-icon-size', String(config.HORSE_ICON_SIZE));
-    setValue('nodemc-overlay-horse-text-size', String(config.HORSE_TEXT_SIZE));
-    setChecked('nodemc-overlay-coords', config.SHOW_COORDS);
-    setChecked('nodemc-overlay-auto-team', config.AUTO_TEAM_FROM_NAME);
-    setChecked('nodemc-overlay-show-waypoint-icon', config.SHOW_WAYPOINT_ICON);
-    setChecked('nodemc-overlay-show-waypoint-text', config.SHOW_WAYPOINT_TEXT);
-    setValue('nodemc-overlay-friendly-tags', config.FRIENDLY_TAGS);
-    setValue('nodemc-overlay-enemy-tags', config.ENEMY_TAGS);
-    setValue('nodemc-overlay-team-friendly-color', getConfiguredTeamColor('friendly'));
-    setValue('nodemc-overlay-team-neutral-color', getConfiguredTeamColor('neutral'));
-    setValue('nodemc-overlay-team-enemy-color', getConfiguredTeamColor('enemy'));
-    setChecked('nodemc-overlay-debug', config.DEBUG);
-
-    const markTeamInput = byId<HTMLSelectElement>('nodemc-mark-team');
-    const markColorInput = byId<HTMLInputElement>('nodemc-mark-color');
-    if (markTeamInput && markColorInput) {
-      markColorInput.value = getConfiguredTeamColor(String(markTeamInput.value || 'neutral'));
-    }
+    state.mark.color = getConfiguredTeamColor(String(state.mark.team || 'neutral'));
   }
 
   function readFormCandidate(config: Record<string, any>) {
-    const value = (id: string, fallback: any) => {
-      const input = byId<HTMLInputElement>(id);
-      return input ? input.value : fallback;
-    };
-    const checked = (id: string, fallback: any) => {
-      const input = byId<HTMLInputElement>(id);
-      return input ? input.checked : fallback;
-    };
-
     return {
-      ADMIN_WS_URL: value('nodemc-overlay-url', config.ADMIN_WS_URL),
-      ROOM_CODE: value('nodemc-overlay-room-code', config.ROOM_CODE),
-      RECONNECT_INTERVAL_MS: value('nodemc-overlay-reconnect', config.RECONNECT_INTERVAL_MS),
-      TARGET_DIMENSION: value('nodemc-overlay-dim', config.TARGET_DIMENSION),
-      SHOW_PLAYER_ICON: checked('nodemc-overlay-show-icon', config.SHOW_PLAYER_ICON),
-      SHOW_PLAYER_TEXT: checked('nodemc-overlay-show-text', config.SHOW_PLAYER_TEXT),
-      SHOW_HORSE_TEXT: checked('nodemc-overlay-show-horse-text', config.SHOW_HORSE_TEXT),
-      SHOW_HORSE_ENTITIES: checked('nodemc-overlay-show-horse-entities', config.SHOW_HORSE_ENTITIES),
-      SHOW_LABEL_TEAM_INFO: checked('nodemc-overlay-show-team-info', config.SHOW_LABEL_TEAM_INFO),
-      SHOW_LABEL_TOWN_INFO: checked('nodemc-overlay-show-town-info', config.SHOW_LABEL_TOWN_INFO),
-      PLAYER_ICON_SIZE: value('nodemc-overlay-player-icon-size', config.PLAYER_ICON_SIZE),
-      PLAYER_TEXT_SIZE: value('nodemc-overlay-player-text-size', config.PLAYER_TEXT_SIZE),
-      HORSE_ICON_SIZE: value('nodemc-overlay-horse-icon-size', config.HORSE_ICON_SIZE),
-      HORSE_TEXT_SIZE: value('nodemc-overlay-horse-text-size', config.HORSE_TEXT_SIZE),
-      SHOW_COORDS: checked('nodemc-overlay-coords', config.SHOW_COORDS),
-      AUTO_TEAM_FROM_NAME: checked('nodemc-overlay-auto-team', config.AUTO_TEAM_FROM_NAME),
-      FRIENDLY_TAGS: value('nodemc-overlay-friendly-tags', config.FRIENDLY_TAGS),
-      ENEMY_TAGS: value('nodemc-overlay-enemy-tags', config.ENEMY_TAGS),
-      TEAM_COLOR_FRIENDLY: value('nodemc-overlay-team-friendly-color', config.TEAM_COLOR_FRIENDLY),
-      TEAM_COLOR_NEUTRAL: value('nodemc-overlay-team-neutral-color', config.TEAM_COLOR_NEUTRAL),
-      TEAM_COLOR_ENEMY: value('nodemc-overlay-team-enemy-color', config.TEAM_COLOR_ENEMY),
-      SHOW_WAYPOINT_ICON: checked('nodemc-overlay-show-waypoint-icon', config.SHOW_WAYPOINT_ICON),
-      SHOW_WAYPOINT_TEXT: checked('nodemc-overlay-show-waypoint-text', config.SHOW_WAYPOINT_TEXT),
-      DEBUG: checked('nodemc-overlay-debug', config.DEBUG),
+      ADMIN_WS_URL: state.form.ADMIN_WS_URL || config.ADMIN_WS_URL,
+      ROOM_CODE: state.form.ROOM_CODE || config.ROOM_CODE,
+      RECONNECT_INTERVAL_MS: state.form.RECONNECT_INTERVAL_MS || config.RECONNECT_INTERVAL_MS,
+      TARGET_DIMENSION: state.form.TARGET_DIMENSION || config.TARGET_DIMENSION,
+      SHOW_PLAYER_ICON: state.form.SHOW_PLAYER_ICON,
+      SHOW_PLAYER_TEXT: state.form.SHOW_PLAYER_TEXT,
+      SHOW_HORSE_TEXT: state.form.SHOW_HORSE_TEXT,
+      SHOW_HORSE_ENTITIES: state.form.SHOW_HORSE_ENTITIES,
+      SHOW_LABEL_TEAM_INFO: state.form.SHOW_LABEL_TEAM_INFO,
+      SHOW_LABEL_TOWN_INFO: state.form.SHOW_LABEL_TOWN_INFO,
+      PLAYER_ICON_SIZE: state.form.PLAYER_ICON_SIZE || config.PLAYER_ICON_SIZE,
+      PLAYER_TEXT_SIZE: state.form.PLAYER_TEXT_SIZE || config.PLAYER_TEXT_SIZE,
+      HORSE_ICON_SIZE: state.form.HORSE_ICON_SIZE || config.HORSE_ICON_SIZE,
+      HORSE_TEXT_SIZE: state.form.HORSE_TEXT_SIZE || config.HORSE_TEXT_SIZE,
+      SHOW_COORDS: state.form.SHOW_COORDS,
+      AUTO_TEAM_FROM_NAME: state.form.AUTO_TEAM_FROM_NAME,
+      FRIENDLY_TAGS: state.form.FRIENDLY_TAGS,
+      ENEMY_TAGS: state.form.ENEMY_TAGS,
+      TEAM_COLOR_FRIENDLY: state.form.TEAM_COLOR_FRIENDLY,
+      TEAM_COLOR_NEUTRAL: state.form.TEAM_COLOR_NEUTRAL,
+      TEAM_COLOR_ENEMY: state.form.TEAM_COLOR_ENEMY,
+      SHOW_WAYPOINT_ICON: state.form.SHOW_WAYPOINT_ICON,
+      SHOW_WAYPOINT_TEXT: state.form.SHOW_WAYPOINT_TEXT,
+      DEBUG: state.form.DEBUG,
     };
   }
 
-  function refreshPlayerSelector(players: Array<{ playerId: string; playerName: string; displayLabel: string; teamColor: string | null }>) {
-    const select = byId<HTMLSelectElement>('nodemc-mark-player-select');
-    if (!select) return;
-
-    const previousValue = select.value;
-    while (select.firstChild) {
-      select.removeChild(select.firstChild);
+  function refreshPlayerSelector(players: PlayerOption[]) {
+    const previous = state.selectedPlayerId;
+    state.players = Array.isArray(players) ? players : [];
+    if (previous && state.players.some((item) => item.playerId === previous)) {
+      state.selectedPlayerId = previous;
+      return;
     }
-
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = players.length ? '请选择在线玩家…' : '暂无在线玩家';
-    select.appendChild(placeholder);
-
-    for (const item of players) {
-      const option = document.createElement('option');
-      option.value = item.playerId;
-      option.textContent = item.displayLabel || item.playerName;
-      const color = deps.getPlayerOptionColor ? deps.getPlayerOptionColor(item) : item.teamColor;
-      if (color) option.style.color = color;
-      select.appendChild(option);
-    }
-
-    if (previousValue && players.some((item) => item.playerId === previousValue)) {
-      select.value = previousValue;
-    } else {
-      select.value = '';
-    }
+    state.selectedPlayerId = '';
   }
 
   function getSelectedPlayerId() {
-    const select = byId<HTMLSelectElement>('nodemc-mark-player-select');
-    return select ? String(select.value || '').trim() : '';
+    return String(state.selectedPlayerId || '').trim();
   }
 
   function getMarkForm() {
-    const teamInput = byId<HTMLSelectElement>('nodemc-mark-team');
-    const colorInput = byId<HTMLInputElement>('nodemc-mark-color');
-    const labelInput = byId<HTMLInputElement>('nodemc-mark-label');
-
     return {
       playerId: getSelectedPlayerId(),
-      team: teamInput ? String(teamInput.value || '') : 'neutral',
-      color: colorInput ? String(colorInput.value || '') : '',
-      label: labelInput ? String(labelInput.value || '').trim() : '',
+      team: String(state.mark.team || 'neutral'),
+      color: String(state.mark.color || ''),
+      label: String(state.mark.label || '').trim(),
     };
   }
 
   function setMarkColor(color: string) {
-    const colorInput = byId<HTMLInputElement>('nodemc-mark-color');
-    if (colorInput) colorInput.value = color;
+    state.mark.color = String(color || '').trim();
   }
 
   function setServerFilterEnabled(enabled: boolean) {
-    const serverFilterInput = byId<HTMLInputElement>('nodemc-overlay-server-filter');
-    if (serverFilterInput) serverFilterInput.checked = enabled;
+    state.sameServerFilterEnabled = Boolean(enabled);
   }
 
   function cleanup() {
-    try { const host = getRootHost(); if (host) host.remove(); } catch (_) {}
-    try { const s = document.getElementById('nodemc-overlay-ui-style'); if (s) s.remove(); } catch (_) {}
-    try { const fab = document.getElementById('nodemc-overlay-fab'); if (fab) fab.remove(); } catch (_) {}
-    try { const panel = document.getElementById('nodemc-overlay-panel'); if (panel) panel.remove(); } catch (_) {}
+    try {
+      if (vueApp) {
+        vueApp.unmount();
+        vueApp = null;
+      }
+    } catch (_) {}
+    try {
+      const host = getRootHost();
+      if (host) host.remove();
+    } catch (_) {}
+    try {
+      const s = document.getElementById('nodemc-overlay-ui-style');
+      if (s) s.remove();
+    } catch (_) {}
+    try {
+      const fab = document.getElementById('nodemc-overlay-fab');
+      if (fab) fab.remove();
+    } catch (_) {}
+    try {
+      const panel = document.getElementById('nodemc-overlay-panel');
+      if (panel) panel.remove();
+    } catch (_) {}
     uiMounted = false;
   }
 

@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
 import monkey from 'vite-plugin-monkey';
+import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
   plugins: [
+    vue(),
     monkey({
       entry: 'src/index.ts',
       userscript: {

@@ -3,7 +3,6 @@ import {
   DEFAULT_CONFIG,
   STORAGE_KEY,
 } from './constants';
-import { PANEL_HTML } from './panelTemplate';
 import { OVERLAY_STYLE_TEXT, UI_STYLE_TEXT } from './styles';
 import {
   getConfiguredTeamColor,
@@ -390,7 +389,6 @@ declare const unsafeWindow: Window | undefined;
 
   const settingsUi = createSettingsUi({
     page: PAGE,
-    panelHtml: PANEL_HTML,
     uiStyleText: UI_STYLE_TEXT,
     onSave: () => {
       applyFormToConfig();
