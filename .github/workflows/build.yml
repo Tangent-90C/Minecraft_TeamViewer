@@ -4,12 +4,18 @@ name: Minecraft Mod CI
 on:
   push:
     branches: [ "main", "dev" ]
+    paths:
+      - 'backend-server/**'
+      - 'minecraft-mod/**'
+      - 'tampermonkey-script/**'
   pull_request:
     branches: [ "main", "dev" ]
+    paths:
+      - 'backend-server/**'
+      - 'minecraft-mod/**'
+      - 'tampermonkey-script/**'
 
 jobs:
-
-
   build:
     # 使用最新的Ubuntu系统
     runs-on: ubuntu-latest
