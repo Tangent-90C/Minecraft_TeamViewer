@@ -46,11 +46,11 @@ jobs:
         - language: actions
           build-mode: none
         - language: java-kotlin
-          build-mode: autobuild # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
+          build-mode: manual # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
         - language: javascript-typescript
           build-mode: none
         - language: python
-          build-mode: none
+          build-mode: manual
         # CodeQL supports the following values keywords for 'language': 'actions', 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'rust', 'swift'
         # Use `c-cpp` to analyze code written in C, C++ or both
         # Use 'java-kotlin' to analyze code written in Java, Kotlin or both
@@ -89,21 +89,31 @@ jobs:
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
 
-        # 设置 Python 环境
+
+    - name: Build Java/Kotlin manually
+      if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
+      working-directory: ./minecraft-mod
+      run: |    
+        chmod +x ./gradlew
+        ./gradlew build --refresh-dependencies
+
+
+
+    # 设置 Python 环境
     - name: Set up Python
-      if: matrix.language == 'python'
+      if: matrix.build-mode == 'manual' && matrix.language == 'python'
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
     
     # 安装 uv 包管理器
     - name: Install uv
-      if: matrix.language == 'python'
+      if: matrix.build-mode == 'manual' && matrix.language == 'python'
       uses: astral-sh/setup-uv@v7
     
     # 导出并安装依赖
     - name: Export and install Python dependencies
-      if: matrix.language == 'python'
+      if: matrix.build-mode == 'manual' && matrix.language == 'python'
       working-directory: ./backend-server
       run: |
         uv pip compile pyproject.toml -o requirements.txt
