@@ -411,7 +411,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 					} else {
 						tracerStart = lookVec.multiply(0.6);
 					}
-					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, tracerRenderColor);
+					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, tracerRenderColor, depthTestEnabled);
 				}
 			}
 		}

@@ -8,7 +8,6 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.render.*;
 import net.minecraft.client.gl.Defines;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
@@ -285,7 +284,6 @@ public class UnifiedRenderModule {
 				try {
 					builder.withShaderDefine(key, Float.parseFloat(value));
 				} catch (NumberFormatException ignored) {
-					LOGGER.debug("Skip non-numeric shader define {}={} for no-depth pipeline clone", key, value);
 				}
 			}
 		}
@@ -312,7 +310,6 @@ public class UnifiedRenderModule {
 		}
 		builder.withColorWrite(basePipeline.isWriteColor(), basePipeline.isWriteAlpha());
 		builder.withDepthWrite(basePipeline.isWriteDepth());
-		builder.withColorLogic(basePipeline.getColorLogic());
 		builder.withVertexFormat(basePipeline.getVertexFormat(), basePipeline.getVertexFormatMode());
 		builder.withDepthBias(basePipeline.getDepthBiasScaleFactor(), basePipeline.getDepthBiasConstant());
 		return builder.build();
