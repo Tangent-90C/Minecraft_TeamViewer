@@ -48,6 +48,7 @@ type OverlayUiState = {
     SHOW_HORSE_ENTITIES: boolean;
     SHOW_LABEL_TEAM_INFO: boolean;
     SHOW_LABEL_TOWN_INFO: boolean;
+    BLOCK_MAP_LEFT_RIGHT_CLICK: boolean;
     PLAYER_ICON_SIZE: string;
     PLAYER_TEXT_SIZE: string;
     HORSE_ICON_SIZE: string;
@@ -305,6 +306,7 @@ function closeHelp() {
       <label class="n-check"><input v-model="state.form.SHOW_HORSE_TEXT" @change="triggerAutoApply" id="nodemc-overlay-show-horse-text" type="checkbox" />显示马文字信息</label>
       <label class="n-check"><input v-model="state.form.SHOW_LABEL_TEAM_INFO" @change="triggerAutoApply" id="nodemc-overlay-show-team-info" type="checkbox" />地图文字显示阵营信息</label>
       <label class="n-check"><input v-model="state.form.SHOW_LABEL_TOWN_INFO" @change="triggerAutoApply" id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>
+      <label class="n-check"><input v-model="state.form.BLOCK_MAP_LEFT_RIGHT_CLICK" @change="triggerAutoApply" id="nodemc-overlay-block-map-click" type="checkbox" />屏蔽原网页地图左/右键功能（保留拖拽与滚轮缩放）</label>
       <label class="n-check"><input v-model="state.form.SHOW_COORDS" @change="triggerAutoApply" id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
       <label class="n-check"><input v-model="state.form.DEBUG" @change="triggerAutoApply" id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
       <label class="n-check"><input v-model="state.sameServerFilterEnabled" @change="onServerFilterChange" id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>

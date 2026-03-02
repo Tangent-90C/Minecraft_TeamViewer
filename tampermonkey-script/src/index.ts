@@ -498,6 +498,7 @@ declare const unsafeWindow: Window | undefined;
     const next = sanitizeConfig(settingsUi.readFormCandidate(CONFIG));
     Object.assign(CONFIG, next);
     saveConfigToStorage();
+    mapProjection.ensureMapInteractionGuard();
     updateUiStatus();
   }
 
@@ -729,6 +730,7 @@ declare const unsafeWindow: Window | undefined;
 
   function initOverlay() {
     mapProjection.ensureOverlayStyles();
+    mapProjection.ensureMapInteractionGuard();
     mapProjection.applyLatestSnapshotIfPossible(latestSnapshot);
   }
 

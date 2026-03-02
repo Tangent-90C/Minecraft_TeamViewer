@@ -29,9 +29,70 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let leafletRef: any = null;
   let capturedMap: any = null;
   let lastGlobalMapScanAt = 0;
+  let guardedMapContainer: HTMLElement | null = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
   const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
+
+  const guardedMouseEvents: Array<keyof HTMLElementEventMap> = ['click', 'dblclick', 'auxclick', 'contextmenu'];
+
+  function shouldBlockMapLeftRightClick() {
+    return Boolean(CONFIG.BLOCK_MAP_LEFT_RIGHT_CLICK);
+  }
+
+  function shouldInterceptMouseEvent(event: MouseEvent) {
+    if (!shouldBlockMapLeftRightClick()) return false;
+    if (event.type === 'contextmenu') return true;
+    if (event.type === 'click' || event.type === 'dblclick') {
+      return event.button === 0 || event.button === 2;
+    }
+    if (event.type === 'auxclick') {
+      return event.button === 2;
+    }
+    return false;
+  }
+
+  function onGuardedMouseEvent(event: Event) {
+    const mouseEvent = event as MouseEvent;
+    if (!shouldInterceptMouseEvent(mouseEvent)) return;
+    mouseEvent.preventDefault();
+    mouseEvent.stopPropagation();
+    if (typeof mouseEvent.stopImmediatePropagation === 'function') {
+      mouseEvent.stopImmediatePropagation();
+    }
+  }
+
+  function detachMapInteractionGuard() {
+    if (!guardedMapContainer) return;
+    for (const eventName of guardedMouseEvents) {
+      guardedMapContainer.removeEventListener(eventName, onGuardedMouseEvent, true);
+    }
+    guardedMapContainer = null;
+  }
+
+  function ensureMapInteractionGuard() {
+    const map = capturedMap || findMapByDom();
+    const container = map && map._container instanceof HTMLElement ? map._container : null;
+    if (!container || !container.isConnected) {
+      detachMapInteractionGuard();
+      return;
+    }
+
+    if (!shouldBlockMapLeftRightClick()) {
+      detachMapInteractionGuard();
+      return;
+    }
+
+    if (guardedMapContainer === container) {
+      return;
+    }
+
+    detachMapInteractionGuard();
+    guardedMapContainer = container;
+    for (const eventName of guardedMouseEvents) {
+      guardedMapContainer.addEventListener(eventName, onGuardedMouseEvent, true);
+    }
+  }
 
   function isLeafletMapCandidate(value: any) {
     return Boolean(
@@ -801,6 +862,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
   function isMapReady() {
     const map = capturedMap || findMapByDom();
+    ensureMapInteractionGuard();
     if (!map || !leafletRef || !map._loaded) {
       return false;
     }
@@ -817,6 +879,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     if (!snapshot) return false;
     ensureOverlayStyles();
     const map = capturedMap || findMapByDom();
+    ensureMapInteractionGuard();
     if (!map || !leafletRef || !map._loaded) return false;
     applySnapshotPlayers(map, snapshot);
     return true;
@@ -851,6 +914,8 @@ export function createMapProjection(deps: MapProjectionDeps) {
   }
 
   function cleanup() {
+    detachMapInteractionGuard();
+
     for (const m of markersById.values()) {
       try { m.remove(); } catch (_) {}
     }
@@ -872,6 +937,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     ensureOverlayStyles,
     installLeafletHook,
     findMapByDom,
+    ensureMapInteractionGuard,
     isMapReady,
     applyLatestSnapshotIfPossible,
     focusOnWorldPosition,

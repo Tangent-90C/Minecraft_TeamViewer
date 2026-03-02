@@ -54,6 +54,7 @@ type OverlayFormState = {
   SHOW_HORSE_ENTITIES: boolean;
   SHOW_LABEL_TEAM_INFO: boolean;
   SHOW_LABEL_TOWN_INFO: boolean;
+  BLOCK_MAP_LEFT_RIGHT_CLICK: boolean;
   PLAYER_ICON_SIZE: string;
   PLAYER_TEXT_SIZE: string;
   HORSE_ICON_SIZE: string;
@@ -91,6 +92,7 @@ function createDefaultFormState(): OverlayFormState {
     SHOW_HORSE_ENTITIES: true,
     SHOW_LABEL_TEAM_INFO: true,
     SHOW_LABEL_TOWN_INFO: true,
+    BLOCK_MAP_LEFT_RIGHT_CLICK: false,
     PLAYER_ICON_SIZE: '10',
     PLAYER_TEXT_SIZE: '12',
     HORSE_ICON_SIZE: '14',
@@ -421,6 +423,7 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     state.form.SHOW_HORSE_ENTITIES = Boolean(config.SHOW_HORSE_ENTITIES);
     state.form.SHOW_LABEL_TEAM_INFO = Boolean(config.SHOW_LABEL_TEAM_INFO);
     state.form.SHOW_LABEL_TOWN_INFO = Boolean(config.SHOW_LABEL_TOWN_INFO);
+    state.form.BLOCK_MAP_LEFT_RIGHT_CLICK = Boolean(config.BLOCK_MAP_LEFT_RIGHT_CLICK);
     state.form.PLAYER_ICON_SIZE = String(config.PLAYER_ICON_SIZE ?? 10);
     state.form.PLAYER_TEXT_SIZE = String(config.PLAYER_TEXT_SIZE ?? 12);
     state.form.HORSE_ICON_SIZE = String(config.HORSE_ICON_SIZE ?? 14);
@@ -463,6 +466,7 @@ export function createSettingsUi(deps: SettingsUiDeps) {
       SHOW_HORSE_ENTITIES: state.form.SHOW_HORSE_ENTITIES,
       SHOW_LABEL_TEAM_INFO: state.form.SHOW_LABEL_TEAM_INFO,
       SHOW_LABEL_TOWN_INFO: state.form.SHOW_LABEL_TOWN_INFO,
+      BLOCK_MAP_LEFT_RIGHT_CLICK: state.form.BLOCK_MAP_LEFT_RIGHT_CLICK,
       PLAYER_ICON_SIZE: state.form.PLAYER_ICON_SIZE || config.PLAYER_ICON_SIZE,
       PLAYER_TEXT_SIZE: state.form.PLAYER_TEXT_SIZE || config.PLAYER_TEXT_SIZE,
       HORSE_ICON_SIZE: state.form.HORSE_ICON_SIZE || config.HORSE_ICON_SIZE,
