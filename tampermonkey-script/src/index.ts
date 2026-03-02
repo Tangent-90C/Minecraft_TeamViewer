@@ -582,9 +582,12 @@ declare const unsafeWindow: Window | undefined;
   const settingsUi = createSettingsUi({
     page: PAGE,
     uiStyleText: UI_STYLE_TEXT,
+    onAutoApply: () => {
+      applyFormToConfig();
+      refreshPlayerLists();
+    },
     onSave: () => {
       applyFormToConfig();
-      wsClient?.reconnect();
     },
     onSaveAdvanced: () => {
       applyFormToConfig();
@@ -592,7 +595,7 @@ declare const unsafeWindow: Window | undefined;
     },
     onSaveDisplay: () => {
       applyFormToConfig();
-      wsClient?.reconnect();
+      refreshPlayerLists();
     },
     onExportConfig: () => {
       exportConfig();

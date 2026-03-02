@@ -22,6 +22,7 @@ type MapPlayerListItem = {
 type SettingsUiDeps = {
   page: Window;
   uiStyleText: string;
+  onAutoApply: () => void;
   onSave: () => void;
   onSaveAdvanced: () => void;
   onSaveDisplay: () => void;
@@ -128,6 +129,11 @@ export function createSettingsUi(deps: SettingsUiDeps) {
   const state = reactive({
     page: 'main' as UiPage,
     statusText: '',
+    dirty: {
+      mainText: false,
+      connection: false,
+      displayInputs: false,
+    },
     sameServerFilterEnabled: false,
     players: [] as PlayerOption[],
     mapPlayers: [] as MapPlayerListItem[],
@@ -237,6 +243,7 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     vueApp = createApp(OverlaySettingsPanel, {
       state,
       actions: {
+        onAutoApply: deps.onAutoApply,
         onSave: deps.onSave,
         onSaveAdvanced: deps.onSaveAdvanced,
         onSaveDisplay: deps.onSaveDisplay,
@@ -437,6 +444,9 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     state.form.TEAM_COLOR_NEUTRAL = String(getConfiguredTeamColor('neutral'));
     state.form.TEAM_COLOR_ENEMY = String(getConfiguredTeamColor('enemy'));
     state.form.DEBUG = Boolean(config.DEBUG);
+    state.dirty.mainText = false;
+    state.dirty.connection = false;
+    state.dirty.displayInputs = false;
 
     state.mark.color = getConfiguredTeamColor(String(state.mark.team || 'neutral'));
   }

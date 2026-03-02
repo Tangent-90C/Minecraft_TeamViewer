@@ -232,6 +232,13 @@ export const UI_STYLE_TEXT = `
   #nodemc-overlay-panel button:active {
     transform: translateY(0) scale(0.98);
   }
+  #nodemc-overlay-panel button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
   #nodemc-overlay-panel .n-btn-primary {
     box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
   }
@@ -354,6 +361,16 @@ export const UI_STYLE_TEXT = `
     font-weight: 700;
     color: #1e3a8a;
     letter-spacing: .25px;
+  }
+  #nodemc-overlay-panel .n-dirty-hint {
+    margin-top: 6px;
+    color: #1e40af;
+    font-size: 11px;
+    line-height: 1.4;
+    background: rgba(219, 234, 254, 0.65);
+    border: 1px dashed rgba(59, 130, 246, 0.45);
+    border-radius: 8px;
+    padding: 6px 8px;
   }
   @media (max-width: 430px) {
     #nodemc-overlay-panel {

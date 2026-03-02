@@ -22,6 +22,11 @@ type MapPlayerListItem = {
 type OverlayUiState = {
   page: 'main' | 'advanced' | 'display' | 'mark' | 'connection';
   statusText: string;
+  dirty: {
+    mainText: boolean;
+    connection: boolean;
+    displayInputs: boolean;
+  };
   sameServerFilterEnabled: boolean;
   players: PlayerOption[];
   mapPlayers: MapPlayerListItem[];
@@ -70,6 +75,7 @@ type OverlayUiState = {
 };
 
 type OverlayUiActions = {
+  onAutoApply: () => void;
   onSave: () => void;
   onSaveAdvanced: () => void;
   onSaveDisplay: () => void;
@@ -116,6 +122,37 @@ function onPlayerSelectionChanged() {
   props.actions.onPlayerSelectionChanged();
 }
 
+function triggerAutoApply() {
+  props.actions.onAutoApply();
+}
+
+function markMainTextDirty() {
+  props.state.dirty.mainText = true;
+}
+
+function markConnectionDirty() {
+  props.state.dirty.connection = true;
+}
+
+function markDisplayInputsDirty() {
+  props.state.dirty.displayInputs = true;
+}
+
+function saveMainText() {
+  props.actions.onSave();
+  props.state.dirty.mainText = false;
+}
+
+function saveConnectionSettings() {
+  props.actions.onSaveAdvanced();
+  props.state.dirty.connection = false;
+}
+
+function saveDisplayInputs() {
+  props.actions.onSaveDisplay();
+  props.state.dirty.displayInputs = false;
+}
+
 function togglePlayerList() {
   props.actions.onTogglePlayerList(!props.state.playerListVisible);
 }
@@ -137,21 +174,22 @@ function focusMapPlayer(playerId: string) {
   <div class="n-page" :class="{ active: state.page === 'main' }" id="nodemc-overlay-page-main">
     <div class="n-card">
       <div class="n-subtitle">基础策略</div>
-      <label class="n-check"><input v-model="state.form.AUTO_TEAM_FROM_NAME" id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
+      <label class="n-check"><input v-model="state.form.AUTO_TEAM_FROM_NAME" @change="triggerAutoApply" id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
       <label class="n-check"><input v-model="state.sameServerFilterEnabled" @change="onServerFilterChange" id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
       <div class="n-row">
         <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
-        <input v-model="state.form.FRIENDLY_TAGS" id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
+        <input v-model="state.form.FRIENDLY_TAGS" @input="markMainTextDirty" id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
       </div>
       <div class="n-row">
         <label>敌军标签（逗号分隔，按游戏中的前缀识别）</label>
-        <input v-model="state.form.ENEMY_TAGS" id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
+        <input v-model="state.form.ENEMY_TAGS" @input="markMainTextDirty" id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
       </div>
     </div>
     <div class="n-btns">
-      <button id="nodemc-overlay-save" type="button" class="n-btn-primary" @click="actions.onSave">保存</button>
+      <button id="nodemc-overlay-save" type="button" class="n-btn-primary" :disabled="!state.dirty.mainText" @click="saveMainText">保存标签设置</button>
       <button id="nodemc-overlay-reset" type="button" class="n-btn-ghost" @click="actions.onReset">重置</button>
     </div>
+    <div v-if="state.dirty.mainText" class="n-dirty-hint">标签输入已修改，点击“保存标签设置”后生效</div>
     <div class="n-btns">
       <button id="nodemc-overlay-export-config" type="button" class="n-btn-ghost" @click="actions.onExportConfig">导出配置</button>
       <button id="nodemc-overlay-import-config" type="button" class="n-btn-ghost" @click="actions.onImportConfig">导入配置</button>
@@ -216,20 +254,18 @@ function focusMapPlayer(playerId: string) {
       <button id="nodemc-overlay-back-main" type="button" class="n-link-btn" @click="setPage('main')">返回基础设置</button>
     </div>
     <div class="n-card">
-      <label class="n-check"><input v-model="state.form.SHOW_PLAYER_ICON" id="nodemc-overlay-show-icon" type="checkbox" />显示玩家图标（图标中心对准玩家坐标）</label>
-      <label class="n-check"><input v-model="state.form.SHOW_PLAYER_TEXT" id="nodemc-overlay-show-text" type="checkbox" />显示玩家文字信息（仅文字时左端对准玩家坐标）</label>
-      <label class="n-check"><input v-model="state.form.SHOW_WAYPOINT_ICON" id="nodemc-overlay-show-waypoint-icon" type="checkbox" />显示报点图标（图标中心对准报点坐标）</label>
-      <label class="n-check"><input v-model="state.form.SHOW_WAYPOINT_TEXT" id="nodemc-overlay-show-waypoint-text" type="checkbox" />显示报点文字（文字左端对准报点坐标，带浅色半透明背景）</label>
-      <label class="n-check"><input v-model="state.form.SHOW_HORSE_ENTITIES" id="nodemc-overlay-show-horse-entities" type="checkbox" />是否显示马实体</label>
-      <label class="n-check"><input v-model="state.form.SHOW_HORSE_TEXT" id="nodemc-overlay-show-horse-text" type="checkbox" />显示马文字信息</label>
-      <label class="n-check"><input v-model="state.form.SHOW_LABEL_TEAM_INFO" id="nodemc-overlay-show-team-info" type="checkbox" />地图文字显示阵营信息</label>
-      <label class="n-check"><input v-model="state.form.SHOW_LABEL_TOWN_INFO" id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>
-      <label class="n-check"><input v-model="state.form.SHOW_COORDS" id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
-      <label class="n-check"><input v-model="state.form.DEBUG" id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
+      <label class="n-check"><input v-model="state.form.SHOW_PLAYER_ICON" @change="triggerAutoApply" id="nodemc-overlay-show-icon" type="checkbox" />显示玩家图标（图标中心对准玩家坐标）</label>
+      <label class="n-check"><input v-model="state.form.SHOW_PLAYER_TEXT" @change="triggerAutoApply" id="nodemc-overlay-show-text" type="checkbox" />显示玩家文字信息（仅文字时左端对准玩家坐标）</label>
+      <label class="n-check"><input v-model="state.form.SHOW_WAYPOINT_ICON" @change="triggerAutoApply" id="nodemc-overlay-show-waypoint-icon" type="checkbox" />显示报点图标（图标中心对准报点坐标）</label>
+      <label class="n-check"><input v-model="state.form.SHOW_WAYPOINT_TEXT" @change="triggerAutoApply" id="nodemc-overlay-show-waypoint-text" type="checkbox" />显示报点文字（文字左端对准报点坐标，带浅色半透明背景）</label>
+      <label class="n-check"><input v-model="state.form.SHOW_HORSE_ENTITIES" @change="triggerAutoApply" id="nodemc-overlay-show-horse-entities" type="checkbox" />是否显示马实体</label>
+      <label class="n-check"><input v-model="state.form.SHOW_HORSE_TEXT" @change="triggerAutoApply" id="nodemc-overlay-show-horse-text" type="checkbox" />显示马文字信息</label>
+      <label class="n-check"><input v-model="state.form.SHOW_LABEL_TEAM_INFO" @change="triggerAutoApply" id="nodemc-overlay-show-team-info" type="checkbox" />地图文字显示阵营信息</label>
+      <label class="n-check"><input v-model="state.form.SHOW_LABEL_TOWN_INFO" @change="triggerAutoApply" id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>
+      <label class="n-check"><input v-model="state.form.SHOW_COORDS" @change="triggerAutoApply" id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
+      <label class="n-check"><input v-model="state.form.DEBUG" @change="triggerAutoApply" id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
     </div>
-    <div class="n-btns">
-      <button id="nodemc-overlay-save-advanced" type="button" class="n-btn-primary" @click="actions.onSaveAdvanced">保存高级设置</button>
-    </div>
+    <div class="n-dirty-hint">本页开关项改动会自动生效</div>
   </div>
 
   <div class="n-page" :class="{ active: state.page === 'display' }" id="nodemc-overlay-page-display">
@@ -241,72 +277,73 @@ function focusMapPlayer(playerId: string) {
       <div class="n-subtitle">大小设置（玩家）</div>
       <div class="n-row">
         <label>玩家图标大小(px)</label>
-        <input v-model="state.form.PLAYER_ICON_SIZE" id="nodemc-overlay-player-icon-size" type="number" min="6" max="40" step="1" />
+        <input v-model="state.form.PLAYER_ICON_SIZE" @input="markDisplayInputsDirty" id="nodemc-overlay-player-icon-size" type="number" min="6" max="40" step="1" />
       </div>
       <div class="n-row">
         <label>玩家文字大小(px)</label>
-        <input v-model="state.form.PLAYER_TEXT_SIZE" id="nodemc-overlay-player-text-size" type="number" min="8" max="32" step="1" />
+        <input v-model="state.form.PLAYER_TEXT_SIZE" @input="markDisplayInputsDirty" id="nodemc-overlay-player-text-size" type="number" min="8" max="32" step="1" />
       </div>
     </div>
     <div class="n-card">
       <div class="n-subtitle">大小设置（马）</div>
       <div class="n-row">
         <label>马图标大小(px)</label>
-        <input v-model="state.form.HORSE_ICON_SIZE" id="nodemc-overlay-horse-icon-size" type="number" min="6" max="40" step="1" />
+        <input v-model="state.form.HORSE_ICON_SIZE" @input="markDisplayInputsDirty" id="nodemc-overlay-horse-icon-size" type="number" min="6" max="40" step="1" />
       </div>
       <div class="n-row">
         <label>马文字大小(px)</label>
-        <input v-model="state.form.HORSE_TEXT_SIZE" id="nodemc-overlay-horse-text-size" type="number" min="8" max="32" step="1" />
+        <input v-model="state.form.HORSE_TEXT_SIZE" @input="markDisplayInputsDirty" id="nodemc-overlay-horse-text-size" type="number" min="8" max="32" step="1" />
       </div>
     </div>
     <div class="n-card">
       <div class="n-subtitle">阵营颜色</div>
       <div class="n-row">
         <label>友军颜色(#RRGGBB)</label>
-        <input v-model="state.form.TEAM_COLOR_FRIENDLY" id="nodemc-overlay-team-friendly-color" type="text" placeholder="#3b82f6" />
+        <input v-model="state.form.TEAM_COLOR_FRIENDLY" @input="markDisplayInputsDirty" id="nodemc-overlay-team-friendly-color" type="text" placeholder="#3b82f6" />
       </div>
       <div class="n-row">
         <label>中立颜色(#RRGGBB)</label>
-        <input v-model="state.form.TEAM_COLOR_NEUTRAL" id="nodemc-overlay-team-neutral-color" type="text" placeholder="#94a3b8" />
+        <input v-model="state.form.TEAM_COLOR_NEUTRAL" @input="markDisplayInputsDirty" id="nodemc-overlay-team-neutral-color" type="text" placeholder="#94a3b8" />
       </div>
       <div class="n-row">
         <label>敌军颜色(#RRGGBB)</label>
-        <input v-model="state.form.TEAM_COLOR_ENEMY" id="nodemc-overlay-team-enemy-color" type="text" placeholder="#ef4444" />
+        <input v-model="state.form.TEAM_COLOR_ENEMY" @input="markDisplayInputsDirty" id="nodemc-overlay-team-enemy-color" type="text" placeholder="#ef4444" />
       </div>
     </div>
     <div class="n-card">
       <div class="n-subtitle">上报玩家特殊显示</div>
-      <label class="n-check"><input v-model="state.form.REPORTER_STAR_ICON" id="nodemc-overlay-reporter-star" type="checkbox" />上报玩家图标使用五角星（替换圆点）</label>
-      <label class="n-check"><input v-model="state.form.REPORTER_VISION_CIRCLE_ENABLED" id="nodemc-overlay-reporter-vision-circle" type="checkbox" />显示上报玩家视野圆圈</label>
-      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_STAR_ICON" @change="triggerAutoApply" id="nodemc-overlay-reporter-star" type="checkbox" />上报玩家图标使用五角星（替换圆点）</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_VISION_CIRCLE_ENABLED" @change="triggerAutoApply" id="nodemc-overlay-reporter-vision-circle" type="checkbox" />显示上报玩家视野圆圈</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" @change="triggerAutoApply" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
       <div class="n-row">
         <label>视野圆圈半径 r（方块）</label>
-        <input v-model="state.form.REPORTER_VISION_RADIUS" id="nodemc-overlay-reporter-vision-radius" type="number" min="8" max="4096" step="1" />
+        <input v-model="state.form.REPORTER_VISION_RADIUS" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-vision-radius" type="number" min="8" max="4096" step="1" />
       </div>
       <div class="n-row">
         <label>视野圆圈颜色（#RRGGBB，留空跟随阵营色）</label>
-        <input v-model="state.form.REPORTER_VISION_COLOR" id="nodemc-overlay-reporter-vision-color" type="text" placeholder="#3b82f6" />
+        <input v-model="state.form.REPORTER_VISION_COLOR" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-vision-color" type="text" placeholder="#3b82f6" />
       </div>
       <div class="n-row">
         <label>视野圆圈透明度（0.02 ~ 0.9）</label>
-        <input v-model="state.form.REPORTER_VISION_OPACITY" id="nodemc-overlay-reporter-vision-opacity" type="number" min="0.02" max="0.9" step="0.01" />
+        <input v-model="state.form.REPORTER_VISION_OPACITY" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-vision-opacity" type="number" min="0.02" max="0.9" step="0.01" />
       </div>
       <div class="n-row">
         <label>区块半径 l（按玩家所在区块向外）</label>
-        <input v-model="state.form.REPORTER_CHUNK_RADIUS" id="nodemc-overlay-reporter-chunk-radius" type="number" min="0" max="64" step="1" />
+        <input v-model="state.form.REPORTER_CHUNK_RADIUS" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-chunk-radius" type="number" min="0" max="64" step="1" />
       </div>
       <div class="n-row">
         <label>区块范围颜色（#RRGGBB，留空跟随阵营色）</label>
-        <input v-model="state.form.REPORTER_CHUNK_COLOR" id="nodemc-overlay-reporter-chunk-color" type="text" placeholder="#ef4444" />
+        <input v-model="state.form.REPORTER_CHUNK_COLOR" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-chunk-color" type="text" placeholder="#ef4444" />
       </div>
       <div class="n-row">
         <label>区块范围透明度（0.02 ~ 0.9）</label>
-        <input v-model="state.form.REPORTER_CHUNK_OPACITY" id="nodemc-overlay-reporter-chunk-opacity" type="number" min="0.02" max="0.9" step="0.01" />
+        <input v-model="state.form.REPORTER_CHUNK_OPACITY" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-chunk-opacity" type="number" min="0.02" max="0.9" step="0.01" />
       </div>
     </div>
     <div class="n-btns">
-      <button id="nodemc-overlay-save-display" type="button" class="n-btn-primary" @click="actions.onSaveDisplay">保存显示设置</button>
+      <button id="nodemc-overlay-save-display" type="button" class="n-btn-primary" :disabled="!state.dirty.displayInputs" @click="saveDisplayInputs">保存显示输入项</button>
     </div>
+    <div v-if="state.dirty.displayInputs" class="n-dirty-hint">显示页输入框已修改，点击“保存显示输入项”后生效</div>
   </div>
 
   <div class="n-page" :class="{ active: state.page === 'connection' }" id="nodemc-overlay-page-connection">
@@ -317,25 +354,26 @@ function focusMapPlayer(playerId: string) {
     <div class="n-card">
       <div class="n-row full-width">
         <label>Admin WS URL</label>
-        <input v-model="state.form.ADMIN_WS_URL" id="nodemc-overlay-url" type="text" />
+        <input v-model="state.form.ADMIN_WS_URL" @input="markConnectionDirty" id="nodemc-overlay-url" type="text" />
       </div>
       <div class="n-row">
         <label>房间号 Room Code</label>
-        <input v-model="state.form.ROOM_CODE" id="nodemc-overlay-room-code" type="text" placeholder="default" />
+        <input v-model="state.form.ROOM_CODE" @input="markConnectionDirty" id="nodemc-overlay-room-code" type="text" placeholder="default" />
       </div>
       <div class="n-row">
         <label>重连间隔(ms)</label>
-        <input v-model="state.form.RECONNECT_INTERVAL_MS" id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
+        <input v-model="state.form.RECONNECT_INTERVAL_MS" @input="markConnectionDirty" id="nodemc-overlay-reconnect" type="number" min="200" max="60000" step="100" />
       </div>
       <div class="n-row">
         <label>维度过滤</label>
-        <input v-model="state.form.TARGET_DIMENSION" id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
+        <input v-model="state.form.TARGET_DIMENSION" @input="markConnectionDirty" id="nodemc-overlay-dim" type="text" placeholder="minecraft:overworld" />
       </div>
     </div>
     <div class="n-btns">
-      <button id="nodemc-overlay-save-connection" type="button" class="n-btn-primary" @click="actions.onSaveAdvanced">保存连接设置</button>
+      <button id="nodemc-overlay-save-connection" type="button" class="n-btn-primary" :disabled="!state.dirty.connection" @click="saveConnectionSettings">应用连接设置</button>
       <button id="nodemc-overlay-refresh" type="button" class="n-btn-ghost" @click="actions.onRefresh">立即重连</button>
     </div>
+    <div v-if="state.dirty.connection" class="n-dirty-hint">连接输入项已修改，点击“应用连接设置”后保存并重连</div>
   </div>
 
   <div class="n-page" :class="{ active: state.page === 'mark' }" id="nodemc-overlay-page-mark">
