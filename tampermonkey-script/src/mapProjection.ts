@@ -28,9 +28,27 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
   let leafletRef: any = null;
   let capturedMap: any = null;
+  let lastGlobalMapScanAt = 0;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
   const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
+
+  function isLeafletMapCandidate(value: any) {
+    return Boolean(
+      value
+      && typeof value === 'object'
+      && typeof value.setView === 'function'
+      && typeof value.getCenter === 'function'
+      && typeof value.getZoom === 'function'
+      && value._container
+    );
+  }
+
+  function captureMap(value: any) {
+    if (!isLeafletMapCandidate(value)) return null;
+    capturedMap = value;
+    return value;
+  }
 
   function patchLeaflet(leafletObj: any) {
     if (!leafletObj || !leafletObj.Map || leafletObj.__nodemcProjectionPatched) {
@@ -41,9 +59,33 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
     const originalInitialize = leafletObj.Map.prototype.initialize;
     leafletObj.Map.prototype.initialize = function (...args: any[]) {
-      capturedMap = this;
+      captureMap(this);
       return originalInitialize.apply(this, args);
     };
+
+    const originalSetView = leafletObj.Map.prototype.setView;
+    if (typeof originalSetView === 'function') {
+      leafletObj.Map.prototype.setView = function (...args: any[]) {
+        captureMap(this);
+        return originalSetView.apply(this, args);
+      };
+    }
+
+    const originalPanTo = leafletObj.Map.prototype.panTo;
+    if (typeof originalPanTo === 'function') {
+      leafletObj.Map.prototype.panTo = function (...args: any[]) {
+        captureMap(this);
+        return originalPanTo.apply(this, args);
+      };
+    }
+
+    const originalFitBounds = leafletObj.Map.prototype.fitBounds;
+    if (typeof originalFitBounds === 'function') {
+      leafletObj.Map.prototype.fitBounds = function (...args: any[]) {
+        captureMap(this);
+        return originalFitBounds.apply(this, args);
+      };
+    }
   }
 
   function installLeafletHook() {
@@ -77,19 +119,67 @@ export function createMapProjection(deps: MapProjectionDeps) {
       return null;
     }
 
-    const mapContainer = document.querySelector('#map.leaflet-container') as Record<string, any> | null;
+    const mapContainer = document.querySelector('#map.leaflet-container, #map .leaflet-container, .leaflet-container') as Record<string, any> | null;
     if (!mapContainer) {
       return null;
+    }
+
+    if (capturedMap && capturedMap._container === mapContainer) {
+      return capturedMap;
     }
 
     for (const key of Object.keys(mapContainer)) {
       if (!key.startsWith('_leaflet_')) continue;
       const maybeMap = mapContainer[key];
-      if (maybeMap && typeof maybeMap.setView === 'function' && typeof maybeMap.getCenter === 'function') {
-        return maybeMap;
+      if (isLeafletMapCandidate(maybeMap)) {
+        return captureMap(maybeMap);
       }
     }
 
+    const now = Date.now();
+    if (now - lastGlobalMapScanAt < 300) {
+      return null;
+    }
+    lastGlobalMapScanAt = now;
+
+    const globalMap = findMapFromWindowGlobals(mapContainer);
+    if (globalMap) {
+      return captureMap(globalMap);
+    }
+
+    return null;
+  }
+
+  function findMapFromWindowGlobals(mapContainer: any) {
+    const pageObj = PAGE as Record<string, any>;
+    const keys = Object.keys(pageObj);
+    for (const key of keys) {
+      let value: any;
+      try {
+        value = pageObj[key];
+      } catch (_) {
+        continue;
+      }
+
+      if (isLeafletMapCandidate(value) && value._container === mapContainer) {
+        return value;
+      }
+
+      if (!value || typeof value !== 'object') continue;
+
+      const nestedKeys = Object.keys(value);
+      for (const nestedKey of nestedKeys) {
+        let nested: any;
+        try {
+          nested = value[nestedKey];
+        } catch (_) {
+          continue;
+        }
+        if (isLeafletMapCandidate(nested) && nested._container === mapContainer) {
+          return nested;
+        }
+      }
+    }
     return null;
   }
 
@@ -698,12 +788,27 @@ export function createMapProjection(deps: MapProjectionDeps) {
     deps.onRevisionChanged?.(snapshot.revision ?? null);
   }
 
+  function isMapReady() {
+    const map = capturedMap || findMapByDom();
+    if (!map || !leafletRef || !map._loaded) {
+      return false;
+    }
+    if (map._container && map._container.isConnected === false) {
+      if (capturedMap === map) {
+        capturedMap = null;
+      }
+      return false;
+    }
+    return true;
+  }
+
   function applyLatestSnapshotIfPossible(snapshot: any) {
-    if (!snapshot) return;
+    if (!snapshot) return false;
     ensureOverlayStyles();
     const map = capturedMap || findMapByDom();
-    if (!map || !leafletRef || !map._loaded) return;
+    if (!map || !leafletRef || !map._loaded) return false;
     applySnapshotPlayers(map, snapshot);
+    return true;
   }
 
   function focusOnWorldPosition(x: number, z: number) {
@@ -756,6 +861,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     ensureOverlayStyles,
     installLeafletHook,
     findMapByDom,
+    isMapReady,
     applyLatestSnapshotIfPossible,
     focusOnWorldPosition,
     getCounts,

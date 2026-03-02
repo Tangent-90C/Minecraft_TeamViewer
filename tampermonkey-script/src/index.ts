@@ -789,8 +789,7 @@ declare const unsafeWindow: Window | undefined;
     }
 
     const tryStart = () => {
-      const map = mapProjection.findMapByDom();
-      if (map) {
+      if (mapProjection.isMapReady()) {
         initOverlay();
         overlayStarted = true;
         return;

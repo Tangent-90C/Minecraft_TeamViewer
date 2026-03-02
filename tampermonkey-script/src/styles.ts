@@ -214,6 +214,16 @@ export const UI_STYLE_TEXT = `
     margin-top: 10px;
     flex-wrap: wrap;
   }
+  #nodemc-overlay-panel .n-config-menu {
+    margin-top: 8px;
+    border: 1px solid var(--nmc-border-soft);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    padding: 8px;
+  }
+  #nodemc-overlay-panel .n-config-menu-items {
+    margin-top: 0;
+  }
   #nodemc-overlay-panel button {
     border: 1px solid rgba(147,197,253,.48);
     background: linear-gradient(180deg, var(--nmc-primary), var(--nmc-primary-hover));
@@ -298,6 +308,29 @@ export const UI_STYLE_TEXT = `
   #nodemc-overlay-panel .n-player-list-table-wrap {
     max-height: 260px;
     overflow: auto;
+  }
+  #nodemc-overlay-panel .n-help-content {
+    padding: 10px;
+    color: var(--nmc-text-main);
+    line-height: 1.5;
+  }
+  #nodemc-overlay-panel .n-help-list {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 6px;
+  }
+  #nodemc-overlay-panel .n-help-list li {
+    color: var(--nmc-text-main);
+  }
+  #nodemc-overlay-panel .n-help-tip {
+    margin-top: 10px;
+    padding: 8px 9px;
+    border-radius: 8px;
+    border: 1px dashed rgba(59, 130, 246, 0.45);
+    background: rgba(219, 234, 254, 0.65);
+    color: #1e40af;
+    font-size: 11px;
   }
   #nodemc-overlay-panel .n-player-list-table {
     width: 100%;
@@ -398,9 +431,9 @@ export const OVERLAY_STYLE_TEXT = `
     white-space: nowrap;
   }
   .nodemc-player-label {
-    background: rgba(15, 23, 42, 0.88);
+    background: rgba(15, 23, 42, 0.55);
     color: #dbeafe;
-    border: 1px solid rgba(147, 197, 253, 0.5);
+    border: 1px solid rgba(147, 197, 253, 0.45);
     border-radius: 6px;
     padding: 3px 7px;
     font-size: 12px;
@@ -450,9 +483,9 @@ export const OVERLAY_STYLE_TEXT = `
     position: absolute;
     top: 0;
     transform: translateY(-50%);
-    background: rgba(15, 23, 42, 0.88);
+    background: rgba(15, 23, 42, 0.55);
     color: #dbeafe;
-    border: 1px solid rgba(147, 197, 253, 0.5);
+    border: 1px solid rgba(147, 197, 253, 0.45);
     border-radius: 6px;
     padding: 3px 7px;
     font-size: 12px;

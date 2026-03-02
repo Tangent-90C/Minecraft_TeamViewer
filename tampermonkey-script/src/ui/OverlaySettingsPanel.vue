@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 type PlayerOption = {
   playerId: string;
@@ -101,8 +101,12 @@ const props = defineProps<{
 
 const hasPlayers = computed(() => props.state.players.length > 0);
 const hasMapPlayers = computed(() => props.state.mapPlayers.length > 0);
+const configMenuVisible = ref(false);
+const helpVisible = ref(false);
 
 function setPage(nextPage: OverlayUiState['page']) {
+  configMenuVisible.value = false;
+  helpVisible.value = false;
   props.state.page = nextPage;
 }
 
@@ -164,6 +168,33 @@ function closePlayerList() {
 function focusMapPlayer(playerId: string) {
   props.actions.onFocusMapPlayer(playerId);
 }
+
+function toggleConfigMenu() {
+  configMenuVisible.value = !configMenuVisible.value;
+}
+
+function onResetFromMenu() {
+  props.actions.onReset();
+  configMenuVisible.value = false;
+}
+
+function onExportConfigFromMenu() {
+  props.actions.onExportConfig();
+  configMenuVisible.value = false;
+}
+
+function onImportConfigFromMenu() {
+  props.actions.onImportConfig();
+  configMenuVisible.value = false;
+}
+
+function toggleHelp() {
+  helpVisible.value = !helpVisible.value;
+}
+
+function closeHelp() {
+  helpVisible.value = false;
+}
 </script>
 
 <template>
@@ -172,27 +203,17 @@ function focusMapPlayer(playerId: string) {
   </div>
 
   <div class="n-page" :class="{ active: state.page === 'main' }" id="nodemc-overlay-page-main">
-    <div class="n-card">
-      <div class="n-subtitle">基础策略</div>
-      <label class="n-check"><input v-model="state.form.AUTO_TEAM_FROM_NAME" @change="triggerAutoApply" id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
-      <label class="n-check"><input v-model="state.sameServerFilterEnabled" @change="onServerFilterChange" id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
-      <div class="n-row">
-        <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
-        <input v-model="state.form.FRIENDLY_TAGS" @input="markMainTextDirty" id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
-      </div>
-      <div class="n-row">
-        <label>敌军标签（逗号分隔，按游戏中的前缀识别）</label>
-        <input v-model="state.form.ENEMY_TAGS" @input="markMainTextDirty" id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
-      </div>
-    </div>
     <div class="n-btns">
-      <button id="nodemc-overlay-save" type="button" class="n-btn-primary" :disabled="!state.dirty.mainText" @click="saveMainText">保存标签设置</button>
-      <button id="nodemc-overlay-reset" type="button" class="n-btn-ghost" @click="actions.onReset">重置</button>
+      <button id="nodemc-overlay-open-config-menu" type="button" class="n-btn-ghost" @click="toggleConfigMenu">
+        {{ configMenuVisible ? '收起配置设置' : '配置设置' }}
+      </button>
     </div>
-    <div v-if="state.dirty.mainText" class="n-dirty-hint">标签输入已修改，点击“保存标签设置”后生效</div>
-    <div class="n-btns">
-      <button id="nodemc-overlay-export-config" type="button" class="n-btn-ghost" @click="actions.onExportConfig">导出配置</button>
-      <button id="nodemc-overlay-import-config" type="button" class="n-btn-ghost" @click="actions.onImportConfig">导入配置</button>
+    <div v-if="configMenuVisible" class="n-config-menu" id="nodemc-overlay-config-menu">
+      <div class="n-btns n-config-menu-items">
+        <button id="nodemc-overlay-reset" type="button" class="n-btn-ghost" @click="onResetFromMenu">重置</button>
+        <button id="nodemc-overlay-export-config" type="button" class="n-btn-ghost" @click="onExportConfigFromMenu">导出配置</button>
+        <button id="nodemc-overlay-import-config" type="button" class="n-btn-ghost" @click="onImportConfigFromMenu">导入配置</button>
+      </div>
     </div>
     <div class="n-btns">
       <button id="nodemc-overlay-open-advanced" type="button" class="n-link-btn" @click="setPage('advanced')">高级设置</button>
@@ -200,6 +221,28 @@ function focusMapPlayer(playerId: string) {
       <button id="nodemc-overlay-open-display" type="button" class="n-link-btn" @click="setPage('display')">显示设置</button>
       <button id="nodemc-overlay-open-mark" type="button" class="n-link-btn" @click="setPage('mark')">玩家标记/颜色</button>
       <button id="nodemc-overlay-open-player-list" type="button" class="n-link-btn" @click="togglePlayerList">玩家列表</button>
+      <button id="nodemc-overlay-open-help" type="button" class="n-link-btn" @click="toggleHelp">使用帮助</button>
+    </div>
+
+    <div v-if="helpVisible" class="n-player-list-popup" id="nodemc-overlay-help-popup">
+      <div class="n-player-list-header">
+        <div class="n-player-list-title">使用教程</div>
+        <button id="nodemc-overlay-close-help" type="button" class="n-player-list-close" @click="closeHelp">关闭</button>
+      </div>
+      <div class="n-help-content">
+        <ol class="n-help-list">
+          <li>先进入“连接设置”，填写 <b>Admin WS URL</b> 和房间号，点击“应用连接设置”。</li>
+          <li>进入“高级设置”，按需开启玩家图标、文字、马实体、坐标等显示项。</li>
+          <li>进入“显示设置”，调整图标/文字大小与阵营颜色，最后点击“保存显示输入项”。</li>
+          <li>进入“玩家标记/颜色”，从在线玩家列表选择目标并设置阵营、颜色、标签后点击“应用标记”。</li>
+          <li>一级页面可随时打开“玩家列表”查看地图玩家信息，点击某行可快速聚焦该玩家。</li>
+          <li>所有需要手动保存的输入项都会出现“已修改”提示，请记得保存后再实战使用。</li>
+        </ol>
+        <div class="n-help-tip">
+          <li>小贴士：在Tab玩家列表中看到的玩家名称前缀，就是标签，可开启“按名字标签自动判定友敌”</li>
+          <li>如“[法兰西]ydxc”的标签是“[法兰西]”，将其设置为友军标签即可自动识别。</li>
+        </div>
+      </div>
     </div>
 
     <div v-if="state.playerListVisible" class="n-player-list-popup" id="nodemc-overlay-player-list-popup">
@@ -264,8 +307,8 @@ function focusMapPlayer(playerId: string) {
       <label class="n-check"><input v-model="state.form.SHOW_LABEL_TOWN_INFO" @change="triggerAutoApply" id="nodemc-overlay-show-town-info" type="checkbox" />地图文字显示城镇信息</label>
       <label class="n-check"><input v-model="state.form.SHOW_COORDS" @change="triggerAutoApply" id="nodemc-overlay-coords" type="checkbox" />显示坐标</label>
       <label class="n-check"><input v-model="state.form.DEBUG" @change="triggerAutoApply" id="nodemc-overlay-debug" type="checkbox" />调试日志</label>
+      <label class="n-check"><input v-model="state.sameServerFilterEnabled" @change="onServerFilterChange" id="nodemc-overlay-server-filter" type="checkbox" />同服隔离广播（服务端）</label>
     </div>
-    <div class="n-dirty-hint">本页开关项改动会自动生效</div>
   </div>
 
   <div class="n-page" :class="{ active: state.page === 'display' }" id="nodemc-overlay-page-display">
@@ -312,9 +355,6 @@ function focusMapPlayer(playerId: string) {
     </div>
     <div class="n-card">
       <div class="n-subtitle">上报玩家特殊显示</div>
-      <label class="n-check"><input v-model="state.form.REPORTER_STAR_ICON" @change="triggerAutoApply" id="nodemc-overlay-reporter-star" type="checkbox" />上报玩家图标使用五角星（替换圆点）</label>
-      <label class="n-check"><input v-model="state.form.REPORTER_VISION_CIRCLE_ENABLED" @change="triggerAutoApply" id="nodemc-overlay-reporter-vision-circle" type="checkbox" />显示上报玩家视野圆圈</label>
-      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" @change="triggerAutoApply" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
       <div class="n-row">
         <label>视野圆圈半径 r（方块）</label>
         <input v-model="state.form.REPORTER_VISION_RADIUS" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-vision-radius" type="number" min="8" max="4096" step="1" />
@@ -339,6 +379,9 @@ function focusMapPlayer(playerId: string) {
         <label>区块范围透明度（0.02 ~ 0.9）</label>
         <input v-model="state.form.REPORTER_CHUNK_OPACITY" @input="markDisplayInputsDirty" id="nodemc-overlay-reporter-chunk-opacity" type="number" min="0.02" max="0.9" step="0.01" />
       </div>
+      <label class="n-check"><input v-model="state.form.REPORTER_STAR_ICON" @change="triggerAutoApply" id="nodemc-overlay-reporter-star" type="checkbox" />上报玩家图标使用五角星（替换圆点）</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_VISION_CIRCLE_ENABLED" @change="triggerAutoApply" id="nodemc-overlay-reporter-vision-circle" type="checkbox" />显示上报玩家视野圆圈</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" @change="triggerAutoApply" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
     </div>
     <div class="n-btns">
       <button id="nodemc-overlay-save-display" type="button" class="n-btn-primary" :disabled="!state.dirty.displayInputs" @click="saveDisplayInputs">保存显示输入项</button>
@@ -414,6 +457,24 @@ function focusMapPlayer(playerId: string) {
         <input id="nodemc-mark-label" v-model="state.mark.label" type="text" placeholder="例如：突击组/重点观察" />
       </div>
     </div>
+
+    <div class="n-card">
+      <div class="n-subtitle">标签设置</div>
+      <div class="n-row">
+        <label>友军标签（逗号分隔，按游戏中的前缀识别）</label>
+        <input v-model="state.form.FRIENDLY_TAGS" @input="markMainTextDirty" id="nodemc-overlay-friendly-tags" type="text" placeholder="[xxx],[队友]" />
+      </div>
+      <div class="n-row">
+        <label>敌军标签（逗号分隔，按游戏中的前缀识别）</label>
+        <input v-model="state.form.ENEMY_TAGS" @input="markMainTextDirty" id="nodemc-overlay-enemy-tags" type="text" placeholder="[yyy],[红队]" />
+      </div>
+      <label class="n-check"><input v-model="state.form.AUTO_TEAM_FROM_NAME" @change="triggerAutoApply" id="nodemc-overlay-auto-team" type="checkbox" />按名字标签自动判定友敌</label>
+      <div class="n-btns">
+        <button id="nodemc-overlay-save" type="button" class="n-btn-primary" :disabled="!state.dirty.mainText" @click="saveMainText">保存设置</button>
+        <div v-if="state.dirty.mainText" class="n-dirty-hint">已修改，点击“保存设置”后生效</div>
+      </div>
+    </div>
+
     <div class="n-btns">
       <button id="nodemc-mark-apply" type="button" class="n-btn-primary" @click="actions.onMarkApply">应用标记</button>
       <button id="nodemc-mark-clear" type="button" class="n-btn-ghost" @click="actions.onMarkClear">清除该玩家</button>
