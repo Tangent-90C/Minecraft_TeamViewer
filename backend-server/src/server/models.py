@@ -60,5 +60,9 @@ class WaypointData(BaseModel):
     targetEntityId: Optional[str] = Field(None, description="命中实体UUID")
     targetEntityType: Optional[str] = Field(None, description="命中实体类型")
     targetEntityName: Optional[str] = Field(None, description="命中实体名称")
+    roomCode: Optional[str] = Field(None, description="房间号，用于房间隔离显示")
+    permanent: Optional[bool] = Field(None, description="是否长期有效（不按默认TTL清理）")
+    tacticalType: Optional[str] = Field(None, description="战术类型，如 attack/defend/gather")
+    sourceType: Optional[str] = Field(None, description="来源类型，如 admin_tactical")
 
     model_config = ConfigDict(extra="ignore")

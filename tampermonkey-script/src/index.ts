@@ -339,6 +339,25 @@ declare const unsafeWindow: Window | undefined;
     maybeSyncAutoDetectedMarks: autoMarkSync.maybeSyncAutoDetectedMarks,
     getLatestPlayerMarks: () => latestPlayerMarks,
     getWsConnected: () => wsConnected,
+    onCreateTacticalWaypoint: (payload) => {
+      const ok = sendAdminCommand({
+        type: 'command_tactical_waypoint_set',
+        x: payload.x,
+        z: payload.z,
+        label: payload.label,
+        tacticalType: payload.tacticalType,
+        color: payload.color,
+        ttlSeconds: payload.ttlSeconds,
+        permanent: payload.permanent,
+        roomCode: normalizeRoomCode(CONFIG.ROOM_CODE),
+        dimension: normalizeDimension(CONFIG.TARGET_DIMENSION) || 'minecraft:overworld',
+      });
+      if (ok) {
+        lastErrorText = null;
+        updateUiStatus();
+      }
+      return ok;
+    },
     onRevisionChanged: (revision) => {
       lastRevision = revision;
     },

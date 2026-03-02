@@ -55,6 +55,8 @@ type OverlayFormState = {
   SHOW_LABEL_TEAM_INFO: boolean;
   SHOW_LABEL_TOWN_INFO: boolean;
   BLOCK_MAP_LEFT_RIGHT_CLICK: boolean;
+  ENABLE_TACTICAL_MAP_MARKING: boolean;
+  TACTICAL_MARK_DEFAULT_TTL_SECONDS: string;
   BLOCK_MAP_HOVER_POPUP: boolean;
   PLAYER_ICON_SIZE: string;
   PLAYER_TEXT_SIZE: string;
@@ -94,6 +96,8 @@ function createDefaultFormState(): OverlayFormState {
     SHOW_LABEL_TEAM_INFO: true,
     SHOW_LABEL_TOWN_INFO: true,
     BLOCK_MAP_LEFT_RIGHT_CLICK: false,
+    ENABLE_TACTICAL_MAP_MARKING: true,
+    TACTICAL_MARK_DEFAULT_TTL_SECONDS: '180',
     BLOCK_MAP_HOVER_POPUP: false,
     PLAYER_ICON_SIZE: '10',
     PLAYER_TEXT_SIZE: '12',
@@ -426,6 +430,8 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     state.form.SHOW_LABEL_TEAM_INFO = Boolean(config.SHOW_LABEL_TEAM_INFO);
     state.form.SHOW_LABEL_TOWN_INFO = Boolean(config.SHOW_LABEL_TOWN_INFO);
     state.form.BLOCK_MAP_LEFT_RIGHT_CLICK = Boolean(config.BLOCK_MAP_LEFT_RIGHT_CLICK);
+    state.form.ENABLE_TACTICAL_MAP_MARKING = Boolean(config.ENABLE_TACTICAL_MAP_MARKING);
+    state.form.TACTICAL_MARK_DEFAULT_TTL_SECONDS = String(config.TACTICAL_MARK_DEFAULT_TTL_SECONDS ?? 180);
     state.form.BLOCK_MAP_HOVER_POPUP = Boolean(config.BLOCK_MAP_HOVER_POPUP);
     state.form.PLAYER_ICON_SIZE = String(config.PLAYER_ICON_SIZE ?? 10);
     state.form.PLAYER_TEXT_SIZE = String(config.PLAYER_TEXT_SIZE ?? 12);
@@ -470,6 +476,8 @@ export function createSettingsUi(deps: SettingsUiDeps) {
       SHOW_LABEL_TEAM_INFO: state.form.SHOW_LABEL_TEAM_INFO,
       SHOW_LABEL_TOWN_INFO: state.form.SHOW_LABEL_TOWN_INFO,
       BLOCK_MAP_LEFT_RIGHT_CLICK: state.form.BLOCK_MAP_LEFT_RIGHT_CLICK,
+      ENABLE_TACTICAL_MAP_MARKING: state.form.ENABLE_TACTICAL_MAP_MARKING,
+      TACTICAL_MARK_DEFAULT_TTL_SECONDS: state.form.TACTICAL_MARK_DEFAULT_TTL_SECONDS || config.TACTICAL_MARK_DEFAULT_TTL_SECONDS,
       BLOCK_MAP_HOVER_POPUP: state.form.BLOCK_MAP_HOVER_POPUP,
       PLAYER_ICON_SIZE: state.form.PLAYER_ICON_SIZE || config.PLAYER_ICON_SIZE,
       PLAYER_TEXT_SIZE: state.form.PLAYER_TEXT_SIZE || config.PLAYER_TEXT_SIZE,

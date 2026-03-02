@@ -79,7 +79,11 @@ class Broadcaster:
         allowed_sources = self.state.get_active_sources_in_room(normalized_room)
         room_players = self.state.filter_state_map_by_sources(self.state.players, allowed_sources)
         room_entities = self.state.filter_state_map_by_sources(self.state.entities, allowed_sources)
-        room_waypoints = self.state.filter_state_map_by_sources(self.state.waypoints, allowed_sources)
+        room_waypoints = self.state.filter_waypoint_state_by_sources_and_room(
+            self.state.waypoints,
+            allowed_sources,
+            normalized_room,
+        )
         return {
             "players": self._snapshot_scope_from_state_map(room_players),
             "entities": self._snapshot_scope_from_state_map(room_entities),
@@ -158,9 +162,14 @@ class Broadcaster:
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
         allowed_sources = self.state.get_allowed_sources_for_player(player_id)
+        player_room = self.state.get_player_room(player_id)
         visible_players = self.state.filter_state_map_by_sources(self.state.players, allowed_sources)
         visible_entities = self.state.filter_state_map_by_sources(self.state.entities, allowed_sources)
-        visible_waypoints = self.state.filter_state_map_by_sources(self.state.waypoints, allowed_sources)
+        visible_waypoints = self.state.filter_waypoint_state_by_sources_and_room(
+            self.state.waypoints,
+            allowed_sources,
+            player_room,
+        )
         return {
             "players": visible_players,
             "entities": visible_entities,

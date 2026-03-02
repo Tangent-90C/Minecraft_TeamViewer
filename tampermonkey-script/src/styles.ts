@@ -501,4 +501,114 @@ export const OVERLAY_STYLE_TEXT = `
   .nodemc-player-anchor .n-team {
     font-weight: 700;
   }
+  .nodemc-tactical-anchor {
+    position: relative;
+    width: 0;
+    height: 0;
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+  }
+  .nodemc-tactical-anchor .n-tactical-icon {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    transform: translate(-50%, -90%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    background: rgba(220, 38, 38, 0.9);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25), 0 0 12px rgba(15, 23, 42, 0.35);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .nodemc-tactical-anchor .n-tactical-label {
+    position: absolute;
+    left: 12px;
+    top: -12px;
+    transform: translateY(-100%);
+    background: rgba(15, 23, 42, 0.78);
+    color: #fde68a;
+    border: 1px solid rgba(251, 191, 36, 0.55);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.4);
+  }
+  .nodemc-tactical-menu {
+    position: fixed;
+    z-index: 2147483200;
+    width: 236px;
+    max-width: calc(100vw - 24px);
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    background: rgba(15, 23, 42, 0.94);
+    color: #e2e8f0;
+    box-shadow: 0 14px 30px rgba(2, 6, 23, 0.52);
+    backdrop-filter: blur(5px);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .nodemc-tactical-menu .nmc-tactical-title {
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 8px;
+    letter-spacing: .2px;
+  }
+  .nodemc-tactical-menu .nmc-tactical-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .nodemc-tactical-menu .nmc-tactical-row > span {
+    color: #cbd5e1;
+    font-size: 11px;
+  }
+  .nodemc-tactical-menu select,
+  .nodemc-tactical-menu input {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 7px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(30, 41, 59, 0.92);
+    color: #f8fafc;
+    padding: 6px 8px;
+    outline: none;
+  }
+  .nodemc-tactical-menu select:focus,
+  .nodemc-tactical-menu input:focus {
+    border-color: rgba(96, 165, 250, 0.92);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+  .nodemc-tactical-menu .nmc-tactical-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .nodemc-tactical-menu button {
+    flex: 1;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    padding: 6px 8px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #f8fafc;
+    background: rgba(51, 65, 85, 0.9);
+  }
+  .nodemc-tactical-menu .nmc-tactical-confirm {
+    border-color: rgba(96, 165, 250, 0.7);
+    background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  }
+  .nodemc-tactical-menu .nmc-tactical-cancel {
+    border-color: rgba(100, 116, 139, 0.65);
+    background: rgba(51, 65, 85, 0.95);
+  }
 `;

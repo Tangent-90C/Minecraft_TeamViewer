@@ -46,6 +46,7 @@ class ServerState:
     DIGEST_INTERVAL_SEC = 10
     TAB_REPORT_TIMEOUT_SEC = 45
     DEFAULT_ROOM_CODE = "default"
+    ADMIN_TACTICAL_SOURCE_PREFIX = "__admin_tactical__:"
 
     def __init__(self) -> None:
         # 已仲裁后的最终视图，供广播层直接下发。
@@ -391,6 +392,55 @@ class ServerState:
             if isinstance(source_id, str) and source_id and source_id not in allowed_sources:
                 continue
             filtered[object_id] = node
+        return filtered
+
+    @classmethod
+    def build_admin_tactical_source_id(cls, room_code: str) -> str:
+        normalized_room = cls.normalize_room_code(room_code)
+        return f"{cls.ADMIN_TACTICAL_SOURCE_PREFIX}{normalized_room}"
+
+    @classmethod
+    def is_admin_tactical_source_id(cls, source_id: Optional[str]) -> bool:
+        return isinstance(source_id, str) and source_id.startswith(cls.ADMIN_TACTICAL_SOURCE_PREFIX)
+
+    @classmethod
+    def parse_admin_tactical_room_code(cls, source_id: Optional[str]) -> Optional[str]:
+        if not cls.is_admin_tactical_source_id(source_id):
+            return None
+        if not isinstance(source_id, str):
+            return None
+        room = source_id[len(cls.ADMIN_TACTICAL_SOURCE_PREFIX):]
+        return cls.normalize_room_code(room)
+
+    @classmethod
+    def filter_waypoint_state_by_sources_and_room(
+        cls,
+        state_map: Dict[str, dict],
+        allowed_sources: set[str],
+        room_code: str,
+    ) -> Dict[str, dict]:
+        normalized_room = cls.normalize_room_code(room_code)
+        filtered: Dict[str, dict] = {}
+
+        for object_id, node in state_map.items():
+            if not isinstance(node, dict):
+                continue
+            source_id = node.get("submitPlayerId")
+            if isinstance(source_id, str) and source_id and source_id in allowed_sources:
+                filtered[object_id] = node
+                continue
+
+            if not cls.is_admin_tactical_source_id(source_id):
+                continue
+
+            data = node.get("data") if isinstance(node.get("data"), dict) else {}
+            data_room_raw = data.get("roomCode") if isinstance(data, dict) else None
+            data_room = cls.normalize_room_code(data_room_raw) if isinstance(data_room_raw, str) and data_room_raw.strip() else None
+            source_room = cls.parse_admin_tactical_room_code(source_id)
+            final_room = data_room or source_room or normalized_room
+            if final_room == normalized_room:
+                filtered[object_id] = node
+
         return filtered
 
     def build_admin_tab_snapshot(self, room_code: Optional[str] = None) -> dict:
@@ -875,6 +925,8 @@ class ServerState:
             data = node.get("data")
             if not isinstance(data, dict):
                 return self.WAYPOINT_TIMEOUT
+            if bool(data.get("permanent")):
+                return 315360000
             ttl = data.get("ttlSeconds")
             if isinstance(ttl, (int, float)):
                 ttl_int = int(ttl)

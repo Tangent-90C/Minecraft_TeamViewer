@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -55,6 +56,29 @@ def read_room_code(payload: dict, fallback: str = "default") -> str:
         return fallback
     text = str(raw).strip()
     return text or fallback
+
+
+def normalize_waypoint_color_to_int(color_value, fallback: int = 0xEF4444) -> int:
+    if isinstance(color_value, (int, float)):
+        value = int(color_value)
+        return max(0, min(value, 0xFFFFFF))
+
+    text = str(color_value or "").strip()
+    if not text:
+        return fallback
+
+    if text.startswith("#"):
+        text = text[1:]
+    if text.lower().startswith("0x"):
+        text = text[2:]
+
+    if len(text) != 6:
+        return fallback
+
+    try:
+        return int(text, 16)
+    except ValueError:
+        return fallback
 
 # 进程级单例：承载内存态与广播能力。
 state = ServerState()
@@ -194,6 +218,80 @@ async def admin_ws(websocket: WebSocket):
                     "ok": True,
                     "action": "command_same_server_filter_set",
                     "enabled": state.same_server_filter_enabled,
+                }, separators=(",", ":")))
+                await broadcaster.broadcast_updates(force_full_to_delta=True)
+                continue
+
+            if msg_type == "command_tactical_waypoint_set":
+                room_code = read_room_code(message, state.get_admin_room(admin_id))
+                waypoint_id_raw = message.get("waypointId")
+                waypoint_id = str(waypoint_id_raw).strip() if isinstance(waypoint_id_raw, str) and waypoint_id_raw.strip() else ""
+                if not waypoint_id:
+                    waypoint_id = f"admin_tactical:{int(time.time() * 1000)}:{uuid.uuid4().hex[:8]}"
+
+                x = message.get("x")
+                z = message.get("z")
+                label = str(message.get("label") or "战术标记").strip()
+                if not label:
+                    label = "战术标记"
+                if len(label) > 64:
+                    label = label[:64]
+
+                dimension = str(message.get("dimension") or "minecraft:overworld").strip() or "minecraft:overworld"
+                tactical_type = str(message.get("tacticalType") or "attack").strip() or "attack"
+                permanent = bool(message.get("permanent"))
+                ttl_seconds_raw = message.get("ttlSeconds")
+                ttl_seconds = None
+                if isinstance(ttl_seconds_raw, (int, float)):
+                    ttl_seconds = max(10, min(int(ttl_seconds_raw), 86400))
+                if permanent:
+                    ttl_seconds = None
+
+                waypoint_payload = {
+                    "x": x,
+                    "y": 64,
+                    "z": z,
+                    "dimension": dimension,
+                    "name": label,
+                    "symbol": "T",
+                    "color": normalize_waypoint_color_to_int(message.get("color"), 0xEF4444),
+                    "ownerId": "admin",
+                    "ownerName": "Admin Tactical",
+                    "createdAt": int(time.time() * 1000),
+                    "ttlSeconds": ttl_seconds,
+                    "waypointKind": "admin_tactical",
+                    "replaceOldQuick": False,
+                    "maxQuickMarks": None,
+                    "targetType": "block",
+                    "targetEntityId": None,
+                    "targetEntityType": None,
+                    "targetEntityName": None,
+                    "roomCode": room_code,
+                    "permanent": permanent,
+                    "tacticalType": tactical_type,
+                    "sourceType": "admin_tactical",
+                }
+
+                try:
+                    validated = WaypointData(**waypoint_payload)
+                except ValidationError:
+                    await websocket.send_text(json.dumps({
+                        "type": "admin_ack",
+                        "ok": False,
+                        "error": "invalid_tactical_waypoint_payload",
+                    }, separators=(",", ":")))
+                    continue
+
+                admin_source_id = state.build_admin_tactical_source_id(room_code)
+                node = state.build_state_node(admin_source_id, time.time(), validated.model_dump())
+                state.upsert_report(state.waypoint_reports, waypoint_id, admin_source_id, node)
+
+                await websocket.send_text(json.dumps({
+                    "type": "admin_ack",
+                    "ok": True,
+                    "action": "command_tactical_waypoint_set",
+                    "waypointId": waypoint_id,
+                    "waypoint": validated.model_dump(),
                 }, separators=(",", ":")))
                 await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
@@ -569,7 +667,11 @@ async def snapshot(roomCode: str | None = None):
 
     selected_players = state.filter_state_map_by_sources(state.players, selected_sources)
     selected_entities = state.filter_state_map_by_sources(state.entities, selected_sources)
-    selected_waypoints = state.filter_state_map_by_sources(state.waypoints, selected_sources)
+    selected_waypoints = state.filter_waypoint_state_by_sources_and_room(
+        state.waypoints,
+        selected_sources,
+        selected_room,
+    )
 
     room_digests = {
         "players": state.state_digest(selected_players),

@@ -19,6 +19,15 @@ type MapProjectionDeps = {
   maybeSyncAutoDetectedMarks: (candidates: any[]) => void;
   getLatestPlayerMarks: () => Record<string, any>;
   getWsConnected: () => boolean;
+  onCreateTacticalWaypoint?: (payload: {
+    x: number;
+    z: number;
+    label: string;
+    tacticalType: string;
+    color: string;
+    ttlSeconds: number | null;
+    permanent: boolean;
+  }) => boolean;
   onRevisionChanged?: (revision: number | null) => void;
 };
 
@@ -31,6 +40,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let lastGlobalMapScanAt = 0;
   let guardedMapContainer: HTMLElement | null = null;
   let hoverPopupBlockedContainer: HTMLElement | null = null;
+  let tacticalMenuEl: HTMLElement | null = null;
+  let tacticalMenuOutsideClickHandler: ((event: MouseEvent) => void) | null = null;
+  let tacticalMenuEscHandler: ((event: KeyboardEvent) => void) | null = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
   const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
@@ -46,6 +58,248 @@ export function createMapProjection(deps: MapProjectionDeps) {
 `;
 
   const guardedMouseEvents: Array<keyof HTMLElementEventMap> = ['click', 'dblclick', 'auxclick', 'contextmenu'];
+
+  function escapeHtml(raw: unknown) {
+    return String(raw || '').replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch] as string));
+  }
+
+  function latLngToWorld(map: any, latLng: any) {
+    const scale = Number.isFinite(map?.options?.scale) ? map.options.scale : 1;
+    const safeScale = scale || 1;
+    const x = Number(latLng?.lng) / safeScale;
+    const z = -Number(latLng?.lat) / safeScale;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      return null;
+    }
+    return { x, z };
+  }
+
+  function shouldEnableTacticalMapMarking() {
+    return Boolean(CONFIG.ENABLE_TACTICAL_MAP_MARKING);
+  }
+
+  function getDefaultTacticalTtlSeconds() {
+    const raw = Number(CONFIG.TACTICAL_MARK_DEFAULT_TTL_SECONDS);
+    if (!Number.isFinite(raw)) return 180;
+    return Math.max(10, Math.min(86400, Math.round(raw)));
+  }
+
+  function getTacticalTypeOptions() {
+    return [
+      { value: 'attack', name: '进攻', label: '⚔ 进攻此处', color: '#ef4444' },
+      { value: 'defend', name: '防守', label: '🛡 防守此处', color: '#3b82f6' },
+      { value: 'gather', name: '集结', label: '📣 集结此处', color: '#22c55e' },
+      { value: 'scout', name: '侦查', label: '👁 侦查此处', color: '#f59e0b' },
+      { value: 'danger', name: '危险', label: '⚠ 危险区域', color: '#f97316' },
+    ];
+  }
+
+  function closeTacticalMenu() {
+    if (tacticalMenuOutsideClickHandler) {
+      document.removeEventListener('mousedown', tacticalMenuOutsideClickHandler, true);
+      tacticalMenuOutsideClickHandler = null;
+    }
+    if (tacticalMenuEscHandler) {
+      document.removeEventListener('keydown', tacticalMenuEscHandler, true);
+      tacticalMenuEscHandler = null;
+    }
+    if (tacticalMenuEl) {
+      try { tacticalMenuEl.remove(); } catch (_) {}
+      tacticalMenuEl = null;
+    }
+  }
+
+  function resolveTtlFromMenuValue(rawValue: string, customRawValue: string) {
+    const value = String(rawValue || '').trim().toLowerCase();
+    if (value === 'long') {
+      return { ttlSeconds: null, permanent: true };
+    }
+    if (value === 'default') {
+      return { ttlSeconds: getDefaultTacticalTtlSeconds(), permanent: false };
+    }
+    if (value === 'custom') {
+      const customNum = Number(customRawValue);
+      if (!Number.isFinite(customNum)) return null;
+      return {
+        ttlSeconds: Math.max(10, Math.min(86400, Math.round(customNum))),
+        permanent: false,
+      };
+    }
+    const ttlNum = Number(value);
+    if (!Number.isFinite(ttlNum)) return null;
+    return {
+      ttlSeconds: Math.max(10, Math.min(86400, Math.round(ttlNum))),
+      permanent: false,
+    };
+  }
+
+  function openTacticalMenuAtPointer(
+    map: any,
+    event: MouseEvent,
+    worldPos: { x: number; z: number }
+  ) {
+    closeTacticalMenu();
+
+    const typeOptions = getTacticalTypeOptions();
+    const defaultTtl = getDefaultTacticalTtlSeconds();
+
+    const menu = document.createElement('div');
+    menu.className = 'nodemc-tactical-menu';
+    menu.innerHTML = `
+      <div class="nmc-tactical-title">战术标记</div>
+      <label class="nmc-tactical-row">
+        <span>标注类型</span>
+        <select class="nmc-tactical-type"></select>
+      </label>
+      <label class="nmc-tactical-row">
+        <span>过期时间</span>
+        <select class="nmc-tactical-ttl">
+          <option value="default">默认（${defaultTtl}s）</option>
+          <option value="60">1 分钟</option>
+          <option value="180">3 分钟</option>
+          <option value="600">10 分钟</option>
+          <option value="1800">30 分钟</option>
+          <option value="3600">1 小时</option>
+          <option value="long">长期有效</option>
+          <option value="custom">自定义秒数</option>
+        </select>
+      </label>
+      <label class="nmc-tactical-row nmc-tactical-custom-row" style="display:none;">
+        <span>自定义秒数</span>
+        <input class="nmc-tactical-custom-ttl" type="number" min="10" max="86400" step="10" value="${defaultTtl}" />
+      </label>
+      <div class="nmc-tactical-actions">
+        <button type="button" class="nmc-tactical-confirm">确认</button>
+        <button type="button" class="nmc-tactical-cancel">取消</button>
+      </div>
+    `;
+
+    const typeSelect = menu.querySelector('.nmc-tactical-type') as HTMLSelectElement | null;
+    const ttlSelect = menu.querySelector('.nmc-tactical-ttl') as HTMLSelectElement | null;
+    const customRow = menu.querySelector('.nmc-tactical-custom-row') as HTMLElement | null;
+    const customInput = menu.querySelector('.nmc-tactical-custom-ttl') as HTMLInputElement | null;
+    const confirmBtn = menu.querySelector('.nmc-tactical-confirm') as HTMLButtonElement | null;
+    const cancelBtn = menu.querySelector('.nmc-tactical-cancel') as HTMLButtonElement | null;
+    if (!typeSelect || !ttlSelect || !customRow || !customInput || !confirmBtn || !cancelBtn) {
+      return false;
+    }
+
+    for (const item of typeOptions) {
+      const option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = `${item.name}（${item.label}）`;
+      typeSelect.appendChild(option);
+    }
+
+    menu.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+    menu.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    menu.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+    });
+    menu.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+
+    ttlSelect.addEventListener('change', () => {
+      customRow.style.display = ttlSelect.value === 'custom' ? 'flex' : 'none';
+      if (ttlSelect.value === 'custom') {
+        customInput.focus();
+      }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      closeTacticalMenu();
+    });
+
+    confirmBtn.addEventListener('click', () => {
+      const selectedType = typeOptions.find((item) => item.value === typeSelect.value) || typeOptions[0];
+      const ttl = resolveTtlFromMenuValue(ttlSelect.value, customInput.value);
+      if (!ttl) {
+        customInput.focus();
+        return;
+      }
+
+      if (typeof deps.onCreateTacticalWaypoint === 'function') {
+        deps.onCreateTacticalWaypoint({
+          x: worldPos.x,
+          z: worldPos.z,
+          label: selectedType.label,
+          tacticalType: selectedType.value,
+          color: selectedType.color,
+          ttlSeconds: ttl.ttlSeconds,
+          permanent: ttl.permanent,
+        });
+      }
+      closeTacticalMenu();
+    });
+
+    document.body.appendChild(menu);
+    tacticalMenuEl = menu;
+
+    const margin = 12;
+    const menuRect = menu.getBoundingClientRect();
+    let left = event.clientX + 14;
+    let top = event.clientY + 12;
+
+    const maxLeft = Math.max(margin, window.innerWidth - menuRect.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - menuRect.height - margin);
+    left = Math.max(margin, Math.min(maxLeft, left));
+    top = Math.max(margin, Math.min(maxTop, top));
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+
+    tacticalMenuOutsideClickHandler = (e: MouseEvent) => {
+      const target = e.target;
+      if (tacticalMenuEl && target instanceof Node && tacticalMenuEl.contains(target)) {
+        return;
+      }
+      closeTacticalMenu();
+    };
+    tacticalMenuEscHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeTacticalMenu();
+      }
+    };
+
+    setTimeout(() => {
+      if (tacticalMenuOutsideClickHandler) {
+        document.addEventListener('mousedown', tacticalMenuOutsideClickHandler, true);
+      }
+      if (tacticalMenuEscHandler) {
+        document.addEventListener('keydown', tacticalMenuEscHandler, true);
+      }
+    }, 0);
+
+    return true;
+  }
+
+  function maybeHandleTacticalMarkPlacement(event: MouseEvent) {
+    if (!shouldBlockMapLeftRightClick()) return false;
+    if (!shouldEnableTacticalMapMarking()) return false;
+    if (event.type !== 'contextmenu' || event.button !== 2) return false;
+    if (typeof deps.onCreateTacticalWaypoint !== 'function') return false;
+
+    const map = capturedMap || findMapByDom();
+    if (!map || !leafletRef || !map._loaded) return false;
+    const latLng = typeof map.mouseEventToLatLng === 'function' ? map.mouseEventToLatLng(event) : null;
+    if (!latLng) return false;
+    const pos = latLngToWorld(map, latLng);
+    if (!pos) return false;
+
+    return openTacticalMenuAtPointer(map, event, pos);
+  }
 
   function shouldBlockMapLeftRightClick() {
     return Boolean(CONFIG.BLOCK_MAP_LEFT_RIGHT_CLICK);
@@ -70,6 +324,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   function onGuardedMouseEvent(event: Event) {
     const mouseEvent = event as MouseEvent;
     if (!shouldInterceptMouseEvent(mouseEvent)) return;
+    maybeHandleTacticalMarkPlacement(mouseEvent);
     mouseEvent.preventDefault();
     mouseEvent.stopPropagation();
     if (typeof mouseEvent.stopImmediatePropagation === 'function') {
@@ -78,6 +333,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   }
 
   function detachMapInteractionGuard() {
+    closeTacticalMenu();
     if (!guardedMapContainer) return;
     for (const eventName of guardedMouseEvents) {
       guardedMapContainer.removeEventListener(eventName, onGuardedMouseEvent, true);
@@ -438,14 +694,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
       return '';
     }
 
-    const escapeHtml = (raw: string) => String(raw).replace(/[&<>"']/g, (ch) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[ch] as string));
-
     let text = name;
     if (CONFIG.SHOW_COORDS) {
       text += ` (${Math.round(x)}, ${Math.round(z)})`;
@@ -643,14 +891,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
     const color = normalizeColor(waypoint && waypoint.color, '#f97316');
     const owner = (waypoint && (waypoint.ownerName || waypoint.ownerId)) ? (waypoint.ownerName || waypoint.ownerId) : null;
-    const escapeHtml = (raw: string) => String(raw).replace(/[&<>"']/g, (ch) => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[ch] as string));
-
     const visual = getMarkerVisualConfig('waypoint');
     const showIcon = Boolean(CONFIG.SHOW_WAYPOINT_ICON);
     const showText = Boolean(CONFIG.SHOW_WAYPOINT_TEXT);
@@ -960,6 +1200,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   }
 
   function cleanup() {
+    closeTacticalMenu();
     detachMapInteractionGuard();
     detachMapHoverPopupBlock();
 

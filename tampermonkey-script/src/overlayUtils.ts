@@ -148,6 +148,13 @@ export function sanitizeConfig(candidate: Record<string, unknown> | null | undef
   next.BLOCK_MAP_LEFT_RIGHT_CLICK = candidate.BLOCK_MAP_LEFT_RIGHT_CLICK === undefined
     ? DEFAULT_CONFIG.BLOCK_MAP_LEFT_RIGHT_CLICK
     : Boolean(candidate.BLOCK_MAP_LEFT_RIGHT_CLICK);
+  next.ENABLE_TACTICAL_MAP_MARKING = candidate.ENABLE_TACTICAL_MAP_MARKING === undefined
+    ? DEFAULT_CONFIG.ENABLE_TACTICAL_MAP_MARKING
+    : Boolean(candidate.ENABLE_TACTICAL_MAP_MARKING);
+  const tacticalMarkTtlSeconds = Number(candidate.TACTICAL_MARK_DEFAULT_TTL_SECONDS);
+  if (Number.isFinite(tacticalMarkTtlSeconds)) {
+    next.TACTICAL_MARK_DEFAULT_TTL_SECONDS = Math.max(10, Math.min(86400, Math.round(tacticalMarkTtlSeconds)));
+  }
   next.BLOCK_MAP_HOVER_POPUP = candidate.BLOCK_MAP_HOVER_POPUP === undefined
     ? DEFAULT_CONFIG.BLOCK_MAP_HOVER_POPUP
     : Boolean(candidate.BLOCK_MAP_HOVER_POPUP);
