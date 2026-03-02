@@ -18,12 +18,26 @@ type SettingsUiDeps = {
 
 export function createSettingsUi(deps: SettingsUiDeps) {
   const PAGE = deps.page;
+  const ROOT_HOST_ID = 'teamviewer-overlay-root';
 
   let uiMounted = false;
   let panelVisible = false;
   let panelPage = 'main';
 
+  function getRootHost() {
+    return document.getElementById(ROOT_HOST_ID);
+  }
+
+  function getShadowRoot() {
+    const host = getRootHost();
+    return host ? host.shadowRoot : null;
+  }
+
   function byId<T extends HTMLElement = HTMLElement>(id: string) {
+    const root = getShadowRoot();
+    if (root) {
+      return root.getElementById(id) as T | null;
+    }
     return document.getElementById(id) as T | null;
   }
 
@@ -113,10 +127,18 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     if (uiMounted || !document.body) return;
     uiMounted = true;
 
+    let host = getRootHost();
+    if (!host) {
+      host = document.createElement('div');
+      host.id = ROOT_HOST_ID;
+      document.body.appendChild(host);
+    }
+    const shadowRoot = host.shadowRoot || host.attachShadow({ mode: 'open' });
+
     const style = document.createElement('style');
     style.id = 'nodemc-overlay-ui-style';
     style.textContent = deps.uiStyleText;
-    document.head.appendChild(style);
+    shadowRoot.appendChild(style);
 
     const fab = document.createElement('div');
     fab.id = 'nodemc-overlay-fab';
@@ -132,8 +154,8 @@ export function createSettingsUi(deps: SettingsUiDeps) {
       panel.appendChild(node.cloneNode(true));
     }
 
-    document.body.appendChild(fab);
-    document.body.appendChild(panel);
+    shadowRoot.appendChild(fab);
+    shadowRoot.appendChild(panel);
 
     const initialRect = fab.getBoundingClientRect();
     setFabPosition(initialRect.left, initialRect.top);
@@ -253,11 +275,15 @@ export function createSettingsUi(deps: SettingsUiDeps) {
 
   function mountWhenReady() {
     if (uiMounted) return;
-    if (!document.body || !document.head) {
+    if (!document.body) {
       PAGE.requestAnimationFrame(mountWhenReady);
       return;
     }
     injectSettingsUi();
+  }
+
+  function isMounted() {
+    return Boolean(byId('nodemc-overlay-panel'));
   }
 
   function updateStatus(text: string) {
@@ -404,14 +430,16 @@ export function createSettingsUi(deps: SettingsUiDeps) {
   }
 
   function cleanup() {
-    try { const s = byId('nodemc-overlay-ui-style'); if (s) s.remove(); } catch (_) {}
-    try { const fab = byId('nodemc-overlay-fab'); if (fab) fab.remove(); } catch (_) {}
-    try { const panel = byId('nodemc-overlay-panel'); if (panel) panel.remove(); } catch (_) {}
+    try { const host = getRootHost(); if (host) host.remove(); } catch (_) {}
+    try { const s = document.getElementById('nodemc-overlay-ui-style'); if (s) s.remove(); } catch (_) {}
+    try { const fab = document.getElementById('nodemc-overlay-fab'); if (fab) fab.remove(); } catch (_) {}
+    try { const panel = document.getElementById('nodemc-overlay-panel'); if (panel) panel.remove(); } catch (_) {}
     uiMounted = false;
   }
 
   return {
     mountWhenReady,
+    isMounted,
     updateStatus,
     fillFormFromConfig,
     readFormCandidate,

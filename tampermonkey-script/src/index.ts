@@ -563,7 +563,7 @@ declare const unsafeWindow: Window | undefined;
 
     settingsUi.mountWhenReady();
     const syncUiOnReady = () => {
-      if (!document.getElementById('nodemc-overlay-panel')) {
+      if (!settingsUi.isMounted()) {
         PAGE.requestAnimationFrame(syncUiOnReady);
         return;
       }
