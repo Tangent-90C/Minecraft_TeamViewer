@@ -296,6 +296,19 @@ export const OVERLAY_STYLE_TEXT = `
     line-height: 14px;
     text-align: center;
   }
+  .nodemc-player-anchor .n-icon.is-reporter-star {
+    font-weight: 900;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: -0.4px;
+    -webkit-text-stroke: 1.8px rgba(255, 255, 255, 0.98);
+    paint-order: stroke fill;
+    text-shadow:
+      0 0 1px rgba(15, 23, 42, 0.85),
+      0 0 5px rgba(15, 23, 42, 0.55);
+  }
   .nodemc-player-anchor .n-label {
     position: absolute;
     top: 0;

@@ -35,6 +35,15 @@ type OverlayUiState = {
     HORSE_ICON_SIZE: string;
     HORSE_TEXT_SIZE: string;
     SHOW_COORDS: boolean;
+    REPORTER_STAR_ICON: boolean;
+    REPORTER_VISION_CIRCLE_ENABLED: boolean;
+    REPORTER_VISION_RADIUS: string;
+    REPORTER_VISION_COLOR: string;
+    REPORTER_VISION_OPACITY: string;
+    REPORTER_CHUNK_AREA_ENABLED: boolean;
+    REPORTER_CHUNK_RADIUS: string;
+    REPORTER_CHUNK_COLOR: string;
+    REPORTER_CHUNK_OPACITY: string;
     AUTO_TEAM_FROM_NAME: boolean;
     FRIENDLY_TAGS: string;
     ENEMY_TAGS: string;
@@ -184,6 +193,36 @@ function onPlayerSelectionChanged() {
       <div class="n-row">
         <label>敌军颜色(#RRGGBB)</label>
         <input v-model="state.form.TEAM_COLOR_ENEMY" id="nodemc-overlay-team-enemy-color" type="text" placeholder="#ef4444" />
+      </div>
+    </div>
+    <div class="n-card">
+      <div class="n-subtitle">上报玩家特殊显示</div>
+      <label class="n-check"><input v-model="state.form.REPORTER_STAR_ICON" id="nodemc-overlay-reporter-star" type="checkbox" />上报玩家图标使用五角星（替换圆点）</label>
+      <label class="n-check"><input v-model="state.form.REPORTER_VISION_CIRCLE_ENABLED" id="nodemc-overlay-reporter-vision-circle" type="checkbox" />显示上报玩家视野圆圈</label>
+      <div class="n-row">
+        <label>视野圆圈半径 r（方块）</label>
+        <input v-model="state.form.REPORTER_VISION_RADIUS" id="nodemc-overlay-reporter-vision-radius" type="number" min="8" max="4096" step="1" />
+      </div>
+      <div class="n-row">
+        <label>视野圆圈颜色（#RRGGBB，留空跟随阵营色）</label>
+        <input v-model="state.form.REPORTER_VISION_COLOR" id="nodemc-overlay-reporter-vision-color" type="text" placeholder="#3b82f6" />
+      </div>
+      <div class="n-row">
+        <label>视野圆圈透明度（0.02 ~ 0.9）</label>
+        <input v-model="state.form.REPORTER_VISION_OPACITY" id="nodemc-overlay-reporter-vision-opacity" type="number" min="0.02" max="0.9" step="0.01" />
+      </div>
+      <label class="n-check"><input v-model="state.form.REPORTER_CHUNK_AREA_ENABLED" id="nodemc-overlay-reporter-chunk-area" type="checkbox" />显示上报玩家区块范围</label>
+      <div class="n-row">
+        <label>区块半径 l（按玩家所在区块向外）</label>
+        <input v-model="state.form.REPORTER_CHUNK_RADIUS" id="nodemc-overlay-reporter-chunk-radius" type="number" min="0" max="64" step="1" />
+      </div>
+      <div class="n-row">
+        <label>区块范围颜色（#RRGGBB，留空跟随阵营色）</label>
+        <input v-model="state.form.REPORTER_CHUNK_COLOR" id="nodemc-overlay-reporter-chunk-color" type="text" placeholder="#ef4444" />
+      </div>
+      <div class="n-row">
+        <label>区块范围透明度（0.02 ~ 0.9）</label>
+        <input v-model="state.form.REPORTER_CHUNK_OPACITY" id="nodemc-overlay-reporter-chunk-opacity" type="number" min="0.02" max="0.9" step="0.01" />
       </div>
     </div>
     <div class="n-btns">

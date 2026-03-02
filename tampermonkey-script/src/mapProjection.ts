@@ -30,6 +30,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let capturedMap: any = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
+  const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
 
   function patchLeaflet(leafletObj: any) {
     if (!leafletObj || !leafletObj.Map || leafletObj.__nodemcProjectionPatched) {
@@ -120,7 +121,118 @@ export function createMapProjection(deps: MapProjectionDeps) {
     };
   }
 
-  function buildMarkerHtml(name: string, x: number, z: number, health: number | null, mark: any, townInfo: any, markerKind = 'player') {
+  function getReporterVisionRadiusBlocks() {
+    const radius = readNumber(CONFIG.REPORTER_VISION_RADIUS);
+    if (radius === null) return 64;
+    return Math.max(8, Math.min(4096, Math.round(radius)));
+  }
+
+  function getReporterChunkRadius() {
+    const radius = readNumber(CONFIG.REPORTER_CHUNK_RADIUS);
+    if (radius === null) return 2;
+    return Math.max(0, Math.min(64, Math.round(radius)));
+  }
+
+  function getReporterVisionOpacity() {
+    const opacity = readNumber(CONFIG.REPORTER_VISION_OPACITY);
+    if (opacity === null) return 0.1;
+    return Math.max(0.02, Math.min(0.9, opacity));
+  }
+
+  function getReporterChunkOpacity() {
+    const opacity = readNumber(CONFIG.REPORTER_CHUNK_OPACITY);
+    if (opacity === null) return 0.11;
+    return Math.max(0.02, Math.min(0.9, opacity));
+  }
+
+  function getReporterEffectColor(configColorKey: 'REPORTER_VISION_COLOR' | 'REPORTER_CHUNK_COLOR', fallbackColor: string) {
+    const text = String(CONFIG[configColorKey] || '').trim();
+    if (!text) return fallbackColor;
+    return normalizeColor(text, fallbackColor);
+  }
+
+  function getReportingPlayerIds(snapshot: any) {
+    const ids = new Set<string>();
+    const tabState = snapshot && typeof snapshot === 'object' ? snapshot.tabState : null;
+    const reports = tabState && typeof tabState.reports === 'object' ? tabState.reports : null;
+    if (!reports) return ids;
+
+    for (const reportKey of Object.keys(reports)) {
+      const playerId = String(reportKey || '').trim();
+      if (!playerId) continue;
+      ids.add(playerId);
+    }
+    return ids;
+  }
+
+  function isReportingPlayer(playerId: string, rawNode: any, playerData: any, reportingPlayerIds: Set<string>) {
+    const idCandidates = new Set<string>();
+    const pushId = (value: unknown) => {
+      const text = String(value || '').trim();
+      if (text) idCandidates.add(text);
+    };
+
+    pushId(playerId);
+    pushId(playerData && (playerData.playerUUID || playerData.uuid || playerData.id));
+    pushId(rawNode && (rawNode.playerUUID || rawNode.uuid || rawNode.id));
+
+    for (const maybeId of idCandidates) {
+      if (reportingPlayerIds.has(maybeId)) return true;
+    }
+
+    if (!rawNode || typeof rawNode !== 'object') return false;
+    const submitPlayerId = String((rawNode as any).submitPlayerId || '').trim();
+    if (!submitPlayerId) return false;
+
+    if (reportingPlayerIds.has(submitPlayerId)) return true;
+    for (const maybeId of idCandidates) {
+      if (submitPlayerId === maybeId) return true;
+    }
+    return false;
+  }
+
+  function buildWorldCircleLatLngs(map: any, centerX: number, centerZ: number, radiusBlocks: number, segments = 48) {
+    const points: any[] = [];
+    const safeSegments = Math.max(16, Math.min(96, Math.round(segments)));
+    for (let i = 0; i < safeSegments; i += 1) {
+      const rad = (Math.PI * 2 * i) / safeSegments;
+      const px = centerX + Math.cos(rad) * radiusBlocks;
+      const pz = centerZ + Math.sin(rad) * radiusBlocks;
+      points.push(worldToLatLng(map, px, pz));
+    }
+    return points;
+  }
+
+  function buildChunkCircleCellsLatLngs(map: any, centerX: number, centerZ: number, chunkRadius: number) {
+    const cx = Math.floor(centerX / 16);
+    const cz = Math.floor(centerZ / 16);
+    const radiusSq = chunkRadius * chunkRadius;
+    const cells: any[] = [];
+
+    for (let dx = -chunkRadius; dx <= chunkRadius; dx += 1) {
+      for (let dz = -chunkRadius; dz <= chunkRadius; dz += 1) {
+        if ((dx * dx) + (dz * dz) > radiusSq) continue;
+
+        const chunkX = cx + dx;
+        const chunkZ = cz + dz;
+        const minX = chunkX * 16;
+        const maxX = (chunkX + 1) * 16;
+        const minZ = chunkZ * 16;
+        const maxZ = (chunkZ + 1) * 16;
+
+        cells.push([
+          worldToLatLng(map, minX, minZ),
+          worldToLatLng(map, maxX, minZ),
+          worldToLatLng(map, maxX, maxZ),
+          worldToLatLng(map, minX, maxZ),
+        ]);
+      }
+    }
+
+    return cells;
+  }
+
+  function buildMarkerHtml(name: string, x: number, z: number, health: number | null, mark: any, townInfo: any, markerKind = 'player', isReporter = false) {
     const team = mark ? normalizeTeam(mark.team) : 'neutral';
     const color = mark ? normalizeColor(mark.color, deps.getConfiguredTeamColor(team)) : deps.getConfiguredTeamColor(team);
     const showIcon = Boolean(CONFIG.SHOW_PLAYER_ICON);
@@ -154,10 +266,16 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const safeNote = escapeHtml(noteText);
     const safeTown = escapeHtml(townText);
     const visual = getMarkerVisualConfig(markerKind);
+    const useReporterStar = markerKind === 'player' && isReporter && Boolean(CONFIG.REPORTER_STAR_ICON);
+    const iconSize = useReporterStar ? Math.max(18, visual.iconSize + 10) : visual.iconSize;
 
-    const iconContent = markerKind === 'horse' ? '🐎' : '';
+    const iconContent = markerKind === 'horse' ? '🐎' : (useReporterStar ? '★' : '');
+    const iconExtraClass = useReporterStar ? ' is-reporter-star' : '';
+    const iconVisualStyle = useReporterStar
+      ? `background:transparent;border:none;color:${color};box-shadow:none;text-shadow:0 0 8px ${color}99,0 0 2px rgba(15,23,42,.8);`
+      : `background:${markerKind === 'horse' ? 'rgba(15,23,42,.92)' : color};box-shadow:0 0 0 2px ${color}55,0 0 0 1px rgba(15,23,42,.95) inset;`;
     const iconHtml = showIcon
-      ? `<span class="n-icon ${markerKind === 'horse' ? 'is-horse' : ''}" style="background:${markerKind === 'horse' ? 'rgba(15,23,42,.92)' : color};box-shadow:0 0 0 2px ${color}55,0 0 0 1px rgba(15,23,42,.95) inset;width:${visual.iconSize}px;height:${visual.iconSize}px;line-height:${visual.iconSize}px;font-size:${Math.max(9, Math.round(visual.iconSize * 0.75))}px;">${iconContent}</span>`
+      ? `<span class="n-icon ${markerKind === 'horse' ? 'is-horse' : ''}${iconExtraClass}" style="${iconVisualStyle}width:${iconSize}px;height:${iconSize}px;line-height:${iconSize}px;font-size:${Math.max(9, Math.round(iconSize * 0.75))}px;">${iconContent}</span>`
       : '';
     const teamHtml = CONFIG.SHOW_LABEL_TEAM_INFO && markerKind !== 'horse'
       ? `<span class="n-team" style="color:${color}">[${safeTeam}]</span>`
@@ -176,7 +294,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   function upsertMarker(map: any, playerId: string, payload: any) {
     const existing = markersById.get(playerId);
     const latLng = worldToLatLng(map, payload.x, payload.z);
-    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, payload.kind || 'player');
+    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, payload.kind || 'player', Boolean(payload.isReporter));
 
     if (!html) {
       if (existing) {
@@ -217,6 +335,93 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
     marker.addTo(map);
     markersById.set(playerId, marker);
+  }
+
+  function upsertReporterEffects(map: any, playerId: string, payload: any, isReporter: boolean) {
+    const existing = reporterEffectsById.get(playerId) || { vision: null, chunkArea: null };
+
+    if (!isReporter || !payload || typeof payload !== 'object') {
+      if (existing.vision) {
+        try { existing.vision.remove(); } catch (_) {}
+      }
+      if (existing.chunkArea) {
+        try { existing.chunkArea.remove(); } catch (_) {}
+      }
+      reporterEffectsById.delete(playerId);
+      return;
+    }
+
+    const team = payload.mark ? normalizeTeam(payload.mark.team) : 'neutral';
+    const color = payload.mark
+      ? normalizeColor(payload.mark.color, deps.getConfiguredTeamColor(team))
+      : deps.getConfiguredTeamColor(team);
+
+    if (Boolean(CONFIG.REPORTER_VISION_CIRCLE_ENABLED)) {
+      const radiusBlocks = getReporterVisionRadiusBlocks();
+      const circlePath = buildWorldCircleLatLngs(map, payload.x, payload.z, radiusBlocks);
+      const visionColor = getReporterEffectColor('REPORTER_VISION_COLOR', color);
+      const visionFillOpacity = getReporterVisionOpacity();
+      const visionLineOpacity = Math.max(0.25, Math.min(1, visionFillOpacity + 0.45));
+      if (existing.vision) {
+        existing.vision.setLatLngs(circlePath);
+        existing.vision.setStyle({
+          color: visionColor,
+          weight: 1.5,
+          opacity: visionLineOpacity,
+          fillColor: visionColor,
+          fillOpacity: visionFillOpacity,
+        });
+      } else {
+        existing.vision = leafletRef.polygon(circlePath, {
+          color: visionColor,
+          weight: 1.5,
+          opacity: visionLineOpacity,
+          fillColor: visionColor,
+          fillOpacity: visionFillOpacity,
+          interactive: false,
+          smoothFactor: 0.5,
+        }).addTo(map);
+      }
+    } else if (existing.vision) {
+      try { existing.vision.remove(); } catch (_) {}
+      existing.vision = null;
+    }
+
+    if (Boolean(CONFIG.REPORTER_CHUNK_AREA_ENABLED)) {
+      const chunkRadius = getReporterChunkRadius();
+      const areaPath = buildChunkCircleCellsLatLngs(map, payload.x, payload.z, chunkRadius);
+      const chunkColor = getReporterEffectColor('REPORTER_CHUNK_COLOR', color);
+      const chunkFillOpacity = getReporterChunkOpacity();
+      const chunkLineOpacity = Math.max(0.2, Math.min(1, chunkFillOpacity + 0.35));
+      if (existing.chunkArea) {
+        existing.chunkArea.setLatLngs(areaPath);
+        existing.chunkArea.setStyle({
+          color: chunkColor,
+          weight: 0.8,
+          opacity: chunkLineOpacity,
+          fillColor: chunkColor,
+          fillOpacity: chunkFillOpacity,
+        });
+      } else {
+        existing.chunkArea = leafletRef.polygon(areaPath, {
+          color: chunkColor,
+          weight: 0.8,
+          opacity: chunkLineOpacity,
+          fillColor: chunkColor,
+          fillOpacity: chunkFillOpacity,
+          interactive: false,
+        }).addTo(map);
+      }
+    } else if (existing.chunkArea) {
+      try { existing.chunkArea.remove(); } catch (_) {}
+      existing.chunkArea = null;
+    }
+
+    if (existing.vision || existing.chunkArea) {
+      reporterEffectsById.set(playerId, existing);
+      return;
+    }
+    reporterEffectsById.delete(playerId);
   }
 
   function buildWaypointHtml(name: string, x: number, z: number, waypoint: any) {
@@ -311,16 +516,32 @@ export function createMapProjection(deps: MapProjectionDeps) {
     }
   }
 
+  function removeMissingReporterEffects(nextIds: Set<string>) {
+    for (const [playerId, layers] of reporterEffectsById.entries()) {
+      if (nextIds.has(playerId)) continue;
+      if (layers.vision) {
+        try { layers.vision.remove(); } catch (_) {}
+      }
+      if (layers.chunkArea) {
+        try { layers.chunkArea.remove(); } catch (_) {}
+      }
+      reporterEffectsById.delete(playerId);
+    }
+  }
+
   function applySnapshotPlayers(map: any, snapshot: any) {
     const players = snapshot && typeof snapshot === 'object' ? snapshot.players : null;
     if (!players || typeof players !== 'object') {
       removeMissingMarkers(new Set());
+      removeMissingReporterEffects(new Set());
       return;
     }
 
     const wantedDim = normalizeDimension(CONFIG.TARGET_DIMENSION);
     const nextIds = new Set<string>();
+    const nextPlayerIds = new Set<string>();
     const autoMarkSyncCandidates: any[] = [];
+    const reportingPlayerIds = getReportingPlayerIds(snapshot);
 
     for (const [playerId, rawNode] of Object.entries(players)) {
       const data = getPlayerDataNode(rawNode);
@@ -385,9 +606,15 @@ export function createMapProjection(deps: MapProjectionDeps) {
             color: tabInfo.teamColor || null,
           }
         : null;
+      const isReporter = isReportingPlayer(String(playerId), rawNode, data, reportingPlayerIds);
 
       nextIds.add(String(playerId));
-      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo });
+      nextPlayerIds.add(String(playerId));
+      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter });
+      try {
+        upsertReporterEffects(map, String(playerId), { x, z, mark: effectiveMark }, isReporter);
+      } catch (_) {
+      }
     }
 
     const entities = snapshot && typeof snapshot === 'object' ? snapshot.entities : null;
@@ -455,6 +682,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
     removeMissingMarkers(nextIds);
     removeMissingWaypoints(nextWaypointIds);
+    removeMissingReporterEffects(nextPlayerIds);
     deps.maybeSyncAutoDetectedMarks(autoMarkSyncCandidates);
 
     (PAGE as any).__NODEMC_PLAYER_OVERLAY__ = {
@@ -495,6 +723,12 @@ export function createMapProjection(deps: MapProjectionDeps) {
       try { m.remove(); } catch (_) {}
     }
     waypointsById.clear();
+
+    for (const layers of reporterEffectsById.values()) {
+      try { layers.vision?.remove(); } catch (_) {}
+      try { layers.chunkArea?.remove(); } catch (_) {}
+    }
+    reporterEffectsById.clear();
   }
 
   return {

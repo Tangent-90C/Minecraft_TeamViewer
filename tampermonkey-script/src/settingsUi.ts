@@ -43,6 +43,15 @@ type OverlayFormState = {
   HORSE_ICON_SIZE: string;
   HORSE_TEXT_SIZE: string;
   SHOW_COORDS: boolean;
+  REPORTER_STAR_ICON: boolean;
+  REPORTER_VISION_CIRCLE_ENABLED: boolean;
+  REPORTER_VISION_RADIUS: string;
+  REPORTER_VISION_COLOR: string;
+  REPORTER_VISION_OPACITY: string;
+  REPORTER_CHUNK_AREA_ENABLED: boolean;
+  REPORTER_CHUNK_RADIUS: string;
+  REPORTER_CHUNK_COLOR: string;
+  REPORTER_CHUNK_OPACITY: string;
   AUTO_TEAM_FROM_NAME: boolean;
   FRIENDLY_TAGS: string;
   ENEMY_TAGS: string;
@@ -71,6 +80,15 @@ function createDefaultFormState(): OverlayFormState {
     HORSE_ICON_SIZE: '14',
     HORSE_TEXT_SIZE: '12',
     SHOW_COORDS: false,
+    REPORTER_STAR_ICON: true,
+    REPORTER_VISION_CIRCLE_ENABLED: false,
+    REPORTER_VISION_RADIUS: '64',
+    REPORTER_VISION_COLOR: '',
+    REPORTER_VISION_OPACITY: '0.1',
+    REPORTER_CHUNK_AREA_ENABLED: false,
+    REPORTER_CHUNK_RADIUS: '2',
+    REPORTER_CHUNK_COLOR: '',
+    REPORTER_CHUNK_OPACITY: '0.11',
     AUTO_TEAM_FROM_NAME: true,
     FRIENDLY_TAGS: '',
     ENEMY_TAGS: '',
@@ -377,6 +395,15 @@ export function createSettingsUi(deps: SettingsUiDeps) {
     state.form.HORSE_ICON_SIZE = String(config.HORSE_ICON_SIZE ?? 14);
     state.form.HORSE_TEXT_SIZE = String(config.HORSE_TEXT_SIZE ?? 12);
     state.form.SHOW_COORDS = Boolean(config.SHOW_COORDS);
+    state.form.REPORTER_STAR_ICON = Boolean(config.REPORTER_STAR_ICON);
+    state.form.REPORTER_VISION_CIRCLE_ENABLED = Boolean(config.REPORTER_VISION_CIRCLE_ENABLED);
+    state.form.REPORTER_VISION_RADIUS = String(config.REPORTER_VISION_RADIUS ?? 64);
+    state.form.REPORTER_VISION_COLOR = String(config.REPORTER_VISION_COLOR ?? '');
+    state.form.REPORTER_VISION_OPACITY = String(config.REPORTER_VISION_OPACITY ?? 0.1);
+    state.form.REPORTER_CHUNK_AREA_ENABLED = Boolean(config.REPORTER_CHUNK_AREA_ENABLED);
+    state.form.REPORTER_CHUNK_RADIUS = String(config.REPORTER_CHUNK_RADIUS ?? 2);
+    state.form.REPORTER_CHUNK_COLOR = String(config.REPORTER_CHUNK_COLOR ?? '');
+    state.form.REPORTER_CHUNK_OPACITY = String(config.REPORTER_CHUNK_OPACITY ?? 0.11);
     state.form.AUTO_TEAM_FROM_NAME = Boolean(config.AUTO_TEAM_FROM_NAME);
     state.form.SHOW_WAYPOINT_ICON = Boolean(config.SHOW_WAYPOINT_ICON);
     state.form.SHOW_WAYPOINT_TEXT = Boolean(config.SHOW_WAYPOINT_TEXT);
@@ -407,6 +434,15 @@ export function createSettingsUi(deps: SettingsUiDeps) {
       HORSE_ICON_SIZE: state.form.HORSE_ICON_SIZE || config.HORSE_ICON_SIZE,
       HORSE_TEXT_SIZE: state.form.HORSE_TEXT_SIZE || config.HORSE_TEXT_SIZE,
       SHOW_COORDS: state.form.SHOW_COORDS,
+      REPORTER_STAR_ICON: state.form.REPORTER_STAR_ICON,
+      REPORTER_VISION_CIRCLE_ENABLED: state.form.REPORTER_VISION_CIRCLE_ENABLED,
+      REPORTER_VISION_RADIUS: state.form.REPORTER_VISION_RADIUS || config.REPORTER_VISION_RADIUS,
+      REPORTER_VISION_COLOR: state.form.REPORTER_VISION_COLOR,
+      REPORTER_VISION_OPACITY: state.form.REPORTER_VISION_OPACITY || config.REPORTER_VISION_OPACITY,
+      REPORTER_CHUNK_AREA_ENABLED: state.form.REPORTER_CHUNK_AREA_ENABLED,
+      REPORTER_CHUNK_RADIUS: state.form.REPORTER_CHUNK_RADIUS || config.REPORTER_CHUNK_RADIUS,
+      REPORTER_CHUNK_COLOR: state.form.REPORTER_CHUNK_COLOR,
+      REPORTER_CHUNK_OPACITY: state.form.REPORTER_CHUNK_OPACITY || config.REPORTER_CHUNK_OPACITY,
       AUTO_TEAM_FROM_NAME: state.form.AUTO_TEAM_FROM_NAME,
       FRIENDLY_TAGS: state.form.FRIENDLY_TAGS,
       ENEMY_TAGS: state.form.ENEMY_TAGS,

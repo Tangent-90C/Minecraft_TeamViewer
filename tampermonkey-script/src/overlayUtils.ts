@@ -167,6 +167,43 @@ export function sanitizeConfig(candidate: Record<string, unknown> | null | undef
   }
 
   next.SHOW_COORDS = Boolean(candidate.SHOW_COORDS);
+  next.REPORTER_STAR_ICON = candidate.REPORTER_STAR_ICON === undefined
+    ? DEFAULT_CONFIG.REPORTER_STAR_ICON
+    : Boolean(candidate.REPORTER_STAR_ICON);
+  next.REPORTER_VISION_CIRCLE_ENABLED = candidate.REPORTER_VISION_CIRCLE_ENABLED === undefined
+    ? DEFAULT_CONFIG.REPORTER_VISION_CIRCLE_ENABLED
+    : Boolean(candidate.REPORTER_VISION_CIRCLE_ENABLED);
+  const reporterVisionRadius = Number(candidate.REPORTER_VISION_RADIUS);
+  if (Number.isFinite(reporterVisionRadius)) {
+    next.REPORTER_VISION_RADIUS = Math.max(8, Math.min(4096, Math.round(reporterVisionRadius)));
+  }
+  if (typeof candidate.REPORTER_VISION_COLOR === 'string') {
+    const reporterVisionColorText = candidate.REPORTER_VISION_COLOR.trim();
+    next.REPORTER_VISION_COLOR = reporterVisionColorText
+      ? normalizeColor(reporterVisionColorText, DEFAULT_CONFIG.TEAM_COLOR_FRIENDLY)
+      : '';
+  }
+  const reporterVisionOpacity = Number(candidate.REPORTER_VISION_OPACITY);
+  if (Number.isFinite(reporterVisionOpacity)) {
+    next.REPORTER_VISION_OPACITY = Math.max(0.02, Math.min(0.9, reporterVisionOpacity));
+  }
+  next.REPORTER_CHUNK_AREA_ENABLED = candidate.REPORTER_CHUNK_AREA_ENABLED === undefined
+    ? DEFAULT_CONFIG.REPORTER_CHUNK_AREA_ENABLED
+    : Boolean(candidate.REPORTER_CHUNK_AREA_ENABLED);
+  const reporterChunkRadius = Number(candidate.REPORTER_CHUNK_RADIUS);
+  if (Number.isFinite(reporterChunkRadius)) {
+    next.REPORTER_CHUNK_RADIUS = Math.max(0, Math.min(64, Math.round(reporterChunkRadius)));
+  }
+  if (typeof candidate.REPORTER_CHUNK_COLOR === 'string') {
+    const reporterChunkColorText = candidate.REPORTER_CHUNK_COLOR.trim();
+    next.REPORTER_CHUNK_COLOR = reporterChunkColorText
+      ? normalizeColor(reporterChunkColorText, DEFAULT_CONFIG.TEAM_COLOR_FRIENDLY)
+      : '';
+  }
+  const reporterChunkOpacity = Number(candidate.REPORTER_CHUNK_OPACITY);
+  if (Number.isFinite(reporterChunkOpacity)) {
+    next.REPORTER_CHUNK_OPACITY = Math.max(0.02, Math.min(0.9, reporterChunkOpacity));
+  }
   next.AUTO_TEAM_FROM_NAME = candidate.AUTO_TEAM_FROM_NAME === undefined
     ? DEFAULT_CONFIG.AUTO_TEAM_FROM_NAME
     : Boolean(candidate.AUTO_TEAM_FROM_NAME);
