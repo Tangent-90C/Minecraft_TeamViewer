@@ -13,9 +13,17 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "main", "dev"]
+    branches: [ "main", "dev" ]
+    paths:
+      - 'backend-server/**'
+      - 'minecraft-mod/**'
+      - 'tampermonkey-script/**'
   pull_request:
-    branches: [ "main", "dev"]
+    branches: [ "main", "dev" ]
+    paths:
+      - 'backend-server/**'
+      - 'minecraft-mod/**'
+      - 'tampermonkey-script/**'
   schedule:
     - cron: '21 14 * * 2'
 
