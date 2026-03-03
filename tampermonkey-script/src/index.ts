@@ -25,6 +25,13 @@ import {
   getPlayerDataNode,
 } from './overlayUtils';
 import { createAutoMarkSyncManager } from './autoMarkSync';
+import {
+  buildCommandPlayerMarkClear,
+  buildCommandPlayerMarkClearAll,
+  buildCommandPlayerMarkSet,
+  buildCommandSameServerFilterSet,
+  buildCommandTacticalWaypointSet,
+} from './networkSchemas';
 import { createAdminWsClient } from './wsClient';
 import { createMapProjection } from './mapProjection';
 import { createSettingsUi } from './settingsUi';
@@ -340,8 +347,7 @@ declare const unsafeWindow: Window | undefined;
     getLatestPlayerMarks: () => latestPlayerMarks,
     getWsConnected: () => wsConnected,
     onCreateTacticalWaypoint: (payload) => {
-      const ok = sendAdminCommand({
-        type: 'command_tactical_waypoint_set',
+      const ok = sendAdminCommand(buildCommandTacticalWaypointSet({
         x: payload.x,
         z: payload.z,
         label: payload.label,
@@ -349,9 +355,9 @@ declare const unsafeWindow: Window | undefined;
         color: payload.color,
         ttlSeconds: payload.ttlSeconds,
         permanent: payload.permanent,
-        roomCode: normalizeRoomCode(CONFIG.ROOM_CODE),
-        dimension: normalizeDimension(CONFIG.TARGET_DIMENSION) || 'minecraft:overworld',
-      });
+        roomCode: CONFIG.ROOM_CODE,
+        dimension: CONFIG.TARGET_DIMENSION,
+      }));
       if (ok) {
         lastErrorText = null;
         updateUiStatus();
@@ -545,14 +551,13 @@ declare const unsafeWindow: Window | undefined;
     const color = normalizeColor(markForm.color || getConfiguredTeamColor(team, CONFIG), getConfiguredTeamColor(team, CONFIG));
     const label = markForm.label;
 
-    const ok = sendAdminCommand({
-      type: 'command_player_mark_set',
+    const ok = sendAdminCommand(buildCommandPlayerMarkSet({
       playerId: resolved.playerId,
       team,
       color,
       label,
       source: 'manual',
-    });
+    }));
     if (ok) {
       autoMarkSync.clearPlayerCache(resolved.playerId);
       lastErrorText = null;
@@ -568,10 +573,7 @@ declare const unsafeWindow: Window | undefined;
       return;
     }
 
-    const ok = sendAdminCommand({
-      type: 'command_player_mark_clear',
-      playerId: resolved.playerId,
-    });
+    const ok = sendAdminCommand(buildCommandPlayerMarkClear(resolved.playerId));
     if (ok) {
       autoMarkSync.clearPlayerCache(resolved.playerId);
       lastErrorText = null;
@@ -580,7 +582,7 @@ declare const unsafeWindow: Window | undefined;
   }
 
   function clearAllMarksOnServer() {
-    const ok = sendAdminCommand({ type: 'command_player_mark_clear_all' });
+    const ok = sendAdminCommand(buildCommandPlayerMarkClearAll());
     if (ok) {
       autoMarkSync.reset();
       lastErrorText = null;
@@ -589,10 +591,7 @@ declare const unsafeWindow: Window | undefined;
   }
 
   function setSameServerFilter(enabled: boolean) {
-    const ok = sendAdminCommand({
-      type: 'command_same_server_filter_set',
-      enabled: Boolean(enabled),
-    });
+    const ok = sendAdminCommand(buildCommandSameServerFilterSet(enabled));
     if (ok) {
       lastErrorText = null;
       updateUiStatus();

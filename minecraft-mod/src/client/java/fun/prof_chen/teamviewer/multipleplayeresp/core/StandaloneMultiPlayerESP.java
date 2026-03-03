@@ -30,6 +30,7 @@ import fun.prof_chen.teamviewer.multipleplayeresp.bridge.XaeroWaypointShareBridg
 import fun.prof_chen.teamviewer.multipleplayeresp.bridge.XaeroWorldMapBridge;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.ReportDataSchemas;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
 import fun.prof_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
@@ -197,22 +198,22 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				UUID pid = p.getUuid();
 				Vec3d pos = p.getPos();
 				Vec3d vel = p.getVelocity();
-				Map<String, Object> data = new HashMap<>();
-				data.put("x", pos.x);
-				data.put("y", pos.y);
-				data.put("z", pos.z);
-				data.put("vx", vel.x);
-				data.put("vy", vel.y);
-				data.put("vz", vel.z);
-				data.put("dimension", p.getWorld().getRegistryKey().getValue().toString());
-				data.put("playerName", p.getName().getString());
-				data.put("playerUUID", pid.toString());
-				data.put("health", p.getHealth());
-				data.put("maxHealth", p.getMaxHealth());
-				data.put("armor", 0);
-				data.put("width", p.getWidth());
-				data.put("height", p.getHeight());
-				players.put(pid, data);
+				ReportDataSchemas.PlayerDataPayload payload = new ReportDataSchemas.PlayerDataPayload(
+						pos.x,
+						pos.y,
+						pos.z,
+						vel.x,
+						vel.y,
+						vel.z,
+						p.getWorld().getRegistryKey().getValue().toString(),
+						p.getName().getString(),
+						pid.toString(),
+						p.getHealth(),
+						p.getMaxHealth(),
+						0,
+						p.getWidth(),
+						p.getHeight());
+				players.put(pid, payload.toMap());
 			}
 		}
 		return players;
@@ -228,19 +229,19 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				Vec3d eVel = entity.getVelocity();
 				String eDim = entity.getWorld().getRegistryKey().getValue().toString();
 				String entityType = entity.getType().toString();
-				Map<String, Object> data = new HashMap<>();
-				data.put("x", ePos.x);
-				data.put("y", ePos.y);
-				data.put("z", ePos.z);
-				data.put("vx", eVel.x);
-				data.put("vy", eVel.y);
-				data.put("vz", eVel.z);
-				data.put("dimension", eDim);
-				data.put("entityType", entityType);
-				data.put("entityName", entity.hasCustomName() ? entity.getDisplayName().getString() : null);
-				data.put("width", entity.getWidth());
-				data.put("height", entity.getHeight());
-				entities.put(entityId, data);
+				ReportDataSchemas.EntityDataPayload payload = new ReportDataSchemas.EntityDataPayload(
+						ePos.x,
+						ePos.y,
+						ePos.z,
+						eVel.x,
+						eVel.y,
+						eVel.z,
+						eDim,
+						entityType,
+						entity.hasCustomName() ? entity.getDisplayName().getString() : null,
+						entity.getWidth(),
+						entity.getHeight());
+				entities.put(entityId, payload.toMap());
 			}
 		}
 		return entities;

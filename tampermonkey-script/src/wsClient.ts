@@ -1,14 +1,14 @@
 import {
-  ADMIN_NETWORK_PROTOCOL_VERSION,
-  LOCAL_PROGRAM_VERSION,
-} from './constants';
-import {
   applyScopePatchMap,
-  normalizeRoomCode,
   shouldResyncForScopeMissingBaseline,
 } from './overlayUtils';
+import {
+  AdminSnapshot,
+  buildAdminHandshake,
+  createEmptyAdminSnapshotModel,
+} from './networkSchemas';
 
-type Snapshot = Record<string, any>;
+type Snapshot = AdminSnapshot & Record<string, any>;
 
 type WsClientDeps = {
   getConfig: () => Record<string, any>;
@@ -25,17 +25,7 @@ type WsClientDeps = {
 };
 
 export function createEmptyAdminSnapshot() {
-  return {
-    players: {},
-    entities: {},
-    waypoints: {},
-    playerMarks: {},
-    tabState: { enabled: false, reports: {}, groups: [] },
-    connections: [],
-    connections_count: 0,
-    revision: 0,
-    server_time: null,
-  };
+  return createEmptyAdminSnapshotModel();
 }
 
 export function createAdminWsClient(deps: WsClientDeps) {
@@ -217,15 +207,7 @@ export function createAdminWsClient(deps: WsClientDeps) {
       wsConnected = true;
       lastErrorText = null;
       try {
-        ws.send(JSON.stringify({
-          type: 'handshake',
-          networkProtocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
-          protocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
-          localProgramVersion: LOCAL_PROGRAM_VERSION,
-          roomCode: normalizeRoomCode(config.ROOM_CODE),
-          supportsDelta: true,
-          channel: 'admin',
-        }));
+        ws.send(JSON.stringify(buildAdminHandshake(config.ROOM_CODE)));
       } catch (error: any) {
         lastErrorText = String(error?.message || error);
       }

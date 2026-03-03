@@ -2,6 +2,10 @@ import {
   AUTO_MARK_SYNC_INTERVAL_MS,
   AUTO_MARK_SYNC_MAX_PER_TICK,
 } from './constants';
+import {
+  buildCommandPlayerMarkClear,
+  buildCommandPlayerMarkSet,
+} from './networkSchemas';
 import { normalizeColor, normalizeTeam } from './overlayUtils';
 
 type Candidate = {
@@ -51,22 +55,18 @@ export function createAutoMarkSyncManager(deps: {
           continue;
         }
 
-        ok = deps.sendAdminCommand({
-          type: 'command_player_mark_set',
+        ok = deps.sendAdminCommand(buildCommandPlayerMarkSet({
           playerId,
           team,
           color,
           source: 'auto',
-        });
+        }));
       } else {
         if (autoMarkSyncCache.get(playerId) === cacheKey) {
           continue;
         }
 
-        ok = deps.sendAdminCommand({
-          type: 'command_player_mark_clear',
-          playerId,
-        });
+        ok = deps.sendAdminCommand(buildCommandPlayerMarkClear(playerId));
       }
 
       if (!ok) {

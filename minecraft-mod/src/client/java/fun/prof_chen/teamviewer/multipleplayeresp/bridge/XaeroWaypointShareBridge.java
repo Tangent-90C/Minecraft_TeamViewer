@@ -8,6 +8,7 @@ import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.ReportDataSchemas;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
 
@@ -164,19 +165,29 @@ public final class XaeroWaypointShareBridge {
 			for (Map.Entry<String, SharedWaypointInfo> entry : currentLocal.entrySet()) {
 				if (!knownLocalWaypoints.containsKey(entry.getKey())) {
 					SharedWaypointInfo waypoint = entry.getValue();
-					Map<String, Object> payload = new HashMap<>();
-					payload.put("x", waypoint.x());
-					payload.put("y", waypoint.y());
-					payload.put("z", waypoint.z());
-					payload.put("dimension", waypoint.dimension());
-					payload.put("name", waypoint.name());
-					payload.put("symbol", waypoint.symbol());
-					payload.put("color", waypoint.color());
-					payload.put("ownerId", ownerId.toString());
-					payload.put("ownerName", ownerName);
-					payload.put("createdAt", waypoint.createdAt());
-					payload.put("ttlSeconds", manualTtl);
-					payload.put("waypointKind", "manual");
+					Map<String, Object> payload = new ReportDataSchemas.WaypointDataPayload(
+							waypoint.x(),
+							waypoint.y(),
+							waypoint.z(),
+							waypoint.dimension(),
+							waypoint.name(),
+							waypoint.symbol(),
+							waypoint.color(),
+							ownerId.toString(),
+							ownerName,
+							waypoint.createdAt(),
+							manualTtl,
+							"manual",
+							null,
+							null,
+							null,
+							null,
+							null,
+							null,
+							null,
+							null,
+							null,
+							null).toMap();
 					toUpload.put(entry.getKey(), payload);
 				}
 			}
