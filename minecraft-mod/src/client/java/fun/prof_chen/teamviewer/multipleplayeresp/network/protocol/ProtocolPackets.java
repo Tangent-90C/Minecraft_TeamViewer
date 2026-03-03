@@ -58,20 +58,12 @@ public final class ProtocolPackets {
 		public List<String> waypointIds;
 	}
 
-	public static class PositionsInboundPacket extends BaseInboundPacket {
-		public Map<String, Object> players;
-		public Map<String, Object> entities;
-		public Map<String, Object> waypoints;
-		public Map<String, Object> playerMarks;
-	}
-
 	public static class HandshakePacket {
 		public final String type = "handshake";
 		public String networkProtocolVersion;
 		public String minimumCompatibleNetworkProtocolVersion;
 		public String localProgramVersion;
 		public String roomCode;
-		public boolean supportsDelta;
 		public String submitPlayerId;
 	}
 
@@ -114,18 +106,6 @@ public final class ProtocolPackets {
 		public final String type = "waypoints_entity_death_cancel";
 		public String submitPlayerId;
 		public List<String> targetEntityIds;
-	}
-
-	public static class PlayersUpdatePacket {
-		public final String type = "players_update";
-		public String submitPlayerId;
-		public Map<String, Map<String, Object>> players;
-	}
-
-	public static class EntitiesUpdatePacket {
-		public final String type = "entities_update";
-		public String submitPlayerId;
-		public Map<String, Map<String, Object>> entities;
 	}
 
 	public static class ResyncReqPacket {

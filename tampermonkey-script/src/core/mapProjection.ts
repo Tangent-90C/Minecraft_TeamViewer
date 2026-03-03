@@ -1009,10 +1009,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
       const autoName = deps.getTabPlayerName(String(playerId)) || name;
       const autoMark = deps.autoTeamFromName(autoName);
       const existingMarkSource = existingMark ? normalizeMarkSource(existingMark.source) : 'manual';
-      const isLegacyUnknownMark = Boolean(existingMark) && !Boolean(existingMark.hasExplicitSource);
-      const legacyLikelyAuto = Boolean(isLegacyUnknownMark && autoMark)
-        && normalizeTeam(existingMark.team) === normalizeTeam(autoMark.team);
-      const existingActsAsAuto = Boolean(existingMark) && (existingMarkSource === 'auto' || legacyLikelyAuto);
+      const existingActsAsAuto = Boolean(existingMark) && existingMarkSource === 'auto';
       const isManualMark = Boolean(existingMark) && !existingActsAsAuto;
 
       if (isManualMark) {

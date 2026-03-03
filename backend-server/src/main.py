@@ -31,7 +31,7 @@ from server.state import ServerState
 
 
 
-NETWORK_PROTOCOL_VERSION = "0.3.0" # 服务器使用的协议版本
+NETWORK_PROTOCOL_VERSION = "0.3.1" # 服务器使用的协议版本
 SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION = "0.3.0" # 服务器兼容的最低协议版本
 SERVER_PROGRAM_VERSION = "teamviewer-server-dev"
 
@@ -416,21 +416,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         "minimumCompatibleNetworkProtocolVersion": SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION,
                         "localProgramVersion": SERVER_PROGRAM_VERSION,
                         "roomCode": client_room,
-                        "deltaEnabled": state.is_delta_client(submit_player_id),
+                        "deltaEnabled": True,
                         "digestIntervalSec": state.DIGEST_INTERVAL_SEC,
                         "rev": state.revision,
                     }
                     await send_packet(websocket, HandshakeAckPacket(**ack))
 
-                    await broadcaster.broadcast_updates(force_full_to_delta=state.is_delta_client(submit_player_id))
+                    await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
-            if submit_player_id and submit_player_id not in state.connections:
-                # 兼容旧客户端：未显式握手也可接入，但按 legacy 能力处理。
-                state.connections[submit_player_id] = websocket
-                state.set_player_room(submit_player_id, state.DEFAULT_ROOM_CODE)
-                state.mark_player_capability(submit_player_id, NETWORK_PROTOCOL_VERSION)
-                logger.info("Client %s connected (legacy)", submit_player_id)
+            if not submit_player_id or submit_player_id not in state.connections:
+                logger.debug("Ignore player packet before handshake registration submitPlayerId=%s", submit_player_id)
+                continue
 
             if packet.type == "players_update":
                 # 玩家全量：语义为“该来源本轮玩家状态完整快照”。

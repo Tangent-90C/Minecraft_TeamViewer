@@ -298,14 +298,6 @@ class DigestPacket(OutboundPacket):
     hashes: dict[str, str]
 
 
-class PositionsPacket(OutboundPacket):
-    type: Literal["positions"] = "positions"
-    players: dict[str, Any]
-    entities: dict[str, Any]
-    waypoints: dict[str, Any]
-    playerMarks: dict[str, Any]
-
-
 class RefreshRequestOutboundPacket(OutboundPacket):
     type: Literal["refresh_req"] = "refresh_req"
     reason: str

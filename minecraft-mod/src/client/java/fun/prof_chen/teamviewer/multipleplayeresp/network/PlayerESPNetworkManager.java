@@ -171,9 +171,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	// 最近一次连接错误信息 - 用于诊断连接问题
 	private volatile String lastConnectionError = "";
 	
-	// 服务端是否支持增量更新 - 影响数据传输策略
-	private volatile boolean serverSupportsDelta = false;
-	
 	// 服务端协议版本 - 用于版本兼容性判断
 	private volatile String serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
 	
@@ -441,9 +438,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	/**
 	 * 发送玩家位置更新数据 - 核心上行数据传输方法
 	 * 
-	 * 协议选择逻辑：
-	 * - 如果服务端支持增量更新：使用players_patch协议发送差分数据
-	 * - 如果服务端不支持增量更新：降级使用players_update协议发送全量数据
+	 * 协议选择逻辑：使用players_patch协议发送差分数据
 	 * 
 	 * 增量更新算法：
 	 * 1. 构建当前玩家状态快照
@@ -468,11 +463,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 */
 	public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
 		if (webSocket == null || !isConnected || submitPlayerId == null || players == null) {
-			return;
-		}
-
-		if (!serverSupportsDelta) {
-			sendPlayersUpdateLegacy(submitPlayerId, players);
 			return;
 		}
 
@@ -550,11 +540,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 */
 	public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
 		if (webSocket == null || !isConnected || submitPlayerId == null || entities == null) {
-			return;
-		}
-
-		if (!serverSupportsDelta) {
-			sendEntitiesUpdateLegacy(submitPlayerId, entities);
 			return;
 		}
 
@@ -819,42 +804,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 	}
 
-	private void sendPlayersUpdateLegacy(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
-		if (players.isEmpty()) {
-			return;
-		}
-		try {
-			Map<String, Map<String, Object>> playersJson = new HashMap<>();
-			for (Map.Entry<UUID, Map<String, Object>> e : players.entrySet()) {
-				playersJson.put(e.getKey().toString(), copyValueMap(e.getValue()));
-			}
-			ProtocolPackets.PlayersUpdatePacket packet = new ProtocolPackets.PlayersUpdatePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
-			packet.players = playersJson;
-			sendPacket(packet);
-		} catch (Exception e) {
-			LOGGER.error("Failed to send players_update to PlayerESP server: {}", e.getMessage());
-		}
-	}
-
-	private void sendEntitiesUpdateLegacy(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
-		if (entities.isEmpty()) {
-			return;
-		}
-		try {
-			Map<String, Map<String, Object>> entitiesJson = new HashMap<>();
-			for (Map.Entry<String, Map<String, Object>> e : entities.entrySet()) {
-				entitiesJson.put(e.getKey(), copyValueMap(e.getValue()));
-			}
-			ProtocolPackets.EntitiesUpdatePacket packet = new ProtocolPackets.EntitiesUpdatePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
-			packet.entities = entitiesJson;
-			sendPacket(packet);
-		} catch (Exception e) {
-			LOGGER.error("Failed to send entities_update to PlayerESP server: {}", e.getMessage());
-		}
-	}
-
 	private void sendPacket(Object packet) {
 		if (webSocket == null || packet == null) {
 			return;
@@ -962,10 +911,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - waypoints_update: 接收新的路标数据
 	 *    - waypoints_delete: 处理路标删除通知
 	 * 
-	 * 7. 兼容性消息(positions)：
-	 *    - 处理旧版本协议的遗留消息格式
-	 *    - 确保向后兼容性
-	 * 
 	 * 通用处理：
 	 * - 解析消息中的修订版本号(rev)
 	 * - 更新本地版本跟踪
@@ -1050,44 +995,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
-			if ("positions".equals(envelope.type)) {
-				ProtocolPackets.PositionsInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.PositionsInboundPacket.class);
-				applyLegacyPositions(packet);
-			}
 		} catch (Exception e) {
 			LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(), message);
-		}
-	}
-
-	private void applyLegacyPositions(ProtocolPackets.PositionsInboundPacket packet) {
-		if (packet == null) {
-			return;
-		}
-
-		JsonObject json = createObjectNode(packet);
-
-		if (json.has("players") && json.get("players").isJsonObject()) {
-			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"), true);
-			reconcileRemotePlayers(latestRemotePlayers);
-		}
-
-		if (json.has("entities") && json.get("entities").isJsonObject()) {
-			replaceEntityCache(json.getAsJsonObject("entities"));
-		}
-
-		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
-			remoteWaypointDataCache.clear();
-			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
-			remoteWaypointCache.clear();
-			remoteWaypointCache.putAll(receivedWaypoints);
-			if (!receivedWaypoints.isEmpty()) {
-				notifyWaypointsReceived(receivedWaypoints);
-			}
-		}
-
-		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
-			replacePlayerMarks(json.getAsJsonObject("playerMarks"));
 		}
 	}
 
@@ -1732,7 +1641,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *   "networkProtocolVersion": "客户端协议版本",
 	 *   "localProgramVersion": "客户端程序版本",
 	 *   "roomCode": "房间代码",
-	 *   "supportsDelta": true,
 	 *   "submitPlayerId": "玩家UUID"
 	 * }
 	 * 
@@ -1755,8 +1663,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			handshake.minimumCompatibleNetworkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
 			handshake.localProgramVersion = CLIENT_PROGRAM_VERSION;
 			handshake.roomCode = getRoomCode();
-			handshake.supportsDelta = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_SUPPORTS_DELTA;
-
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
 				handshake.submitPlayerId = client.player.getUuid().toString();
@@ -1778,19 +1684,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - serverProtocolVersion: 服务端协议版本
 	 *    - 用于后续功能兼容性判断
 	 * 
-	 * 2. 增量更新支持：
-	 *    - serverSupportsDelta: 是否支持差分同步
-	 *    - 影响数据传输策略选择
-	 * 
-	 * 3. 数据一致性配置：
+	 * 2. 数据一致性配置：
 	 *    - digestIntervalSec: 摘要校验间隔时间
 	 *    - 控制数据同步频率
 	 * 
-	 * 4. 初始状态同步：
+	 * 3. 初始状态同步：
 	 *    - lastServerRevision: 服务端初始修订版本
 	 *    - 作为后续增量更新的基准版本
 	 * 
-	 * 5. 程序版本信息：
+	 * 4. 程序版本信息：
 	 *    - serverProgramVersion: 服务端程序版本
 	 *    - 用于调试和版本对比
 	 */
@@ -1815,13 +1717,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 
-		serverSupportsDelta = Boolean.TRUE.equals(packet.deltaEnabled);
 		digestIntervalSec = packet.digestIntervalSec != null ? packet.digestIntervalSec : 10;
 		if (packet.rev != null) {
 			lastServerRevision = packet.rev;
 		}
-		LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, delta={}, digestInterval={}s",
-				serverProtocolVersion, serverProgramVersion, serverSupportsDelta, digestIntervalSec);
+		LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s",
+				serverProtocolVersion, serverProgramVersion, digestIntervalSec);
 	}
 
 	private String extractHandshakeRejectReason(ProtocolPackets.HandshakeAckInboundPacket packet) {
@@ -2481,7 +2382,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private void resetNegotiationState() {
-		serverSupportsDelta = false;
 		serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
 		serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
 		digestIntervalSec = 10;

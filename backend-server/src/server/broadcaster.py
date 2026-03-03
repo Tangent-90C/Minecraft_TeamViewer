@@ -2,7 +2,7 @@ import logging
 import time
 
 from .codec import JsonMessageCodec
-from .protocol import DigestPacket, PatchPacket, PositionsPacket, RefreshRequestOutboundPacket, SnapshotFullPacket
+from .protocol import DigestPacket, PatchPacket, RefreshRequestOutboundPacket, SnapshotFullPacket
 from .state import ServerState
 
 
@@ -191,7 +191,7 @@ class Broadcaster:
         """按节流周期发送摘要，帮助客户端做状态一致性检测。"""
         ws = self.state.connections.get(player_id)
         caps = self.state.connection_caps.get(player_id)
-        if ws is None or caps is None or not caps.get("delta"):
+        if ws is None or caps is None:
             return
 
         now = time.time()
@@ -257,40 +257,6 @@ class Broadcaster:
             if admin_id in self._admin_last_states:
                 del self._admin_last_states[admin_id]
 
-    async def broadcast_legacy_positions(self) -> None:
-        """向 legacy 客户端广播全量 positions 消息。"""
-        disconnected = []
-        for player_uuid, ws in list(self.state.connections.items()):
-            if self.state.is_delta_client(player_uuid):
-                continue
-            if not self.state.websocket_is_connected(ws):
-                logger.debug(
-                    f"Skip legacy broadcast to disconnected websocket player={player_uuid} "
-                    f"state=({self.state.websocket_state_label(ws)})"
-                )
-                disconnected.append(player_uuid)
-                continue
-            try:
-                visible = self._build_visible_state_for_player(player_uuid)
-                message = self._encode_message(
-                    PositionsPacket(
-                        players=dict(visible["players"]),
-                        entities=dict(visible["entities"]),
-                        waypoints=dict(visible["waypoints"]),
-                        playerMarks=dict(self.state.player_marks),
-                    )
-                )
-                await ws.send_text(message)
-            except Exception as e:
-                logger.warning(
-                    f"Error sending legacy message to player={player_uuid} "
-                    f"state=({self.state.websocket_state_label(ws)}): {e}"
-                )
-                disconnected.append(player_uuid)
-
-        for player_uuid in disconnected:
-            self.state.remove_connection(player_uuid)
-
     async def broadcast_updates(self, force_full_to_delta: bool = False) -> None:
         """统一广播入口：清理超时、计算 patch、按能力下发。"""
         await self.request_preexpiry_refreshes()
@@ -314,39 +280,38 @@ class Broadcaster:
                 continue
 
             try:
-                if self.state.is_delta_client(player_id):
-                    requires_scoped = self.state.requires_scoped_delivery(player_id)
-                    if requires_scoped:
-                        visible = self._build_visible_state_for_player(player_id)
-                        if force_full_to_delta or changed:
-                            compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
-                            compact_scopes["playerMarks"] = dict(self.state.player_marks)
-                            full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
-                            await ws.send_text(self._encode_message(full_msg))
-                        await self.maybe_send_digest(player_id, visible)
-                    elif force_full_to_delta:
-                        compact_scopes = self._compact_scope_state(
-                            {
-                                "players": self.state.players,
-                                "entities": self.state.entities,
-                                "waypoints": self.state.waypoints,
-                            },
-                            self._player_sync_scopes,
-                        )
+                requires_scoped = self.state.requires_scoped_delivery(player_id)
+                if requires_scoped:
+                    visible = self._build_visible_state_for_player(player_id)
+                    if force_full_to_delta or changed:
+                        compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
                         compact_scopes["playerMarks"] = dict(self.state.player_marks)
                         full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
                         await ws.send_text(self._encode_message(full_msg))
-                    elif changed:
-                        patch_state = {
-                            "players": changes["players"],
-                            "entities": changes["entities"],
-                            "waypoints": changes["waypoints"],
-                        }
-                        patch_msg = self._build_patch_message(rev, patch_state, revision_key="rev")
-                        await ws.send_text(self._encode_message(patch_msg))
+                    await self.maybe_send_digest(player_id, visible)
+                elif force_full_to_delta:
+                    compact_scopes = self._compact_scope_state(
+                        {
+                            "players": self.state.players,
+                            "entities": self.state.entities,
+                            "waypoints": self.state.waypoints,
+                        },
+                        self._player_sync_scopes,
+                    )
+                    compact_scopes["playerMarks"] = dict(self.state.player_marks)
+                    full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
+                    await ws.send_text(self._encode_message(full_msg))
+                elif changed:
+                    patch_state = {
+                        "players": changes["players"],
+                        "entities": changes["entities"],
+                        "waypoints": changes["waypoints"],
+                    }
+                    patch_msg = self._build_patch_message(rev, patch_state, revision_key="rev")
+                    await ws.send_text(self._encode_message(patch_msg))
 
-                    if not requires_scoped:
-                        await self.maybe_send_digest(player_id)
+                if not requires_scoped:
+                    await self.maybe_send_digest(player_id)
             except RuntimeError as e:
                 logger.warning(
                     f"RuntimeError sending delta update to player={player_id} "
@@ -364,9 +329,6 @@ class Broadcaster:
 
         for player_id in disconnected:
             self.state.remove_connection(player_id)
-
-        if changed:
-            await self.broadcast_legacy_positions()
 
         await self.broadcast_admin_updates()
 
