@@ -107,7 +107,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
 	
 	// 强制全量刷新间隔(毫秒) - 确保数据最终一致性
-	private static final long FORCE_FULL_REFRESH_MS = 25_000L;
+	private static final long FORCE_FULL_REFRESH_MS = 60_000L;
+	
+	// 对象级保活默认间隔(毫秒) - 若握手未下发 timeout，则使用该值
+	private static final long DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS = 12_000L;
+
+	// 单次 keepalive 报文最多携带对象数量
+	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
 
 	// 全局配置引用
 	private static Config config;
@@ -138,6 +144,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	
 	// 上次发送的实体快照 - 用于计算增量更新
 	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
+
+	// 对象级保活时间戳：记录某个对象最近一次被显式保活/上报的时刻
+	private final Map<String, Long> lastPlayerObjectLivenessMs = new HashMap<>();
+	private final Map<String, Long> lastEntityObjectLivenessMs = new HashMap<>();
 
 	// WebSocket连接实例
 	private WebSocket webSocket;
@@ -185,6 +195,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	// 服务端广播频率与协商后的上报间隔
 	private volatile double serverBroadcastHz = 20.0;
 	private volatile int negotiatedReportIntervalTicks = 10;
+	private volatile long playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
+	private volatile long entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 	
 	// 上次重同步请求时间戳 - 防止重复请求
 	private volatile long lastResyncRequestMs = 0L;
@@ -467,6 +479,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (webSocket == null || !isConnected || submitPlayerId == null || players == null) {
 			return;
 		}
+		long now = System.currentTimeMillis();
 
 		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
 		for (Map.Entry<UUID, Map<String, Object>> entry : players.entrySet()) {
@@ -499,19 +512,22 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		applyPendingPlayerRefresh(currentSnapshot, upsert, delete);
 
 		if (upsert.isEmpty() && delete.isEmpty()) {
+			sendObjectKeepaliveIfNeeded(submitPlayerId, currentSnapshot, null, upsert.keySet(), null, now);
 			return;
 		}
 
 		try {
-			long sentAt = System.currentTimeMillis();
+			long sentAt = now;
 			ProtocolPackets.PlayersPatchPacket packet = new ProtocolPackets.PlayersPatchPacket();
 			packet.submitPlayerId = submitPlayerId.toString();
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
+			updateObjectLivenessAfterPatch(lastPlayerObjectLivenessMs, upsert.keySet(), delete, sentAt);
 			lastSentPlayersSnapshot.clear();
 			lastSentPlayersSnapshot.putAll(currentSnapshot);
 			lastPlayersPacketSentMs = sentAt;
+			sendObjectKeepaliveIfNeeded(submitPlayerId, currentSnapshot, null, upsert.keySet(), null, sentAt);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send players_patch: {}", e.getMessage());
 		}
@@ -542,6 +558,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (webSocket == null || !isConnected || submitPlayerId == null || entities == null) {
 			return;
 		}
+		long now = System.currentTimeMillis();
 
 		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
 		for (Map.Entry<String, Map<String, Object>> entry : entities.entrySet()) {
@@ -574,19 +591,22 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		applyPendingEntityRefresh(currentSnapshot, upsert, delete);
 
 		if (upsert.isEmpty() && delete.isEmpty()) {
+			sendObjectKeepaliveIfNeeded(submitPlayerId, null, currentSnapshot, null, upsert.keySet(), now);
 			return;
 		}
 
 		try {
-			long sentAt = System.currentTimeMillis();
+			long sentAt = now;
 			ProtocolPackets.EntitiesPatchPacket packet = new ProtocolPackets.EntitiesPatchPacket();
 			packet.submitPlayerId = submitPlayerId.toString();
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
+			updateObjectLivenessAfterPatch(lastEntityObjectLivenessMs, upsert.keySet(), delete, sentAt);
 			lastSentEntitiesSnapshot.clear();
 			lastSentEntitiesSnapshot.putAll(currentSnapshot);
 			lastEntitiesPacketSentMs = sentAt;
+			sendObjectKeepaliveIfNeeded(submitPlayerId, null, currentSnapshot, null, upsert.keySet(), sentAt);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send entities_patch: {}", e.getMessage());
 		}
@@ -1730,8 +1750,37 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (packet.reportIntervalTicks != null && packet.reportIntervalTicks > 0) {
 			negotiatedReportIntervalTicks = packet.reportIntervalTicks;
 		}
-		LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s",
-				serverProtocolVersion, serverProgramVersion, digestIntervalSec);
+
+		int advertisedPlayerTimeoutSec = packet.playerTimeoutSec != null && packet.playerTimeoutSec > 0
+				? packet.playerTimeoutSec
+				: 0;
+		int advertisedEntityTimeoutSec = packet.entityTimeoutSec != null && packet.entityTimeoutSec > 0
+				? packet.entityTimeoutSec
+				: 0;
+		if (advertisedPlayerTimeoutSec > 0) {
+			playerKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedPlayerTimeoutSec);
+		}
+		if (advertisedEntityTimeoutSec > 0) {
+			entityKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedEntityTimeoutSec);
+		}
+
+		LOGGER.info(
+				"Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s, playerKeepalive={}ms(playerTimeout={}s), entityKeepalive={}ms(entityTimeout={}s)",
+				serverProtocolVersion,
+				serverProgramVersion,
+				digestIntervalSec,
+				playerKeepaliveIntervalMs,
+				advertisedPlayerTimeoutSec,
+				entityKeepaliveIntervalMs,
+				advertisedEntityTimeoutSec
+		);
+	}
+
+	private long calculateKeepaliveIntervalMs(int timeoutSec) {
+		long timeoutMs = Math.max(1L, (long) timeoutSec) * 1_000L;
+		long candidate = Math.round(timeoutMs * 0.6);
+		long upperBound = Math.max(1_000L, timeoutMs - 1_000L);
+		return Math.max(1_000L, Math.min(candidate, upperBound));
 	}
 
 	private void handleReportRateHint(ProtocolPackets.ReportRateHintInboundPacket packet) {
@@ -2049,6 +2098,106 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 		}
 		return delta;
+	}
+
+	private void updateObjectLivenessAfterPatch(
+			Map<String, Long> livenessMap,
+			Set<String> upsertIds,
+			List<String> deleteIds,
+			long nowMs
+	) {
+		if (upsertIds != null) {
+			for (String id : upsertIds) {
+				if (id != null && !id.isBlank()) {
+					livenessMap.put(id, nowMs);
+				}
+			}
+		}
+		if (deleteIds != null) {
+			for (String id : deleteIds) {
+				if (id != null && !id.isBlank()) {
+					livenessMap.remove(id);
+				}
+			}
+		}
+	}
+
+	private void sendObjectKeepaliveIfNeeded(
+			UUID submitPlayerId,
+			Map<String, Map<String, Object>> playerSnapshot,
+			Map<String, Map<String, Object>> entitySnapshot,
+			Set<String> playerUpsertIds,
+			Set<String> entityUpsertIds,
+			long nowMs
+	) {
+		if (webSocket == null || !isConnected || submitPlayerId == null) {
+			return;
+		}
+
+		List<String> keepalivePlayers = collectKeepaliveIds(
+				playerSnapshot,
+				playerUpsertIds,
+				lastPlayerObjectLivenessMs,
+				playerKeepaliveIntervalMs,
+				nowMs
+		);
+		List<String> keepaliveEntities = collectKeepaliveIds(
+				entitySnapshot,
+				entityUpsertIds,
+				lastEntityObjectLivenessMs,
+				entityKeepaliveIntervalMs,
+				nowMs
+		);
+
+		if (keepalivePlayers.isEmpty() && keepaliveEntities.isEmpty()) {
+			return;
+		}
+
+		ProtocolPackets.StateKeepalivePacket packet = new ProtocolPackets.StateKeepalivePacket();
+		packet.submitPlayerId = submitPlayerId.toString();
+		packet.players = keepalivePlayers;
+		packet.entities = keepaliveEntities;
+		sendPacket(packet);
+	}
+
+	private List<String> collectKeepaliveIds(
+			Map<String, Map<String, Object>> snapshot,
+			Set<String> justUpsertedIds,
+			Map<String, Long> livenessMap,
+			long keepaliveIntervalMs,
+			long nowMs
+	) {
+		if (snapshot == null || snapshot.isEmpty()) {
+			return List.of();
+		}
+
+		Set<String> activeIds = new HashSet<>(snapshot.keySet());
+		livenessMap.keySet().retainAll(activeIds);
+
+		List<String> keepaliveIds = new ArrayList<>();
+		for (String objectId : activeIds) {
+			if (objectId == null || objectId.isBlank()) {
+				continue;
+			}
+			if (justUpsertedIds != null && justUpsertedIds.contains(objectId)) {
+				continue;
+			}
+			Long lastSeenMs = livenessMap.get(objectId);
+			if (lastSeenMs == null) {
+				livenessMap.put(objectId, nowMs);
+				continue;
+			}
+			if (nowMs - lastSeenMs < keepaliveIntervalMs) {
+				continue;
+			}
+			keepaliveIds.add(objectId);
+			livenessMap.put(objectId, nowMs);
+			if (keepaliveIds.size() >= KEEPALIVE_MAX_ITEMS_PER_PACKET) {
+				break;
+			}
+		}
+
+		return keepaliveIds;
 	}
 
 	private boolean shouldForcePlayersFullRefresh() {
@@ -2414,6 +2563,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		digestIntervalSec = 10;
 		serverBroadcastHz = 20.0;
 		negotiatedReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
+		playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
+		entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
@@ -2431,6 +2582,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
+		lastPlayerObjectLivenessMs.clear();
+		lastEntityObjectLivenessMs.clear();
 		lastTabPlayersSignature = "";
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();

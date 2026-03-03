@@ -108,6 +108,8 @@ async def reject_handshake(
             error="version_incompatible",
             rejectReason=reason,
             broadcastHz=state.broadcast_hz,
+            playerTimeoutSec=state.PLAYER_TIMEOUT,
+            entityTimeoutSec=state.ENTITY_TIMEOUT,
         ),
     )
     close_reason = reason if len(reason) <= 120 else reason[:120]
@@ -238,6 +240,8 @@ async def admin_ws(websocket: WebSocket):
                         roomCode=admin_room,
                         deltaEnabled=True,
                         broadcastHz=state.broadcast_hz,
+                        playerTimeoutSec=state.PLAYER_TIMEOUT,
+                        entityTimeoutSec=state.ENTITY_TIMEOUT,
                     ),
                 )
                 await broadcaster.send_admin_snapshot_full(admin_id)
@@ -479,6 +483,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         "digestIntervalSec": state.DIGEST_INTERVAL_SEC,
                         "broadcastHz": state.broadcast_hz,
                         "reportIntervalTicks": negotiated_ticks,
+                        "playerTimeoutSec": state.PLAYER_TIMEOUT,
+                        "entityTimeoutSec": state.ENTITY_TIMEOUT,
                     }
                     await send_packet(websocket, HandshakeAckPacket(**ack))
                     await broadcaster.send_snapshot_full_to_player(submit_player_id)
@@ -486,6 +492,28 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if not submit_player_id or submit_player_id not in state.connections:
                 logger.debug("Ignore player packet before handshake registration submitPlayerId=%s", submit_player_id)
+                continue
+
+            if packet.type == "state_keepalive":
+                current_time = time.time()
+                touched_players = state.touch_reports(
+                    state.player_reports,
+                    packet.players,
+                    submit_player_id,
+                    current_time,
+                )
+                touched_entities = state.touch_reports(
+                    state.entity_reports,
+                    packet.entities,
+                    submit_player_id,
+                    current_time,
+                )
+                if touched_players or touched_entities:
+                    logger.debug(
+                        "Applied state_keepalive "
+                        f"submitPlayerId={submit_player_id} players={touched_players}/{len(packet.players)} "
+                        f"entities={touched_entities}/{len(packet.entities)}"
+                    )
                 continue
 
             if packet.type == "players_update":

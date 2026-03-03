@@ -23,6 +23,8 @@ public final class ProtocolPackets {
 		public Integer digestIntervalSec;
 		public Double broadcastHz;
 		public Integer reportIntervalTicks;
+		public Integer playerTimeoutSec;
+		public Integer entityTimeoutSec;
 	}
 
 	public static class SnapshotFullInboundPacket extends BaseInboundPacket {
@@ -88,6 +90,13 @@ public final class ProtocolPackets {
 		public String submitPlayerId;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
+	}
+
+	public static class StateKeepalivePacket {
+		public final String type = "state_keepalive";
+		public String submitPlayerId;
+		public List<String> players;
+		public List<String> entities;
 	}
 
 	public static class WaypointsUpdatePacket {

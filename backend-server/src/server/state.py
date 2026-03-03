@@ -2,8 +2,9 @@ import hashlib
 import json
 import logging
 import math
-import os
 import time
+import tomllib
+from pathlib import Path
 from typing import Dict, Optional
 
 from fastapi import WebSocket
@@ -24,24 +25,25 @@ class ServerState:
     """
 
     # 默认超时配置（秒）
-    # - PLAYER_TIMEOUT / ENTITY_TIMEOUT / WAYPOINT_TIMEOUT: 对象在“没有新上报”时的基础生存时间。
-    #   现在所有来源统一按基础超时处理，不再因连接在线与否额外放宽超时。
-    PLAYER_TIMEOUT = 30
-    ENTITY_TIMEOUT = 30
+    # - PLAYER_TIMEOUT / ENTITY_TIMEOUT / WAYPOINT_TIMEOUT:
+    #   对象在“没有新上报”时的基础生存时间。
+    #   实际运行值会在 __init__ 中由配置文件覆盖。
+    PLAYER_TIMEOUT = 120
+    ENTITY_TIMEOUT = 300
     WAYPOINT_TIMEOUT = 60
     # 多来源切换阈值：仅当候选来源显著更新（领先该阈值秒）才切换来源，减少抖动。
     SOURCE_SWITCH_THRESHOLD_SEC = 0.35
     # 超时清理日志输出节流：避免高频刷屏。
     TIMEOUT_LOG_INTERVAL_SEC = 2.0
     TIMEOUT_LOG_SAMPLE_LIMIT = 20
-    # refresh_req 下发节流：同一来源两次请求最小间隔。
+    # refresh_req 下发节流：同一来源两次请求最小间隔（秒）。
     REFRESH_REQUEST_COOLDOWN_SEC = 1.5
-    # 提前量窗口：对象距离超时 <= 该值时，会触发 pre-expiry refresh_req。
+    # 提前量窗口：对象距离超时 <= 该值时，会触发 pre-expiry refresh_req（秒）。
     REFRESH_REQUEST_LEAD_SEC = 1.2
     # 单次 refresh_req 每个 scope 最多携带多少对象，避免包过大。
     REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = 64
 
-    # 协议配置
+    # 协议配置（可由配置文件覆盖）
     DIGEST_INTERVAL_SEC = 10
     DEFAULT_BROADCAST_HZ = 20.0
     MIN_BROADCAST_HZ = 2.0
@@ -53,6 +55,9 @@ class ServerState:
     TAB_REPORT_TIMEOUT_SEC = 45
     DEFAULT_ROOM_CODE = "default"
     ADMIN_TACTICAL_SOURCE_PREFIX = "__admin_tactical__:"
+
+    # 服务端配置文件（TOML）路径。
+    CONFIG_FILE_NAME = "server_state_config.toml"
 
     def __init__(self) -> None:
         # 已仲裁后的最终视图，供广播层直接下发。
@@ -87,25 +92,67 @@ class ServerState:
         self._last_timeout_log_ts = 0.0
         self._last_refresh_request_ts: Dict[str, float] = {}
 
-        self.PLAYER_TIMEOUT = self._get_env_int("TEAMVIEWER_PLAYER_TIMEOUT_SEC", self.PLAYER_TIMEOUT, 1, 3600)
-        self.ENTITY_TIMEOUT = self._get_env_int("TEAMVIEWER_ENTITY_TIMEOUT_SEC", self.ENTITY_TIMEOUT, 1, 3600)
-        self.WAYPOINT_TIMEOUT = self._get_env_int("TEAMVIEWER_WAYPOINT_TIMEOUT_SEC", self.WAYPOINT_TIMEOUT, 5, 86400)
-        self.TIMEOUT_LOG_INTERVAL_SEC = float(
-            self._get_env_int("TEAMVIEWER_TIMEOUT_LOG_INTERVAL_SEC", int(self.TIMEOUT_LOG_INTERVAL_SEC), 1, 600)
+        # 配置加载说明：
+        # 1) 不再读取环境变量；
+        # 2) 全部从 server_state_config.toml 读取；
+        # 3) 未配置时回退到类默认值。
+        config = self._load_file_config()
+
+        timeout_cfg = config.get("timeouts", {}) if isinstance(config.get("timeouts"), dict) else {}
+        self.PLAYER_TIMEOUT = self._coerce_int(timeout_cfg.get("playerTimeoutSec"), self.PLAYER_TIMEOUT, 1, 3600)
+        self.ENTITY_TIMEOUT = self._coerce_int(timeout_cfg.get("entityTimeoutSec"), self.ENTITY_TIMEOUT, 1, 3600)
+        self.WAYPOINT_TIMEOUT = self._coerce_int(timeout_cfg.get("waypointTimeoutSec"), self.WAYPOINT_TIMEOUT, 5, 86400)
+
+        timeout_log_cfg = config.get("timeoutLog", {}) if isinstance(config.get("timeoutLog"), dict) else {}
+        self.TIMEOUT_LOG_INTERVAL_SEC = self._coerce_float(
+            timeout_log_cfg.get("intervalSec"),
+            self.TIMEOUT_LOG_INTERVAL_SEC,
+            0.1,
+            600.0,
         )
-        self.REFRESH_REQUEST_COOLDOWN_SEC = float(
-            self._get_env_int("TEAMVIEWER_REFRESH_REQ_COOLDOWN_SEC", int(self.REFRESH_REQUEST_COOLDOWN_SEC), 1, 120)
+        self.TIMEOUT_LOG_SAMPLE_LIMIT = self._coerce_int(
+            timeout_log_cfg.get("sampleLimit"),
+            self.TIMEOUT_LOG_SAMPLE_LIMIT,
+            1,
+            500,
         )
-        self.REFRESH_REQUEST_LEAD_SEC = float(
-            self._get_env_int("TEAMVIEWER_REFRESH_REQ_LEAD_SEC", int(self.REFRESH_REQUEST_LEAD_SEC), 1, 30)
+
+        refresh_cfg = config.get("refreshRequest", {}) if isinstance(config.get("refreshRequest"), dict) else {}
+        self.REFRESH_REQUEST_COOLDOWN_SEC = self._coerce_float(
+            refresh_cfg.get("cooldownSec"),
+            self.REFRESH_REQUEST_COOLDOWN_SEC,
+            0.1,
+            120.0,
         )
-        self.TAB_REPORT_TIMEOUT_SEC = self._get_env_int(
-            "TEAMVIEWER_TAB_REPORT_TIMEOUT_SEC",
-            self.TAB_REPORT_TIMEOUT_SEC,
-            5,
-            600,
+        self.REFRESH_REQUEST_LEAD_SEC = self._coerce_float(
+            refresh_cfg.get("leadSec"),
+            self.REFRESH_REQUEST_LEAD_SEC,
+            0.1,
+            30.0,
         )
-        self.same_server_filter_enabled = self._get_env_bool("TEAMVIEWER_ENABLE_SAME_SERVER_FILTER", False)
+        self.REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = self._coerce_int(
+            refresh_cfg.get("maxItemsPerScope"),
+            self.REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE,
+            1,
+            500,
+        )
+
+        protocol_cfg = config.get("protocol", {}) if isinstance(config.get("protocol"), dict) else {}
+        self.DIGEST_INTERVAL_SEC = self._coerce_int(protocol_cfg.get("digestIntervalSec"), self.DIGEST_INTERVAL_SEC, 1, 120)
+        self.DEFAULT_BROADCAST_HZ = self._coerce_float(protocol_cfg.get("defaultBroadcastHz"), self.DEFAULT_BROADCAST_HZ, 1.0, 120.0)
+        self.MIN_BROADCAST_HZ = self._coerce_float(protocol_cfg.get("minBroadcastHz"), self.MIN_BROADCAST_HZ, 0.5, 60.0)
+        self.TAB_REPORT_TIMEOUT_SEC = self._coerce_int(protocol_cfg.get("tabReportTimeoutSec"), self.TAB_REPORT_TIMEOUT_SEC, 5, 600)
+
+        raw_congestion_levels = protocol_cfg.get("congestionLevels")
+        parsed_congestion_levels = self._parse_congestion_levels(raw_congestion_levels)
+        if parsed_congestion_levels:
+            self.CONGESTION_LEVELS = tuple(parsed_congestion_levels)
+
+        feature_cfg = config.get("features", {}) if isinstance(config.get("features"), dict) else {}
+        self.same_server_filter_enabled = self._coerce_bool(
+            feature_cfg.get("sameServerFilterEnabled"),
+            False,
+        )
 
         logger.info(
             "ServerState timeout config "
@@ -116,32 +163,78 @@ class ServerState:
             f"enabled={self.same_server_filter_enabled} tabReportTimeout={self.TAB_REPORT_TIMEOUT_SEC}s"
         )
 
-    @staticmethod
-    def _get_env_int(key: str, default: int, min_value: int, max_value: int) -> int:
-        raw = os.getenv(key)
-        if raw is None:
-            return default
+    @classmethod
+    def _config_file_path(cls) -> Path:
+        return Path(__file__).resolve().parent / cls.CONFIG_FILE_NAME
+
+    @classmethod
+    def _load_file_config(cls) -> dict:
+        path = cls._config_file_path()
+        if not path.exists():
+            logger.warning(
+                "Config file not found, fallback to defaults: %s",
+                path,
+            )
+            return {}
+
         try:
-            value = int(raw)
-        except ValueError:
-            return default
-        if value < min_value:
-            return min_value
-        if value > max_value:
-            return max_value
-        return value
+            with path.open("rb") as fp:
+                data = tomllib.load(fp)
+            return data if isinstance(data, dict) else {}
+        except Exception as exc:
+            logger.warning(
+                "Failed to load config file %s, fallback to defaults: %s",
+                path,
+                exc,
+            )
+            return {}
 
     @staticmethod
-    def _get_env_bool(key: str, default: bool) -> bool:
-        raw = os.getenv(key)
-        if raw is None:
+    def _coerce_int(value, default: int, min_value: int, max_value: int) -> int:
+        if not isinstance(value, (int, float)):
             return default
-        text = str(raw).strip().lower()
-        if text in ("1", "true", "yes", "on"):
-            return True
-        if text in ("0", "false", "no", "off"):
-            return False
+        coerced = int(value)
+        if coerced < min_value:
+            return min_value
+        if coerced > max_value:
+            return max_value
+        return coerced
+
+    @staticmethod
+    def _coerce_float(value, default: float, min_value: float, max_value: float) -> float:
+        if not isinstance(value, (int, float)):
+            return default
+        coerced = float(value)
+        if coerced < min_value:
+            return min_value
+        if coerced > max_value:
+            return max_value
+        return coerced
+
+    @staticmethod
+    def _coerce_bool(value, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
         return default
+
+    @staticmethod
+    def _parse_congestion_levels(raw_levels) -> list[tuple[int, float]]:
+        if not isinstance(raw_levels, list):
+            return []
+
+        levels: list[tuple[int, float]] = []
+        for item in raw_levels:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                continue
+            threshold, hz = item[0], item[1]
+            if not isinstance(threshold, (int, float)) or not isinstance(hz, (int, float)):
+                continue
+            threshold_int = max(1, int(threshold))
+            hz_float = max(0.5, float(hz))
+            levels.append((threshold_int, hz_float))
+
+        levels.sort(key=lambda pair: pair[0], reverse=True)
+        return levels
 
     @staticmethod
     def _normalize_tab_uuid(value) -> Optional[str]:
@@ -764,6 +857,32 @@ class ServerState:
         if not source_bucket:
             del report_map[object_id]
         return True
+
+    @staticmethod
+    def touch_reports(
+        report_map: Dict[str, Dict[str, dict]],
+        object_ids: list[str],
+        source_id: Optional[str],
+        current_time: float,
+    ) -> int:
+        if not isinstance(object_ids, list) or not object_ids:
+            return 0
+
+        source_key = source_id if isinstance(source_id, str) else ""
+        touched = 0
+        for object_id in object_ids:
+            if not isinstance(object_id, str) or not object_id:
+                continue
+            source_bucket = report_map.get(object_id)
+            if not isinstance(source_bucket, dict):
+                continue
+            node = source_bucket.get(source_key)
+            if not isinstance(node, dict):
+                continue
+            node["timestamp"] = float(current_time)
+            touched += 1
+
+        return touched
 
     @staticmethod
     def node_timestamp(node: Optional[dict]) -> float:

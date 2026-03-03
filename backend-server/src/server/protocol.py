@@ -107,6 +107,13 @@ class EntitiesPatchPacket(PacketModel):
     delete: list[str] = Field(default_factory=list)
 
 
+class StateKeepalivePacket(PacketModel):
+    type: Literal["state_keepalive"]
+    submitPlayerId: str | None = None
+    players: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+
+
 class WaypointsUpdatePacket(PacketModel):
     type: Literal["waypoints_update"]
     submitPlayerId: str | None = None
@@ -144,6 +151,7 @@ PlayerInboundPacket = Annotated[
     | PlayersPatchPacket
     | EntitiesUpdatePacket
     | EntitiesPatchPacket
+    | StateKeepalivePacket
     | WaypointsUpdatePacket
     | WaypointsDeletePacket
     | WaypointsEntityDeathCancelPacket
@@ -245,6 +253,8 @@ class HandshakeAckPacket(OutboundPacket):
     digestIntervalSec: int | None = None
     broadcastHz: float | None = None
     reportIntervalTicks: int | None = None
+    playerTimeoutSec: int | None = None
+    entityTimeoutSec: int | None = None
 
 
 class AdminAckPacket(OutboundPacket):
@@ -308,3 +318,4 @@ class ReportRateHintPacket(OutboundPacket):
     reportIntervalTicks: int
     broadcastHz: float
     reason: str | None = None
+
