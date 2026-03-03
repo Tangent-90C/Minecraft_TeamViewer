@@ -28,7 +28,6 @@ type MapProjectionDeps = {
     ttlSeconds: number | null;
     permanent: boolean;
   }) => boolean;
-  onRevisionChanged?: (revision: number | null) => void;
 };
 
 export function createMapProjection(deps: MapProjectionDeps) {
@@ -1131,7 +1130,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
     deps.maybeSyncAutoDetectedMarks(autoMarkSyncCandidates);
 
     (PAGE as any).__NODEMC_PLAYER_OVERLAY__ = {
-      revision: snapshot.revision,
       playersOnMap: markersById.size,
       waypointsOnMap: waypointsById.size,
       source: CONFIG.ADMIN_WS_URL,
@@ -1139,8 +1137,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
       wsConnected: deps.getWsConnected(),
       playerMarks: deps.getLatestPlayerMarks(),
     };
-
-    deps.onRevisionChanged?.(snapshot.revision ?? null);
   }
 
   function isMapReady() {

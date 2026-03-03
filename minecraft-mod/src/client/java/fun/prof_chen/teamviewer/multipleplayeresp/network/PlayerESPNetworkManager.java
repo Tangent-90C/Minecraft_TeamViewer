@@ -181,9 +181,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	
 	// 摘要校验间隔(秒) - 控制数据一致性检查频率
 	private volatile int digestIntervalSec = 10;
-	
-	// 服务端最新修订版本号 - 用于增量同步
-	private volatile long lastServerRevision = 0;
+
+	// 服务端广播频率与协商后的上报间隔
+	private volatile double serverBroadcastHz = 20.0;
+	private volatile int negotiatedReportIntervalTicks = 10;
 	
 	// 上次重同步请求时间戳 - 防止重复请求
 	private volatile long lastResyncRequestMs = 0L;
@@ -453,7 +454,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "players_patch",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "ackRev": 服务端修订版本号,
 	 *   "upsert": {玩家ID: 变更字段},
 	 *   "delete": [要删除的玩家ID列表]
 	 * }
@@ -506,7 +506,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			long sentAt = System.currentTimeMillis();
 			ProtocolPackets.PlayersPatchPacket packet = new ProtocolPackets.PlayersPatchPacket();
 			packet.submitPlayerId = submitPlayerId.toString();
-			packet.ackRev = lastServerRevision;
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
@@ -529,7 +528,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "entities_patch",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "ackRev": 服务端修订版本号,
 	 *   "upsert": {实体ID: 实体数据变更},
 	 *   "delete": [要删除的实体ID列表]
 	 * }
@@ -583,7 +581,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			long sentAt = System.currentTimeMillis();
 			ProtocolPackets.EntitiesPatchPacket packet = new ProtocolPackets.EntitiesPatchPacket();
 			packet.submitPlayerId = submitPlayerId.toString();
-			packet.ackRev = lastServerRevision;
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
@@ -654,7 +651,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "tab_players_update",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "ackRev": 服务端修订版本号,
 	 *   "tabPlayers": [
 	 *     {
 	 *       "id": "玩家UUID",
@@ -709,7 +705,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 			ProtocolPackets.TabPlayersUpdatePacket packet = new ProtocolPackets.TabPlayersUpdatePacket();
 			packet.submitPlayerId = submitPlayerId.toString();
-			packet.ackRev = lastServerRevision;
 			packet.tabPlayers = normalized;
 			sendPacket(packet);
 
@@ -921,10 +916,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - waypoints_update: 接收新的路标数据
 	 *    - waypoints_delete: 处理路标删除通知
 	 * 
-	 * 通用处理：
-	 * - 解析消息中的修订版本号(rev)
-	 * - 更新本地版本跟踪
-	 * - 统一的错误处理和日志记录
+	 * 通用处理：统一的错误处理和日志记录。
 	 */
 	private void processCompleteMessage(byte[] message) {
 		try {
@@ -937,11 +929,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			if (envelope == null || envelope.type == null || envelope.type.isBlank()) {
 				LOGGER.warn("Received invalid message envelope");
 				return;
-			}
-
-			Long incomingRev = envelope.rev != null ? envelope.rev : envelope.revision;
-			if (incomingRev != null) {
-				lastServerRevision = Math.max(lastServerRevision, incomingRev);
 			}
 
 			if ("handshake_ack".equals(envelope.type)) {
@@ -976,6 +963,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				ProtocolPackets.RefreshReqInboundPacket packet = messageCodec.decode(message,
 						ProtocolPackets.RefreshReqInboundPacket.class);
 				handleRefreshRequest(packet);
+				return;
+			}
+
+			if ("report_rate_hint".equals(envelope.type)) {
+				ProtocolPackets.ReportRateHintInboundPacket packet = messageCodec.decode(
+						message,
+						ProtocolPackets.ReportRateHintInboundPacket.class
+				);
+				handleReportRateHint(packet);
 				return;
 			}
 
@@ -1389,7 +1385,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		try {
 			ProtocolPackets.ResyncReqPacket req = new ProtocolPackets.ResyncReqPacket();
 			req.reason = reason;
-			req.ackRev = lastServerRevision;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
 				req.submitPlayerId = client.player.getUuid().toString();
@@ -1673,6 +1668,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			handshake.minimumCompatibleNetworkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
 			handshake.localProgramVersion = CLIENT_PROGRAM_VERSION;
 			handshake.roomCode = getRoomCode();
+			handshake.preferredReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
+			handshake.minReportIntervalTicks = 1;
+			handshake.maxReportIntervalTicks = 1000;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
 				handshake.submitPlayerId = client.player.getUuid().toString();
@@ -1699,8 +1697,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - 控制数据同步频率
 	 * 
 	 * 3. 初始状态同步：
-	 *    - lastServerRevision: 服务端初始修订版本
-	 *    - 作为后续增量更新的基准版本
+	 *    - 下发服务端广播频率与建议上报间隔
+	 *    - 作为后续运行时拥塞协商基准
 	 * 
 	 * 4. 程序版本信息：
 	 *    - serverProgramVersion: 服务端程序版本
@@ -1728,11 +1726,30 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 
 		digestIntervalSec = packet.digestIntervalSec != null ? packet.digestIntervalSec : 10;
-		if (packet.rev != null) {
-			lastServerRevision = packet.rev;
+		serverBroadcastHz = packet.broadcastHz != null ? packet.broadcastHz : 20.0;
+		if (packet.reportIntervalTicks != null && packet.reportIntervalTicks > 0) {
+			negotiatedReportIntervalTicks = packet.reportIntervalTicks;
 		}
 		LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s",
 				serverProtocolVersion, serverProgramVersion, digestIntervalSec);
+	}
+
+	private void handleReportRateHint(ProtocolPackets.ReportRateHintInboundPacket packet) {
+		if (packet == null) {
+			return;
+		}
+		if (packet.broadcastHz != null && packet.broadcastHz > 0) {
+			serverBroadcastHz = packet.broadcastHz;
+		}
+		if (packet.reportIntervalTicks != null && packet.reportIntervalTicks > 0) {
+			negotiatedReportIntervalTicks = packet.reportIntervalTicks;
+			LOGGER.info(
+					"Applied report rate hint: interval={} ticks, broadcastHz={}, reason={}",
+					negotiatedReportIntervalTicks,
+					serverBroadcastHz,
+					packet.reason == null ? "runtime" : packet.reason
+			);
+		}
 	}
 
 	private String extractHandshakeRejectReason(ProtocolPackets.HandshakeAckInboundPacket packet) {
@@ -2395,11 +2412,20 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
 		serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
 		digestIntervalSec = 10;
-		lastServerRevision = 0;
+		serverBroadcastHz = 20.0;
+		negotiatedReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
 		lastTabPlayersPacketSentMs = 0L;
+	}
+
+	public int getNegotiatedReportIntervalTicks() {
+		return Math.max(1, negotiatedReportIntervalTicks);
+	}
+
+	public double getServerBroadcastHz() {
+		return serverBroadcastHz;
 	}
 
 	private void clearLocalOutboundSnapshots() {

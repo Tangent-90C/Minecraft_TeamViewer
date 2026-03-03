@@ -2,6 +2,8 @@ import logging
 import os
 import time
 import uuid
+import asyncio
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -105,7 +107,7 @@ async def reject_handshake(
             deltaEnabled=True,
             error="version_incompatible",
             rejectReason=reason,
-            revision=state.revision,
+            broadcastHz=state.broadcast_hz,
         ),
     )
     close_reason = reason if len(reason) <= 120 else reason[:120]
@@ -137,9 +139,50 @@ def normalize_waypoint_color_to_int(color_value, fallback: int = 0xEF4444) -> in
 # 进程级单例：承载内存态与广播能力。
 state = ServerState()
 broadcaster = Broadcaster(state)
+broadcast_task: asyncio.Task | None = None
+
+
+async def run_broadcast_scheduler() -> None:
+    previous_hz: float | None = None
+    while True:
+        tick_start = time.time()
+        try:
+            current_hz = state.update_broadcast_hz_for_congestion()
+            if previous_hz is None or abs(current_hz - previous_hz) > 1e-6:
+                await broadcaster.broadcast_report_rate_hints(
+                    reason="startup" if previous_hz is None else "congestion"
+                )
+                previous_hz = current_hz
+
+            await broadcaster.broadcast_updates()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.exception("Broadcast scheduler error: %s", e)
+
+        interval_sec = 1.0 / max(state.MIN_BROADCAST_HZ, state.broadcast_hz)
+        elapsed = time.time() - tick_start
+        await asyncio.sleep(max(0.0, interval_sec - elapsed))
 
 # HTTP/WS 入口层：仅做协议收发与调度，不承载核心仲裁逻辑。
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global broadcast_task
+    if broadcast_task is None or broadcast_task.done():
+        broadcast_task = asyncio.create_task(run_broadcast_scheduler())
+    try:
+        yield
+    finally:
+        if broadcast_task is not None:
+            broadcast_task.cancel()
+            try:
+                await broadcast_task
+            except asyncio.CancelledError:
+                pass
+            broadcast_task = None
+
+
+app = FastAPI(lifespan=lifespan)
 
 @app.websocket("/adminws")
 async def admin_ws(websocket: WebSocket):
@@ -194,14 +237,14 @@ async def admin_ws(websocket: WebSocket):
                         localProgramVersion=SERVER_PROGRAM_VERSION,
                         roomCode=admin_room,
                         deltaEnabled=True,
-                        revision=state.revision,
+                        broadcastHz=state.broadcast_hz,
                     ),
                 )
                 await broadcaster.send_admin_snapshot_full(admin_id)
                 continue
 
             if isinstance(packet, PingPacket):
-                await send_packet(websocket, PongPacket(serverTime=time.time(), revision=state.revision))
+                await send_packet(websocket, PongPacket(serverTime=time.time()))
                 continue
 
             if isinstance(packet, ResyncRequestPacket):
@@ -231,7 +274,6 @@ async def admin_ws(websocket: WebSocket):
                         mark=updated_mark,
                     ),
                 )
-                await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             if isinstance(packet, CommandPlayerMarkClearPacket):
@@ -247,7 +289,7 @@ async def admin_ws(websocket: WebSocket):
                     ),
                 )
                 if removed:
-                    await broadcaster.broadcast_updates(force_full_to_delta=True)
+                    await broadcaster.broadcast_admin_updates()
                 continue
 
             if isinstance(packet, CommandPlayerMarkClearAllPacket):
@@ -260,7 +302,6 @@ async def admin_ws(websocket: WebSocket):
                         removedCount=removed_count,
                     ),
                 )
-                await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             if isinstance(packet, CommandSameServerFilterSetPacket):
@@ -273,7 +314,6 @@ async def admin_ws(websocket: WebSocket):
                         enabled=state.same_server_filter_enabled,
                     ),
                 )
-                await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             if isinstance(packet, CommandTacticalWaypointSetPacket):
@@ -345,7 +385,6 @@ async def admin_ws(websocket: WebSocket):
                         waypoint=validated.model_dump(),
                     ),
                 )
-                await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
             await send_packet(websocket, AdminAckPacket(ok=False, error="unsupported_command"))
@@ -407,7 +446,22 @@ async def websocket_endpoint(websocket: WebSocket):
                     client_protocol = HandshakeHelpers.protocol_version(packet)
                     client_program_version = HandshakeHelpers.program_version(packet)
                     client_room = state.set_player_room(submit_player_id, HandshakeHelpers.room_code(packet, state.DEFAULT_ROOM_CODE))
-                    state.mark_player_capability(submit_player_id, client_protocol)
+                    state.mark_player_capability(
+                        submit_player_id,
+                        client_protocol,
+                        packet.preferredReportIntervalTicks,
+                        packet.minReportIntervalTicks,
+                        packet.maxReportIntervalTicks,
+                    )
+                    negotiated_ticks = state.negotiate_report_interval_ticks(
+                        submit_player_id,
+                        packet.preferredReportIntervalTicks,
+                        packet.minReportIntervalTicks,
+                        packet.maxReportIntervalTicks,
+                    )
+                    caps = state.connection_caps.get(submit_player_id)
+                    if isinstance(caps, dict):
+                        caps["negotiatedReportIntervalTicks"] = negotiated_ticks
 
                     logger.info(
                         "Client %s connected (protocol=%s, programVersion=%s, roomCode=%s)",
@@ -423,11 +477,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         "roomCode": client_room,
                         "deltaEnabled": True,
                         "digestIntervalSec": state.DIGEST_INTERVAL_SEC,
-                        "rev": state.revision,
+                        "broadcastHz": state.broadcast_hz,
+                        "reportIntervalTicks": negotiated_ticks,
                     }
                     await send_packet(websocket, HandshakeAckPacket(**ack))
-
-                    await broadcaster.broadcast_updates(force_full_to_delta=True)
+                    await broadcaster.send_snapshot_full_to_player(submit_player_id)
                 continue
 
             if not submit_player_id or submit_player_id not in state.connections:
@@ -445,7 +499,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     except Exception as e:
                         logger.warning("Error validating player data for %s: %s", pid, e)
 
-                await broadcaster.broadcast_updates()
                 continue
 
             if packet.type == "tab_players_update":
@@ -505,7 +558,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         bypass_cooldown=False,
                     )
 
-                await broadcaster.broadcast_updates()
                 continue
 
             if packet.type == "entities_update":
@@ -526,7 +578,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     except Exception as e:
                         logger.warning("Error validating entity data for %s: %s", entity_id, e)
 
-                await broadcaster.broadcast_updates()
                 continue
 
             if packet.type == "entities_patch":
@@ -579,7 +630,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         bypass_cooldown=False,
                     )
 
-                await broadcaster.broadcast_updates()
                 continue
 
             if packet.type == "waypoints_update":
@@ -623,7 +673,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     except Exception as e:
                         logger.warning("Error validating waypoint data for %s: %s", waypoint_id, e)
 
-                await broadcaster.broadcast_updates()
                 continue
 
             if packet.type == "waypoints_delete":
@@ -635,7 +684,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                     state.delete_report(state.waypoint_reports, waypoint_id, submit_player_id)
 
-                await broadcaster.broadcast_updates()
                 continue
 
             if packet.type == "waypoints_entity_death_cancel":
@@ -666,7 +714,6 @@ async def websocket_endpoint(websocket: WebSocket):
                                 continue
                             state.delete_report(state.waypoint_reports, waypoint_id, source_id)
 
-                    await broadcaster.broadcast_updates()
                 continue
 
             if isinstance(packet, ResyncRequestPacket) and submit_player_id:
@@ -685,7 +732,6 @@ async def websocket_endpoint(websocket: WebSocket):
         if submit_player_id:
             state.remove_connection(submit_player_id)
             logger.info("Client %s disconnected", submit_player_id)
-            await broadcaster.broadcast_updates()
 
 
 @app.get("/health")
@@ -751,7 +797,7 @@ async def snapshot(roomCode: str | None = None):
             "tabState": state.build_admin_tab_snapshot(selected_room),
             "digests": room_digests,
         },
-        "revision": state.revision,
+        "broadcastHz": state.broadcast_hz,
         "digests": state.build_digests(),
     })
 

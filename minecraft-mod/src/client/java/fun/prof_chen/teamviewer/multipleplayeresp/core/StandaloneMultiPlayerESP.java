@@ -269,7 +269,10 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		tickCounter++;
 		
 		// 连接成功后按间隔发送玩家更新与实体更新（submitPlayerId 为本地玩家 UUID）
-		if (networkManager.isConnected() && tickCounter >= config.getUpdateInterval()) {
+		int targetInterval = networkManager.isConnected()
+				? networkManager.getNegotiatedReportIntervalTicks()
+				: config.getUpdateInterval();
+		if (networkManager.isConnected() && tickCounter >= Math.max(1, targetInterval)) {
 			tickCounter = 0;
 			UUID submitPlayerId = client.player.getUuid();
 			networkManager.sendTabPlayersUpdate(submitPlayerId, collectTabPlayers(client));

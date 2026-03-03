@@ -43,6 +43,13 @@ class ServerState:
 
     # 协议配置
     DIGEST_INTERVAL_SEC = 10
+    DEFAULT_BROADCAST_HZ = 20.0
+    MIN_BROADCAST_HZ = 2.0
+    CONGESTION_LEVELS = (
+        (40, 2.0),
+        (20, 5.0),
+        (8, 10.0),
+    )
     TAB_REPORT_TIMEOUT_SEC = 45
     DEFAULT_ROOM_CODE = "default"
     ADMIN_TACTICAL_SOURCE_PREFIX = "__admin_tactical__:"
@@ -76,7 +83,7 @@ class ServerState:
         self.entity_selected_sources: Dict[str, str] = {}
         self.waypoint_selected_sources: Dict[str, str] = {}
 
-        self.revision = 0
+        self.broadcast_hz = float(self.DEFAULT_BROADCAST_HZ)
         self._last_timeout_log_ts = 0.0
         self._last_refresh_request_ts: Dict[str, float] = {}
 
@@ -555,10 +562,37 @@ class ServerState:
         self.player_marks.clear()
         return count
 
-    def next_revision(self) -> int:
-        """全局版本号递增。用于客户端按 rev 应用状态。"""
-        self.revision += 1
-        return self.revision
+    @staticmethod
+    def _clamp_report_interval_ticks(value, fallback: int) -> int:
+        if isinstance(value, (int, float)):
+            return max(1, min(int(value), 200))
+        return max(1, min(int(fallback), 200))
+
+    def compute_recommended_report_interval_ticks(self, broadcast_hz: float | None = None) -> int:
+        hz = float(broadcast_hz if isinstance(broadcast_hz, (int, float)) else self.broadcast_hz)
+        if hz >= 20.0:
+            return 1
+        if hz >= 10.0:
+            return 2
+        if hz >= 5.0:
+            return 4
+        return 10
+
+    def negotiate_report_interval_ticks(self, player_id: str, preferred=None, minimum=None, maximum=None) -> int:
+        suggested = self.compute_recommended_report_interval_ticks()
+        caps = self.connection_caps.get(player_id, {}) if isinstance(player_id, str) else {}
+        preferred_val = self._clamp_report_interval_ticks(preferred, caps.get("preferredReportIntervalTicks", suggested))
+        minimum_val = self._clamp_report_interval_ticks(minimum, caps.get("minReportIntervalTicks", 1))
+        maximum_val = self._clamp_report_interval_ticks(maximum, caps.get("maxReportIntervalTicks", 200))
+
+        if minimum_val > maximum_val:
+            minimum_val, maximum_val = maximum_val, minimum_val
+
+        chosen = max(minimum_val, min(maximum_val, suggested))
+        if preferred_val >= chosen and preferred_val <= maximum_val:
+            chosen = preferred_val
+
+        return max(minimum_val, min(maximum_val, chosen))
 
     @staticmethod
     def compact_state_map(state_map: Dict[str, dict]) -> Dict[str, dict]:
@@ -893,13 +927,43 @@ class ServerState:
     def _protocol_at_least(cls, current, minimum) -> bool:
         return cls._parse_protocol_version(current) >= cls._parse_protocol_version(minimum)
 
-    def mark_player_capability(self, player_id: str, protocol_version) -> None:
+    def mark_player_capability(
+        self,
+        player_id: str,
+        protocol_version,
+        preferred_report_interval_ticks=None,
+        min_report_interval_ticks=None,
+        max_report_interval_ticks=None,
+    ) -> None:
         """记录客户端协议与广播节流状态。"""
         normalized_protocol = self._normalize_protocol_version(protocol_version)
+        preferred_ticks = self._clamp_report_interval_ticks(
+            preferred_report_interval_ticks,
+            self.compute_recommended_report_interval_ticks(),
+        )
+        min_ticks = self._clamp_report_interval_ticks(min_report_interval_ticks, 1)
+        max_ticks = self._clamp_report_interval_ticks(max_report_interval_ticks, 200)
+        if min_ticks > max_ticks:
+            min_ticks, max_ticks = max_ticks, min_ticks
+
         self.connection_caps[player_id] = {
             "protocol": normalized_protocol,
             "lastDigestSent": 0.0,
+            "preferredReportIntervalTicks": preferred_ticks,
+            "minReportIntervalTicks": min_ticks,
+            "maxReportIntervalTicks": max_ticks,
+            "negotiatedReportIntervalTicks": max(min_ticks, min(max_ticks, preferred_ticks)),
         }
+
+    def update_broadcast_hz_for_congestion(self) -> float:
+        load = len(self.connections)
+        hz = float(self.DEFAULT_BROADCAST_HZ)
+        for threshold, lowered_hz in self.CONGESTION_LEVELS:
+            if load >= threshold:
+                hz = float(lowered_hz)
+                break
+        self.broadcast_hz = max(self.MIN_BROADCAST_HZ, hz)
+        return self.broadcast_hz
 
     def cleanup_timeouts(self) -> None:
         """按来源维度清理超时上报，避免脏数据长期占用最终视图。"""

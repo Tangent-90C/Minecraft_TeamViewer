@@ -143,7 +143,6 @@ export type AdminSnapshot = {
   tabState: { enabled: boolean; reports: Record<string, any>; groups: any[] };
   connections: string[];
   connections_count: number;
-  revision: number;
   server_time: number | null;
 };
 
@@ -222,14 +221,11 @@ export type HandshakeAckInboundPacket = {
   localProgramVersion?: string;
   error?: string;
   rejectReason?: string;
-  revision?: number;
-  rev?: number;
   [key: string]: unknown;
 };
 
 export type PongInboundPacket = {
   type: 'pong';
-  revision?: number;
   [key: string]: unknown;
 };
 
@@ -242,7 +238,6 @@ export type SnapshotFullInboundPacket = {
   tabState?: { enabled: boolean; reports: Record<string, any>; groups: any[] };
   connections?: string[];
   connections_count?: number;
-  revision?: number;
   server_time?: number | null;
   [key: string]: unknown;
 };
@@ -259,7 +254,6 @@ export type PatchInboundPacket = {
   waypoints?: ScopePatch;
   playerMarks?: ScopePatch;
   meta?: Record<string, unknown>;
-  revision?: number;
   server_time?: number | null;
   [key: string]: unknown;
 };
@@ -280,7 +274,6 @@ export function createEmptyAdminSnapshotModel(): AdminSnapshot {
     tabState: { enabled: false, reports: {}, groups: [] },
     connections: [],
     connections_count: 0,
-    revision: 0,
     server_time: null,
   };
 }

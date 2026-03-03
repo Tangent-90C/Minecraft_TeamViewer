@@ -26,8 +26,6 @@ type WsClientDeps = {
     lastErrorText: string | null;
     lastAdminMessageType: string | null;
     lastAdminMessageAt: number;
-    lastAdminMessageRevision: number | null;
-    lastRevision: number | null;
   }) => void;
 };
 
@@ -47,8 +45,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
   let lastAdminResyncRequestAt = 0;
   let lastAdminMessageType: string | null = null;
   let lastAdminMessageAt = 0;
-  let lastAdminMessageRevision: number | null = null;
-  let lastRevision: number | null = null;
   let latestSnapshot: Snapshot = createEmptyAdminSnapshot();
 
   function emitStatus() {
@@ -57,8 +53,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
       lastErrorText,
       lastAdminMessageType,
       lastAdminMessageAt,
-      lastAdminMessageRevision,
-      lastRevision,
     });
   }
 
@@ -100,10 +94,8 @@ export function createAdminWsClient(deps: WsClientDeps) {
         tabState: (message.tabState && typeof message.tabState === 'object') ? message.tabState : { enabled: false, reports: {}, groups: [] },
         connections: Array.isArray(message.connections) ? message.connections : [],
         connections_count: Number.isFinite(message.connections_count) ? message.connections_count : 0,
-        revision: message.revision,
         server_time: message.server_time,
       };
-      lastRevision = latestSnapshot.revision ?? null;
       deps.onSnapshotChanged(latestSnapshot);
       return;
     }
@@ -143,14 +135,10 @@ export function createAdminWsClient(deps: WsClientDeps) {
       latestSnapshot.connections_count = Number(metaConnectionsCount);
     }
 
-    if (message.revision !== undefined) {
-      latestSnapshot.revision = message.revision;
-    }
     if (message.server_time !== undefined) {
       latestSnapshot.server_time = message.server_time;
     }
 
-    lastRevision = latestSnapshot.revision ?? null;
     deps.onSnapshotChanged(latestSnapshot);
   }
 
@@ -286,9 +274,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
         }
         lastAdminMessageType = payload?.type ? String(payload.type) : 'unknown';
         lastAdminMessageAt = Date.now();
-        lastAdminMessageRevision = payload?.revision !== undefined
-          ? Number(payload.revision)
-          : (payload?.rev !== undefined ? Number(payload.rev) : null);
 
         if (payload?.type === 'admin_ack') {
           if (payload.ok) {
@@ -372,8 +357,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
       lastErrorText,
       lastAdminMessageType,
       lastAdminMessageAt,
-      lastAdminMessageRevision,
-      lastRevision,
       wsReadyState: adminWs ? adminWs.readyState : -1,
     };
   }

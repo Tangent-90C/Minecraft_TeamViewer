@@ -9,8 +9,6 @@ public final class ProtocolPackets {
 
 	public static class BaseInboundPacket {
 		public String type;
-		public Long rev;
-		public Long revision;
 	}
 
 	public static class HandshakeAckInboundPacket extends BaseInboundPacket {
@@ -23,6 +21,8 @@ public final class ProtocolPackets {
 		public String rejectReason;
 		public Boolean deltaEnabled;
 		public Integer digestIntervalSec;
+		public Double broadcastHz;
+		public Integer reportIntervalTicks;
 	}
 
 	public static class SnapshotFullInboundPacket extends BaseInboundPacket {
@@ -50,6 +50,12 @@ public final class ProtocolPackets {
 		public String reason;
 	}
 
+	public static class ReportRateHintInboundPacket extends BaseInboundPacket {
+		public Integer reportIntervalTicks;
+		public Double broadcastHz;
+		public String reason;
+	}
+
 	public static class WaypointsUpdateInboundPacket extends BaseInboundPacket {
 		public Map<String, Object> waypoints;
 	}
@@ -65,12 +71,14 @@ public final class ProtocolPackets {
 		public String localProgramVersion;
 		public String roomCode;
 		public String submitPlayerId;
+		public Integer preferredReportIntervalTicks;
+		public Integer minReportIntervalTicks;
+		public Integer maxReportIntervalTicks;
 	}
 
 	public static class PlayersPatchPacket {
 		public final String type = "players_patch";
 		public String submitPlayerId;
-		public long ackRev;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
 	}
@@ -78,7 +86,6 @@ public final class ProtocolPackets {
 	public static class EntitiesPatchPacket {
 		public final String type = "entities_patch";
 		public String submitPlayerId;
-		public long ackRev;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
 	}
@@ -92,7 +99,6 @@ public final class ProtocolPackets {
 	public static class TabPlayersUpdatePacket {
 		public final String type = "tab_players_update";
 		public String submitPlayerId;
-		public long ackRev;
 		public List<Map<String, Object>> tabPlayers;
 	}
 
@@ -111,7 +117,6 @@ public final class ProtocolPackets {
 	public static class ResyncReqPacket {
 		public final String type = "resync_req";
 		public String reason;
-		public long ackRev;
 		public String submitPlayerId;
 	}
 }
