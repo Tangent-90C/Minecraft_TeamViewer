@@ -42,7 +42,6 @@ class ServerState:
     REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = 64
 
     # 协议配置
-    PROTOCOL_V2 = "0.2.0"
     DIGEST_INTERVAL_SEC = 10
     TAB_REPORT_TIMEOUT_SEC = 45
     DEFAULT_ROOM_CODE = "default"
@@ -872,8 +871,8 @@ class ServerState:
         text = cls._normalize_protocol_version(version)
         if "." not in text:
             try:
-                legacy_num = int(text)
-                return 0, 0, max(legacy_num, 0)
+                parsed_num = int(text)
+                return 0, 0, max(parsed_num, 0)
             except ValueError:
                 return 0, 0, 0
 
@@ -893,20 +892,13 @@ class ServerState:
     def _protocol_at_least(cls, current, minimum) -> bool:
         return cls._parse_protocol_version(current) >= cls._parse_protocol_version(minimum)
 
-    def mark_player_capability(self, player_id: str, protocol_version, delta_enabled: bool) -> None:
-        """记录客户端能力，决定后续是否发送 patch/digest。"""
+    def mark_player_capability(self, player_id: str, protocol_version) -> None:
+        """记录客户端协议与广播节流状态。"""
         normalized_protocol = self._normalize_protocol_version(protocol_version)
         self.connection_caps[player_id] = {
             "protocol": normalized_protocol,
-            "delta": bool(self._protocol_at_least(normalized_protocol, self.PROTOCOL_V2) and delta_enabled),
             "lastDigestSent": 0.0,
         }
-
-    def is_delta_client(self, player_id: str) -> bool:
-        caps = self.connection_caps.get(player_id)
-        if not caps:
-            return False
-        return bool(caps.get("delta", False))
 
     def cleanup_timeouts(self) -> None:
         """按来源维度清理超时上报，避免脏数据长期占用最终视图。"""

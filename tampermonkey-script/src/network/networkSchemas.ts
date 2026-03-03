@@ -153,7 +153,6 @@ export type AdminHandshakePacket = {
   minimumCompatibleNetworkProtocolVersion: string;
   localProgramVersion: string;
   roomCode: string;
-  supportsDelta: boolean;
   channel: 'admin';
 };
 
@@ -293,7 +292,6 @@ export function buildAdminHandshake(roomCode: string): AdminHandshakePacket {
     minimumCompatibleNetworkProtocolVersion: ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION,
     localProgramVersion: LOCAL_PROGRAM_VERSION,
     roomCode: normalizeRoomCode(roomCode),
-    supportsDelta: true,
     channel: 'admin',
   };
 }

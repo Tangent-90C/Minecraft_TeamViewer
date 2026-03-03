@@ -70,7 +70,6 @@ class CommandTacticalWaypointSetPacket(PacketModel):
 
 class PlayerHandshakePacket(HandshakePacket):
     submitPlayerId: str | None = None
-    supportsDelta: bool = False
 
 
 class PlayersUpdatePacket(PacketModel):
@@ -297,14 +296,6 @@ class DigestPacket(OutboundPacket):
     type: Literal["digest"] = "digest"
     rev: int
     hashes: dict[str, str]
-
-
-class PositionsPacket(OutboundPacket):
-    type: Literal["positions"] = "positions"
-    players: dict[str, Any]
-    entities: dict[str, Any]
-    waypoints: dict[str, Any]
-    playerMarks: dict[str, Any]
 
 
 class RefreshRequestOutboundPacket(OutboundPacket):

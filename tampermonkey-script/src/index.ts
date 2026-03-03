@@ -73,8 +73,7 @@ declare const unsafeWindow: Window | undefined;
     const label = typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : null;
     const sourceRaw = typeof entry.source === 'string' ? entry.source.trim().toLowerCase() : '';
     const source = normalizeMarkSource(sourceRaw);
-    const hasExplicitSource = sourceRaw === 'auto' || sourceRaw === 'manual';
-    return { team, color, label, source, hasExplicitSource };
+    return { team, color, label, source };
   }
 
   function autoTeamFromName(nameText: string) {
@@ -301,10 +300,7 @@ declare const unsafeWindow: Window | undefined;
       const existingMark = getPlayerMark(String(playerId));
       const autoMark = autoTeamFromName(autoName);
       const existingMarkSource = existingMark ? normalizeMarkSource(existingMark.source) : 'manual';
-      const isLegacyUnknownMark = Boolean(existingMark) && !Boolean(existingMark.hasExplicitSource);
-      const legacyLikelyAuto = Boolean(isLegacyUnknownMark && autoMark)
-        && normalizeTeam(existingMark.team) === normalizeTeam(autoMark.team);
-      const existingActsAsAuto = Boolean(existingMark) && (existingMarkSource === 'auto' || legacyLikelyAuto);
+      const existingActsAsAuto = Boolean(existingMark) && existingMarkSource === 'auto';
       const isManualMark = Boolean(existingMark) && !existingActsAsAuto;
       const effectiveMark = isManualMark
         ? existingMark

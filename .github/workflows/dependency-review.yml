@@ -4,7 +4,7 @@ name: Dependency Review
 # 工作流监听多个事件
 on:
   pull_request:
-    branches: [ "main", "dev" ]
+    branches: [ "main"]
     paths:
       - 'backend-server/**'
       - 'minecraft-mod/**'
