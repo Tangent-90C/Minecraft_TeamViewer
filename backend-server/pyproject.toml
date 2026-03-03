@@ -9,3 +9,7 @@ dependencies = [
     "httpx[http2,socks]>=0.28.1",
     "uvicorn[standard]>=0.40.0",
 ]
+
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
