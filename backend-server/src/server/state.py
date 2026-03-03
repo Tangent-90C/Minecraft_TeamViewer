@@ -42,7 +42,6 @@ class ServerState:
     REFRESH_REQUEST_MAX_ITEMS_PER_SCOPE = 64
 
     # 协议配置
-    PROTOCOL_V2 = "0.2.0"
     DIGEST_INTERVAL_SEC = 10
     TAB_REPORT_TIMEOUT_SEC = 45
     DEFAULT_ROOM_CODE = "default"
@@ -893,12 +892,12 @@ class ServerState:
     def _protocol_at_least(cls, current, minimum) -> bool:
         return cls._parse_protocol_version(current) >= cls._parse_protocol_version(minimum)
 
-    def mark_player_capability(self, player_id: str, protocol_version, delta_enabled: bool) -> None:
+    def mark_player_capability(self, player_id: str, protocol_version) -> None:
         """记录客户端能力，决定后续是否发送 patch/digest。"""
         normalized_protocol = self._normalize_protocol_version(protocol_version)
         self.connection_caps[player_id] = {
             "protocol": normalized_protocol,
-            "delta": bool(self._protocol_at_least(normalized_protocol, self.PROTOCOL_V2) and delta_enabled),
+            "delta": True,
             "lastDigestSent": 0.0,
         }
 

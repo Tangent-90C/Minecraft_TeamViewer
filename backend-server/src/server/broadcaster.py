@@ -22,7 +22,7 @@ class Broadcaster:
     def __init__(self, state: ServerState) -> None:
         self.state = state
         self._codec = JsonMessageCodec()
-        self._admin_last_state: dict | None = None
+        self._admin_last_states: dict[str, dict] = {}
         self._player_sync_scopes = ("players", "entities", "waypoints")
         self._admin_sync_scopes = ("players", "entities", "waypoints", "playerMarks")
 
@@ -158,6 +158,7 @@ class Broadcaster:
         )
 
         await ws.send_text(self._encode_message(message))
+        self._admin_last_states[admin_id] = view_state
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
         allowed_sources = self.state.get_allowed_sources_for_player(player_id)
@@ -213,21 +214,37 @@ class Broadcaster:
     async def broadcast_admin_updates(self, force_full: bool = False) -> None:
         """向管理端广播增量（必要时全量）。"""
         if not self.state.admin_connections:
-            self._admin_last_state = None
+            self._admin_last_states = {}
             return
 
         disconnected = []
         for admin_id, ws in list(self.state.admin_connections.items()):
             try:
                 current_state = self._build_admin_view_state(self.state.get_admin_room(admin_id))
-                message = self._build_full_message(
-                    self.state.revision,
-                    current_state,
-                    revision_key="revision",
-                    channel="admin",
-                    extra={"server_time": time.time()},
-                )
-                await ws.send_text(self._encode_message(message))
+                previous_state = self._admin_last_states.get(admin_id)
+
+                if force_full or previous_state is None:
+                    message = self._build_full_message(
+                        self.state.revision,
+                        current_state,
+                        revision_key="revision",
+                        channel="admin",
+                        extra={"server_time": time.time()},
+                    )
+                    await ws.send_text(self._encode_message(message))
+                else:
+                    patch_state = self._compute_admin_patch(previous_state, current_state)
+                    if self._has_admin_patch_changes(patch_state):
+                        message = self._build_patch_message(
+                            self.state.revision,
+                            patch_state,
+                            revision_key="revision",
+                            channel="admin",
+                            extra={"server_time": time.time()},
+                        )
+                        await ws.send_text(self._encode_message(message))
+
+                self._admin_last_states[admin_id] = current_state
             except Exception as e:
                 logger.warning("Error sending admin update to %s: %s", admin_id, e)
                 disconnected.append(admin_id)
@@ -237,8 +254,8 @@ class Broadcaster:
                 del self.state.admin_connections[admin_id]
             if admin_id in self.state.admin_connection_rooms:
                 del self.state.admin_connection_rooms[admin_id]
-
-        self._admin_last_state = None
+            if admin_id in self._admin_last_states:
+                del self._admin_last_states[admin_id]
 
     async def broadcast_legacy_positions(self) -> None:
         """向 legacy 客户端广播全量 positions 消息。"""

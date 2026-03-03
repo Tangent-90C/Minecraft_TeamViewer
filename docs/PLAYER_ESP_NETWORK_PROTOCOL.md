@@ -139,7 +139,6 @@
   "networkProtocolVersion": "0.2.0",
   "protocolVersion": "0.2.0",
   "roomCode": "default",
-  "supportsDelta": true,
   "submitPlayerId": "<可选，玩家UUID>"
 }
 ```
@@ -163,7 +162,7 @@
 
 `deltaEnabled` 计算规则：
 
-- `networkProtocolVersion >= 0.2.0` 且客户端 `supportsDelta=true`
+- `networkProtocolVersion >= 0.2.0`
 
 ### 5.3 握手后首轮同步
 

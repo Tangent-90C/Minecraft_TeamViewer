@@ -70,7 +70,6 @@ class CommandTacticalWaypointSetPacket(PacketModel):
 
 class PlayerHandshakePacket(HandshakePacket):
     submitPlayerId: str | None = None
-    supportsDelta: bool = False
 
 
 class PlayersUpdatePacket(PacketModel):

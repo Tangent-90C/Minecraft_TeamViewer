@@ -402,8 +402,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     client_protocol = HandshakeHelpers.protocol_version(packet)
                     client_program_version = HandshakeHelpers.program_version(packet)
                     client_room = state.set_player_room(submit_player_id, HandshakeHelpers.room_code(packet, state.DEFAULT_ROOM_CODE))
-                    client_delta = bool(getattr(packet, "supportsDelta", False))
-                    state.mark_player_capability(submit_player_id, client_protocol, client_delta)
+                    state.mark_player_capability(submit_player_id, client_protocol)
 
                     logger.info(
                         "Client %s connected (protocol=%s, programVersion=%s, roomCode=%s)",
@@ -430,7 +429,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 兼容旧客户端：未显式握手也可接入，但按 legacy 能力处理。
                 state.connections[submit_player_id] = websocket
                 state.set_player_room(submit_player_id, state.DEFAULT_ROOM_CODE)
-                state.mark_player_capability(submit_player_id, 1, False)
+                state.mark_player_capability(submit_player_id, NETWORK_PROTOCOL_VERSION)
                 logger.info("Client %s connected (legacy)", submit_player_id)
 
             if packet.type == "players_update":
