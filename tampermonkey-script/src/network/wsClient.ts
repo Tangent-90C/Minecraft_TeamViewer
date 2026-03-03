@@ -13,7 +13,7 @@ import {
   buildAdminResyncRequest,
   createEmptyAdminSnapshotModel,
 } from './networkSchemas';
-import { JsonNetworkMessageCodec } from './messageCodec';
+import { MsgpackNetworkMessageCodec } from './messageCodec';
 
 type Snapshot = AdminSnapshot & Record<string, any>;
 
@@ -36,7 +36,7 @@ export function createEmptyAdminSnapshot() {
 }
 
 export function createAdminWsClient(deps: WsClientDeps) {
-  const messageCodec = new JsonNetworkMessageCodec();
+  const messageCodec = new MsgpackNetworkMessageCodec();
   let adminWs: WebSocket | null = null;
   let wsConnected = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -255,6 +255,7 @@ export function createAdminWsClient(deps: WsClientDeps) {
     }
 
     adminWs = ws;
+    ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       wsConnected = true;
       lastErrorText = null;
@@ -266,10 +267,20 @@ export function createAdminWsClient(deps: WsClientDeps) {
       emitStatus();
     };
 
-    ws.onmessage = (event) => {
-      if (typeof event?.data !== 'string') return;
+    ws.onmessage = async (event) => {
       try {
-        const payload = messageCodec.decode(event.data);
+        const data = event?.data;
+        let rawPayload: ArrayBuffer | Uint8Array | string | null = null;
+        if (data instanceof ArrayBuffer) {
+          rawPayload = data;
+        } else if (typeof data === 'string') {
+          rawPayload = data;
+        } else if (data && typeof (data as Blob).arrayBuffer === 'function') {
+          rawPayload = await (data as Blob).arrayBuffer();
+        }
+        if (rawPayload == null) return;
+
+        const payload = messageCodec.decode(rawPayload);
         if (!payload) {
           return;
         }

@@ -671,7 +671,8 @@ class ServerState:
             text = str(payload)
         if len(text) <= limit:
             return text
-        return text[:limit] + "...(truncated)"
+        # return text[:limit] + "...(truncated)"
+        return text[:] # 先不截断，方便调试，后续再根据实际情况调整
 
     @staticmethod
     def missing_fields_from_validation_error(error: ValidationError) -> list:

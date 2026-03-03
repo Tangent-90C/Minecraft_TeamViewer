@@ -20,8 +20,8 @@ import fun.prof_chen.teamviewer.multipleplayeresp.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.JsonMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MessageCodec;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.ProtocolPackets;
 
 import java.math.BigDecimal;
@@ -46,6 +46,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import okio.ByteString;
 
 /**
  * PlayerESP 网络层管理器 - 核心网络通信组件
@@ -154,7 +156,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	
 	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
-	private final MessageCodec messageCodec = new JsonMessageCodec(gson);
+	private final MessageCodec messageCodec = new MsgpackMessageCodec();
 	
 	// HTTP客户端 - 用于创建WebSocket连接
 	private OkHttpClient httpClient;
@@ -808,7 +810,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (webSocket == null || packet == null) {
 			return;
 		}
-		webSocket.send(messageCodec.encode(packet));
+		byte[] payload = messageCodec.encode(packet);
+		webSocket.send(ByteString.of(payload, 0, payload.length));
 	}
 
 	private JsonObject createObjectNode(Object packet) {
@@ -873,8 +876,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 */
 	@Override
 	public void onMessage(WebSocket webSocket, String text) {
-		// 消息解析与缓存更新在主线程执行，确保与渲染/tick 读写同线程。
-		enqueueMainThreadTask(() -> processCompleteMessage(text));
+		LOGGER.warn("Ignoring text websocket frame, expected MessagePack binary frame");
+	}
+
+	@Override
+	public void onMessage(WebSocket webSocket, ByteString bytes) {
+		if (bytes == null || bytes.size() == 0) {
+			return;
+		}
+		enqueueMainThreadTask(() -> processCompleteMessage(bytes.toByteArray()));
 	}
 
 	/**
@@ -916,9 +926,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 更新本地版本跟踪
 	 * - 统一的错误处理和日志记录
 	 */
-	private void processCompleteMessage(String message) {
+	private void processCompleteMessage(byte[] message) {
 		try {
-			if (message == null || message.trim().isEmpty()) {
+			if (message == null || message.length == 0) {
 				LOGGER.warn("Received empty message");
 				return;
 			}
@@ -996,7 +1006,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 
 		} catch (Exception e) {
-			LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(), message);
+			LOGGER.error("PlayerESP Network - Error processing complete message: {}, bytes={}", e.getMessage(), message == null ? 0 : message.length);
 		}
 	}
 

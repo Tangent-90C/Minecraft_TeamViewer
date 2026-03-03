@@ -1,7 +1,7 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.network.protocol;
 
 public interface MessageCodec {
-	String encode(Object packet);
+	byte[] encode(Object packet);
 
-	<T> T decode(String payload, Class<T> packetType);
+	<T> T decode(byte[] payload, Class<T> packetType);
 }

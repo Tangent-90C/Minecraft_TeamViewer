@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.129.0",
     "httpx[http2,socks]>=0.28.1",
+    "msgpack>=1.1.2",
     "uvicorn[standard]>=0.40.0",
 ]
 

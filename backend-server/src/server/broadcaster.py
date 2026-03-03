@@ -1,7 +1,7 @@
 import logging
 import time
 
-from .codec import JsonMessageCodec
+from .codec import MsgpackMessageCodec
 from .protocol import DigestPacket, PatchPacket, RefreshRequestOutboundPacket, SnapshotFullPacket
 from .state import ServerState
 
@@ -21,12 +21,12 @@ class Broadcaster:
 
     def __init__(self, state: ServerState) -> None:
         self.state = state
-        self._codec = JsonMessageCodec()
+        self._codec = MsgpackMessageCodec()
         self._admin_last_states: dict[str, dict] = {}
         self._player_sync_scopes = ("players", "entities", "waypoints")
         self._admin_sync_scopes = ("players", "entities", "waypoints", "playerMarks")
 
-    def _encode_message(self, packet) -> str:
+    def _encode_message(self, packet) -> bytes:
         return self._codec.encode(packet)
 
     def _build_full_message(
@@ -157,7 +157,7 @@ class Broadcaster:
             extra={"server_time": time.time()},
         )
 
-        await ws.send_text(self._encode_message(message))
+        await ws.send_bytes(self._encode_message(message))
         self._admin_last_states[admin_id] = view_state
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
@@ -185,7 +185,7 @@ class Broadcaster:
         compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
         compact_scopes["playerMarks"] = dict(self.state.player_marks)
         message = self._build_full_message(self.state.revision, compact_scopes, revision_key="rev")
-        await ws.send_text(self._encode_message(message))
+        await ws.send_bytes(self._encode_message(message))
 
     async def maybe_send_digest(self, player_id: str, visible_state: dict | None = None) -> None:
         """按节流周期发送摘要，帮助客户端做状态一致性检测。"""
@@ -209,7 +209,7 @@ class Broadcaster:
                 "waypoints": self.state.state_digest(visible_state["waypoints"]),
             },
         )
-        await ws.send_text(self._encode_message(message))
+        await ws.send_bytes(self._encode_message(message))
 
     async def broadcast_admin_updates(self, force_full: bool = False) -> None:
         """向管理端广播增量（必要时全量）。"""
@@ -231,7 +231,7 @@ class Broadcaster:
                         channel="admin",
                         extra={"server_time": time.time()},
                     )
-                    await ws.send_text(self._encode_message(message))
+                    await ws.send_bytes(self._encode_message(message))
                 else:
                     patch_state = self._compute_admin_patch(previous_state, current_state)
                     if self._has_admin_patch_changes(patch_state):
@@ -242,7 +242,7 @@ class Broadcaster:
                             channel="admin",
                             extra={"server_time": time.time()},
                         )
-                        await ws.send_text(self._encode_message(message))
+                        await ws.send_bytes(self._encode_message(message))
 
                 self._admin_last_states[admin_id] = current_state
             except Exception as e:
@@ -287,7 +287,7 @@ class Broadcaster:
                         compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
                         compact_scopes["playerMarks"] = dict(self.state.player_marks)
                         full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
-                        await ws.send_text(self._encode_message(full_msg))
+                        await ws.send_bytes(self._encode_message(full_msg))
                     await self.maybe_send_digest(player_id, visible)
                 elif force_full_to_delta:
                     compact_scopes = self._compact_scope_state(
@@ -300,7 +300,7 @@ class Broadcaster:
                     )
                     compact_scopes["playerMarks"] = dict(self.state.player_marks)
                     full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
-                    await ws.send_text(self._encode_message(full_msg))
+                    await ws.send_bytes(self._encode_message(full_msg))
                 elif changed:
                     patch_state = {
                         "players": changes["players"],
@@ -308,7 +308,7 @@ class Broadcaster:
                         "waypoints": changes["waypoints"],
                     }
                     patch_msg = self._build_patch_message(rev, patch_state, revision_key="rev")
-                    await ws.send_text(self._encode_message(patch_msg))
+                    await ws.send_bytes(self._encode_message(patch_msg))
 
                 if not requires_scoped:
                     await self.maybe_send_digest(player_id)
@@ -385,7 +385,7 @@ class Broadcaster:
             entities=entities,
         )
         try:
-            await ws.send_text(self._encode_message(message))
+            await ws.send_bytes(self._encode_message(message))
             self.state.mark_refresh_request_sent(source_id, now)
             logger.debug(
                 "Sent refresh_req "

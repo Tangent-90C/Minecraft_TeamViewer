@@ -5,11 +5,10 @@ import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from server.broadcaster import Broadcaster
-from server.codec import JsonMessageCodec
+from server.codec import MsgpackMessageCodec
 from server.models import EntityData, PlayerData, WaypointData
 from server.protocol import (
     AdminAckPacket,
@@ -51,16 +50,24 @@ def configure_logging() -> None:
 configure_logging()
 logger = logging.getLogger("teamviewer.main")
 
-message_codec = JsonMessageCodec()
+message_codec = MsgpackMessageCodec()
 
 
 async def send_packet(websocket: WebSocket, packet) -> None:
-    await websocket.send_text(message_codec.encode(packet))
+    await websocket.send_bytes(message_codec.encode(packet))
 
 
 async def receive_payload(websocket: WebSocket) -> dict:
-    raw = await websocket.receive_text()
-    return message_codec.decode(raw)
+    message = await websocket.receive()
+    if message.get("type") == "websocket.disconnect":
+        raise WebSocketDisconnect(code=message.get("code", 1000))
+
+    payload = message.get("bytes")
+    if payload is None:
+        payload = message.get("text")
+    if payload is None:
+        raise PacketDecodeError("invalid_payload", "payload must be bytes")
+    return message_codec.decode(payload)
 
 
 def resolve_handshake_rejection_reason(packet: HandshakePacket) -> str | None:
@@ -133,8 +140,6 @@ broadcaster = Broadcaster(state)
 
 # HTTP/WS 入口层：仅做协议收发与调度，不承载核心仲裁逻辑。
 app = FastAPI()
-app.mount("/admin", StaticFiles(directory="static", html=True), name="admin")
-
 
 @app.websocket("/adminws")
 async def admin_ws(websocket: WebSocket):
