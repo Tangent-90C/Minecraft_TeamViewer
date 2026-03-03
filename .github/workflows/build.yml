@@ -29,7 +29,7 @@ jobs:
         with:
           submodules: true
 
-      # 2. 设置Java环境（关键：匹配你的MC版本要求）
+      # 2. 设置环境
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -38,17 +38,6 @@ jobs:
           cache: 'gradle' # 自动缓存Gradle依赖
           cache-dependency-path: 'minecraft-mod/build.gradle' # 指定Mod的Gradle文件
 
-      # 3. 赋予Gradle可执行权限（Linux系统必需）
-      - name: Make Gradle wrapper executable
-        working-directory: ./minecraft-mod # 切换到Mod目录执行编译
-        run: chmod +x ./gradlew
-
-      # 4. 编译Minecraft模组（核心步骤）
-      - name: Build Minecraft Mod
-        working-directory: ./minecraft-mod # 切换到Mod目录执行编译
-        run: ./gradlew build --refresh-dependencies
-
-      # 4.1 设置 Node 环境并构建油猴脚本（Vite） — 使用 pnpm
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -59,21 +48,33 @@ jobs:
         with:
           version: 10
 
-      - name: Install Monkey deps (pnpm)
-        working-directory: ./tampermonkey-script
-        run: pnpm install --frozen-lockfile
+      - name: Setup Task
+        uses: DiyRex/action-setup-taskfile@v1.0.0
 
-      - name: Build Monkey script
-        working-directory: ./tampermonkey-script
-        run: pnpm run build
+      # 3. 开始编译
+
+      - name: Build versioned artifacts with Task
+        shell: bash
+        run: task ci-build-assets
+
+      - name: Read artifact versions
+        id: versions
+        shell: bash
+        run: |
+          backend_version=$(python3 -c "import tomllib;print(tomllib.load(open('backend-server/pyproject.toml','rb'))['project']['version'])")
+          monkey_version=$(python3 -c "import json;print(json.load(open('tampermonkey-script/package.json', encoding='utf-8'))['version'])")
+          mod_version=$(python3 -c "import re;print(re.search(r'^\s*mod_version\s*=\s*(.+?)\s*$', open('minecraft-mod/gradle.properties', encoding='utf-8').read(), re.M).group(1))")
+          echo "backend_version=${backend_version}" >> "$GITHUB_OUTPUT"
+          echo "monkey_version=${monkey_version}" >> "$GITHUB_OUTPUT"
+          echo "mod_version=${mod_version}" >> "$GITHUB_OUTPUT"
 
       # 上传Backend产物包
       - name: Upload Backend Package
         id: upload-backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-server
-          path: backend-server/  # Github会自动打包为.zip
+          name: MC-Teamviewer-backend-server-v${{ steps.versions.outputs.backend_version }}
+          path: build-artifacts/backend-server-v${{ steps.versions.outputs.backend_version }}.tar.gz
           if-no-files-found: error  # 若文件夹为空则报错（避免上传空artifact）
       
       # 上传油猴脚本
@@ -81,19 +82,14 @@ jobs:
         id: upload-monkey
         uses: actions/upload-artifact@v4
         with:
-          name: tampermonkey-script-dist
-          path: ./tampermonkey-script/dist/*.user.js
+          name: MC-Teamviewer-mod-tampermonkey-script-v${{ steps.versions.outputs.monkey_version }}
+          path: build-artifacts/tampermonkey-script-v${{ steps.versions.outputs.monkey_version }}.user.js
           if-no-files-found: error
       
-      # 5.2 上传编译产物
+      # 上传编译产物
       - name: Upload built mod JAR
         uses: actions/upload-artifact@v4
         with:
-          name: mod-build
-          path: |
-            minecraft-mod/build/libs/*.jar
-            !minecraft-mod/build/libs/*-sources.jar
-            !minecraft-mod/build/libs/*-dev.jar
-            !minecraft-mod/build/libs/*-javadoc.jar
-      
+          name: MC-Teamviewer-mod-v${{ steps.versions.outputs.mod_version }}-fabric
+          path: build-artifacts/*.jar
                   
