@@ -3,13 +3,8 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.network;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.Vec3d;
@@ -21,9 +16,13 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import fun.prof_chen.teamviewer.multipleplayeresp.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.JsonMessageCodec;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MessageCodec;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.ProtocolPackets;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -98,12 +97,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	// 日志记录器
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
-	
-	// 客户端协议版本号 - 用于服务端兼容性检查
-	private static final String CLIENT_PROTOCOL_VERSION = "0.2.0";
-	
+
 	// 客户端程序版本 - 从Mod元数据中获取
-	private static final String CLIENT_PROGRAM_VERSION = resolveLocalProgramVersion();
+	private static final String CLIENT_PROGRAM_VERSION = TeamviewerModMetadata.getModVersion();
 	
 	// 重同步冷却时间(毫秒) - 防止频繁重同步请求
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
@@ -153,8 +149,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	// 重连意愿标志 - 控制是否应该尝试重连
 	private volatile boolean shouldReconnect = false;
 	
+	// 版本不兼容导致的重连抑制标志
+	private volatile boolean reconnectSuppressedForVersionMismatch = false;
+	
 	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
+	private final MessageCodec messageCodec = new JsonMessageCodec(gson);
 	
 	// HTTP客户端 - 用于创建WebSocket连接
 	private OkHttpClient httpClient;
@@ -175,10 +175,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private volatile boolean serverSupportsDelta = false;
 	
 	// 服务端协议版本 - 用于版本兼容性判断
-	private volatile String serverProtocolVersion = "0.0.0";
+	private volatile String serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
 	
 	// 服务端程序版本 - 用于版本对比和调试
-	private volatile String serverProgramVersion = "unknown";
+	private volatile String serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
 	
 	// 摘要校验间隔(秒) - 控制数据一致性检查频率
 	private volatile int digestIntervalSec = 10;
@@ -305,6 +305,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 		shouldReconnect = true;
+		reconnectSuppressedForVersionMismatch = false;
 
 		boolean useSystemProxy = config.isUseSystemProxy();
 		if (this.httpClient == null || this.currentUseSystemProxy != useSystemProxy) {
@@ -511,13 +512,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 		try {
 			long sentAt = System.currentTimeMillis();
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "players_patch");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			obj.addProperty("ackRev", lastServerRevision);
-			obj.add("upsert", mapOfMapToJsonObject(upsert));
-			obj.add("delete", toStringArray(delete));
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.PlayersPatchPacket packet = new ProtocolPackets.PlayersPatchPacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.ackRev = lastServerRevision;
+			packet.upsert = upsert;
+			packet.delete = delete;
+			sendPacket(packet);
 			lastSentPlayersSnapshot.clear();
 			lastSentPlayersSnapshot.putAll(currentSnapshot);
 			lastPlayersPacketSentMs = sentAt;
@@ -594,13 +594,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 		try {
 			long sentAt = System.currentTimeMillis();
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "entities_patch");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			obj.addProperty("ackRev", lastServerRevision);
-			obj.add("upsert", mapOfMapToJsonObject(upsert));
-			obj.add("delete", toStringArray(delete));
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.EntitiesPatchPacket packet = new ProtocolPackets.EntitiesPatchPacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.ackRev = lastServerRevision;
+			packet.upsert = upsert;
+			packet.delete = delete;
+			sendPacket(packet);
 			lastSentEntitiesSnapshot.clear();
 			lastSentEntitiesSnapshot.putAll(currentSnapshot);
 			lastEntitiesPacketSentMs = sentAt;
@@ -643,11 +642,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (waypoints == null || waypoints.isEmpty())
 			return;
 		try {
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "waypoints_update");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			obj.add("waypoints", mapOfMapToJsonObject(waypoints));
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.WaypointsUpdatePacket packet = new ProtocolPackets.WaypointsUpdatePacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.waypoints = waypoints;
+			sendPacket(packet);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send waypoints_update to PlayerESP server: {}", e.getMessage());
 		}
@@ -722,12 +720,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "tab_players_update");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			obj.addProperty("ackRev", lastServerRevision);
-			obj.add("tabPlayers", gson.toJsonTree(normalized));
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.TabPlayersUpdatePacket packet = new ProtocolPackets.TabPlayersUpdatePacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.ackRev = lastServerRevision;
+			packet.tabPlayers = normalized;
+			sendPacket(packet);
 
 			lastTabPlayersSignature = signature;
 			lastTabPlayersPacketSentMs = now;
@@ -761,10 +758,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (waypointIds == null || waypointIds.isEmpty())
 			return;
 		try {
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "waypoints_delete");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonArray ids = new JsonArray();
+			List<String> ids = new ArrayList<>();
 			for (String waypointId : waypointIds) {
 				if (waypointId != null && !waypointId.isBlank()) {
 					ids.add(waypointId);
@@ -773,8 +767,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			if (ids.isEmpty()) {
 				return;
 			}
-			obj.add("waypointIds", ids);
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.WaypointsDeletePacket packet = new ProtocolPackets.WaypointsDeletePacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.waypointIds = ids;
+			sendPacket(packet);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send waypoints_delete to PlayerESP server: {}", e.getMessage());
 		}
@@ -805,10 +801,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (submitPlayerId == null || targetEntityIds == null || targetEntityIds.isEmpty())
 			return;
 		try {
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "waypoints_entity_death_cancel");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonArray ids = new JsonArray();
+			List<String> ids = new ArrayList<>();
 			for (String entityId : targetEntityIds) {
 				if (entityId != null && !entityId.isBlank()) {
 					ids.add(entityId);
@@ -817,8 +810,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			if (ids.isEmpty()) {
 				return;
 			}
-			obj.add("targetEntityIds", ids);
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.WaypointsEntityDeathCancelPacket packet = new ProtocolPackets.WaypointsEntityDeathCancelPacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.targetEntityIds = ids;
+			sendPacket(packet);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send waypoints_entity_death_cancel to PlayerESP server: {}", e.getMessage());
 		}
@@ -829,15 +824,14 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 		try {
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "players_update");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonObject playersJson = new JsonObject();
+			Map<String, Map<String, Object>> playersJson = new HashMap<>();
 			for (Map.Entry<UUID, Map<String, Object>> e : players.entrySet()) {
-				playersJson.add(e.getKey().toString(), mapToJsonObject(e.getValue()));
+				playersJson.put(e.getKey().toString(), copyValueMap(e.getValue()));
 			}
-			obj.add("players", playersJson);
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.PlayersUpdatePacket packet = new ProtocolPackets.PlayersUpdatePacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.players = playersJson;
+			sendPacket(packet);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send players_update to PlayerESP server: {}", e.getMessage());
 		}
@@ -848,48 +842,35 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 		try {
-			JsonObject obj = new JsonObject();
-			obj.addProperty("type", "entities_update");
-			obj.addProperty("submitPlayerId", submitPlayerId.toString());
-			JsonObject entitiesJson = new JsonObject();
+			Map<String, Map<String, Object>> entitiesJson = new HashMap<>();
 			for (Map.Entry<String, Map<String, Object>> e : entities.entrySet()) {
-				entitiesJson.add(e.getKey(), mapToJsonObject(e.getValue()));
+				entitiesJson.put(e.getKey(), copyValueMap(e.getValue()));
 			}
-			obj.add("entities", entitiesJson);
-			webSocket.send(gson.toJson(obj));
+			ProtocolPackets.EntitiesUpdatePacket packet = new ProtocolPackets.EntitiesUpdatePacket();
+			packet.submitPlayerId = submitPlayerId.toString();
+			packet.entities = entitiesJson;
+			sendPacket(packet);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send entities_update to PlayerESP server: {}", e.getMessage());
 		}
 	}
 
-	private JsonObject mapToJsonObject(Map<String, Object> map) {
-		JsonObject object = new JsonObject();
-		for (Map.Entry<String, Object> entry : map.entrySet()) {
-			if (entry.getValue() == null) {
-				object.add(entry.getKey(), JsonNull.INSTANCE);
-			} else {
-				object.add(entry.getKey(), gson.toJsonTree(entry.getValue()));
-			}
+	private void sendPacket(Object packet) {
+		if (webSocket == null || packet == null) {
+			return;
 		}
-		return object;
+		webSocket.send(messageCodec.encode(packet));
 	}
 
-	private JsonObject mapOfMapToJsonObject(Map<String, Map<String, Object>> map) {
-		JsonObject object = new JsonObject();
-		for (Map.Entry<String, Map<String, Object>> entry : map.entrySet()) {
-			object.add(entry.getKey(), mapToJsonObject(entry.getValue()));
+	private JsonObject createObjectNode(Object packet) {
+		if (packet == null) {
+			return new JsonObject();
 		}
-		return object;
-	}
-
-	private JsonArray toStringArray(List<String> list) {
-		JsonArray array = new JsonArray();
-		for (String value : list) {
-			if (value != null && !value.isBlank()) {
-				array.add(value);
-			}
+		JsonElement node = gson.toJsonTree(packet);
+		if (node != null && node.isJsonObject()) {
+			return node.getAsJsonObject();
 		}
-		return array;
+		return new JsonObject();
 	}
 
 	/**
@@ -997,50 +978,58 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
-			JsonObject json;
-			try {
-				json = JsonParser.parseString(message).getAsJsonObject();
-			} catch (JsonSyntaxException e) {
-				LOGGER.error("Failed to parse JSON message: {}, message: {}", e.getMessage(), message);
+			ProtocolPackets.BaseInboundPacket envelope = messageCodec.decode(message, ProtocolPackets.BaseInboundPacket.class);
+			if (envelope == null || envelope.type == null || envelope.type.isBlank()) {
+				LOGGER.warn("Received invalid message envelope");
 				return;
 			}
 
-			String messageType = json.has("type") ? json.get("type").getAsString() : "";
-
-			if (json.has("rev") && !json.get("rev").isJsonNull()) {
-				try {
-					lastServerRevision = Math.max(lastServerRevision, json.get("rev").getAsLong());
-				} catch (Exception ignored) {
-				}
+			Long incomingRev = envelope.rev != null ? envelope.rev : envelope.revision;
+			if (incomingRev != null) {
+				lastServerRevision = Math.max(lastServerRevision, incomingRev);
 			}
 
-			if ("handshake_ack".equals(messageType)) {
-				handleHandshakeAck(json);
+			if ("handshake_ack".equals(envelope.type)) {
+				ProtocolPackets.HandshakeAckInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.HandshakeAckInboundPacket.class);
+				handleHandshakeAck(packet);
 				return;
 			}
 
-			if ("snapshot_full".equals(messageType)) {
-				applySnapshot(json);
+			if ("snapshot_full".equals(envelope.type)) {
+				ProtocolPackets.SnapshotFullInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.SnapshotFullInboundPacket.class);
+				applySnapshot(packet);
 				return;
 			}
 
-			if ("patch".equals(messageType)) {
-				applyPatch(json);
+			if ("patch".equals(envelope.type)) {
+				ProtocolPackets.PatchInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.PatchInboundPacket.class);
+				applyPatch(packet);
 				return;
 			}
 
-			if ("digest".equals(messageType)) {
-				handleDigest(json);
+			if ("digest".equals(envelope.type)) {
+				ProtocolPackets.DigestInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.DigestInboundPacket.class);
+				handleDigest(packet);
 				return;
 			}
 
-			if ("refresh_req".equals(messageType)) {
-				handleRefreshRequest(json);
+			if ("refresh_req".equals(envelope.type)) {
+				ProtocolPackets.RefreshReqInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.RefreshReqInboundPacket.class);
+				handleRefreshRequest(packet);
 				return;
 			}
 
-			if ("waypoints_update".equals(messageType)) {
-				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
+			if ("waypoints_update".equals(envelope.type)) {
+				ProtocolPackets.WaypointsUpdateInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.WaypointsUpdateInboundPacket.class);
+				JsonObject payload = new JsonObject();
+				payload.add("waypoints", createObjectNode(packet == null ? null : packet.waypoints));
+				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(payload, "waypoints");
 				if (!receivedWaypoints.isEmpty()) {
 					remoteWaypointCache.putAll(receivedWaypoints);
 					notifyWaypointsReceived(receivedWaypoints);
@@ -1048,8 +1037,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
-			if ("waypoints_delete".equals(messageType)) {
-				List<String> waypointIds = parseWaypointDeleteIds(json);
+			if ("waypoints_delete".equals(envelope.type)) {
+				ProtocolPackets.WaypointsDeleteInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.WaypointsDeleteInboundPacket.class);
+				List<String> waypointIds = packet != null && packet.waypointIds != null ? packet.waypointIds : List.of();
 				if (!waypointIds.isEmpty()) {
 					for (String id : waypointIds) {
 						remoteWaypointCache.remove(id);
@@ -1059,15 +1050,23 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
-			if ("positions".equals(messageType)) {
-				applyLegacyPositions(json);
+			if ("positions".equals(envelope.type)) {
+				ProtocolPackets.PositionsInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.PositionsInboundPacket.class);
+				applyLegacyPositions(packet);
 			}
 		} catch (Exception e) {
 			LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(), message);
 		}
 	}
 
-	private void applyLegacyPositions(JsonObject json) {
+	private void applyLegacyPositions(ProtocolPackets.PositionsInboundPacket packet) {
+		if (packet == null) {
+			return;
+		}
+
+		JsonObject json = createObjectNode(packet);
+
 		if (json.has("players") && json.get("players").isJsonObject()) {
 			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"), true);
 			reconcileRemotePlayers(latestRemotePlayers);
@@ -1127,7 +1126,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 确保数据的完整性和一致性
 	 * - 适用于需要完全同步的场景
 	 */
-	private void applySnapshot(JsonObject json) {
+	private void applySnapshot(ProtocolPackets.SnapshotFullInboundPacket packet) {
+		if (packet == null) {
+			return;
+		}
+
+		JsonObject json = createObjectNode(packet);
+
 		if (json.has("players") && json.get("players").isJsonObject()) {
 			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"), true);
 			reconcileRemotePlayers(latestRemotePlayers);
@@ -1204,7 +1209,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *   }
 	 * }
 	 */
-	private void applyPatch(JsonObject json) {
+	private void applyPatch(ProtocolPackets.PatchInboundPacket packet) {
+		if (packet == null) {
+			return;
+		}
+
+		JsonObject json = createObjectNode(packet);
+
 		if (json.has("players") && json.get("players").isJsonObject()) {
 			JsonObject playersPatch = json.getAsJsonObject("players");
 
@@ -1422,15 +1433,14 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 自动恢复数据一致性
 	 * - 减少手动干预需求
 	 */
-	private void handleDigest(JsonObject json) {
-		if (!json.has("hashes") || !json.get("hashes").isJsonObject()) {
+	private void handleDigest(ProtocolPackets.DigestInboundPacket packet) {
+		if (packet == null || packet.hashes == null) {
 			return;
 		}
 
-		JsonObject hashes = json.getAsJsonObject("hashes");
-		String serverPlayerHash = getOptionalString(hashes, "players");
-		String serverEntityHash = getOptionalString(hashes, "entities");
-		String serverWaypointHash = getOptionalString(hashes, "waypoints");
+		String serverPlayerHash = packet.hashes.get("players");
+		String serverEntityHash = packet.hashes.get("entities");
+		String serverWaypointHash = packet.hashes.get("waypoints");
 
 		String localPlayerHash = computePlayersDigest();
 		String localEntityHash = computeEntitiesDigest();
@@ -1458,15 +1468,14 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 		try {
-			JsonObject req = new JsonObject();
-			req.addProperty("type", "resync_req");
-			req.addProperty("reason", reason);
-			req.addProperty("ackRev", lastServerRevision);
+			ProtocolPackets.ResyncReqPacket req = new ProtocolPackets.ResyncReqPacket();
+			req.reason = reason;
+			req.ackRev = lastServerRevision;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
-				req.addProperty("submitPlayerId", client.player.getUuid().toString());
+				req.submitPlayerId = client.player.getUuid().toString();
 			}
-			webSocket.send(gson.toJson(req));
+			sendPacket(req);
 		} catch (Exception e) {
 			LOGGER.warn("Failed to send resync request: {}", e.getMessage());
 		}
@@ -1496,6 +1505,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		// 关闭事件也切回主线程，统一处理状态重置与重连调度。
 		enqueueMainThreadTask(() -> {
 			isConnected = false;
+			if (statusCode == 1008) {
+				shouldReconnect = false;
+				reconnectSuppressedForVersionMismatch = true;
+			}
 			if (statusCode != 1000) {
 				lastConnectionError = "WebSocket closed (" + statusCode + "): "
 						+ (reason == null || reason.isBlank() ? "unknown reason" : reason);
@@ -1506,7 +1519,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			clearLocalOutboundSnapshots();
 			notifyConnectionStatusChanged(false);
 			LOGGER.info("Disconnected from PlayerESP server. Status: {}, Reason: {}", statusCode, reason);
-			if (shouldReconnect) {
+			if (shouldReconnect && !reconnectSuppressedForVersionMismatch) {
 				scheduleReconnect();
 			}
 		});
@@ -1717,7 +1730,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "handshake",
 	 *   "networkProtocolVersion": "客户端协议版本",
-	 *   "protocolVersion": "协议版本(冗余字段)",
 	 *   "localProgramVersion": "客户端程序版本",
 	 *   "roomCode": "房间代码",
 	 *   "supportsDelta": true,
@@ -1738,20 +1750,19 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 
 		try {
-			JsonObject handshake = new JsonObject();
-			handshake.addProperty("type", "handshake");
-			handshake.addProperty("networkProtocolVersion", CLIENT_PROTOCOL_VERSION);
-			handshake.addProperty("protocolVersion", CLIENT_PROTOCOL_VERSION);
-			handshake.addProperty("localProgramVersion", CLIENT_PROGRAM_VERSION);
-			handshake.addProperty("roomCode", getRoomCode());
-			handshake.addProperty("supportsDelta", true);
+			ProtocolPackets.HandshakePacket handshake = new ProtocolPackets.HandshakePacket();
+			handshake.networkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_PROTOCOL_VERSION;
+			handshake.minimumCompatibleNetworkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
+			handshake.localProgramVersion = CLIENT_PROGRAM_VERSION;
+			handshake.roomCode = getRoomCode();
+			handshake.supportsDelta = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_SUPPORTS_DELTA;
 
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
-				handshake.addProperty("submitPlayerId", client.player.getUuid().toString());
+				handshake.submitPlayerId = client.player.getUuid().toString();
 			}
 
-			webSocket.send(gson.toJson(handshake));
+			sendPacket(handshake);
 			LOGGER.info("Sent handshake message");
 		} catch (Exception e) {
 			LOGGER.error("Failed to send handshake message: {}", e.getMessage());
@@ -1783,70 +1794,167 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - serverProgramVersion: 服务端程序版本
 	 *    - 用于调试和版本对比
 	 */
-	private void handleHandshakeAck(JsonObject json) {
-		if (json.has("ready") && json.get("ready").getAsBoolean()) {
-			serverProtocolVersion = readProtocolVersionFromHandshakeAck(json);
-			serverProgramVersion = readProgramVersionFromHandshakeAck(json);
-			serverSupportsDelta = json.has("deltaEnabled") && json.get("deltaEnabled").getAsBoolean();
-			digestIntervalSec = json.has("digestIntervalSec") ? json.get("digestIntervalSec").getAsInt() : 10;
-			if (json.has("rev") && !json.get("rev").isJsonNull()) {
-				lastServerRevision = json.get("rev").getAsLong();
-			}
-			LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, delta={}, digestInterval={}s",
-					serverProtocolVersion, serverProgramVersion, serverSupportsDelta, digestIntervalSec);
+	private void handleHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
+		if (packet == null) {
+			return;
 		}
+
+		serverProtocolVersion = readProtocolVersionFromHandshakeAck(packet);
+		serverProgramVersion = readProgramVersionFromHandshakeAck(packet);
+
+		if (!Boolean.TRUE.equals(packet.ready)) {
+			String rejectReason = extractHandshakeRejectReason(packet);
+			rejectForVersionIncompatibility("服务端拒绝握手: " + rejectReason);
+			return;
+		}
+
+		if (!protocolAtLeast(serverProtocolVersion, TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION)) {
+			rejectForVersionIncompatibility(
+					"版本不兼容: 服务端协议 " + serverProtocolVersion
+							+ " 低于客户端最低要求 " + TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION);
+			return;
+		}
+
+		serverSupportsDelta = Boolean.TRUE.equals(packet.deltaEnabled);
+		digestIntervalSec = packet.digestIntervalSec != null ? packet.digestIntervalSec : 10;
+		if (packet.rev != null) {
+			lastServerRevision = packet.rev;
+		}
+		LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, delta={}, digestInterval={}s",
+				serverProtocolVersion, serverProgramVersion, serverSupportsDelta, digestIntervalSec);
 	}
 
-	private String readProtocolVersionFromHandshakeAck(JsonObject json) {
-		try {
-			if (json.has("networkProtocolVersion") && !json.get("networkProtocolVersion").isJsonNull()) {
-				String value = json.get("networkProtocolVersion").getAsString();
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			}
-			if (json.has("protocolVersion") && !json.get("protocolVersion").isJsonNull()) {
-				String value = json.get("protocolVersion").getAsString();
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			}
-		} catch (Exception ignored) {
+	private String extractHandshakeRejectReason(ProtocolPackets.HandshakeAckInboundPacket packet) {
+		if (packet == null) {
+			return "unknown";
 		}
-		return "0.0.0";
-	}
 
-	private String readProgramVersionFromHandshakeAck(JsonObject json) {
-		if (json.has("localProgramVersion") && !json.get("localProgramVersion").isJsonNull()) {
-			try {
-				String value = json.get("localProgramVersion").getAsString();
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			} catch (Exception ignored) {
-			}
+		if (packet.rejectReason != null && !packet.rejectReason.isBlank()) {
+			return packet.rejectReason.trim();
 		}
-		if (json.has("programVersion") && !json.get("programVersion").isJsonNull()) {
-			try {
-				String value = json.get("programVersion").getAsString();
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			} catch (Exception ignored) {
-			}
+
+		if (packet.error != null && !packet.error.isBlank()) {
+			return packet.error.trim();
 		}
+
 		return "unknown";
 	}
 
-	private static String resolveLocalProgramVersion() {
-		try {
-			return FabricLoader.getInstance()
-					.getModContainer("teamviewer")
-					.map(container -> container.getMetadata().getVersion().getFriendlyString())
-					.orElse("teamviewer-mod-dev");
-		} catch (Exception ignored) {
-			return "teamviewer-mod-dev";
+	private void rejectForVersionIncompatibility(String reason) {
+		String finalReason = reason == null || reason.isBlank()
+				? "版本不兼容，连接已拒绝"
+				: reason.trim();
+
+		lastConnectionError = finalReason;
+		isConnected = false;
+		shouldReconnect = false;
+		reconnectSuppressedForVersionMismatch = true;
+		notifyConnectionStatusChanged(false);
+
+		if (webSocket != null) {
+			try {
+				webSocket.close(1008, truncateWebSocketCloseReason(finalReason));
+			} catch (Exception ignored) {
+			}
 		}
+
+		LOGGER.warn("Connection rejected due to protocol incompatibility: {}", finalReason);
+	}
+
+	private String truncateWebSocketCloseReason(String reason) {
+		if (reason == null || reason.isBlank()) {
+			return "version_incompatible";
+		}
+		String normalized = reason.trim();
+		if (normalized.length() <= 120) {
+			return normalized;
+		}
+		return normalized.substring(0, 120);
+	}
+
+	private boolean protocolAtLeast(String current, String minimum) {
+		return parseProtocolVersion(current) >= parseProtocolVersion(minimum);
+	}
+
+	private long parseProtocolVersion(String version) {
+		if (version == null || version.isBlank()) {
+			return 0L;
+		}
+
+		String normalized = version.trim();
+		int suffixIndex = normalized.indexOf('-');
+		if (suffixIndex >= 0) {
+			normalized = normalized.substring(0, suffixIndex);
+		}
+
+		String[] parts = normalized.split("\\.");
+		long major = parseProtocolVersionPart(parts, 0);
+		long minor = parseProtocolVersionPart(parts, 1);
+		long patch = parseProtocolVersionPart(parts, 2);
+		return major * 1_000_000L + minor * 1_000L + patch;
+	}
+
+	private long parseProtocolVersionPart(String[] parts, int index) {
+		if (parts == null || index < 0 || index >= parts.length) {
+			return 0L;
+		}
+		String text = parts[index] == null ? "" : parts[index].trim();
+		if (text.isEmpty()) {
+			return 0L;
+		}
+
+		StringBuilder digits = new StringBuilder();
+		for (int i = 0; i < text.length(); i++) {
+			char ch = text.charAt(i);
+			if (Character.isDigit(ch)) {
+				digits.append(ch);
+			} else {
+				break;
+			}
+		}
+		if (digits.length() == 0) {
+			return 0L;
+		}
+		try {
+			return Long.parseLong(digits.toString());
+		} catch (NumberFormatException ignored) {
+			return 0L;
+		}
+	}
+
+	private String readProtocolVersionFromHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
+		try {
+			if (packet.networkProtocolVersion != null) {
+				String value = packet.networkProtocolVersion;
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			}
+		} catch (Exception ignored) {
+		}
+		return TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+	}
+
+	private String readProgramVersionFromHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
+		if (packet.localProgramVersion != null) {
+			try {
+				String value = packet.localProgramVersion;
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			} catch (Exception ignored) {
+			}
+		}
+		if (packet.programVersion != null) {
+			try {
+				String value = packet.programVersion;
+				if (value != null && !value.isBlank()) {
+					return value;
+				}
+			} catch (Exception ignored) {
+			}
+		}
+		return TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
 	}
 
 	private void notifyConnectionStatusChanged(boolean connected) {
@@ -2025,9 +2133,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return now - lastEntitiesPacketSentMs >= FORCE_FULL_REFRESH_MS;
 	}
 
-	private void handleRefreshRequest(JsonObject json) {
-		List<String> players = parseStringArrayField(json, "players");
-		List<String> entities = parseStringArrayField(json, "entities");
+	private void handleRefreshRequest(ProtocolPackets.RefreshReqInboundPacket packet) {
+		List<String> players = packet != null && packet.players != null ? packet.players : List.of();
+		List<String> entities = packet != null && packet.entities != null ? packet.entities : List.of();
 
 		pendingPlayerRefreshIds.addAll(players);
 		pendingEntityRefreshIds.addAll(entities);
@@ -2035,24 +2143,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (!players.isEmpty() || !entities.isEmpty()) {
 			LOGGER.info("Received refresh_req: players={}, entities={}", players.size(), entities.size());
 		}
-	}
-
-	private List<String> parseStringArrayField(JsonObject json, String fieldName) {
-		if (!json.has(fieldName) || !json.get(fieldName).isJsonArray()) {
-			return List.of();
-		}
-
-		List<String> result = new ArrayList<>();
-		for (JsonElement element : json.getAsJsonArray(fieldName)) {
-			if (element == null || !element.isJsonPrimitive()) {
-				continue;
-			}
-			String value = element.getAsString();
-			if (value != null && !value.isBlank()) {
-				result.add(value);
-			}
-		}
-		return result;
 	}
 
 	private void applyPendingPlayerRefresh(
@@ -2202,24 +2292,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		} catch (Exception ignored) {
 			return null;
 		}
-	}
-
-	private List<String> parseWaypointDeleteIds(JsonObject json) {
-		if (!json.has("waypointIds") || !json.get("waypointIds").isJsonArray()) {
-			return List.of();
-		}
-
-		List<String> result = new ArrayList<>();
-		for (JsonElement idElement : json.getAsJsonArray("waypointIds")) {
-			if (idElement != null && idElement.isJsonPrimitive()) {
-				String id = idElement.getAsString();
-				if (id != null && !id.isBlank()) {
-					result.add(id);
-				}
-			}
-		}
-
-		return result;
 	}
 
 	private void reconcilePlayerPositions(Map<UUID, Vec3d> latestPositions) {
@@ -2410,8 +2482,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 
 	private void resetNegotiationState() {
 		serverSupportsDelta = false;
-		serverProtocolVersion = "0.0.0";
-		serverProgramVersion = "unknown";
+		serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+		serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
 		digestIntervalSec = 10;
 		lastServerRevision = 0;
 		lastResyncRequestMs = 0L;

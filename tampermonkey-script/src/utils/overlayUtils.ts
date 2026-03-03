@@ -3,7 +3,7 @@ import {
   MC_COLOR_CODE_MAP,
   TEAM_CONFIG_COLOR_FIELD,
   TEAM_DEFAULT_COLORS,
-} from './constants';
+} from '../constants';
 
 export function parseTagList(raw: unknown) {
   return String(raw || '')
@@ -277,7 +277,7 @@ export function parseMcDisplayName(rawText: unknown) {
   }
 
   const plain = text.replace(/§[0-9a-fk-orA-FK-OR]/g, '').trim();
-  const teamMatch = plain.match(/\[[^\]]+\]/);
+  const teamMatch = plain.match(/\[[^]]+\]/);
   const teamText = teamMatch ? teamMatch[0] : '';
 
   return {

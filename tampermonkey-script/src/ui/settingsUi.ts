@@ -1,5 +1,5 @@
 import { App, createApp, reactive } from 'vue';
-import OverlaySettingsPanel from './ui/OverlaySettingsPanel.vue';
+import OverlaySettingsPanel from './components/OverlaySettingsPanel.vue';
 
 type PlayerOption = {
   playerId: string;

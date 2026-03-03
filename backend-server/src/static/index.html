@@ -41,10 +41,12 @@
 	</div>
 
 	<script>
-		const ADMIN_NETWORK_PROTOCOL_VERSION = '0.1.0';
+		const ADMIN_NETWORK_PROTOCOL_VERSION = '0.2.0';
+		const ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION = '0.2.0';
 		const ADMIN_PROGRAM_VERSION = 'admin-ui-dev';
 
 		let adminSocket = null;
+		let reconnectDisabledByIncompatibleVersion = false;
 		let lastAdminResyncRequestAt = 0;
 		let adminState = {
 			players: {},
@@ -178,6 +180,9 @@
 		}
 
 		function connectAdminWs() {
+			if (reconnectDisabledByIncompatibleVersion) {
+				return;
+			}
 			const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
 			const ws = new WebSocket(`${scheme}://${window.location.host}/adminws`);
 			adminSocket = ws;
@@ -186,6 +191,7 @@
 				ws.send(JSON.stringify({
 					type: 'handshake',
 					networkProtocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
+					minimumCompatibleNetworkProtocolVersion: ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION,
 					protocolVersion: ADMIN_NETWORK_PROTOCOL_VERSION,
 					localProgramVersion: ADMIN_PROGRAM_VERSION,
 					supportsDelta: true,
@@ -196,6 +202,17 @@
 			ws.onmessage = (event) => {
 				try {
 					const data = JSON.parse(event.data);
+					if (data && data.type === 'handshake_ack' && data.ready === false) {
+						const reason = String(data.rejectReason || data.error || 'unknown').trim();
+						reconnectDisabledByIncompatibleVersion = true;
+						document.getElementById('server-time').textContent = `连接拒绝: ${reason || 'unknown'}`;
+						try {
+							ws.close(1008, (reason || 'version_incompatible').slice(0, 120));
+						} catch (_) {
+							ws.close();
+						}
+						return;
+					}
 					if (data && (data.type === 'handshake_ack' || data.type === 'admin_ack' || data.type === 'pong')) {
 						return;
 					}
@@ -210,7 +227,9 @@
 				if (adminSocket === ws) {
 					adminSocket = null;
 				}
-				setTimeout(connectAdminWs, 50);
+				if (!reconnectDisabledByIncompatibleVersion) {
+					setTimeout(connectAdminWs, 50);
+				}
 			};
 
 			ws.onerror = () => {

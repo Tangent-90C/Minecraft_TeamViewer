@@ -30,6 +30,12 @@ from server.protocol import (
 from server.state import ServerState
 
 
+
+NETWORK_PROTOCOL_VERSION = "0.3.0" # 服务器使用的协议版本
+SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION = "0.3.0" # 服务器兼容的最低协议版本
+SERVER_PROGRAM_VERSION = "teamviewer-server-dev"
+
+
 def configure_logging() -> None:
     if logging.getLogger().handlers:
         return
@@ -45,8 +51,6 @@ def configure_logging() -> None:
 configure_logging()
 logger = logging.getLogger("teamviewer.main")
 
-NETWORK_PROTOCOL_VERSION = "0.2.0"
-SERVER_PROGRAM_VERSION = os.getenv("TEAMVIEWER_SERVER_VERSION", "teamviewer-server-dev")
 message_codec = JsonMessageCodec()
 
 
@@ -57,6 +61,48 @@ async def send_packet(websocket: WebSocket, packet) -> None:
 async def receive_payload(websocket: WebSocket) -> dict:
     raw = await websocket.receive_text()
     return message_codec.decode(raw)
+
+
+def resolve_handshake_rejection_reason(packet: HandshakePacket) -> str | None:
+    client_protocol = HandshakeHelpers.protocol_version(packet)
+    client_min_compatible = HandshakeHelpers.minimum_compatible_protocol_version(packet, client_protocol)
+
+    if not HandshakeHelpers.protocol_at_least(client_protocol, SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION):
+        return (
+            "client_protocol_too_old: "
+            f"client={client_protocol}, required>={SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION}"
+        )
+
+    if not HandshakeHelpers.protocol_at_least(NETWORK_PROTOCOL_VERSION, client_min_compatible):
+        return (
+            "server_protocol_too_old: "
+            f"server={NETWORK_PROTOCOL_VERSION}, clientRequires>={client_min_compatible}"
+        )
+
+    return None
+
+
+async def reject_handshake(
+    websocket: WebSocket,
+    reason: str,
+    room_code: str,
+) -> None:
+    await send_packet(
+        websocket,
+        HandshakeAckPacket(
+            ready=False,
+            networkProtocolVersion=NETWORK_PROTOCOL_VERSION,
+            minimumCompatibleNetworkProtocolVersion=SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION,
+            localProgramVersion=SERVER_PROGRAM_VERSION,
+            roomCode=room_code,
+            deltaEnabled=True,
+            error="version_incompatible",
+            rejectReason=reason,
+            revision=state.revision,
+        ),
+    )
+    close_reason = reason if len(reason) <= 120 else reason[:120]
+    await websocket.close(code=1008, reason=close_reason)
 
 
 def normalize_waypoint_color_to_int(color_value, fallback: int = 0xEF4444) -> int:
@@ -118,6 +164,17 @@ async def admin_ws(websocket: WebSocket):
                 client_protocol = HandshakeHelpers.protocol_version(packet)
                 client_program_version = HandshakeHelpers.program_version(packet)
                 admin_room = state.set_admin_room(admin_id, HandshakeHelpers.room_code(packet, state.DEFAULT_ROOM_CODE))
+                rejection_reason = resolve_handshake_rejection_reason(packet)
+                if rejection_reason:
+                    logger.warning(
+                        "Admin handshake rejected (clientProtocol=%s, roomCode=%s, reason=%s)",
+                        client_protocol,
+                        admin_room,
+                        rejection_reason,
+                    )
+                    await reject_handshake(websocket, rejection_reason, admin_room)
+                    return
+
                 logger.info(
                     "Admin connected (clientProtocol=%s, clientProgramVersion=%s, roomCode=%s)",
                     client_protocol,
@@ -128,7 +185,7 @@ async def admin_ws(websocket: WebSocket):
                     websocket,
                     HandshakeAckPacket(
                         networkProtocolVersion=NETWORK_PROTOCOL_VERSION,
-                        protocolVersion=state.PROTOCOL_V2,
+                        minimumCompatibleNetworkProtocolVersion=SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION,
                         localProgramVersion=SERVER_PROGRAM_VERSION,
                         roomCode=admin_room,
                         deltaEnabled=True,
@@ -326,6 +383,20 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # 握手：建立能力协商（协议版本、是否支持 delta）。
             if isinstance(packet, HandshakePacket):
+                rejection_reason = resolve_handshake_rejection_reason(packet)
+                if rejection_reason:
+                    logger.warning(
+                        "Player handshake rejected (submitPlayerId=%s, reason=%s)",
+                        submit_player_id,
+                        rejection_reason,
+                    )
+                    await reject_handshake(
+                        websocket,
+                        rejection_reason,
+                        HandshakeHelpers.room_code(packet, state.DEFAULT_ROOM_CODE),
+                    )
+                    return
+
                 if submit_player_id:
                     state.connections[submit_player_id] = websocket
                     client_protocol = HandshakeHelpers.protocol_version(packet)
@@ -343,7 +414,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                     ack = {
                         "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
-                        "protocolVersion": state.PROTOCOL_V2,
+                        "minimumCompatibleNetworkProtocolVersion": SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION,
                         "localProgramVersion": SERVER_PROGRAM_VERSION,
                         "roomCode": client_room,
                         "deltaEnabled": state.is_delta_client(submit_player_id),

@@ -8,8 +8,8 @@ import {
   createConfigExportPayload,
   getConfigCompatVersion,
   parseImportedConfigText,
-} from './configTransfer';
-import { OVERLAY_STYLE_TEXT, UI_STYLE_TEXT } from './styles';
+} from './config/configTransfer';
+import { OVERLAY_STYLE_TEXT, UI_STYLE_TEXT } from './ui/styles';
 import {
   getConfiguredTeamColor,
   normalizeColor,
@@ -23,18 +23,18 @@ import {
   readNumber,
   sanitizeConfig,
   getPlayerDataNode,
-} from './overlayUtils';
-import { createAutoMarkSyncManager } from './autoMarkSync';
+} from './utils/overlayUtils';
+import { createAutoMarkSyncManager } from './core/autoMarkSync';
 import {
   buildCommandPlayerMarkClear,
   buildCommandPlayerMarkClearAll,
   buildCommandPlayerMarkSet,
   buildCommandSameServerFilterSet,
   buildCommandTacticalWaypointSet,
-} from './networkSchemas';
-import { createAdminWsClient } from './wsClient';
-import { createMapProjection } from './mapProjection';
-import { createSettingsUi } from './settingsUi';
+} from './network/networkSchemas';
+import { createAdminWsClient } from './network/wsClient';
+import { createMapProjection } from './core/mapProjection';
+import { createSettingsUi } from './ui/settingsUi';
 
 declare const unsafeWindow: Window | undefined;
 

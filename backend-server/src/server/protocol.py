@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -14,7 +15,7 @@ class PacketModel(BaseModel):
 class HandshakePacket(PacketModel):
     type: Literal["handshake"]
     networkProtocolVersion: str | None = None
-    protocolVersion: str | None = None
+    minimumCompatibleNetworkProtocolVersion: str | None = None
     localProgramVersion: str | None = None
     programVersion: str | None = None
     roomCode: str | None = None
@@ -178,9 +179,16 @@ class PacketParsers:
 class HandshakeHelpers:
     @staticmethod
     def protocol_version(packet: HandshakePacket, fallback: str = "0.0.1") -> str:
-        raw = packet.networkProtocolVersion or packet.protocolVersion or fallback
+        raw = packet.networkProtocolVersion or fallback
         text = str(raw).strip()
         return text or fallback
+
+    @staticmethod
+    def minimum_compatible_protocol_version(packet: HandshakePacket, fallback: str | None = None) -> str:
+        default_value = fallback or HandshakeHelpers.protocol_version(packet, "0.0.1")
+        raw = packet.minimumCompatibleNetworkProtocolVersion or default_value
+        text = str(raw).strip()
+        return text or default_value
 
     @staticmethod
     def program_version(packet: HandshakePacket, fallback: str = "unknown") -> str:
@@ -194,6 +202,29 @@ class HandshakeHelpers:
         text = str(raw).strip()
         return text or fallback
 
+    @staticmethod
+    def parse_protocol_version(version: str | int | float | None) -> tuple[int, int, int]:
+        text = str(version or "").strip()
+        if not text:
+            return 0, 0, 0
+
+        core = text.split("-", 1)[0]
+        tokens = core.split(".") if "." in core else [core]
+        parsed: list[int] = []
+
+        for token in tokens[:3]:
+            match = re.match(r"^(\d+)", token.strip())
+            parsed.append(int(match.group(1)) if match else 0)
+
+        while len(parsed) < 3:
+            parsed.append(0)
+
+        return parsed[0], parsed[1], parsed[2]
+
+    @staticmethod
+    def protocol_at_least(current: str | int | float | None, minimum: str | int | float | None) -> bool:
+        return HandshakeHelpers.parse_protocol_version(current) >= HandshakeHelpers.parse_protocol_version(minimum)
+
 
 class OutboundPacket(PacketModel):
     type: str
@@ -203,10 +234,12 @@ class HandshakeAckPacket(OutboundPacket):
     type: Literal["handshake_ack"] = "handshake_ack"
     ready: bool = True
     networkProtocolVersion: str
-    protocolVersion: str
+    minimumCompatibleNetworkProtocolVersion: str | None = None
     localProgramVersion: str
     roomCode: str
     deltaEnabled: bool
+    error: str | None = None
+    rejectReason: str | None = None
     digestIntervalSec: int | None = None
     rev: int | None = None
     revision: int | None = None

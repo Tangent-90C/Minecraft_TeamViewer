@@ -1,12 +1,19 @@
 import {
+  ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION,
+} from '../constants';
+import {
   applyScopePatchMap,
   shouldResyncForScopeMissingBaseline,
-} from './overlayUtils';
+} from '../utils/overlayUtils';
 import {
+  AdminInboundPacket,
+  AdminOutboundPacket,
   AdminSnapshot,
   buildAdminHandshake,
+  buildAdminResyncRequest,
   createEmptyAdminSnapshotModel,
 } from './networkSchemas';
+import { JsonNetworkMessageCodec } from './messageCodec';
 
 type Snapshot = AdminSnapshot & Record<string, any>;
 
@@ -29,10 +36,12 @@ export function createEmptyAdminSnapshot() {
 }
 
 export function createAdminWsClient(deps: WsClientDeps) {
+  const messageCodec = new JsonNetworkMessageCodec();
   let adminWs: WebSocket | null = null;
   let wsConnected = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let manualWsClose = false;
+  let reconnectSuppressedByVersionIncompatibility = false;
 
   let lastErrorText: string | null = null;
   let lastAdminResyncRequestAt = 0;
@@ -54,6 +63,7 @@ export function createAdminWsClient(deps: WsClientDeps) {
   }
 
   function scheduleReconnect() {
+    if (reconnectSuppressedByVersionIncompatibility) return;
     if (reconnectTimer !== null) return;
     const config = deps.getConfig();
     reconnectTimer = setTimeout(() => {
@@ -72,11 +82,11 @@ export function createAdminWsClient(deps: WsClientDeps) {
     }
     lastAdminResyncRequestAt = now;
     try {
-      adminWs.send(JSON.stringify({ type: 'resync_req', reason }));
+      adminWs.send(messageCodec.encode(buildAdminResyncRequest(reason)));
     } catch (_) {}
   }
 
-  function applyAdminDeltaMessage(message: Snapshot) {
+  function applyAdminDeltaMessage(message: AdminInboundPacket) {
     if (!message || typeof message !== 'object') {
       return;
     }
@@ -120,14 +130,17 @@ export function createAdminWsClient(deps: WsClientDeps) {
     latestSnapshot.playerMarks = applyScopePatchMap(latestSnapshot.playerMarks, message.playerMarks);
 
     const meta = (message.meta && typeof message.meta === 'object') ? message.meta : {};
-    if (meta.tabState && typeof meta.tabState === 'object') {
-      latestSnapshot.tabState = meta.tabState;
+    const metaTabState = (meta as Record<string, unknown>).tabState;
+    if (metaTabState && typeof metaTabState === 'object') {
+      latestSnapshot.tabState = metaTabState as { enabled: boolean; reports: Record<string, any>; groups: any[] };
     }
-    if (Array.isArray(meta.connections)) {
-      latestSnapshot.connections = meta.connections;
+    const metaConnections = (meta as Record<string, unknown>).connections;
+    if (Array.isArray(metaConnections)) {
+      latestSnapshot.connections = metaConnections as string[];
     }
-    if (Number.isFinite(meta.connections_count)) {
-      latestSnapshot.connections_count = meta.connections_count;
+    const metaConnectionsCount = (meta as Record<string, unknown>).connections_count;
+    if (Number.isFinite(metaConnectionsCount)) {
+      latestSnapshot.connections_count = Number(metaConnectionsCount);
     }
 
     if (message.revision !== undefined) {
@@ -141,14 +154,14 @@ export function createAdminWsClient(deps: WsClientDeps) {
     deps.onSnapshotChanged(latestSnapshot);
   }
 
-  function sendCommand(message: Record<string, unknown>) {
+  function sendCommand(message: AdminOutboundPacket) {
     if (!adminWs || adminWs.readyState !== WebSocket.OPEN) {
       lastErrorText = 'ws not connected';
       emitStatus();
       return false;
     }
     try {
-      adminWs.send(JSON.stringify(message));
+      adminWs.send(messageCodec.encode(message));
       return true;
     } catch (error: any) {
       lastErrorText = String(error?.message || error);
@@ -179,8 +192,45 @@ export function createAdminWsClient(deps: WsClientDeps) {
     manualWsClose = true;
     cleanup();
     manualWsClose = false;
+    reconnectSuppressedByVersionIncompatibility = false;
     lastErrorText = null;
     connect();
+    emitStatus();
+  }
+
+  function parseProtocolVersionNumber(version: unknown): number {
+    const raw = String(version ?? '').trim();
+    if (!raw) return 0;
+    const core = raw.split('-', 1)[0] || '';
+    const parts = core.split('.');
+    const nums = [0, 0, 0].map((_, index) => {
+      const token = String(parts[index] ?? '').trim();
+      const match = token.match(/^(\d+)/);
+      return match ? Number(match[1]) : 0;
+    });
+    return nums[0] * 1_000_000 + nums[1] * 1_000 + nums[2];
+  }
+
+  function protocolAtLeast(current: unknown, minimum: unknown): boolean {
+    return parseProtocolVersionNumber(current) >= parseProtocolVersionNumber(minimum);
+  }
+
+  function formatHandshakeRejectReason(payload: Record<string, unknown>): string {
+    const text = String(payload.rejectReason ?? payload.error ?? '').trim();
+    return text || 'unknown';
+  }
+
+  function forceCloseForIncompatibleVersion(message: string) {
+    reconnectSuppressedByVersionIncompatibility = true;
+    wsConnected = false;
+    lastErrorText = message;
+    if (adminWs) {
+      try {
+        adminWs.close(1008, message.slice(0, 120));
+      } catch (_) {
+        try { adminWs.close(); } catch (_) {}
+      }
+    }
     emitStatus();
   }
 
@@ -188,6 +238,8 @@ export function createAdminWsClient(deps: WsClientDeps) {
     if (adminWs && (adminWs.readyState === WebSocket.OPEN || adminWs.readyState === WebSocket.CONNECTING)) {
       return;
     }
+
+    reconnectSuppressedByVersionIncompatibility = false;
 
     const config = deps.getConfig();
 
@@ -207,7 +259,7 @@ export function createAdminWsClient(deps: WsClientDeps) {
       wsConnected = true;
       lastErrorText = null;
       try {
-        ws.send(JSON.stringify(buildAdminHandshake(config.ROOM_CODE)));
+        ws.send(messageCodec.encode(buildAdminHandshake(config.ROOM_CODE)));
       } catch (error: any) {
         lastErrorText = String(error?.message || error);
       }
@@ -217,12 +269,15 @@ export function createAdminWsClient(deps: WsClientDeps) {
     ws.onmessage = (event) => {
       if (typeof event?.data !== 'string') return;
       try {
-        const payload = JSON.parse(event.data);
+        const payload = messageCodec.decode(event.data);
+        if (!payload) {
+          return;
+        }
         lastAdminMessageType = payload?.type ? String(payload.type) : 'unknown';
         lastAdminMessageAt = Date.now();
         lastAdminMessageRevision = payload?.revision !== undefined
-          ? payload.revision
-          : (payload?.rev !== undefined ? payload.rev : null);
+          ? Number(payload.revision)
+          : (payload?.rev !== undefined ? Number(payload.rev) : null);
 
         if (payload?.type === 'admin_ack') {
           if (payload.ok) {
@@ -235,7 +290,28 @@ export function createAdminWsClient(deps: WsClientDeps) {
           return;
         }
 
-        if (payload?.type === 'pong' || payload?.type === 'handshake_ack') {
+        if (payload?.type === 'pong') {
+          lastErrorText = null;
+          emitStatus();
+          return;
+        }
+
+        if (payload?.type === 'handshake_ack') {
+          const handshakePayload = payload as Record<string, unknown>;
+          if (handshakePayload.ready === false) {
+            const reason = formatHandshakeRejectReason(handshakePayload);
+            forceCloseForIncompatibleVersion(`服务端拒绝握手: ${reason}`);
+            return;
+          }
+
+          const serverProtocolVersion = String(handshakePayload.networkProtocolVersion ?? '0.0.0').trim() || '0.0.0';
+          if (!protocolAtLeast(serverProtocolVersion, ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION)) {
+            forceCloseForIncompatibleVersion(
+              `版本不兼容: 服务端协议 ${serverProtocolVersion} 低于脚本最低要求 ${ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION}`,
+            );
+            return;
+          }
+
           lastErrorText = null;
           emitStatus();
           return;
@@ -258,11 +334,14 @@ export function createAdminWsClient(deps: WsClientDeps) {
       emitStatus();
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       wsConnected = false;
       adminWs = null;
-      if (!manualWsClose) {
+      if (!manualWsClose && !reconnectSuppressedByVersionIncompatibility) {
         scheduleReconnect();
+      } else if (reconnectSuppressedByVersionIncompatibility && !lastErrorText) {
+        const reason = String(event?.reason || '').trim();
+        lastErrorText = reason || '版本不兼容，已停止自动重连';
       }
       emitStatus();
     };

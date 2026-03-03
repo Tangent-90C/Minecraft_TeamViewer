@@ -1,8 +1,8 @@
 import {
   LOCAL_PROGRAM_VERSION,
   STORAGE_KEY,
-} from './constants';
-import { sanitizeConfig } from './overlayUtils';
+} from '../constants';
+import { sanitizeConfig } from '../utils/overlayUtils';
 
 const EXPORT_KIND = 'nodemc_overlay_config_export';
 const EXPORT_SCHEMA_VERSION = 1;

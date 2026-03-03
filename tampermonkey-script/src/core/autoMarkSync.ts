@@ -1,12 +1,12 @@
 import {
   AUTO_MARK_SYNC_INTERVAL_MS,
   AUTO_MARK_SYNC_MAX_PER_TICK,
-} from './constants';
+} from '../constants';
 import {
   buildCommandPlayerMarkClear,
   buildCommandPlayerMarkSet,
-} from './networkSchemas';
-import { normalizeColor, normalizeTeam } from './overlayUtils';
+} from '../network/networkSchemas';
+import { normalizeColor, normalizeTeam } from '../utils/overlayUtils';
 
 type Candidate = {
   action: 'set' | 'clear';

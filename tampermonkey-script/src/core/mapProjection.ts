@@ -5,7 +5,7 @@ import {
   normalizeMarkSource,
   normalizeTeam,
   readNumber,
-} from './overlayUtils';
+} from '../utils/overlayUtils';
 
 type MapProjectionDeps = {
   page: Window;

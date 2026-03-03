@@ -1,6 +1,9 @@
-export const STORAGE_KEY = 'nodemc_player_overlay_settings_v1';
-export const ADMIN_NETWORK_PROTOCOL_VERSION = '0.2.0';
-export const LOCAL_PROGRAM_VERSION = 'nodemc-overlay-0.2.0';
+import { APP_META, PROTOCOL_META } from './meta';
+
+export const STORAGE_KEY = APP_META.storageKey;
+export const ADMIN_NETWORK_PROTOCOL_VERSION = PROTOCOL_META.adminNetworkProtocolVersion;
+export const ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION = PROTOCOL_META.adminMinCompatibleNetworkProtocolVersion;
+export const LOCAL_PROGRAM_VERSION = `${APP_META.localProgramPrefix}-${__USERSCRIPT_VERSION__}`;
 export const AUTO_MARK_SYNC_INTERVAL_MS = 1200;
 export const AUTO_MARK_SYNC_MAX_PER_TICK = 12;
 
