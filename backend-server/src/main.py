@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import time
@@ -10,8 +9,24 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from server.broadcaster import Broadcaster
+from server.codec import JsonMessageCodec
 from server.models import EntityData, PlayerData, WaypointData
-from server.nodemc_proxy import nodemc_lifespan, nodemc_router
+from server.protocol import (
+    AdminAckPacket,
+    CommandPlayerMarkClearAllPacket,
+    CommandPlayerMarkClearPacket,
+    CommandPlayerMarkSetPacket,
+    CommandSameServerFilterSetPacket,
+    CommandTacticalWaypointSetPacket,
+    HandshakeAckPacket,
+    HandshakeHelpers,
+    HandshakePacket,
+    PacketDecodeError,
+    PacketParsers,
+    PingPacket,
+    PongPacket,
+    ResyncRequestPacket,
+)
 from server.state import ServerState
 
 
@@ -32,30 +47,16 @@ logger = logging.getLogger("teamviewer.main")
 
 NETWORK_PROTOCOL_VERSION = "0.2.0"
 SERVER_PROGRAM_VERSION = os.getenv("TEAMVIEWER_SERVER_VERSION", "teamviewer-server-dev")
+message_codec = JsonMessageCodec()
 
 
-def read_protocol_version(payload: dict, fallback: str = "0.0.1") -> str:
-    raw = payload.get("networkProtocolVersion", payload.get("protocolVersion", fallback))
-    if raw is None:
-        return fallback
-    text = str(raw).strip()
-    return text or fallback
+async def send_packet(websocket: WebSocket, packet) -> None:
+    await websocket.send_text(message_codec.encode(packet))
 
 
-def read_program_version(payload: dict, fallback: str = "unknown") -> str:
-    raw = payload.get("localProgramVersion", payload.get("programVersion", fallback))
-    if raw is None:
-        return fallback
-    text = str(raw).strip()
-    return text or fallback
-
-
-def read_room_code(payload: dict, fallback: str = "default") -> str:
-    raw = payload.get("roomCode", payload.get("roomId", fallback))
-    if raw is None:
-        return fallback
-    text = str(raw).strip()
-    return text or fallback
+async def receive_payload(websocket: WebSocket) -> dict:
+    raw = await websocket.receive_text()
+    return message_codec.decode(raw)
 
 
 def normalize_waypoint_color_to_int(color_value, fallback: int = 0xEF4444) -> int:
@@ -85,9 +86,8 @@ state = ServerState()
 broadcaster = Broadcaster(state)
 
 # HTTP/WS 入口层：仅做协议收发与调度，不承载核心仲裁逻辑。
-app = FastAPI(lifespan=nodemc_lifespan)
+app = FastAPI()
 app.mount("/admin", StaticFiles(directory="static", html=True), name="admin")
-app.include_router(nodemc_router)
 
 
 @app.websocket("/adminws")
@@ -98,149 +98,141 @@ async def admin_ws(websocket: WebSocket):
     state.admin_connections[admin_id] = websocket
     try:
         while True:
-            raw_text = await websocket.receive_text()
-            if not raw_text:
+            try:
+                payload = await receive_payload(websocket)
+            except PacketDecodeError as exc:
+                await send_packet(websocket, AdminAckPacket(ok=False, error=exc.code))
                 continue
 
             try:
-                message = json.loads(raw_text)
-            except json.JSONDecodeError:
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": False,
-                    "error": "invalid_json",
-                }, separators=(",", ":")))
+                packet = PacketParsers.parse_admin(payload)
+            except PacketDecodeError:
+                msg_type = str(payload.get("type") or "").strip()
+                await send_packet(
+                    websocket,
+                    AdminAckPacket(ok=False, error="unsupported_command", command=msg_type or None),
+                )
                 continue
 
-            if not isinstance(message, dict):
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": False,
-                    "error": "invalid_payload",
-                }, separators=(",", ":")))
-                continue
-
-            msg_type = str(message.get("type") or "").strip()
-
-            if msg_type == "handshake":
-                client_protocol = read_protocol_version(message)
-                client_program_version = read_program_version(message)
-                admin_room = state.set_admin_room(admin_id, read_room_code(message, state.DEFAULT_ROOM_CODE))
+            if isinstance(packet, HandshakePacket):
+                client_protocol = HandshakeHelpers.protocol_version(packet)
+                client_program_version = HandshakeHelpers.program_version(packet)
+                admin_room = state.set_admin_room(admin_id, HandshakeHelpers.room_code(packet, state.DEFAULT_ROOM_CODE))
                 logger.info(
                     "Admin connected (clientProtocol=%s, clientProgramVersion=%s, roomCode=%s)",
                     client_protocol,
                     client_program_version,
                     admin_room,
                 )
-                await websocket.send_text(json.dumps({
-                    "type": "handshake_ack",
-                    "ready": True,
-                    "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
-                    "protocolVersion": state.PROTOCOL_V2,
-                    "localProgramVersion": SERVER_PROGRAM_VERSION,
-                    "roomCode": admin_room,
-                    "deltaEnabled": True,
-                    "revision": state.revision,
-                }, separators=(",", ":")))
+                await send_packet(
+                    websocket,
+                    HandshakeAckPacket(
+                        networkProtocolVersion=NETWORK_PROTOCOL_VERSION,
+                        protocolVersion=state.PROTOCOL_V2,
+                        localProgramVersion=SERVER_PROGRAM_VERSION,
+                        roomCode=admin_room,
+                        deltaEnabled=True,
+                        revision=state.revision,
+                    ),
+                )
                 await broadcaster.send_admin_snapshot_full(admin_id)
                 continue
 
-            if msg_type in ("ping", "health"):
-                await websocket.send_text(json.dumps({
-                    "type": "pong",
-                    "serverTime": time.time(),
-                    "revision": state.revision,
-                }, separators=(",", ":")))
+            if isinstance(packet, PingPacket):
+                await send_packet(websocket, PongPacket(serverTime=time.time(), revision=state.revision))
                 continue
 
-            if msg_type == "resync_req":
+            if isinstance(packet, ResyncRequestPacket):
                 await broadcaster.send_admin_snapshot_full(admin_id)
                 continue
 
-            if msg_type == "command_player_mark_set":
-                target_player_id = message.get("playerId")
+            if isinstance(packet, CommandPlayerMarkSetPacket):
+                target_player_id = packet.playerId
                 updated_mark = state.set_player_mark(
                     target_player_id,
-                    message.get("team"),
-                    message.get("color"),
-                    message.get("label"),
-                    message.get("source"),
+                    packet.team,
+                    packet.color,
+                    packet.label,
+                    packet.source,
                 )
 
                 if updated_mark is None:
-                    await websocket.send_text(json.dumps({
-                        "type": "admin_ack",
-                        "ok": False,
-                        "error": "invalid_player_id",
-                    }, separators=(",", ":")))
+                    await send_packet(websocket, AdminAckPacket(ok=False, error="invalid_player_id"))
                     continue
 
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": True,
-                    "action": "command_player_mark_set",
-                    "playerId": str(target_player_id).strip() if isinstance(target_player_id, str) else target_player_id,
-                    "mark": updated_mark,
-                }, separators=(",", ":")))
+                await send_packet(
+                    websocket,
+                    AdminAckPacket(
+                        ok=True,
+                        action="command_player_mark_set",
+                        playerId=str(target_player_id).strip() if isinstance(target_player_id, str) else None,
+                        mark=updated_mark,
+                    ),
+                )
                 await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
-            if msg_type == "command_player_mark_clear":
-                target_player_id = message.get("playerId")
+            if isinstance(packet, CommandPlayerMarkClearPacket):
+                target_player_id = packet.playerId
                 removed = state.clear_player_mark(target_player_id)
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": bool(removed),
-                    "action": "command_player_mark_clear",
-                    "playerId": target_player_id,
-                    "error": None if removed else "mark_not_found",
-                }, separators=(",", ":")))
+                await send_packet(
+                    websocket,
+                    AdminAckPacket(
+                        ok=bool(removed),
+                        action="command_player_mark_clear",
+                        playerId=target_player_id,
+                        error=None if removed else "mark_not_found",
+                    ),
+                )
                 if removed:
                     await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
-            if msg_type == "command_player_mark_clear_all":
+            if isinstance(packet, CommandPlayerMarkClearAllPacket):
                 removed_count = state.clear_all_player_marks()
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": True,
-                    "action": "command_player_mark_clear_all",
-                    "removedCount": removed_count,
-                }, separators=(",", ":")))
+                await send_packet(
+                    websocket,
+                    AdminAckPacket(
+                        ok=True,
+                        action="command_player_mark_clear_all",
+                        removedCount=removed_count,
+                    ),
+                )
                 await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
-            if msg_type == "command_same_server_filter_set":
-                enabled = bool(message.get("enabled"))
-                state.same_server_filter_enabled = enabled
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": True,
-                    "action": "command_same_server_filter_set",
-                    "enabled": state.same_server_filter_enabled,
-                }, separators=(",", ":")))
+            if isinstance(packet, CommandSameServerFilterSetPacket):
+                state.same_server_filter_enabled = bool(packet.enabled)
+                await send_packet(
+                    websocket,
+                    AdminAckPacket(
+                        ok=True,
+                        action="command_same_server_filter_set",
+                        enabled=state.same_server_filter_enabled,
+                    ),
+                )
                 await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
-            if msg_type == "command_tactical_waypoint_set":
-                room_code = read_room_code(message, state.get_admin_room(admin_id))
-                waypoint_id_raw = message.get("waypointId")
+            if isinstance(packet, CommandTacticalWaypointSetPacket):
+                room_code = state.normalize_room_code(packet.roomCode or packet.roomId or state.get_admin_room(admin_id))
+                waypoint_id_raw = packet.waypointId
                 waypoint_id = str(waypoint_id_raw).strip() if isinstance(waypoint_id_raw, str) and waypoint_id_raw.strip() else ""
                 if not waypoint_id:
                     waypoint_id = f"admin_tactical:{int(time.time() * 1000)}:{uuid.uuid4().hex[:8]}"
 
-                x = message.get("x")
-                z = message.get("z")
-                label = str(message.get("label") or "战术标记").strip()
+                x = packet.x
+                z = packet.z
+                label = str(packet.label or "战术标记").strip()
                 if not label:
                     label = "战术标记"
                 if len(label) > 64:
                     label = label[:64]
 
-                dimension = str(message.get("dimension") or "minecraft:overworld").strip() or "minecraft:overworld"
-                tactical_type = str(message.get("tacticalType") or "attack").strip() or "attack"
-                permanent = bool(message.get("permanent"))
-                ttl_seconds_raw = message.get("ttlSeconds")
+                dimension = str(packet.dimension or "minecraft:overworld").strip() or "minecraft:overworld"
+                tactical_type = str(packet.tacticalType or "attack").strip() or "attack"
+                permanent = bool(packet.permanent)
+                ttl_seconds_raw = packet.ttlSeconds
                 ttl_seconds = None
                 if isinstance(ttl_seconds_raw, (int, float)):
                     ttl_seconds = max(10, min(int(ttl_seconds_raw), 86400))
@@ -254,8 +246,8 @@ async def admin_ws(websocket: WebSocket):
                     "dimension": dimension,
                     "name": label,
                     "symbol": "T",
-                    "color": normalize_waypoint_color_to_int(message.get("color"), 0xEF4444),
-                       "ownerId": None,
+                    "color": normalize_waypoint_color_to_int(packet.color, 0xEF4444),
+                    "ownerId": None,
                     "ownerName": "Admin Tactical",
                     "createdAt": int(time.time() * 1000),
                     "ttlSeconds": ttl_seconds,
@@ -275,33 +267,26 @@ async def admin_ws(websocket: WebSocket):
                 try:
                     validated = WaypointData(**waypoint_payload)
                 except ValidationError:
-                    await websocket.send_text(json.dumps({
-                        "type": "admin_ack",
-                        "ok": False,
-                        "error": "invalid_tactical_waypoint_payload",
-                    }, separators=(",", ":")))
+                    await send_packet(websocket, AdminAckPacket(ok=False, error="invalid_tactical_waypoint_payload"))
                     continue
 
                 admin_source_id = state.build_admin_tactical_source_id(room_code)
                 node = state.build_state_node(admin_source_id, time.time(), validated.model_dump())
                 state.upsert_report(state.waypoint_reports, waypoint_id, admin_source_id, node)
 
-                await websocket.send_text(json.dumps({
-                    "type": "admin_ack",
-                    "ok": True,
-                    "action": "command_tactical_waypoint_set",
-                    "waypointId": waypoint_id,
-                    "waypoint": validated.model_dump(),
-                }, separators=(",", ":")))
+                await send_packet(
+                    websocket,
+                    AdminAckPacket(
+                        ok=True,
+                        action="command_tactical_waypoint_set",
+                        waypointId=waypoint_id,
+                        waypoint=validated.model_dump(),
+                    ),
+                )
                 await broadcaster.broadcast_updates(force_full_to_delta=True)
                 continue
 
-            await websocket.send_text(json.dumps({
-                "type": "admin_ack",
-                "ok": False,
-                "error": "unsupported_command",
-                "command": msg_type,
-            }, separators=(",", ":")))
+            await send_packet(websocket, AdminAckPacket(ok=False, error="unsupported_command"))
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -328,24 +313,25 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            message = await websocket.receive_text()
             try:
-                data = json.loads(message)
-            except json.JSONDecodeError as e:
-                logger.debug("Error decoding JSON message: %s", e)
+                payload = await receive_payload(websocket)
+                packet = PacketParsers.parse_player(payload)
+            except PacketDecodeError as e:
+                logger.debug("Error decoding player packet: %s", e)
                 continue
 
-            submit_player_id = data.get("submitPlayerId")
-            message_type = data.get("type")
+            packet_submit_id = getattr(packet, "submitPlayerId", None)
+            if isinstance(packet_submit_id, str) and packet_submit_id:
+                submit_player_id = packet_submit_id
 
             # 握手：建立能力协商（协议版本、是否支持 delta）。
-            if message_type == "handshake":
+            if isinstance(packet, HandshakePacket):
                 if submit_player_id:
                     state.connections[submit_player_id] = websocket
-                    client_protocol = read_protocol_version(data)
-                    client_program_version = read_program_version(data)
-                    client_room = state.set_player_room(submit_player_id, read_room_code(data, state.DEFAULT_ROOM_CODE))
-                    client_delta = bool(data.get("supportsDelta", False))
+                    client_protocol = HandshakeHelpers.protocol_version(packet)
+                    client_program_version = HandshakeHelpers.program_version(packet)
+                    client_room = state.set_player_room(submit_player_id, HandshakeHelpers.room_code(packet, state.DEFAULT_ROOM_CODE))
+                    client_delta = bool(getattr(packet, "supportsDelta", False))
                     state.mark_player_capability(submit_player_id, client_protocol, client_delta)
 
                     logger.info(
@@ -356,8 +342,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         client_room,
                     )
                     ack = {
-                        "type": "handshake_ack",
-                        "ready": True,
                         "networkProtocolVersion": NETWORK_PROTOCOL_VERSION,
                         "protocolVersion": state.PROTOCOL_V2,
                         "localProgramVersion": SERVER_PROGRAM_VERSION,
@@ -366,7 +350,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "digestIntervalSec": state.DIGEST_INTERVAL_SEC,
                         "rev": state.revision,
                     }
-                    await websocket.send_text(json.dumps(ack, separators=(",", ":")))
+                    await send_packet(websocket, HandshakeAckPacket(**ack))
 
                     await broadcaster.broadcast_updates(force_full_to_delta=state.is_delta_client(submit_player_id))
                 continue
@@ -378,13 +362,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 state.mark_player_capability(submit_player_id, 1, False)
                 logger.info("Client %s connected (legacy)", submit_player_id)
 
-            if message_type == "players_update":
+            if packet.type == "players_update":
                 # 玩家全量：语义为“该来源本轮玩家状态完整快照”。
                 current_time = time.time()
-                for pid, player_data in data.get("players", {}).items():
+                for pid, player_data in packet.players.items():
                     try:
-                        validated_data = PlayerData(**player_data)
-                        normalized = validated_data.model_dump()
+                        normalized = player_data.model_dump()
                         node = state.build_state_node(submit_player_id, current_time, normalized)
                         state.upsert_report(state.player_reports, pid, submit_player_id, node)
                     except Exception as e:
@@ -393,19 +376,19 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "tab_players_update":
+            if packet.type == "tab_players_update":
                 if isinstance(submit_player_id, str) and submit_player_id:
                     current_time = time.time()
-                    tab_players = data.get("tabPlayers", [])
+                    tab_players = packet.tabPlayers
                     state.upsert_tab_player_report(submit_player_id, tab_players, current_time)
                     await broadcaster.broadcast_admin_updates()
                 continue
 
-            if message_type == "players_patch":
+            if packet.type == "players_patch":
                 # 玩家增量：基于该来源已有快照做 merge 后再校验。
                 current_time = time.time()
-                upsert = data.get("upsert", {})
-                delete = data.get("delete", [])
+                upsert = packet.upsert
+                delete = packet.delete
                 missing_baseline_players = []
 
                 for pid, player_data in upsert.items():
@@ -453,10 +436,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "entities_update":
+            if packet.type == "entities_update":
                 # 实体全量：先清理该来源旧实体，再写入本轮实体列表。
                 current_time = time.time()
-                player_entities = data.get("entities", {})
+                player_entities = packet.entities
                 source_key = submit_player_id if isinstance(submit_player_id, str) else ""
                 for entity_id in list(state.entity_reports.keys()):
                     source_bucket = state.entity_reports.get(entity_id, {})
@@ -465,8 +448,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 for entity_id, entity_data in player_entities.items():
                     try:
-                        validated_data = EntityData(**entity_data)
-                        normalized = validated_data.model_dump()
+                        normalized = entity_data.model_dump()
                         node = state.build_state_node(submit_player_id, current_time, normalized)
                         state.upsert_report(state.entity_reports, entity_id, submit_player_id, node)
                     except Exception as e:
@@ -475,11 +457,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "entities_patch":
+            if packet.type == "entities_patch":
                 # 实体增量：仅修改当前来源 bucket，不影响其他来源。
                 current_time = time.time()
-                upsert = data.get("upsert", {})
-                delete = data.get("delete", [])
+                upsert = packet.upsert
+                delete = packet.delete
                 missing_baseline_entities = []
 
                 for entity_id, entity_data in upsert.items():
@@ -528,14 +510,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "waypoints_update":
+            if packet.type == "waypoints_update":
                 # 路标上报：支持 quick 类型数量约束。
                 current_time = time.time()
-                player_waypoints = data.get("waypoints", {})
+                player_waypoints = packet.waypoints
                 for waypoint_id, waypoint_data in player_waypoints.items():
                     try:
-                        validated_data = WaypointData(**waypoint_data)
-                        normalized = validated_data.model_dump()
+                        normalized = waypoint_data.model_dump()
 
                         if normalized.get("waypointKind") == "quick":
                             max_quick_marks = normalized.get("maxQuickMarks")
@@ -573,11 +554,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "waypoints_delete":
+            if packet.type == "waypoints_delete":
                 # 路标删除：仅删除当前来源提交的目标路标。
-                waypoint_ids = data.get("waypointIds", [])
-                if not isinstance(waypoint_ids, list):
-                    waypoint_ids = []
+                waypoint_ids = packet.waypointIds
 
                 for waypoint_id in waypoint_ids:
                     if not isinstance(waypoint_id, str):
@@ -587,11 +566,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "waypoints_entity_death_cancel":
+            if packet.type == "waypoints_entity_death_cancel":
                 # 实体死亡撤销：清理 targetEntityId 命中的 entity 类型路标。
-                target_entity_ids = data.get("targetEntityIds", [])
-                if not isinstance(target_entity_ids, list):
-                    target_entity_ids = []
+                target_entity_ids = packet.targetEntityIds
 
                 target_entity_id_set = {
                     entity_id for entity_id in target_entity_ids
@@ -620,7 +597,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     await broadcaster.broadcast_updates()
                 continue
 
-            if message_type == "resync_req" and submit_player_id:
+            if isinstance(packet, ResyncRequestPacket) and submit_player_id:
                 # 客户端主动请求全量重同步。
                 try:
                     await broadcaster.send_snapshot_full_to_player(submit_player_id)
