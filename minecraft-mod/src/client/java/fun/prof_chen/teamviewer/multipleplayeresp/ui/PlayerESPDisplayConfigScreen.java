@@ -26,6 +26,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private ButtonWidget showLinesButton;
     private ButtonWidget showSharedWaypointsButton;
     private ButtonWidget showOwnSharedWaypointsOnMinimapButton;
+    private ButtonWidget xrayMarkersAndBoxesButton;
     private ButtonWidget middleDoubleClickMarkButton;
     private ButtonWidget middleClickCancelWaypointButton;
     private ButtonWidget autoCancelWaypointOnEntityDeathButton;
@@ -42,6 +43,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private final boolean originalShowLines;
     private final boolean originalShowSharedWaypoints;
     private final boolean originalShowOwnSharedWaypointsOnMinimap;
+    private final boolean originalXrayMarkersAndBoxes;
     private final boolean originalEnableMiddleDoubleClickMark;
     private final boolean originalEnableMiddleClickCancelWaypoint;
     private final boolean originalAutoCancelWaypointOnEntityDeath;
@@ -75,6 +77,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
         this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
         this.originalShowOwnSharedWaypointsOnMinimap = StandaloneMultiPlayerESP.getConfig().isShowOwnSharedWaypointsOnMinimap();
+        this.originalXrayMarkersAndBoxes = StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes();
         this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
         this.originalEnableMiddleClickCancelWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
         this.originalAutoCancelWaypointOnEntityDeath = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
@@ -249,6 +252,12 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(leftX, ownSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.showOwnSharedWaypointsOnMinimapButton);
 
+        this.xrayMarkersAndBoxesButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.xray_markers_and_boxes"),
+            button -> toggleXrayMarkersAndBoxes()
+        ).dimensions(rightX, ownSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.xrayMarkersAndBoxesButton);
+
         int enableLongTermWaypointY = getNextButtonY();
         this.enableLongTermWaypointButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.enable_long_term_waypoint"),
@@ -325,6 +334,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateShowOwnSharedWaypointsOnMinimapButton();
+        updateXrayMarkersAndBoxesButton();
         updateMiddleDoubleClickMarkButton();
         updateMiddleClickCancelWaypointButton();
         updateAutoCancelWaypointOnEntityDeathButton();
@@ -375,6 +385,10 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
         if (this.showOwnSharedWaypointsOnMinimapButton != null && this.showOwnSharedWaypointsOnMinimapButton.isMouseOver(mouseX, mouseY)) {
             drawTooltip(context, "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.xrayMarkersAndBoxesButton != null && this.xrayMarkersAndBoxesButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.xray_markers_and_boxes.tooltip", mouseX, mouseY);
             return;
         }
         if (this.middleDoubleClickMarkButton != null && this.middleDoubleClickMarkButton.isMouseOver(mouseX, mouseY)) {
@@ -457,6 +471,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
         StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
         StandaloneMultiPlayerESP.getConfig().setShowOwnSharedWaypointsOnMinimap(this.originalShowOwnSharedWaypointsOnMinimap);
+        StandaloneMultiPlayerESP.getConfig().setXrayMarkersAndBoxes(this.originalXrayMarkersAndBoxes);
         StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
         StandaloneMultiPlayerESP.getConfig().setEnableMiddleClickCancelWaypoint(this.originalEnableMiddleClickCancelWaypoint);
         StandaloneMultiPlayerESP.getConfig().setAutoCancelWaypointOnEntityDeath(this.originalAutoCancelWaypointOnEntityDeath);
@@ -555,6 +570,21 @@ public class PlayerESPDisplayConfigScreen extends Screen {
             String buttonText = Text.translatable("screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap").getString();
             buttonText += isEnabled ? " [ON]" : " [OFF]";
             this.showOwnSharedWaypointsOnMinimapButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void toggleXrayMarkersAndBoxes() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes();
+        StandaloneMultiPlayerESP.getConfig().setXrayMarkersAndBoxes(!currentStatus);
+        updateXrayMarkersAndBoxesButton();
+    }
+
+    private void updateXrayMarkersAndBoxesButton() {
+        if (this.xrayMarkersAndBoxesButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.xray_markers_and_boxes").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.xrayMarkersAndBoxesButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -699,6 +729,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateShowLinesButton();
         updateShowSharedWaypointsButton();
         updateShowOwnSharedWaypointsOnMinimapButton();
+        updateXrayMarkersAndBoxesButton();
         updateMiddleDoubleClickMarkButton();
         updateMiddleClickCancelWaypointButton();
         updateAutoCancelWaypointOnEntityDeathButton();

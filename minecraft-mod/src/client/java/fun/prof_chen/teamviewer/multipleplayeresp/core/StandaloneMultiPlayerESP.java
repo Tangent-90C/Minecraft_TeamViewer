@@ -30,6 +30,7 @@ import fun.prof_chen.teamviewer.multipleplayeresp.bridge.XaeroWaypointShareBridg
 import fun.prof_chen.teamviewer.multipleplayeresp.bridge.XaeroWorldMapBridge;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.ReportDataSchemas;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
 import fun.prof_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
@@ -197,22 +198,22 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				UUID pid = p.getUuid();
 				Vec3d pos = p.getPos();
 				Vec3d vel = p.getVelocity();
-				Map<String, Object> data = new HashMap<>();
-				data.put("x", pos.x);
-				data.put("y", pos.y);
-				data.put("z", pos.z);
-				data.put("vx", vel.x);
-				data.put("vy", vel.y);
-				data.put("vz", vel.z);
-				data.put("dimension", p.getWorld().getRegistryKey().getValue().toString());
-				data.put("playerName", p.getName().getString());
-				data.put("playerUUID", pid.toString());
-				data.put("health", p.getHealth());
-				data.put("maxHealth", p.getMaxHealth());
-				data.put("armor", 0);
-				data.put("width", p.getWidth());
-				data.put("height", p.getHeight());
-				players.put(pid, data);
+				ReportDataSchemas.PlayerDataPayload payload = new ReportDataSchemas.PlayerDataPayload(
+						pos.x,
+						pos.y,
+						pos.z,
+						vel.x,
+						vel.y,
+						vel.z,
+						p.getWorld().getRegistryKey().getValue().toString(),
+						p.getName().getString(),
+						pid.toString(),
+						p.getHealth(),
+						p.getMaxHealth(),
+						0,
+						p.getWidth(),
+						p.getHeight());
+				players.put(pid, payload.toMap());
 			}
 		}
 		return players;
@@ -228,19 +229,19 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				Vec3d eVel = entity.getVelocity();
 				String eDim = entity.getWorld().getRegistryKey().getValue().toString();
 				String entityType = entity.getType().toString();
-				Map<String, Object> data = new HashMap<>();
-				data.put("x", ePos.x);
-				data.put("y", ePos.y);
-				data.put("z", ePos.z);
-				data.put("vx", eVel.x);
-				data.put("vy", eVel.y);
-				data.put("vz", eVel.z);
-				data.put("dimension", eDim);
-				data.put("entityType", entityType);
-				data.put("entityName", entity.hasCustomName() ? entity.getDisplayName().getString() : null);
-				data.put("width", entity.getWidth());
-				data.put("height", entity.getHeight());
-				entities.put(entityId, data);
+				ReportDataSchemas.EntityDataPayload payload = new ReportDataSchemas.EntityDataPayload(
+						ePos.x,
+						ePos.y,
+						ePos.z,
+						eVel.x,
+						eVel.y,
+						eVel.z,
+						eDim,
+						entityType,
+						entity.hasCustomName() ? entity.getDisplayName().getString() : null,
+						entity.getWidth(),
+						entity.getHeight());
+				entities.put(entityId, payload.toMap());
 			}
 		}
 		return entities;
@@ -361,6 +362,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	private void renderESP(WorldRenderContext context) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) return;
+		boolean depthTestEnabled = !config.isXrayMarkersAndBoxes();
 		
 		Vec3d cameraPos = context.camera().getPos();
 		Map<UUID, Vec3d> positions = useServerPositions ? serverPlayerPositions : playerPositions;
@@ -390,7 +392,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				
 				// 绘制包围盒
 				if (config.isShowBoxes()) {
-					UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), box, boxRenderColor, true);
+					UnifiedRenderModule.drawOutlinedBox(context.matrixStack(), box, boxRenderColor, depthTestEnabled);
 				}
 				
 				// 绘制连线
@@ -410,12 +412,12 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 					} else {
 						tracerStart = lookVec.multiply(0.6);
 					}
-					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, tracerRenderColor);
+					UnifiedRenderModule.drawTracerLine(context.matrixStack(), tracerStart, targetPos, tracerRenderColor, depthTestEnabled);
 				}
 			}
 		}
 
-		renderSharedWaypointMarkers(context, cameraPos);
+		renderSharedWaypointMarkers(context, cameraPos, depthTestEnabled);
 	}
 
 	private int resolveRenderColorByTeam(String teamTag, int fallbackColor) {
@@ -863,7 +865,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		return new MarkTarget(blockMarkPos, null);
 	}
 
-	private void renderSharedWaypointMarkers(WorldRenderContext context, Vec3d cameraPos) {
+	private void renderSharedWaypointMarkers(WorldRenderContext context, Vec3d cameraPos, boolean depthTestEnabled) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) {
 			return;
@@ -893,7 +895,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 			Vec3d relativePos = worldPos.subtract(cameraPos);
 			int color = withAlpha(waypoint.color(), 0xCC);
-			renderWaypointMarkerStyle(context, relativePos, color);
+			renderWaypointMarkerStyle(context, relativePos, color, depthTestEnabled);
 		}
 	}
 
@@ -1012,72 +1014,72 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		return "minecraft:player".equalsIgnoreCase(targetEntityType);
 	}
 
-	private void renderWaypointMarkerStyle(WorldRenderContext context, Vec3d basePos, int color) {
+	private void renderWaypointMarkerStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {
 		String style = config.getWaypointUiStyle();
 		if (Config.WAYPOINT_UI_RING.equals(style)) {
-			renderWaypointRingStyle(context, basePos, color);
+			renderWaypointRingStyle(context, basePos, color, depthTestEnabled);
 			return;
 		}
 		if (Config.WAYPOINT_UI_PIN.equals(style)) {
-			renderWaypointPinStyle(context, basePos, color);
+			renderWaypointPinStyle(context, basePos, color, depthTestEnabled);
 			return;
 		}
-		renderWaypointBeaconStyle(context, basePos, color);
+		renderWaypointBeaconStyle(context, basePos, color, depthTestEnabled);
 	}
 
-	private void renderWaypointBeaconStyle(WorldRenderContext context, Vec3d basePos, int color) {
+	private void renderWaypointBeaconStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {
 		Vec3d center = basePos.add(0.0D, 0.2D, 0.0D);
 		Vec3d top = basePos.add(0.0D, 8.0D, 0.0D);
-		UnifiedRenderModule.drawLine(context.matrixStack(), center, top, color);
+		UnifiedRenderModule.drawLine(context.matrixStack(), center, top, color, depthTestEnabled);
 
 		double radius = 0.28D;
 		for (int i = 0; i < 4; i++) {
 			double angle = (Math.PI / 2.0D) * i;
 			Vec3d p = center.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius);
 			Vec3d pTop = p.add(0.0D, 6.5D, 0.0D);
-			UnifiedRenderModule.drawLine(context.matrixStack(), p, pTop, withAlpha(color, 0x90));
+			UnifiedRenderModule.drawLine(context.matrixStack(), p, pTop, withAlpha(color, 0x90), depthTestEnabled);
 		}
 
-		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.7D, color, 18);
-		renderCircle(context, center.add(0.0D, 7.2D, 0.0D), 0.4D, withAlpha(color, 0xAA), 14);
+		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.7D, color, 18, depthTestEnabled);
+		renderCircle(context, center.add(0.0D, 7.2D, 0.0D), 0.4D, withAlpha(color, 0xAA), 14, depthTestEnabled);
 	}
 
-	private void renderWaypointRingStyle(WorldRenderContext context, Vec3d basePos, int color) {
+	private void renderWaypointRingStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {
 		Vec3d center = basePos.add(0.0D, 0.05D, 0.0D);
-		renderCircle(context, center, 0.95D, color, 24);
-		renderCircle(context, center.add(0.0D, 0.3D, 0.0D), 0.65D, withAlpha(color, 0x9A), 18);
+		renderCircle(context, center, 0.95D, color, 24, depthTestEnabled);
+		renderCircle(context, center.add(0.0D, 0.3D, 0.0D), 0.65D, withAlpha(color, 0x9A), 18, depthTestEnabled);
 
 		for (int i = 0; i < 4; i++) {
 			double angle = (Math.PI / 2.0D) * i;
 			Vec3d start = center.add(Math.cos(angle) * 0.3D, 0.0D, Math.sin(angle) * 0.3D);
 			Vec3d end = center.add(Math.cos(angle) * 1.2D, 0.0D, Math.sin(angle) * 1.2D);
-			UnifiedRenderModule.drawLine(context.matrixStack(), start, end, withAlpha(color, 0x88));
+			UnifiedRenderModule.drawLine(context.matrixStack(), start, end, withAlpha(color, 0x88), depthTestEnabled);
 		}
 
-		UnifiedRenderModule.drawLine(context.matrixStack(), center.add(0.0D, 0.1D, 0.0D), center.add(0.0D, 3.0D, 0.0D), withAlpha(color, 0xB5));
+		UnifiedRenderModule.drawLine(context.matrixStack(), center.add(0.0D, 0.1D, 0.0D), center.add(0.0D, 3.0D, 0.0D), withAlpha(color, 0xB5), depthTestEnabled);
 	}
 
-	private void renderWaypointPinStyle(WorldRenderContext context, Vec3d basePos, int color) {
+	private void renderWaypointPinStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {
 		Vec3d center = basePos.add(0.0D, 0.1D, 0.0D);
 		Vec3d head = basePos.add(0.0D, 2.8D, 0.0D);
-		UnifiedRenderModule.drawLine(context.matrixStack(), center, head, color);
+		UnifiedRenderModule.drawLine(context.matrixStack(), center, head, color, depthTestEnabled);
 
 		double size = 0.42D;
 		Vec3d north = head.add(0.0D, 0.0D, -size);
 		Vec3d south = head.add(0.0D, 0.0D, size);
 		Vec3d east = head.add(size, 0.0D, 0.0D);
 		Vec3d west = head.add(-size, 0.0D, 0.0D);
-		UnifiedRenderModule.drawLine(context.matrixStack(), north, south, color);
-		UnifiedRenderModule.drawLine(context.matrixStack(), east, west, color);
-		UnifiedRenderModule.drawLine(context.matrixStack(), north, east, withAlpha(color, 0x9A));
-		UnifiedRenderModule.drawLine(context.matrixStack(), east, south, withAlpha(color, 0x9A));
-		UnifiedRenderModule.drawLine(context.matrixStack(), south, west, withAlpha(color, 0x9A));
-		UnifiedRenderModule.drawLine(context.matrixStack(), west, north, withAlpha(color, 0x9A));
+		UnifiedRenderModule.drawLine(context.matrixStack(), north, south, color, depthTestEnabled);
+		UnifiedRenderModule.drawLine(context.matrixStack(), east, west, color, depthTestEnabled);
+		UnifiedRenderModule.drawLine(context.matrixStack(), north, east, withAlpha(color, 0x9A), depthTestEnabled);
+		UnifiedRenderModule.drawLine(context.matrixStack(), east, south, withAlpha(color, 0x9A), depthTestEnabled);
+		UnifiedRenderModule.drawLine(context.matrixStack(), south, west, withAlpha(color, 0x9A), depthTestEnabled);
+		UnifiedRenderModule.drawLine(context.matrixStack(), west, north, withAlpha(color, 0x9A), depthTestEnabled);
 
-		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.35D, withAlpha(color, 0xB0), 12);
+		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.35D, withAlpha(color, 0xB0), 12, depthTestEnabled);
 	}
 
-	private void renderCircle(WorldRenderContext context, Vec3d center, double radius, int color, int segments) {
+	private void renderCircle(WorldRenderContext context, Vec3d center, double radius, int color, int segments, boolean depthTestEnabled) {
 		if (segments < 3) {
 			return;
 		}
@@ -1091,7 +1093,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				center.z + Math.sin(angle) * radius
 			);
 			if (prev != null) {
-				UnifiedRenderModule.drawLine(context.matrixStack(), prev, current, color);
+				UnifiedRenderModule.drawLine(context.matrixStack(), prev, current, color, depthTestEnabled);
 			}
 			prev = current;
 		}

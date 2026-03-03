@@ -1,7 +1,8 @@
-import json
 import logging
 import time
 
+from .codec import JsonMessageCodec
+from .protocol import DigestPacket, PatchPacket, PositionsPacket, RefreshRequestOutboundPacket, SnapshotFullPacket
 from .state import ServerState
 
 
@@ -20,13 +21,13 @@ class Broadcaster:
 
     def __init__(self, state: ServerState) -> None:
         self.state = state
+        self._codec = JsonMessageCodec()
         self._admin_last_state: dict | None = None
         self._player_sync_scopes = ("players", "entities", "waypoints")
         self._admin_sync_scopes = ("players", "entities", "waypoints", "playerMarks")
 
-    @staticmethod
-    def _encode_message(message: dict) -> str:
-        return json.dumps(message, separators=(",", ":"))
+    def _encode_message(self, packet) -> str:
+        return self._codec.encode(packet)
 
     def _build_full_message(
         self,
@@ -36,9 +37,8 @@ class Broadcaster:
         revision_key: str,
         channel: str | None = None,
         extra: dict | None = None,
-    ) -> dict:
+    ) -> SnapshotFullPacket:
         message = {
-            "type": "snapshot_full",
             revision_key: revision,
             **scope_state,
         }
@@ -46,7 +46,7 @@ class Broadcaster:
             message["channel"] = channel
         if isinstance(extra, dict) and extra:
             message.update(extra)
-        return message
+        return SnapshotFullPacket(**message)
 
     def _build_patch_message(
         self,
@@ -56,9 +56,8 @@ class Broadcaster:
         revision_key: str,
         channel: str | None = None,
         extra: dict | None = None,
-    ) -> dict:
+    ) -> PatchPacket:
         message = {
-            "type": "patch",
             revision_key: revision,
             **scope_patch,
         }
@@ -66,7 +65,7 @@ class Broadcaster:
             message["channel"] = channel
         if isinstance(extra, dict) and extra:
             message.update(extra)
-        return message
+        return PatchPacket(**message)
 
     @staticmethod
     def _snapshot_scope_from_state_map(state_map: dict) -> dict:
@@ -79,7 +78,11 @@ class Broadcaster:
         allowed_sources = self.state.get_active_sources_in_room(normalized_room)
         room_players = self.state.filter_state_map_by_sources(self.state.players, allowed_sources)
         room_entities = self.state.filter_state_map_by_sources(self.state.entities, allowed_sources)
-        room_waypoints = self.state.filter_state_map_by_sources(self.state.waypoints, allowed_sources)
+        room_waypoints = self.state.filter_waypoint_state_by_sources_and_room(
+            self.state.waypoints,
+            allowed_sources,
+            normalized_room,
+        )
         return {
             "players": self._snapshot_scope_from_state_map(room_players),
             "entities": self._snapshot_scope_from_state_map(room_entities),
@@ -158,9 +161,14 @@ class Broadcaster:
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
         allowed_sources = self.state.get_allowed_sources_for_player(player_id)
+        player_room = self.state.get_player_room(player_id)
         visible_players = self.state.filter_state_map_by_sources(self.state.players, allowed_sources)
         visible_entities = self.state.filter_state_map_by_sources(self.state.entities, allowed_sources)
-        visible_waypoints = self.state.filter_state_map_by_sources(self.state.waypoints, allowed_sources)
+        visible_waypoints = self.state.filter_waypoint_state_by_sources_and_room(
+            self.state.waypoints,
+            allowed_sources,
+            player_room,
+        )
         return {
             "players": visible_players,
             "entities": visible_entities,
@@ -192,16 +200,15 @@ class Broadcaster:
         caps["lastDigestSent"] = now
         if visible_state is None:
             visible_state = self._build_visible_state_for_player(player_id)
-        message = {
-            "type": "digest",
-            "rev": self.state.revision,
-            "hashes": {
+        message = DigestPacket(
+            rev=self.state.revision,
+            hashes={
                 "players": self.state.state_digest(visible_state["players"]),
                 "entities": self.state.state_digest(visible_state["entities"]),
                 "waypoints": self.state.state_digest(visible_state["waypoints"]),
             },
-        }
-        await ws.send_text(json.dumps(message, separators=(",", ":")))
+        )
+        await ws.send_text(self._encode_message(message))
 
     async def broadcast_admin_updates(self, force_full: bool = False) -> None:
         """向管理端广播增量（必要时全量）。"""
@@ -248,14 +255,14 @@ class Broadcaster:
                 continue
             try:
                 visible = self._build_visible_state_for_player(player_uuid)
-                message_data = {
-                    "type": "positions",
-                    "players": dict(visible["players"]),
-                    "entities": dict(visible["entities"]),
-                    "waypoints": dict(visible["waypoints"]),
-                    "playerMarks": dict(self.state.player_marks),
-                }
-                message = json.dumps(message_data, separators=(",", ":"))
+                message = self._encode_message(
+                    PositionsPacket(
+                        players=dict(visible["players"]),
+                        entities=dict(visible["entities"]),
+                        waypoints=dict(visible["waypoints"]),
+                        playerMarks=dict(self.state.player_marks),
+                    )
+                )
                 await ws.send_text(message)
             except Exception as e:
                 logger.warning(
@@ -391,16 +398,15 @@ class Broadcaster:
             self.state.remove_connection(source_id)
             return
 
-        message = {
-            "type": "refresh_req",
-            "reason": reason,
-            "serverTime": now,
-            "rev": self.state.revision,
-            "players": players,
-            "entities": entities,
-        }
+        message = RefreshRequestOutboundPacket(
+            reason=reason,
+            serverTime=now,
+            rev=self.state.revision,
+            players=players,
+            entities=entities,
+        )
         try:
-            await ws.send_text(json.dumps(message, separators=(",", ":")))
+            await ws.send_text(self._encode_message(message))
             self.state.mark_refresh_request_sent(source_id, now)
             logger.debug(
                 "Sent refresh_req "
