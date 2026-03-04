@@ -79,7 +79,6 @@
   "screen.multipleplayeresp.config.network_settings": "网络设置",
   "screen.multipleplayeresp.config.done": "保存",
   "screen.multipleplayeresp.config.save_network_settings": "保存服务器设置",
-  "screen.multipleplayeresp.config.exit_save": "退出保存",
   "screen.multipleplayeresp.config.cancel": "取消",
   "screen.multipleplayeresp.config.back": "返回",
   "screen.multipleplayeresp.config.connect": "连接",
