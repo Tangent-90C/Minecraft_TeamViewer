@@ -78,6 +78,8 @@
   "screen.multipleplayeresp.config.display_settings": "Display Settings",
   "screen.multipleplayeresp.config.network_settings": "Network Settings",
   "screen.multipleplayeresp.config.done": "Save",
+  "screen.multipleplayeresp.config.save_network_settings": "Save Server Settings",
+  "screen.multipleplayeresp.config.exit_save": "Save & Exit",
   "screen.multipleplayeresp.config.cancel": "Cancel",
   "screen.multipleplayeresp.config.back": "Back",
   "screen.multipleplayeresp.config.connect": "Connect",
@@ -86,7 +88,7 @@
   "screen.multipleplayeresp.config.connection_status": "Connection Status: %s",
   "screen.multipleplayeresp.config.connection_failed": "Connection failed: %s",
   "screen.multipleplayeresp.config.connection_failed_short": "Connection failed (hover for details)",
-  "screen.multipleplayeresp.config.save_required_hint": "Settings changed. Click Save to apply",
+  "screen.multipleplayeresp.config.save_required_hint": "Server settings updated. Click Save to apply",
   "screen.multipleplayeresp.config.unknown_error": "Unknown error",
   
   "screen.multipleplayeresp.color_config.title": "Color Configuration",

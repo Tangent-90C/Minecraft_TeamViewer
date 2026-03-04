@@ -78,6 +78,8 @@
   "screen.multipleplayeresp.config.display_settings": "显示设置",
   "screen.multipleplayeresp.config.network_settings": "网络设置",
   "screen.multipleplayeresp.config.done": "保存",
+  "screen.multipleplayeresp.config.save_network_settings": "保存服务器设置",
+  "screen.multipleplayeresp.config.exit_save": "退出保存",
   "screen.multipleplayeresp.config.cancel": "取消",
   "screen.multipleplayeresp.config.back": "返回",
   "screen.multipleplayeresp.config.connect": "连接",
@@ -86,7 +88,7 @@
   "screen.multipleplayeresp.config.connection_status": "连接状态: %s",
   "screen.multipleplayeresp.config.connection_failed": "连接失败: %s",
   "screen.multipleplayeresp.config.connection_failed_short": "连接失败（鼠标悬浮查看原因）",
-  "screen.multipleplayeresp.config.save_required_hint": "设置有改动，需点击保存才能生效",
+  "screen.multipleplayeresp.config.save_required_hint": "服务器设置已更新，请修改生效",
   "screen.multipleplayeresp.config.unknown_error": "未知错误",
   
   "screen.multipleplayeresp.color_config.title": "颜色配置",

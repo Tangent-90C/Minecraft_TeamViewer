@@ -22,7 +22,7 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget displaySettingsButton;
     private ButtonWidget networkSettingsButton;
     private ButtonWidget disconnectButton;
-    private ButtonWidget saveButton;
+    private ButtonWidget exitSaveButton;
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private TextWidget saveHintWidget;
@@ -30,37 +30,8 @@ public class PlayerESPConfigScreen extends Screen {
     private int connectionStatusY;
     private String currentConnectionStatus = "Unknown";
     // 保存原始值，用于取消时恢复
-    private final String originalURL;
-    private final String originalRoomCode;
-    private final int originalRenderDistance;
-    private final int originalUpdateInterval;
-    private final boolean originalShowBoxes;
-    private final boolean originalShowLines;
-    private final boolean originalUploadEntities;
-    private final boolean originalUploadSharedWaypoints;
-    private final boolean originalShowSharedWaypoints;
-    private final boolean originalShowOwnSharedWaypointsOnMinimap;
-    private final boolean originalUseSystemProxy;
-    private final String originalTracerStartMode;
-    private final double originalTracerTopOffset;
-    private final boolean originalXrayMarkersAndBoxes;
-    private final int originalBoxColor;
-    private final int originalLineColor;
-    private final int originalFriendlyTeamColor;
-    private final int originalNeutralTeamColor;
-    private final int originalEnemyTeamColor;
-    private final int originalWaypointTimeoutSeconds;
-    private final int originalLongTermWaypointTimeoutSeconds;
-    private final String originalWaypointUiStyle;
-    private final boolean originalEnableMiddleDoubleClickMark;
-    private final boolean originalEnableMiddleClickCancelWaypoint;
-    private final boolean originalAutoCancelWaypointOnEntityDeath;
-    private final boolean originalEnableLongTermWaypoint;
-    private final int originalMaxQuickMarkCount;
-    private final double originalWaypointBeaconBeamWidth;
-    private final double originalWaypointBeaconBeamHeight;
-    private final double originalTampermonkeyBeamWidth;
-    private final double originalTampermonkeyBeamHeight;
+    private String originalURL;
+    private String originalRoomCode;
     
     // 自动布局相关变量
     private static final int COMPONENT_WIDTH = 200;
@@ -79,35 +50,6 @@ public class PlayerESPConfigScreen extends Screen {
         this.parent = parent;
         this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
-        this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
-        this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
-        this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
-        this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
-        this.originalUploadEntities = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
-        this.originalUploadSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
-        this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
-        this.originalShowOwnSharedWaypointsOnMinimap = StandaloneMultiPlayerESP.getConfig().isShowOwnSharedWaypointsOnMinimap();
-        this.originalUseSystemProxy = StandaloneMultiPlayerESP.getConfig().isUseSystemProxy();
-        this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
-        this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
-        this.originalXrayMarkersAndBoxes = StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes();
-        this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
-        this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
-        this.originalFriendlyTeamColor = StandaloneMultiPlayerESP.getConfig().getFriendlyTeamColor();
-        this.originalNeutralTeamColor = StandaloneMultiPlayerESP.getConfig().getNeutralTeamColor();
-        this.originalEnemyTeamColor = StandaloneMultiPlayerESP.getConfig().getEnemyTeamColor();
-        this.originalWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds();
-        this.originalLongTermWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getLongTermWaypointTimeoutSeconds();
-        this.originalWaypointUiStyle = StandaloneMultiPlayerESP.getConfig().getWaypointUiStyle();
-        this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
-        this.originalEnableMiddleClickCancelWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
-        this.originalAutoCancelWaypointOnEntityDeath = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
-        this.originalEnableLongTermWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
-        this.originalMaxQuickMarkCount = StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount();
-        this.originalWaypointBeaconBeamWidth = StandaloneMultiPlayerESP.getConfig().getWaypointBeaconBeamWidth();
-        this.originalWaypointBeaconBeamHeight = StandaloneMultiPlayerESP.getConfig().getWaypointBeaconBeamHeight();
-        this.originalTampermonkeyBeamWidth = StandaloneMultiPlayerESP.getConfig().getTampermonkeyBeamWidth();
-        this.originalTampermonkeyBeamHeight = StandaloneMultiPlayerESP.getConfig().getTampermonkeyBeamHeight();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -122,7 +64,7 @@ public class PlayerESPConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING; // URL输入框组
         totalHeight += COMPONENT_SPACING; // 房间号输入框组
         totalHeight += BUTTON_SPACING;    // 显示设置/网络设置按钮行
-        totalHeight += BUTTON_SPACING;    // 完成/取消按钮行
+        totalHeight += BUTTON_SPACING;    // 退出保存按钮行
         totalHeight += BUTTON_SPACING;    // 连接按钮
         totalHeight += COMPONENT_SPACING; // 连接状态显示
         totalHeight += COMPONENT_SPACING; // 保存提示
@@ -234,19 +176,12 @@ public class PlayerESPConfigScreen extends Screen {
         ).dimensions(componentX + settingsButtonWidth + 2, settingsY, settingsButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.networkSettingsButton);
         
-        // 完成和取消按钮（并排显示）
-        int buttonsY = getNextButtonY();
-        int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
-        this.saveButton = ButtonWidget.builder(
-                Text.translatable("screen.multipleplayeresp.config.done"),
-                button -> saveAndClose()
-        ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.saveButton);
-        
-        this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.cancel"),
-            button -> close()
-        ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
+        int exitSaveY = getNextButtonY();
+        this.exitSaveButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.save_network_settings"),
+            button -> saveAndClose()
+        ).dimensions(componentX, exitSaveY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.exitSaveButton);
         
         // 连接按钮
         int connectY = getNextButtonY();
@@ -310,38 +245,9 @@ public class PlayerESPConfigScreen extends Screen {
         // 移除连接状态监听器
         StandaloneMultiPlayerESP.getNetworkManager().removeConnectionStatusListener(connectionListener);
         
-        // 恢复原始值
+        // 仅恢复高危参数：服务器URL与房间号
         PlayerESPNetworkManager.setServerURL(this.originalURL);
         PlayerESPNetworkManager.setRoomCode(this.originalRoomCode);
-        StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
-        StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
-        StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
-        StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
-        StandaloneMultiPlayerESP.getConfig().setUploadEntities(this.originalUploadEntities);
-        StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(this.originalUploadSharedWaypoints);
-        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
-        StandaloneMultiPlayerESP.getConfig().setShowOwnSharedWaypointsOnMinimap(this.originalShowOwnSharedWaypointsOnMinimap);
-        StandaloneMultiPlayerESP.getConfig().setUseSystemProxy(this.originalUseSystemProxy);
-        StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
-        StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
-        StandaloneMultiPlayerESP.getConfig().setXrayMarkersAndBoxes(this.originalXrayMarkersAndBoxes);
-        StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
-        StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
-        StandaloneMultiPlayerESP.getConfig().setFriendlyTeamColor(this.originalFriendlyTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setNeutralTeamColor(this.originalNeutralTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setEnemyTeamColor(this.originalEnemyTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setWaypointTimeoutSeconds(this.originalWaypointTimeoutSeconds);
-        StandaloneMultiPlayerESP.getConfig().setLongTermWaypointTimeoutSeconds(this.originalLongTermWaypointTimeoutSeconds);
-        StandaloneMultiPlayerESP.getConfig().setWaypointUiStyle(this.originalWaypointUiStyle);
-        StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
-        StandaloneMultiPlayerESP.getConfig().setEnableMiddleClickCancelWaypoint(this.originalEnableMiddleClickCancelWaypoint);
-        StandaloneMultiPlayerESP.getConfig().setAutoCancelWaypointOnEntityDeath(this.originalAutoCancelWaypointOnEntityDeath);
-        StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(this.originalEnableLongTermWaypoint);
-        StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(this.originalMaxQuickMarkCount);
-        StandaloneMultiPlayerESP.getConfig().setWaypointBeaconBeamWidth(this.originalWaypointBeaconBeamWidth);
-        StandaloneMultiPlayerESP.getConfig().setWaypointBeaconBeamHeight(this.originalWaypointBeaconBeamHeight);
-        StandaloneMultiPlayerESP.getConfig().setTampermonkeyBeamWidth(this.originalTampermonkeyBeamWidth);
-        StandaloneMultiPlayerESP.getConfig().setTampermonkeyBeamHeight(this.originalTampermonkeyBeamHeight);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
@@ -359,6 +265,12 @@ public class PlayerESPConfigScreen extends Screen {
             // 显示/网络开关设置在二级页面中实时保存
             // 保存配置到文件
             StandaloneMultiPlayerESP.getConfig().save();
+
+            // 刷新“已保存”基线，避免保存后被取消回滚
+            this.originalURL = PlayerESPNetworkManager.getServerURL();
+            this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
+            updateSaveHintWidget();
+            updateSaveButton();
         } catch (NumberFormatException e) {
             // 如果输入格式不正确，忽略错误并使用原始值
         }
@@ -485,15 +397,15 @@ public class PlayerESPConfigScreen extends Screen {
     }
 
     private void updateSaveButton() {
-        if (this.saveButton == null) {
+        if (this.exitSaveButton == null) {
             return;
         }
         if (hasUnsavedChanges()) {
-            this.saveButton.setMessage(
-                Text.translatable("screen.multipleplayeresp.config.done").formatted(Formatting.GREEN)
+            this.exitSaveButton.setMessage(
+                Text.translatable("screen.multipleplayeresp.config.save_network_settings").formatted(Formatting.GREEN)
             );
         } else {
-            this.saveButton.setMessage(Text.translatable("screen.multipleplayeresp.config.done"));
+            this.exitSaveButton.setMessage(Text.translatable("screen.multipleplayeresp.config.save_network_settings"));
         }
     }
 
@@ -504,35 +416,11 @@ public class PlayerESPConfigScreen extends Screen {
         }
 
         String currentUrl = this.urlField == null ? this.originalURL : this.urlField.getText().trim();
-        if (!currentUrl.isEmpty() && !currentUrl.equals(this.originalURL)) {
+        if (!currentUrl.equals(this.originalURL)) {
             return true;
         }
 
-        return StandaloneMultiPlayerESP.getConfig().getRenderDistance() != this.originalRenderDistance
-            || StandaloneMultiPlayerESP.getConfig().getUpdateInterval() != this.originalUpdateInterval
-            || StandaloneMultiPlayerESP.getConfig().isShowBoxes() != this.originalShowBoxes
-            || StandaloneMultiPlayerESP.getConfig().isShowLines() != this.originalShowLines
-            || StandaloneMultiPlayerESP.getConfig().isUploadEntities() != this.originalUploadEntities
-            || StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints() != this.originalUploadSharedWaypoints
-            || StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints() != this.originalShowSharedWaypoints
-            || StandaloneMultiPlayerESP.getConfig().isShowOwnSharedWaypointsOnMinimap() != this.originalShowOwnSharedWaypointsOnMinimap
-            || StandaloneMultiPlayerESP.getConfig().isUseSystemProxy() != this.originalUseSystemProxy
-            || !StandaloneMultiPlayerESP.getConfig().getTracerStartMode().equals(this.originalTracerStartMode)
-            || Double.compare(StandaloneMultiPlayerESP.getConfig().getTracerTopOffset(), this.originalTracerTopOffset) != 0
-            || StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes() != this.originalXrayMarkersAndBoxes
-            || StandaloneMultiPlayerESP.getConfig().getBoxColor() != this.originalBoxColor
-            || StandaloneMultiPlayerESP.getConfig().getLineColor() != this.originalLineColor
-            || StandaloneMultiPlayerESP.getConfig().getFriendlyTeamColor() != this.originalFriendlyTeamColor
-            || StandaloneMultiPlayerESP.getConfig().getNeutralTeamColor() != this.originalNeutralTeamColor
-            || StandaloneMultiPlayerESP.getConfig().getEnemyTeamColor() != this.originalEnemyTeamColor
-            || StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds() != this.originalWaypointTimeoutSeconds
-            || StandaloneMultiPlayerESP.getConfig().getLongTermWaypointTimeoutSeconds() != this.originalLongTermWaypointTimeoutSeconds
-            || !StandaloneMultiPlayerESP.getConfig().getWaypointUiStyle().equals(this.originalWaypointUiStyle)
-            || StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark() != this.originalEnableMiddleDoubleClickMark
-            || StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint() != this.originalEnableMiddleClickCancelWaypoint
-            || StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath() != this.originalAutoCancelWaypointOnEntityDeath
-            || StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint() != this.originalEnableLongTermWaypoint
-            || StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount() != this.originalMaxQuickMarkCount;
+        return false;
     }
     
     /**
