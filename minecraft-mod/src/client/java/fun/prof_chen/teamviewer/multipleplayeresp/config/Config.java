@@ -49,6 +49,10 @@ public class Config {
     private int longTermWaypointTimeoutSeconds = 1800; // 长期报点超时秒数
     private int maxQuickMarkCount = 3; // 最多保留的快捷报点数量
     private String waypointUiStyle = WAYPOINT_UI_BEACON; // 报点UI样式
+    private double waypointBeaconBeamWidth = 0.32D; // 普通报点光柱宽度（半径）
+    private double waypointBeaconBeamHeight = 7.6D; // 普通报点光柱高度
+    private double tampermonkeyBeamWidth = 0.34D; // 网页下发顶天立地光柱宽度（半径）
+    private double tampermonkeyBeamHeight = 384.0D; // 网页下发顶天立地光柱高度
     private boolean useSystemProxy = false; // 连接服务器时是否使用系统代理
     
     public static Config load() {
@@ -388,6 +392,94 @@ public class Config {
             return;
         }
         this.waypointUiStyle = WAYPOINT_UI_BEACON;
+    }
+
+    public double getWaypointBeaconBeamWidth() {
+        if (Double.isNaN(waypointBeaconBeamWidth) || Double.isInfinite(waypointBeaconBeamWidth)) {
+            return 0.32D;
+        }
+        if (waypointBeaconBeamWidth < 0.05D) {
+            return 0.05D;
+        }
+        return Math.min(waypointBeaconBeamWidth, 4.0D);
+    }
+
+    public void setWaypointBeaconBeamWidth(double waypointBeaconBeamWidth) {
+        if (Double.isNaN(waypointBeaconBeamWidth) || Double.isInfinite(waypointBeaconBeamWidth)) {
+            this.waypointBeaconBeamWidth = 0.32D;
+            return;
+        }
+        if (waypointBeaconBeamWidth < 0.05D) {
+            this.waypointBeaconBeamWidth = 0.05D;
+            return;
+        }
+        this.waypointBeaconBeamWidth = Math.min(waypointBeaconBeamWidth, 4.0D);
+    }
+
+    public double getWaypointBeaconBeamHeight() {
+        if (Double.isNaN(waypointBeaconBeamHeight) || Double.isInfinite(waypointBeaconBeamHeight)) {
+            return 7.6D;
+        }
+        if (waypointBeaconBeamHeight < 0.5D) {
+            return 0.5D;
+        }
+        return Math.min(waypointBeaconBeamHeight, 256.0D);
+    }
+
+    public void setWaypointBeaconBeamHeight(double waypointBeaconBeamHeight) {
+        if (Double.isNaN(waypointBeaconBeamHeight) || Double.isInfinite(waypointBeaconBeamHeight)) {
+            this.waypointBeaconBeamHeight = 7.6D;
+            return;
+        }
+        if (waypointBeaconBeamHeight < 0.5D) {
+            this.waypointBeaconBeamHeight = 0.5D;
+            return;
+        }
+        this.waypointBeaconBeamHeight = Math.min(waypointBeaconBeamHeight, 256.0D);
+    }
+
+    public double getTampermonkeyBeamWidth() {
+        if (Double.isNaN(tampermonkeyBeamWidth) || Double.isInfinite(tampermonkeyBeamWidth)) {
+            return 0.34D;
+        }
+        if (tampermonkeyBeamWidth < 0.05D) {
+            return 0.05D;
+        }
+        return Math.min(tampermonkeyBeamWidth, 8.0D);
+    }
+
+    public void setTampermonkeyBeamWidth(double tampermonkeyBeamWidth) {
+        if (Double.isNaN(tampermonkeyBeamWidth) || Double.isInfinite(tampermonkeyBeamWidth)) {
+            this.tampermonkeyBeamWidth = 0.34D;
+            return;
+        }
+        if (tampermonkeyBeamWidth < 0.05D) {
+            this.tampermonkeyBeamWidth = 0.05D;
+            return;
+        }
+        this.tampermonkeyBeamWidth = Math.min(tampermonkeyBeamWidth, 8.0D);
+    }
+
+    public double getTampermonkeyBeamHeight() {
+        if (Double.isNaN(tampermonkeyBeamHeight) || Double.isInfinite(tampermonkeyBeamHeight)) {
+            return 384.0D;
+        }
+        if (tampermonkeyBeamHeight < 1.0D) {
+            return 1.0D;
+        }
+        return Math.min(tampermonkeyBeamHeight, 1024.0D);
+    }
+
+    public void setTampermonkeyBeamHeight(double tampermonkeyBeamHeight) {
+        if (Double.isNaN(tampermonkeyBeamHeight) || Double.isInfinite(tampermonkeyBeamHeight)) {
+            this.tampermonkeyBeamHeight = 384.0D;
+            return;
+        }
+        if (tampermonkeyBeamHeight < 1.0D) {
+            this.tampermonkeyBeamHeight = 1.0D;
+            return;
+        }
+        this.tampermonkeyBeamHeight = Math.min(tampermonkeyBeamHeight, 1024.0D);
     }
 
     public boolean isUseSystemProxy() {
