@@ -198,7 +198,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				UUID pid = p.getUuid();
 				Vec3d pos = p.getPos();
 				Vec3d vel = p.getVelocity();
-				boolean isRidingHorse = isPlayerRidingHorse(p);
+				boolean isRiding = isPlayerRiding(p);
 				ReportDataSchemas.PlayerDataPayload payload = new ReportDataSchemas.PlayerDataPayload(
 						pos.x,
 						pos.y,
@@ -212,7 +212,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 						p.getHealth(),
 						p.getMaxHealth(),
 						0,
-						isRidingHorse,
+						isRiding,
 						p.getWidth(),
 						p.getHeight());
 				players.put(pid, payload.toMap());
@@ -221,7 +221,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		return players;
 	}
 
-	private boolean isPlayerRidingHorse(AbstractClientPlayerEntity player) {
+	private boolean isPlayerRiding(AbstractClientPlayerEntity player) {
 		if (player == null) {
 			return false;
 		}

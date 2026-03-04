@@ -766,7 +766,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     townInfo: any,
     markerKind = 'player',
     isReporter = false,
-    isRidingHorse = false
+    isRiding = false
   ) {
     const team = mark ? normalizeTeam(mark.team) : 'neutral';
     const color = mark ? normalizeColor(mark.color, deps.getConfiguredTeamColor(team)) : deps.getConfiguredTeamColor(team);
@@ -791,7 +791,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const safeTeam = escapeHtml(teamText);
     const safeNote = escapeHtml(noteText);
     const safeTown = escapeHtml(townText);
-    const ridingHtml = markerKind === 'player' && isRidingHorse
+    const ridingHtml = markerKind === 'player' && isRiding
       ? `<span class="n-ride"> · 🐎</span>`
       : '';
     const visual = getMarkerVisualConfig(markerKind);
@@ -843,7 +843,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
       payload.townInfo,
       markerKind,
       Boolean(payload.isReporter),
-      Boolean(payload.isRidingHorse)
+      Boolean(payload.isRiding)
     );
 
     if (!html) {
@@ -1236,11 +1236,11 @@ export function createMapProjection(deps: MapProjectionDeps) {
           }
         : null;
       const isReporter = isReportingPlayer(String(playerId), rawNode, data, reportingPlayerIds);
-      const isRidingHorse = parseBooleanFlag((data as any).isRidingHorse);
+      const isRiding = parseBooleanFlag((data as any).isRiding);
 
       nextIds.add(String(playerId));
       nextPlayerIds.add(String(playerId));
-      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter, isRidingHorse });
+      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter, isRiding });
       try {
         upsertReporterEffects(map, String(playerId), { x, z, mark: effectiveMark }, isReporter);
       } catch (_) {
