@@ -72,7 +72,7 @@ public final class ProtocolPackets {
 		public String minimumCompatibleNetworkProtocolVersion;
 		public String localProgramVersion;
 		public String roomCode;
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public Integer preferredReportIntervalTicks;
 		public Integer minReportIntervalTicks;
 		public Integer maxReportIntervalTicks;
@@ -80,52 +80,52 @@ public final class ProtocolPackets {
 
 	public static class PlayersPatchPacket {
 		public final String type = "players_patch";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
 	}
 
 	public static class EntitiesPatchPacket {
 		public final String type = "entities_patch";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
 	}
 
 	public static class StateKeepalivePacket {
 		public final String type = "state_keepalive";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public List<String> players;
 		public List<String> entities;
 	}
 
 	public static class WaypointsUpdatePacket {
 		public final String type = "waypoints_update";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public Map<String, Map<String, Object>> waypoints;
 	}
 
 	public static class TabPlayersUpdatePacket {
 		public final String type = "tab_players_update";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public List<Map<String, Object>> tabPlayers;
 	}
 
 	public static class WaypointsDeletePacket {
 		public final String type = "waypoints_delete";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public List<String> waypointIds;
 	}
 
 	public static class WaypointsEntityDeathCancelPacket {
 		public final String type = "waypoints_entity_death_cancel";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public List<String> targetEntityIds;
 	}
 
 	public static class ResyncReqPacket {
 		public final String type = "resync_req";
 		public String reason;
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 	}
 }

@@ -23,6 +23,7 @@ import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.ProtocolPackets;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.UuidBinaryCodec;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -519,7 +520,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		try {
 			long sentAt = now;
 			ProtocolPackets.PlayersPatchPacket packet = new ProtocolPackets.PlayersPatchPacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
@@ -598,7 +599,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		try {
 			long sentAt = now;
 			ProtocolPackets.EntitiesPatchPacket packet = new ProtocolPackets.EntitiesPatchPacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
@@ -647,7 +648,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		try {
 			ProtocolPackets.WaypointsUpdatePacket packet = new ProtocolPackets.WaypointsUpdatePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.waypoints = waypoints;
 			sendPacket(packet);
 		} catch (Exception e) {
@@ -702,7 +703,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				Object displayName = raw.get("prefixColored");
 
 				if (idValue != null && !String.valueOf(idValue).isBlank()) {
-					copy.put("id", String.valueOf(idValue));
+					byte[] uuidBytes = UuidBinaryCodec.toBytes(String.valueOf(idValue));
+					copy.put("id", uuidBytes != null ? uuidBytes : String.valueOf(idValue));
 				}
 				if (nameValue != null && !String.valueOf(nameValue).isBlank()) {
 					copy.put("name", String.valueOf(nameValue));
@@ -724,7 +726,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 
 			ProtocolPackets.TabPlayersUpdatePacket packet = new ProtocolPackets.TabPlayersUpdatePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.tabPlayers = normalized;
 			sendPacket(packet);
 
@@ -770,7 +772,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 			ProtocolPackets.WaypointsDeletePacket packet = new ProtocolPackets.WaypointsDeletePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.waypointIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
@@ -813,7 +815,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 			ProtocolPackets.WaypointsEntityDeathCancelPacket packet = new ProtocolPackets.WaypointsEntityDeathCancelPacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.targetEntityIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
@@ -1407,7 +1409,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			req.reason = reason;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
-				req.submitPlayerId = client.player.getUuid().toString();
+				req.submitPlayerId = UuidBinaryCodec.toBytes(client.player.getUuid());
 			}
 			sendPacket(req);
 		} catch (Exception e) {
@@ -1693,7 +1695,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			handshake.maxReportIntervalTicks = 1000;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
-				handshake.submitPlayerId = client.player.getUuid().toString();
+				handshake.submitPlayerId = UuidBinaryCodec.toBytes(client.player.getUuid());
 			}
 
 			sendPacket(handshake);
@@ -2154,7 +2156,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 
 		ProtocolPackets.StateKeepalivePacket packet = new ProtocolPackets.StateKeepalivePacket();
-		packet.submitPlayerId = submitPlayerId.toString();
+		packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 		packet.players = keepalivePlayers;
 		packet.entities = keepaliveEntities;
 		sendPacket(packet);
