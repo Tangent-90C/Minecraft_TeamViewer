@@ -1,10 +1,10 @@
 {
-  "key.multipleplayeresp.toggle": "Toggle Player ESP",
-  "key.multipleplayeresp.config": "Open Player ESP Config",
+  "key.multipleplayeresp.toggle": "Toggle connection to the MC-Teamviewer server",
+  "key.multipleplayeresp.config": "Open MC-Teamviewer configuration panel",
   "key.multipleplayeresp.mark": "Quick Mark",
-  "category.multipleplayeresp.general": "MultiPlayer ESP",
+  "category.multipleplayeresp.general": "MC-Teamviewer",
   
-  "screen.multipleplayeresp.config.title": "MultiPlayer ESP Configuration",
+  "screen.multipleplayeresp.config.title": "MC-Teamviewer Configuration",
   "screen.multipleplayeresp.config.url": "Server URL",
   "screen.multipleplayeresp.config.url_hint": "e.g. ws://127.0.0.1:8080/playeresp",
   "screen.multipleplayeresp.config.room_code": "Room Code",
@@ -59,6 +59,8 @@
   "screen.multipleplayeresp.config.tracer_top_offset_hint": "e.g. 0.42 (range 0.0-1.5)",
   "screen.multipleplayeresp.config.color_settings": "Color Settings",
   "screen.multipleplayeresp.config.color_settings.tooltip": "Open color configuration to adjust box and tracer colors.",
+  "screen.multipleplayeresp.config.waypoint_settings": "Mark Settings",
+  "screen.multipleplayeresp.config.waypoint_settings.tooltip": "Open mark configuration to adjust all mark-related options in one place.",
   "screen.multipleplayeresp.config.display_settings": "Display Settings",
   "screen.multipleplayeresp.config.network_settings": "Network Settings",
   "screen.multipleplayeresp.config.done": "Save",
@@ -80,6 +82,7 @@
   "screen.multipleplayeresp.color_config.done": "Save",
   "screen.multipleplayeresp.color_config.cancel": "Cancel",
   "screen.multipleplayeresp.display_config.title": "Display Configuration",
+  "screen.multipleplayeresp.waypoint_config.title": "Mark Configuration",
   "screen.multipleplayeresp.network_config.title": "Network Configuration",
   
   "connection.status.connected": "Connected",
