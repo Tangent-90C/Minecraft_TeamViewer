@@ -25,6 +25,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
     private ButtonWidget middleClickCancelWaypointButton;
     private ButtonWidget autoCancelWaypointOnEntityDeathButton;
     private ButtonWidget enableLongTermWaypointButton;
+    private ButtonWidget waypointShapeSettingsButton;
 
     private static final int COMPONENT_WIDTH = 170;
     private static final int COMPONENT_HEIGHT = 20;
@@ -45,6 +46,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
+        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -193,6 +195,13 @@ public class PlayerESPWaypointConfigScreen extends Screen {
         ).dimensions(rightX, longTermWaypointY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.autoCancelWaypointOnEntityDeathButton);
 
+        int shapeSettingsY = getNextButtonY();
+        this.waypointShapeSettingsButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.waypoint_shape_settings"),
+            button -> openWaypointShapeConfig()
+        ).dimensions(leftX, shapeSettingsY, COMPONENT_WIDTH * 2 + COLUMN_GAP, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.waypointShapeSettingsButton);
+
         int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.back"),
@@ -258,6 +267,10 @@ public class PlayerESPWaypointConfigScreen extends Screen {
         }
         if (this.enableLongTermWaypointButton != null && this.enableLongTermWaypointButton.isMouseOver(mouseX, mouseY)) {
             drawTooltip(context, "screen.multipleplayeresp.config.enable_long_term_waypoint.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.waypointShapeSettingsButton != null && this.waypointShapeSettingsButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.waypoint_shape_settings.tooltip", mouseX, mouseY);
         }
     }
 
@@ -421,6 +434,10 @@ public class PlayerESPWaypointConfigScreen extends Screen {
                 + Text.translatable(styleKey).getString();
             this.waypointUiStyleButton.setMessage(Text.of(buttonText));
         }
+    }
+
+    private void openWaypointShapeConfig() {
+        MinecraftClient.getInstance().setScreen(new PlayerESPWaypointShapeConfigScreen(this));
     }
 
     private void applyFieldValues() {
