@@ -26,17 +26,6 @@ public class PlayerESPWaypointConfigScreen extends Screen {
     private ButtonWidget autoCancelWaypointOnEntityDeathButton;
     private ButtonWidget enableLongTermWaypointButton;
 
-    private final int originalWaypointTimeoutSeconds;
-    private final int originalLongTermWaypointTimeoutSeconds;
-    private final String originalWaypointUiStyle;
-    private final boolean originalShowSharedWaypoints;
-    private final boolean originalShowOwnSharedWaypointsOnMinimap;
-    private final boolean originalEnableMiddleDoubleClickMark;
-    private final boolean originalEnableMiddleClickCancelWaypoint;
-    private final boolean originalAutoCancelWaypointOnEntityDeath;
-    private final boolean originalEnableLongTermWaypoint;
-    private final int originalMaxQuickMarkCount;
-
     private static final int COMPONENT_WIDTH = 170;
     private static final int COMPONENT_HEIGHT = 20;
     private static final int COMPONENT_SPACING = 30;
@@ -49,16 +38,6 @@ public class PlayerESPWaypointConfigScreen extends Screen {
     public PlayerESPWaypointConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.waypoint_config.title"));
         this.parent = parent;
-        this.originalWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds();
-        this.originalLongTermWaypointTimeoutSeconds = StandaloneMultiPlayerESP.getConfig().getLongTermWaypointTimeoutSeconds();
-        this.originalWaypointUiStyle = StandaloneMultiPlayerESP.getConfig().getWaypointUiStyle();
-        this.originalShowSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isShowSharedWaypoints();
-        this.originalShowOwnSharedWaypointsOnMinimap = StandaloneMultiPlayerESP.getConfig().isShowOwnSharedWaypointsOnMinimap();
-        this.originalEnableMiddleDoubleClickMark = StandaloneMultiPlayerESP.getConfig().isEnableMiddleDoubleClickMark();
-        this.originalEnableMiddleClickCancelWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableMiddleClickCancelWaypoint();
-        this.originalAutoCancelWaypointOnEntityDeath = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
-        this.originalEnableLongTermWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
-        this.originalMaxQuickMarkCount = StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount();
     }
 
     private void calculateLayout() {
@@ -117,7 +96,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.waypoint_timeout")
         );
         this.waypointTimeoutField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getWaypointTimeoutSeconds()));
-        this.waypointTimeoutField.setMaxLength(4);
+        this.waypointTimeoutField.setMaxLength(10);
         this.waypointTimeoutField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.waypoint_timeout_hint"));
         this.addDrawableChild(this.waypointTimeoutField);
 
@@ -137,7 +116,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.long_term_waypoint_timeout")
         );
         this.longTermWaypointTimeoutField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getLongTermWaypointTimeoutSeconds()));
-        this.longTermWaypointTimeoutField.setMaxLength(5);
+        this.longTermWaypointTimeoutField.setMaxLength(10);
         this.longTermWaypointTimeoutField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.long_term_waypoint_timeout_hint"));
         this.addDrawableChild(this.longTermWaypointTimeoutField);
 
@@ -158,7 +137,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.quick_mark_max_count")
         );
         this.quickMarkMaxCountField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount()));
-        this.quickMarkMaxCountField.setMaxLength(2);
+        this.quickMarkMaxCountField.setMaxLength(10);
         this.quickMarkMaxCountField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.quick_mark_max_count_hint"));
         this.addDrawableChild(this.quickMarkMaxCountField);
 
@@ -214,16 +193,11 @@ public class PlayerESPWaypointConfigScreen extends Screen {
         ).dimensions(rightX, longTermWaypointY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.autoCancelWaypointOnEntityDeathButton);
 
-        int buttonsY = getNextButtonY();
+        int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.done"),
-            button -> saveAndClose()
-        ).dimensions(leftX, buttonsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
-
-        this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.cancel"),
+            Text.translatable("screen.multipleplayeresp.config.back"),
             button -> close()
-        ).dimensions(rightX, buttonsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+        ).dimensions(leftX, backButtonY, COMPONENT_WIDTH * 2 + COLUMN_GAP, COMPONENT_HEIGHT).build());
 
         updateShowSharedWaypointsButton();
         updateShowOwnSharedWaypointsOnMinimapButton();
@@ -324,17 +298,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
 
     @Override
     public void close() {
-        StandaloneMultiPlayerESP.getConfig().setWaypointTimeoutSeconds(this.originalWaypointTimeoutSeconds);
-        StandaloneMultiPlayerESP.getConfig().setLongTermWaypointTimeoutSeconds(this.originalLongTermWaypointTimeoutSeconds);
-        StandaloneMultiPlayerESP.getConfig().setWaypointUiStyle(this.originalWaypointUiStyle);
-        StandaloneMultiPlayerESP.getConfig().setShowSharedWaypoints(this.originalShowSharedWaypoints);
-        StandaloneMultiPlayerESP.getConfig().setShowOwnSharedWaypointsOnMinimap(this.originalShowOwnSharedWaypointsOnMinimap);
-        StandaloneMultiPlayerESP.getConfig().setEnableMiddleDoubleClickMark(this.originalEnableMiddleDoubleClickMark);
-        StandaloneMultiPlayerESP.getConfig().setEnableMiddleClickCancelWaypoint(this.originalEnableMiddleClickCancelWaypoint);
-        StandaloneMultiPlayerESP.getConfig().setAutoCancelWaypointOnEntityDeath(this.originalAutoCancelWaypointOnEntityDeath);
-        StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(this.originalEnableLongTermWaypoint);
-        StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(this.originalMaxQuickMarkCount);
-
+        applyFieldValues();
         MinecraftClient.getInstance().setScreen(this.parent);
     }
 
@@ -459,7 +423,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
         }
     }
 
-    private void saveAndClose() {
+    private void applyFieldValues() {
         try {
             String waypointTimeoutStr = this.waypointTimeoutField.getText().trim();
             if (!waypointTimeoutStr.isEmpty()) {
@@ -478,12 +442,8 @@ public class PlayerESPWaypointConfigScreen extends Screen {
                 int quickMarkMaxCount = Integer.parseInt(quickMarkMaxCountStr);
                 StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(quickMarkMaxCount);
             }
-
-            StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
         }
-
-        MinecraftClient.getInstance().setScreen(this.parent);
     }
 
     @Override

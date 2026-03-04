@@ -16,11 +16,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
     private ButtonWidget uploadSharedWaypointsButton;
     private ButtonWidget useSystemProxyButton;
 
-    private final int originalUpdateInterval;
-    private final boolean originalUploadEntities;
-    private final boolean originalUploadSharedWaypoints;
-    private final boolean originalUseSystemProxy;
-
     private static final int COMPONENT_WIDTH = 200;
     private static final int COMPONENT_HEIGHT = 20;
     private static final int COMPONENT_SPACING = 30;
@@ -32,10 +27,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
     public PlayerESPNetworkConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.network_config.title"));
         this.parent = parent;
-        this.originalUpdateInterval = StandaloneMultiPlayerESP.getConfig().getUpdateInterval();
-        this.originalUploadEntities = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
-        this.originalUploadSharedWaypoints = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
-        this.originalUseSystemProxy = StandaloneMultiPlayerESP.getConfig().isUseSystemProxy();
     }
 
     private void calculateLayout() {
@@ -86,7 +77,7 @@ public class PlayerESPNetworkConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.update_interval")
         );
         this.updateIntervalField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getUpdateInterval()));
-        this.updateIntervalField.setMaxLength(4);
+        this.updateIntervalField.setMaxLength(5);
         this.updateIntervalField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.update_interval_hint"));
         this.addDrawableChild(this.updateIntervalField);
 
@@ -118,17 +109,11 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         ).dimensions(componentX, useSystemProxyY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.useSystemProxyButton);
 
-        int buttonsY = getNextButtonY();
-        int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
+        int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.done"),
-            button -> saveAndClose()
-        ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
-
-        this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.cancel"),
+            Text.translatable("screen.multipleplayeresp.config.back"),
             button -> close()
-        ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
+        ).dimensions(componentX, backButtonY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
 
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
@@ -150,14 +135,11 @@ public class PlayerESPNetworkConfigScreen extends Screen {
 
     @Override
     public void close() {
-        StandaloneMultiPlayerESP.getConfig().setUpdateInterval(this.originalUpdateInterval);
-        StandaloneMultiPlayerESP.getConfig().setUploadEntities(this.originalUploadEntities);
-        StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(this.originalUploadSharedWaypoints);
-        StandaloneMultiPlayerESP.getConfig().setUseSystemProxy(this.originalUseSystemProxy);
+        applyFieldValues();
         MinecraftClient.getInstance().setScreen(this.parent);
     }
 
-    private void saveAndClose() {
+    private void applyFieldValues() {
         try {
             String updateIntervalStr = this.updateIntervalField.getText().trim();
             if (!updateIntervalStr.isEmpty()) {
@@ -169,9 +151,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         } catch (NumberFormatException e) {
             // 如果输入格式不正确，忽略错误并使用原始值
         }
-
-        StandaloneMultiPlayerESP.getConfig().save();
-        MinecraftClient.getInstance().setScreen(this.parent);
     }
 
     private void toggleUploadEntities() {

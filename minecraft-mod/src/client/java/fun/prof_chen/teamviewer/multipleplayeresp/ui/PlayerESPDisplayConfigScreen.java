@@ -24,18 +24,6 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private ButtonWidget colorSettingsButton;
     private ButtonWidget waypointSettingsButton;
 
-    private final int originalRenderDistance;
-    private final String originalTracerStartMode;
-    private final double originalTracerTopOffset;
-    private final boolean originalShowBoxes;
-    private final boolean originalShowLines;
-    private final boolean originalXrayMarkersAndBoxes;
-    private final int originalBoxColor;
-    private final int originalLineColor;
-    private final int originalFriendlyTeamColor;
-    private final int originalNeutralTeamColor;
-    private final int originalEnemyTeamColor;
-
     private static final int COMPONENT_WIDTH = 170;
     private static final int COMPONENT_HEIGHT = 20;
     private static final int COMPONENT_SPACING = 30;
@@ -48,17 +36,6 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     public PlayerESPDisplayConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.display_config.title"));
         this.parent = parent;
-        this.originalRenderDistance = StandaloneMultiPlayerESP.getConfig().getRenderDistance();
-        this.originalTracerStartMode = StandaloneMultiPlayerESP.getConfig().getTracerStartMode();
-        this.originalTracerTopOffset = StandaloneMultiPlayerESP.getConfig().getTracerTopOffset();
-        this.originalShowBoxes = StandaloneMultiPlayerESP.getConfig().isShowBoxes();
-        this.originalShowLines = StandaloneMultiPlayerESP.getConfig().isShowLines();
-        this.originalXrayMarkersAndBoxes = StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes();
-        this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
-        this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
-        this.originalFriendlyTeamColor = StandaloneMultiPlayerESP.getConfig().getFriendlyTeamColor();
-        this.originalNeutralTeamColor = StandaloneMultiPlayerESP.getConfig().getNeutralTeamColor();
-        this.originalEnemyTeamColor = StandaloneMultiPlayerESP.getConfig().getEnemyTeamColor();
     }
 
     private void calculateLayout() {
@@ -116,7 +93,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.render_distance")
         );
         this.renderDistanceField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getRenderDistance()));
-        this.renderDistanceField.setMaxLength(3);
+        this.renderDistanceField.setMaxLength(100);
         this.renderDistanceField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.render_distance_hint"));
         this.addDrawableChild(this.renderDistanceField);
 
@@ -136,7 +113,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
             Text.translatable("screen.multipleplayeresp.config.tracer_top_offset")
         );
         this.tracerTopOffsetField.setText(String.valueOf(StandaloneMultiPlayerESP.getConfig().getTracerTopOffset()));
-        this.tracerTopOffsetField.setMaxLength(6);
+        this.tracerTopOffsetField.setMaxLength(10);
         this.tracerTopOffsetField.setPlaceholder(Text.translatable("screen.multipleplayeresp.config.tracer_top_offset_hint"));
         this.addDrawableChild(this.tracerTopOffsetField);
 
@@ -186,16 +163,11 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(rightX, subSettingsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.waypointSettingsButton);
 
-        int buttonsY = getNextButtonY();
+        int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.done"),
-            button -> saveAndClose()
-        ).dimensions(leftX, buttonsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
-
-        this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.cancel"),
+            Text.translatable("screen.multipleplayeresp.config.back"),
             button -> close()
-        ).dimensions(rightX, buttonsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+        ).dimensions(leftX, backButtonY, COMPONENT_WIDTH * 2 + COLUMN_GAP, COMPONENT_HEIGHT).build());
 
         updateTracerStartModeButton();
         updateShowBoxesButton();
@@ -285,18 +257,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
 
     @Override
     public void close() {
-        StandaloneMultiPlayerESP.getConfig().setRenderDistance(this.originalRenderDistance);
-        StandaloneMultiPlayerESP.getConfig().setTracerStartMode(this.originalTracerStartMode);
-        StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(this.originalTracerTopOffset);
-        StandaloneMultiPlayerESP.getConfig().setShowBoxes(this.originalShowBoxes);
-        StandaloneMultiPlayerESP.getConfig().setShowLines(this.originalShowLines);
-        StandaloneMultiPlayerESP.getConfig().setXrayMarkersAndBoxes(this.originalXrayMarkersAndBoxes);
-        StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
-        StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
-        StandaloneMultiPlayerESP.getConfig().setFriendlyTeamColor(this.originalFriendlyTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setNeutralTeamColor(this.originalNeutralTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setEnemyTeamColor(this.originalEnemyTeamColor);
-
+        applyFieldValues();
         MinecraftClient.getInstance().setScreen(this.parent);
     }
 
@@ -376,7 +337,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
-    private void saveAndClose() {
+    private void applyFieldValues() {
         try {
             String renderDistanceStr = this.renderDistanceField.getText().trim();
             if (!renderDistanceStr.isEmpty()) {
@@ -391,12 +352,8 @@ public class PlayerESPDisplayConfigScreen extends Screen {
                 double tracerTopOffset = Double.parseDouble(tracerTopOffsetStr);
                 StandaloneMultiPlayerESP.getConfig().setTracerTopOffset(tracerTopOffset);
             }
-
-            StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
         }
-
-        MinecraftClient.getInstance().setScreen(this.parent);
     }
 
     @Override
