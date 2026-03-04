@@ -14,6 +14,7 @@ public class PlayerESPNetworkConfigScreen extends Screen {
     private TextFieldWidget updateIntervalField;
     private ButtonWidget uploadEntitiesButton;
     private ButtonWidget uploadSharedWaypointsButton;
+    private ButtonWidget preferLocalDataForEspButton;
     private ButtonWidget useSystemProxyButton;
 
     private static final int COMPONENT_WIDTH = 200;
@@ -33,6 +34,7 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         int totalHeight = 0;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
+        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -102,6 +104,13 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         ).dimensions(componentX, uploadSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.uploadSharedWaypointsButton);
 
+        int preferLocalDataY = getNextButtonY();
+        this.preferLocalDataForEspButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.prefer_local_data_for_esp"),
+            button -> togglePreferLocalDataForEsp()
+        ).dimensions(componentX, preferLocalDataY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.preferLocalDataForEspButton);
+
         int useSystemProxyY = getNextButtonY();
         this.useSystemProxyButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.use_system_proxy"),
@@ -117,6 +126,7 @@ public class PlayerESPNetworkConfigScreen extends Screen {
 
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
+        updatePreferLocalDataForEspButton();
         updateUseSystemProxyButton();
     }
 
@@ -171,6 +181,12 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         updateUseSystemProxyButton();
     }
 
+    private void togglePreferLocalDataForEsp() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isPreferLocalDataForEsp();
+        StandaloneMultiPlayerESP.getConfig().setPreferLocalDataForEsp(!currentStatus);
+        updatePreferLocalDataForEspButton();
+    }
+
     private void updateUploadEntitiesButton() {
         if (this.uploadEntitiesButton != null) {
             boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isUploadEntities();
@@ -198,11 +214,21 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         }
     }
 
+    private void updatePreferLocalDataForEspButton() {
+        if (this.preferLocalDataForEspButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isPreferLocalDataForEsp();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.prefer_local_data_for_esp").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.preferLocalDataForEspButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
+        updatePreferLocalDataForEspButton();
         updateUseSystemProxyButton();
     }
 }

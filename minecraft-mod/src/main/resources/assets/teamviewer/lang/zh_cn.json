@@ -39,6 +39,7 @@
   "screen.multipleplayeresp.config.quick_mark_max_count.tooltip": "快捷报点允许同时保留的最大数量；超过后会自动清理较旧的快捷报点。",
   "screen.multipleplayeresp.config.upload_entities": "上传实体信息",
   "screen.multipleplayeresp.config.upload_shared_waypoints": "上报共享路标",
+  "screen.multipleplayeresp.config.prefer_local_data_for_esp": "ESP优先使用本地数据",
   "screen.multipleplayeresp.config.show_shared_waypoints": "显示共享路标",
   "screen.multipleplayeresp.config.show_shared_waypoints.tooltip": "控制是否显示其他玩家共享过来的路标（含小地图）。",
   "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap": "在小地图显示自己的共享报点",

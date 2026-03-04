@@ -39,6 +39,7 @@
   "screen.multipleplayeresp.config.quick_mark_max_count.tooltip": "Maximum number of quick marks kept at once; older quick marks are auto-removed when exceeded.",
   "screen.multipleplayeresp.config.upload_entities": "Upload Entity Data",
   "screen.multipleplayeresp.config.upload_shared_waypoints": "Upload Shared Waypoints",
+  "screen.multipleplayeresp.config.prefer_local_data_for_esp": "Prefer Local Data for ESP",
   "screen.multipleplayeresp.config.show_shared_waypoints": "Show Shared Waypoints",
   "screen.multipleplayeresp.config.show_shared_waypoints.tooltip": "Control whether shared waypoints from other players are displayed (including minimap).",
   "screen.multipleplayeresp.config.show_own_shared_waypoints_on_minimap": "Show Own Shared Marks on Minimap",
