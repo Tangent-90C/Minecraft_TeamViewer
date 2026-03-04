@@ -910,7 +910,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const ownerHtml = owner ? `<span class="n-wp-owner" style="font-weight:600;display:inline-block;margin-right:6px;">${escapeHtml(String(owner))}</span>` : '';
     const paddingLeft = showIcon ? Math.max(0, Math.round(visual.iconSize / 2) + 6) : 0;
     const textBg = 'background:rgba(255,255,255,0.85);color:#0f172a;padding:4px 6px;border-radius:6px;display:inline-block;';
-    //const textBg = 'background:rgba(255,255,255,0.85);color:#000;padding:4px 6px;border-radius:6px;display:inline-block;';
 
     const textHtml = showText
       ? `<span class="n-waypoint-label" style="direction:ltr;white-space:nowrap;padding-left:${paddingLeft}px;${textBg};font-size:${visual.textSize}px;">${ownerHtml}${escapeHtml(safeName)}</span>`

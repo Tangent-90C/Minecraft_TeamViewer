@@ -1,8 +1,8 @@
 export const UI_STYLE_TEXT = `
-  #teamviewer-overlay-root {
-    --nmc-bg-main: rgba(245, 252, 255, 0.98);
-    --nmc-bg-panel: rgba(255, 255, 255, 0.98);
-    --nmc-bg-card: rgba(219, 234, 254, 0.65);
+  :host {
+    --nmc-bg-main: rgba(245, 252, 255, 0.52);
+    --nmc-bg-panel: rgba(255, 255, 255, 0.62);
+    --nmc-bg-card: rgba(219, 234, 254, 0.36);
     --nmc-border-strong: rgba(59, 130, 246, 0.35);
     --nmc-border-soft: rgba(37, 99, 235, 0.24);
     --nmc-text-main: #0f172a;
@@ -51,17 +51,18 @@ export const UI_STYLE_TEXT = `
     max-height: min(82vh, 760px);
     overflow: auto;
     background:
-      linear-gradient(150deg, rgba(147, 197, 253, 0.34) 0%, rgba(186, 230, 253, 0.18) 42%),
+      linear-gradient(150deg, rgba(147, 197, 253, 0.24) 0%, rgba(186, 230, 253, 0.12) 42%),
       var(--nmc-bg-main);
     border: 1px solid var(--nmc-border-strong);
     border-radius: 14px;
     color: var(--nmc-text-main);
     z-index: 2147483000;
-    box-shadow: 0 16px 38px rgba(30, 64, 175, 0.26);
+    box-shadow: 0 16px 38px rgba(30, 64, 175, 0.22);
     padding: 12px 12px 14px;
     font-size: 12px;
     display: none;
-    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(16px) saturate(1.18);
+    backdrop-filter: blur(16px) saturate(1.18);
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, .6) transparent;
     color-scheme: light;
@@ -120,14 +121,14 @@ export const UI_STYLE_TEXT = `
     padding: 10px;
     border-radius: 10px;
     border: 1px solid var(--nmc-border-soft);
-    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.52), rgba(239, 246, 255, 0.42));
   }
   #nodemc-overlay-panel .n-card {
     margin-bottom: 10px;
     padding: 10px;
     border-radius: 10px;
     border: 1px solid var(--nmc-border-soft);
-    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.52), rgba(239, 246, 255, 0.42));
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 10px;
