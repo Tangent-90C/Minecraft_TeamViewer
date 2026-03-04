@@ -72,7 +72,7 @@
   "screen.multipleplayeresp.config.connection_status": "连接状态: %s",
   "screen.multipleplayeresp.config.connection_failed": "连接失败: %s",
   "screen.multipleplayeresp.config.connection_failed_short": "连接失败（鼠标悬浮查看原因）",
-  "screen.multipleplayeresp.config.save_required_hint": "部分设置需点击\"保存\"后生效；取消或直接退出不生效",
+  "screen.multipleplayeresp.config.save_required_hint": "设置有改动，需点击保存才能生效",
   "screen.multipleplayeresp.config.unknown_error": "未知错误",
   
   "screen.multipleplayeresp.color_config.title": "颜色配置",
