@@ -57,6 +57,10 @@ public class PlayerESPConfigScreen extends Screen {
     private final boolean originalAutoCancelWaypointOnEntityDeath;
     private final boolean originalEnableLongTermWaypoint;
     private final int originalMaxQuickMarkCount;
+    private final double originalWaypointBeaconBeamWidth;
+    private final double originalWaypointBeaconBeamHeight;
+    private final double originalTampermonkeyBeamWidth;
+    private final double originalTampermonkeyBeamHeight;
     
     // 自动布局相关变量
     private static final int COMPONENT_WIDTH = 200;
@@ -100,6 +104,10 @@ public class PlayerESPConfigScreen extends Screen {
         this.originalAutoCancelWaypointOnEntityDeath = StandaloneMultiPlayerESP.getConfig().isAutoCancelWaypointOnEntityDeath();
         this.originalEnableLongTermWaypoint = StandaloneMultiPlayerESP.getConfig().isEnableLongTermWaypoint();
         this.originalMaxQuickMarkCount = StandaloneMultiPlayerESP.getConfig().getMaxQuickMarkCount();
+        this.originalWaypointBeaconBeamWidth = StandaloneMultiPlayerESP.getConfig().getWaypointBeaconBeamWidth();
+        this.originalWaypointBeaconBeamHeight = StandaloneMultiPlayerESP.getConfig().getWaypointBeaconBeamHeight();
+        this.originalTampermonkeyBeamWidth = StandaloneMultiPlayerESP.getConfig().getTampermonkeyBeamWidth();
+        this.originalTampermonkeyBeamHeight = StandaloneMultiPlayerESP.getConfig().getTampermonkeyBeamHeight();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -330,6 +338,10 @@ public class PlayerESPConfigScreen extends Screen {
         StandaloneMultiPlayerESP.getConfig().setAutoCancelWaypointOnEntityDeath(this.originalAutoCancelWaypointOnEntityDeath);
         StandaloneMultiPlayerESP.getConfig().setEnableLongTermWaypoint(this.originalEnableLongTermWaypoint);
         StandaloneMultiPlayerESP.getConfig().setMaxQuickMarkCount(this.originalMaxQuickMarkCount);
+        StandaloneMultiPlayerESP.getConfig().setWaypointBeaconBeamWidth(this.originalWaypointBeaconBeamWidth);
+        StandaloneMultiPlayerESP.getConfig().setWaypointBeaconBeamHeight(this.originalWaypointBeaconBeamHeight);
+        StandaloneMultiPlayerESP.getConfig().setTampermonkeyBeamWidth(this.originalTampermonkeyBeamWidth);
+        StandaloneMultiPlayerESP.getConfig().setTampermonkeyBeamHeight(this.originalTampermonkeyBeamHeight);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }

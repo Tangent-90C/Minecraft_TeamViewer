@@ -953,9 +953,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 		double renderX = resolvedWorldPos.x;
 		double renderZ = resolvedWorldPos.z;
-		double baseY = -64.0D;
-		double topY = Math.max(baseY + 1.0D, client.world.getTopYInclusive() + 1.0D);
-		double beamHeight = topY - baseY;
+		double baseY = client.world.getBottomY();
+		double beamHeight = config.getTampermonkeyBeamHeight();
 
 		Vec3d beamBaseRelative = new Vec3d(renderX - cameraPos.x, baseY - cameraPos.y, renderZ - cameraPos.z);
 		Vec3d beamCenter = beamBaseRelative.add(0.0D, 0.08D, 0.0D);
@@ -963,7 +962,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			context.matrixStack(),
 			beamCenter,
 			beamHeight,
-			0.34D,
+			config.getTampermonkeyBeamWidth(),
 			withAlpha(color, 0x55),
 			depthTestEnabled
 		);
@@ -1127,8 +1126,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 	private void renderWaypointBeaconStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {
 		Vec3d center = basePos.add(0.0D, 0.1D, 0.0D);
-		double beamHeight = 7.6D;
-		double beamRadius = 0.32D;
+		double beamHeight = config.getWaypointBeaconBeamHeight();
+		double beamRadius = config.getWaypointBeaconBeamWidth();
 		UnifiedRenderModule.drawVerticalBeam(context.matrixStack(), center, beamHeight, beamRadius, withAlpha(color, 0x66), depthTestEnabled);
 
 		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.75D, withAlpha(color, 0xB0), 18, depthTestEnabled);
