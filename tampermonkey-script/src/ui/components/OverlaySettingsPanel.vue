@@ -469,6 +469,11 @@ function closeHelp() {
         <label>标签(可选)</label>
         <input id="nodemc-mark-label" v-model="state.mark.label" type="text" placeholder="例如：突击组/重点观察" />
       </div>
+      <div class="n-btns">
+        <button id="nodemc-mark-apply" type="button" class="n-btn-primary" @click="actions.onMarkApply">应用标记</button>
+        <button id="nodemc-mark-clear" type="button" class="n-btn-ghost" @click="actions.onMarkClear">清除该玩家</button>
+        <button id="nodemc-mark-clear-all" type="button" class="n-btn-danger" @click="actions.onMarkClearAll">清空全部标记</button>
+      </div>
     </div>
 
     <div class="n-card">
@@ -486,12 +491,6 @@ function closeHelp() {
         <button id="nodemc-overlay-save" type="button" class="n-btn-primary" :disabled="!state.dirty.mainText" @click="saveMainText">保存设置</button>
         <div v-if="state.dirty.mainText" class="n-dirty-hint">已修改，点击“保存设置”后生效</div>
       </div>
-    </div>
-
-    <div class="n-btns">
-      <button id="nodemc-mark-apply" type="button" class="n-btn-primary" @click="actions.onMarkApply">应用标记</button>
-      <button id="nodemc-mark-clear" type="button" class="n-btn-ghost" @click="actions.onMarkClear">清除该玩家</button>
-      <button id="nodemc-mark-clear-all" type="button" class="n-btn-danger" @click="actions.onMarkClearAll">清空全部标记</button>
     </div>
   </div>
 

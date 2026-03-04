@@ -10,12 +10,12 @@ public final class JsonMessageCodec implements MessageCodec {
 	}
 
 	@Override
-	public String encode(Object packet) {
-		return gson.toJson(packet);
+	public byte[] encode(Object packet) {
+		return gson.toJson(packet).getBytes(java.nio.charset.StandardCharsets.UTF_8);
 	}
 
 	@Override
-	public <T> T decode(String payload, Class<T> packetType) {
-		return gson.fromJson(payload, packetType);
+	public <T> T decode(byte[] payload, Class<T> packetType) {
+		return gson.fromJson(new String(payload, java.nio.charset.StandardCharsets.UTF_8), packetType);
 	}
 }

@@ -31,8 +31,8 @@ public final class TeamviewerModMetadata {
 		private PlayerEspProtocol() {
 		}
 
-		public static final String CLIENT_PROTOCOL_VERSION = "0.3.1";
-		public static final String CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION = "0.3.0";
+		public static final String CLIENT_PROTOCOL_VERSION = "0.4.0";
+		public static final String CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION = "0.4.0";
 		public static final boolean CLIENT_SUPPORTS_DELTA = true;
 		public static final String SERVER_PROTOCOL_VERSION_FALLBACK = "0.0.0";
 	}

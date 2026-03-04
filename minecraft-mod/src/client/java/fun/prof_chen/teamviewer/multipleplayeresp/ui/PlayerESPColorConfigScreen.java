@@ -17,12 +17,6 @@ public class PlayerESPColorConfigScreen extends Screen {
     private TextFieldWidget neutralTeamColorField;
     private TextFieldWidget enemyTeamColorField;
 
-    private final int originalBoxColor;
-    private final int originalLineColor;
-    private final int originalFriendlyTeamColor;
-    private final int originalNeutralTeamColor;
-    private final int originalEnemyTeamColor;
-
     private static final int COMPONENT_WIDTH = 200;
     private static final int COMPONENT_HEIGHT = 20;
     private static final int COMPONENT_SPACING = 30;
@@ -33,11 +27,6 @@ public class PlayerESPColorConfigScreen extends Screen {
     public PlayerESPColorConfigScreen(Screen parent) {
         super(Text.translatable("screen.multipleplayeresp.color_config.title"));
         this.parent = parent;
-        this.originalBoxColor = StandaloneMultiPlayerESP.getConfig().getBoxColor();
-        this.originalLineColor = StandaloneMultiPlayerESP.getConfig().getLineColor();
-        this.originalFriendlyTeamColor = StandaloneMultiPlayerESP.getConfig().getFriendlyTeamColor();
-        this.originalNeutralTeamColor = StandaloneMultiPlayerESP.getConfig().getNeutralTeamColor();
-        this.originalEnemyTeamColor = StandaloneMultiPlayerESP.getConfig().getEnemyTeamColor();
     }
 
     private void calculateLayout() {
@@ -153,17 +142,12 @@ public class PlayerESPColorConfigScreen extends Screen {
             .alignLeft()
             .setTextColor(0xA0A0A0));
 
-        int buttonsY = getNextY();
-        int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
+        int backButtonY = getNextY();
         this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.color_config.done"),
-            button -> saveAndClose()
-        ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
-
-        this.addDrawableChild(ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.color_config.cancel"),
+            Text.translatable("screen.multipleplayeresp.config.back"),
             button -> close()
-        ).dimensions(componentX + buttonWidth + 2, buttonsY, buttonWidth, COMPONENT_HEIGHT).build());
+        ).dimensions(componentX, backButtonY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+
     }
 
     @Override
@@ -181,16 +165,11 @@ public class PlayerESPColorConfigScreen extends Screen {
 
     @Override
     public void close() {
-        StandaloneMultiPlayerESP.getConfig().setBoxColor(this.originalBoxColor);
-        StandaloneMultiPlayerESP.getConfig().setLineColor(this.originalLineColor);
-        StandaloneMultiPlayerESP.getConfig().setFriendlyTeamColor(this.originalFriendlyTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setNeutralTeamColor(this.originalNeutralTeamColor);
-        StandaloneMultiPlayerESP.getConfig().setEnemyTeamColor(this.originalEnemyTeamColor);
-
+        applyFieldValues();
         MinecraftClient.getInstance().setScreen(this.parent);
     }
 
-    private void saveAndClose() {
+    private void applyFieldValues() {
         try {
             Integer boxColor = parseColorValue(this.boxColorField.getText());
             if (boxColor != null) {
@@ -216,12 +195,8 @@ public class PlayerESPColorConfigScreen extends Screen {
             if (enemyColor != null) {
                 StandaloneMultiPlayerESP.getConfig().setEnemyTeamColor(enemyColor);
             }
-
-            StandaloneMultiPlayerESP.getConfig().save();
         } catch (NumberFormatException e) {
         }
-
-        MinecraftClient.getInstance().setScreen(this.parent);
     }
 
     private Integer parseColorValue(String rawText) {

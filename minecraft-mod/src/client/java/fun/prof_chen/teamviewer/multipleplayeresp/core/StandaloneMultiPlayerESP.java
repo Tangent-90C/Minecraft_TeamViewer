@@ -198,6 +198,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				UUID pid = p.getUuid();
 				Vec3d pos = p.getPos();
 				Vec3d vel = p.getVelocity();
+				boolean isRiding = isPlayerRiding(p);
 				ReportDataSchemas.PlayerDataPayload payload = new ReportDataSchemas.PlayerDataPayload(
 						pos.x,
 						pos.y,
@@ -211,12 +212,25 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 						p.getHealth(),
 						p.getMaxHealth(),
 						0,
+						isRiding,
 						p.getWidth(),
 						p.getHeight());
 				players.put(pid, payload.toMap());
 			}
 		}
 		return players;
+	}
+
+	private boolean isPlayerRiding(AbstractClientPlayerEntity player) {
+		if (player == null) {
+			return false;
+		}
+		Entity vehicle = player.getVehicle();
+		if (vehicle == null || vehicle.getType() == null) {
+			return false;
+		}
+		String entityTypeText = String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT);
+		return entityTypeText.contains("horse");
 	}
 	
 	private Map<String, Map<String, Object>> collectEntityData(MinecraftClient client) {
@@ -269,7 +283,10 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		tickCounter++;
 		
 		// 连接成功后按间隔发送玩家更新与实体更新（submitPlayerId 为本地玩家 UUID）
-		if (networkManager.isConnected() && tickCounter >= config.getUpdateInterval()) {
+		int targetInterval = networkManager.isConnected()
+				? networkManager.getNegotiatedReportIntervalTicks()
+				: config.getUpdateInterval();
+		if (networkManager.isConnected() && tickCounter >= Math.max(1, targetInterval)) {
 			tickCounter = 0;
 			UUID submitPlayerId = client.player.getUuid();
 			networkManager.sendTabPlayersUpdate(submitPlayerId, collectTabPlayers(client));
@@ -740,7 +757,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			targetEntityId,
 			targetEntityType,
 			targetEntityName,
-			"quick"
+			"quick",
+			null,
+			null
 		);
 		sharedWaypoints.put(waypointId, waypoint);
 
@@ -889,14 +908,93 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			if (worldPos == null) {
 				continue;
 			}
-			if (client.player.getPos().distanceTo(worldPos) > maxDistance) {
+			boolean isTmWaypoint = isTampermonkeyWaypoint(waypoint);
+			if (!isTmWaypoint && client.player.getPos().distanceTo(worldPos) > maxDistance) {
+				continue;
+			}
+
+			int color = withAlpha(waypoint.color(), 0xCC);
+			if (isTmWaypoint) {
+				renderTampermonkeyWaypointStyle(context, waypoint, worldPos, cameraPos, color, depthTestEnabled);
 				continue;
 			}
 
 			Vec3d relativePos = worldPos.subtract(cameraPos);
-			int color = withAlpha(waypoint.color(), 0xCC);
 			renderWaypointMarkerStyle(context, relativePos, color, depthTestEnabled);
 		}
+	}
+
+	private boolean isTampermonkeyWaypoint(SharedWaypointInfo waypoint) {
+		if (waypoint == null) {
+			return false;
+		}
+
+		String sourceType = waypoint.sourceType();
+		if (sourceType != null && sourceType.equalsIgnoreCase("admin_tactical")) {
+			return true;
+		}
+
+		String waypointKind = waypoint.waypointKind();
+		return waypointKind != null && waypointKind.equalsIgnoreCase("admin_tactical");
+	}
+
+	private void renderTampermonkeyWaypointStyle(
+		WorldRenderContext context,
+		SharedWaypointInfo waypoint,
+		Vec3d resolvedWorldPos,
+		Vec3d cameraPos,
+		int color,
+		boolean depthTestEnabled
+	) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client.world == null) {
+			return;
+		}
+
+		double renderX = resolvedWorldPos.x;
+		double renderZ = resolvedWorldPos.z;
+		double baseY = -64.0D;
+		double topY = Math.max(baseY + 1.0D, client.world.getTopYInclusive() + 1.0D);
+		double beamHeight = topY - baseY;
+
+		Vec3d beamBaseRelative = new Vec3d(renderX - cameraPos.x, baseY - cameraPos.y, renderZ - cameraPos.z);
+		Vec3d beamCenter = beamBaseRelative.add(0.0D, 0.08D, 0.0D);
+		UnifiedRenderModule.drawVerticalBeam(
+			context.matrixStack(),
+			beamCenter,
+			beamHeight,
+			0.34D,
+			withAlpha(color, 0x55),
+			depthTestEnabled
+		);
+
+		Vec3d planeCenter = new Vec3d(renderX - cameraPos.x, baseY - cameraPos.y + 0.03D, renderZ - cameraPos.z);
+		UnifiedRenderModule.drawHorizontalPlane(
+			context.matrixStack(),
+			planeCenter,
+			1.8D,
+			withAlpha(color, 0x4C),
+			depthTestEnabled
+		);
+
+		renderCircle(
+			context,
+			planeCenter,
+			1.15D,
+			withAlpha(color, 0xA6),
+			24,
+			depthTestEnabled
+		);
+
+		Vec3d topCenter = beamCenter.add(0.0D, beamHeight, 0.0D);
+		renderCircle(
+			context,
+			topCenter,
+			0.48D,
+			withAlpha(color, 0x9A),
+			18,
+			depthTestEnabled
+		);
 	}
 
 	private Vec3d resolveWaypointWorldPosition(MinecraftClient client, SharedWaypointInfo waypoint, String currentDimension) {
@@ -1028,20 +1126,13 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	}
 
 	private void renderWaypointBeaconStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {
-		Vec3d center = basePos.add(0.0D, 0.2D, 0.0D);
-		Vec3d top = basePos.add(0.0D, 8.0D, 0.0D);
-		UnifiedRenderModule.drawLine(context.matrixStack(), center, top, color, depthTestEnabled);
+		Vec3d center = basePos.add(0.0D, 0.1D, 0.0D);
+		double beamHeight = 7.6D;
+		double beamRadius = 0.32D;
+		UnifiedRenderModule.drawVerticalBeam(context.matrixStack(), center, beamHeight, beamRadius, withAlpha(color, 0x66), depthTestEnabled);
 
-		double radius = 0.28D;
-		for (int i = 0; i < 4; i++) {
-			double angle = (Math.PI / 2.0D) * i;
-			Vec3d p = center.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius);
-			Vec3d pTop = p.add(0.0D, 6.5D, 0.0D);
-			UnifiedRenderModule.drawLine(context.matrixStack(), p, pTop, withAlpha(color, 0x90), depthTestEnabled);
-		}
-
-		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.7D, color, 18, depthTestEnabled);
-		renderCircle(context, center.add(0.0D, 7.2D, 0.0D), 0.4D, withAlpha(color, 0xAA), 14, depthTestEnabled);
+		renderCircle(context, center.add(0.0D, 0.02D, 0.0D), 0.75D, withAlpha(color, 0xB0), 18, depthTestEnabled);
+		renderCircle(context, center.add(0.0D, beamHeight, 0.0D), 0.42D, withAlpha(color, 0xA0), 14, depthTestEnabled);
 	}
 
 	private void renderWaypointRingStyle(WorldRenderContext context, Vec3d basePos, int color, boolean depthTestEnabled) {

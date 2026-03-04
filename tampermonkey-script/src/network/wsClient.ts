@@ -13,7 +13,7 @@ import {
   buildAdminResyncRequest,
   createEmptyAdminSnapshotModel,
 } from './networkSchemas';
-import { JsonNetworkMessageCodec } from './messageCodec';
+import { MsgpackNetworkMessageCodec } from './messageCodec';
 
 type Snapshot = AdminSnapshot & Record<string, any>;
 
@@ -26,8 +26,12 @@ type WsClientDeps = {
     lastErrorText: string | null;
     lastAdminMessageType: string | null;
     lastAdminMessageAt: number;
-    lastAdminMessageRevision: number | null;
-    lastRevision: number | null;
+  }) => void;
+  onVersionIncompatible?: (payload: {
+    message: string;
+    serverProtocolVersion?: string;
+    minimumCompatibleVersion?: string;
+    rejectReason?: string;
   }) => void;
 };
 
@@ -36,7 +40,7 @@ export function createEmptyAdminSnapshot() {
 }
 
 export function createAdminWsClient(deps: WsClientDeps) {
-  const messageCodec = new JsonNetworkMessageCodec();
+  const messageCodec = new MsgpackNetworkMessageCodec();
   let adminWs: WebSocket | null = null;
   let wsConnected = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -47,8 +51,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
   let lastAdminResyncRequestAt = 0;
   let lastAdminMessageType: string | null = null;
   let lastAdminMessageAt = 0;
-  let lastAdminMessageRevision: number | null = null;
-  let lastRevision: number | null = null;
   let latestSnapshot: Snapshot = createEmptyAdminSnapshot();
 
   function emitStatus() {
@@ -57,8 +59,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
       lastErrorText,
       lastAdminMessageType,
       lastAdminMessageAt,
-      lastAdminMessageRevision,
-      lastRevision,
     });
   }
 
@@ -100,10 +100,8 @@ export function createAdminWsClient(deps: WsClientDeps) {
         tabState: (message.tabState && typeof message.tabState === 'object') ? message.tabState : { enabled: false, reports: {}, groups: [] },
         connections: Array.isArray(message.connections) ? message.connections : [],
         connections_count: Number.isFinite(message.connections_count) ? message.connections_count : 0,
-        revision: message.revision,
         server_time: message.server_time,
       };
-      lastRevision = latestSnapshot.revision ?? null;
       deps.onSnapshotChanged(latestSnapshot);
       return;
     }
@@ -143,14 +141,10 @@ export function createAdminWsClient(deps: WsClientDeps) {
       latestSnapshot.connections_count = Number(metaConnectionsCount);
     }
 
-    if (message.revision !== undefined) {
-      latestSnapshot.revision = message.revision;
-    }
     if (message.server_time !== undefined) {
       latestSnapshot.server_time = message.server_time;
     }
 
-    lastRevision = latestSnapshot.revision ?? null;
     deps.onSnapshotChanged(latestSnapshot);
   }
 
@@ -220,10 +214,25 @@ export function createAdminWsClient(deps: WsClientDeps) {
     return text || 'unknown';
   }
 
-  function forceCloseForIncompatibleVersion(message: string) {
+  function forceCloseForIncompatibleVersion(
+    message: string,
+    details?: {
+      serverProtocolVersion?: string;
+      minimumCompatibleVersion?: string;
+      rejectReason?: string;
+    },
+  ) {
     reconnectSuppressedByVersionIncompatibility = true;
     wsConnected = false;
     lastErrorText = message;
+    try {
+      deps.onVersionIncompatible?.({
+        message,
+        serverProtocolVersion: details?.serverProtocolVersion,
+        minimumCompatibleVersion: details?.minimumCompatibleVersion,
+        rejectReason: details?.rejectReason,
+      });
+    } catch (_) {}
     if (adminWs) {
       try {
         adminWs.close(1008, message.slice(0, 120));
@@ -255,6 +264,7 @@ export function createAdminWsClient(deps: WsClientDeps) {
     }
 
     adminWs = ws;
+    ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       wsConnected = true;
       lastErrorText = null;
@@ -266,18 +276,25 @@ export function createAdminWsClient(deps: WsClientDeps) {
       emitStatus();
     };
 
-    ws.onmessage = (event) => {
-      if (typeof event?.data !== 'string') return;
+    ws.onmessage = async (event) => {
       try {
-        const payload = messageCodec.decode(event.data);
+        const data = event?.data;
+        let rawPayload: ArrayBuffer | Uint8Array | string | null = null;
+        if (data instanceof ArrayBuffer) {
+          rawPayload = data;
+        } else if (typeof data === 'string') {
+          rawPayload = data;
+        } else if (data && typeof (data as Blob).arrayBuffer === 'function') {
+          rawPayload = await (data as Blob).arrayBuffer();
+        }
+        if (rawPayload == null) return;
+
+        const payload = messageCodec.decode(rawPayload);
         if (!payload) {
           return;
         }
         lastAdminMessageType = payload?.type ? String(payload.type) : 'unknown';
         lastAdminMessageAt = Date.now();
-        lastAdminMessageRevision = payload?.revision !== undefined
-          ? Number(payload.revision)
-          : (payload?.rev !== undefined ? Number(payload.rev) : null);
 
         if (payload?.type === 'admin_ack') {
           if (payload.ok) {
@@ -300,7 +317,9 @@ export function createAdminWsClient(deps: WsClientDeps) {
           const handshakePayload = payload as Record<string, unknown>;
           if (handshakePayload.ready === false) {
             const reason = formatHandshakeRejectReason(handshakePayload);
-            forceCloseForIncompatibleVersion(`服务端拒绝握手: ${reason}`);
+            forceCloseForIncompatibleVersion(`服务端拒绝握手: ${reason}`, {
+              rejectReason: reason,
+            });
             return;
           }
 
@@ -308,6 +327,10 @@ export function createAdminWsClient(deps: WsClientDeps) {
           if (!protocolAtLeast(serverProtocolVersion, ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION)) {
             forceCloseForIncompatibleVersion(
               `版本不兼容: 服务端协议 ${serverProtocolVersion} 低于脚本最低要求 ${ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION}`,
+              {
+                serverProtocolVersion,
+                minimumCompatibleVersion: ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION,
+              },
             );
             return;
           }
@@ -361,8 +384,6 @@ export function createAdminWsClient(deps: WsClientDeps) {
       lastErrorText,
       lastAdminMessageType,
       lastAdminMessageAt,
-      lastAdminMessageRevision,
-      lastRevision,
       wsReadyState: adminWs ? adminWs.readyState : -1,
     };
   }

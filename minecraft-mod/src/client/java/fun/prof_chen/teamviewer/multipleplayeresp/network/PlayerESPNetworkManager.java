@@ -20,9 +20,10 @@ import fun.prof_chen.teamviewer.multipleplayeresp.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.JsonMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MessageCodec;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.ProtocolPackets;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.UuidBinaryCodec;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,6 +47,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import okio.ByteString;
 
 /**
  * PlayerESP 网络层管理器 - 核心网络通信组件
@@ -105,7 +108,13 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
 	
 	// 强制全量刷新间隔(毫秒) - 确保数据最终一致性
-	private static final long FORCE_FULL_REFRESH_MS = 25_000L;
+	private static final long FORCE_FULL_REFRESH_MS = 60_000L;
+	
+	// 对象级保活默认间隔(毫秒) - 若握手未下发 timeout，则使用该值
+	private static final long DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS = 12_000L;
+
+	// 单次 keepalive 报文最多携带对象数量
+	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
 
 	// 全局配置引用
 	private static Config config;
@@ -137,6 +146,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	// 上次发送的实体快照 - 用于计算增量更新
 	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
 
+	// 对象级保活时间戳：记录某个对象最近一次被显式保活/上报的时刻
+	private final Map<String, Long> lastPlayerObjectLivenessMs = new HashMap<>();
+	private final Map<String, Long> lastEntityObjectLivenessMs = new HashMap<>();
+
 	// WebSocket连接实例
 	private WebSocket webSocket;
 	
@@ -154,7 +167,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	
 	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
-	private final MessageCodec messageCodec = new JsonMessageCodec(gson);
+	private final MessageCodec messageCodec = new MsgpackMessageCodec();
 	
 	// HTTP客户端 - 用于创建WebSocket连接
 	private OkHttpClient httpClient;
@@ -179,9 +192,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	
 	// 摘要校验间隔(秒) - 控制数据一致性检查频率
 	private volatile int digestIntervalSec = 10;
-	
-	// 服务端最新修订版本号 - 用于增量同步
-	private volatile long lastServerRevision = 0;
+
+	// 服务端广播频率与协商后的上报间隔
+	private volatile double serverBroadcastHz = 20.0;
+	private volatile int negotiatedReportIntervalTicks = 10;
+	private volatile long playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
+	private volatile long entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 	
 	// 上次重同步请求时间戳 - 防止重复请求
 	private volatile long lastResyncRequestMs = 0L;
@@ -451,7 +467,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "players_patch",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "ackRev": 服务端修订版本号,
 	 *   "upsert": {玩家ID: 变更字段},
 	 *   "delete": [要删除的玩家ID列表]
 	 * }
@@ -465,6 +480,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (webSocket == null || !isConnected || submitPlayerId == null || players == null) {
 			return;
 		}
+		long now = System.currentTimeMillis();
 
 		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
 		for (Map.Entry<UUID, Map<String, Object>> entry : players.entrySet()) {
@@ -497,20 +513,22 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		applyPendingPlayerRefresh(currentSnapshot, upsert, delete);
 
 		if (upsert.isEmpty() && delete.isEmpty()) {
+			sendObjectKeepaliveIfNeeded(submitPlayerId, currentSnapshot, null, upsert.keySet(), null, now);
 			return;
 		}
 
 		try {
-			long sentAt = System.currentTimeMillis();
+			long sentAt = now;
 			ProtocolPackets.PlayersPatchPacket packet = new ProtocolPackets.PlayersPatchPacket();
-			packet.submitPlayerId = submitPlayerId.toString();
-			packet.ackRev = lastServerRevision;
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
+			updateObjectLivenessAfterPatch(lastPlayerObjectLivenessMs, upsert.keySet(), delete, sentAt);
 			lastSentPlayersSnapshot.clear();
 			lastSentPlayersSnapshot.putAll(currentSnapshot);
 			lastPlayersPacketSentMs = sentAt;
+			sendObjectKeepaliveIfNeeded(submitPlayerId, currentSnapshot, null, upsert.keySet(), null, sentAt);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send players_patch: {}", e.getMessage());
 		}
@@ -527,7 +545,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "entities_patch",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "ackRev": 服务端修订版本号,
 	 *   "upsert": {实体ID: 实体数据变更},
 	 *   "delete": [要删除的实体ID列表]
 	 * }
@@ -542,6 +559,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (webSocket == null || !isConnected || submitPlayerId == null || entities == null) {
 			return;
 		}
+		long now = System.currentTimeMillis();
 
 		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
 		for (Map.Entry<String, Map<String, Object>> entry : entities.entrySet()) {
@@ -574,20 +592,22 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		applyPendingEntityRefresh(currentSnapshot, upsert, delete);
 
 		if (upsert.isEmpty() && delete.isEmpty()) {
+			sendObjectKeepaliveIfNeeded(submitPlayerId, null, currentSnapshot, null, upsert.keySet(), now);
 			return;
 		}
 
 		try {
-			long sentAt = System.currentTimeMillis();
+			long sentAt = now;
 			ProtocolPackets.EntitiesPatchPacket packet = new ProtocolPackets.EntitiesPatchPacket();
-			packet.submitPlayerId = submitPlayerId.toString();
-			packet.ackRev = lastServerRevision;
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.upsert = upsert;
 			packet.delete = delete;
 			sendPacket(packet);
+			updateObjectLivenessAfterPatch(lastEntityObjectLivenessMs, upsert.keySet(), delete, sentAt);
 			lastSentEntitiesSnapshot.clear();
 			lastSentEntitiesSnapshot.putAll(currentSnapshot);
 			lastEntitiesPacketSentMs = sentAt;
+			sendObjectKeepaliveIfNeeded(submitPlayerId, null, currentSnapshot, null, upsert.keySet(), sentAt);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send entities_patch: {}", e.getMessage());
 		}
@@ -628,7 +648,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		try {
 			ProtocolPackets.WaypointsUpdatePacket packet = new ProtocolPackets.WaypointsUpdatePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.waypoints = waypoints;
 			sendPacket(packet);
 		} catch (Exception e) {
@@ -652,7 +672,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * {
 	 *   "type": "tab_players_update",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "ackRev": 服务端修订版本号,
 	 *   "tabPlayers": [
 	 *     {
 	 *       "id": "玩家UUID",
@@ -684,7 +703,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				Object displayName = raw.get("prefixColored");
 
 				if (idValue != null && !String.valueOf(idValue).isBlank()) {
-					copy.put("id", String.valueOf(idValue));
+					byte[] uuidBytes = UuidBinaryCodec.toBytes(String.valueOf(idValue));
+					copy.put("id", uuidBytes != null ? uuidBytes : String.valueOf(idValue));
 				}
 				if (nameValue != null && !String.valueOf(nameValue).isBlank()) {
 					copy.put("name", String.valueOf(nameValue));
@@ -706,8 +726,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 
 			ProtocolPackets.TabPlayersUpdatePacket packet = new ProtocolPackets.TabPlayersUpdatePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
-			packet.ackRev = lastServerRevision;
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.tabPlayers = normalized;
 			sendPacket(packet);
 
@@ -753,7 +772,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 			ProtocolPackets.WaypointsDeletePacket packet = new ProtocolPackets.WaypointsDeletePacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.waypointIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
@@ -796,7 +815,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 			ProtocolPackets.WaypointsEntityDeathCancelPacket packet = new ProtocolPackets.WaypointsEntityDeathCancelPacket();
-			packet.submitPlayerId = submitPlayerId.toString();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.targetEntityIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
@@ -808,7 +827,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		if (webSocket == null || packet == null) {
 			return;
 		}
-		webSocket.send(messageCodec.encode(packet));
+		byte[] payload = messageCodec.encode(packet);
+		webSocket.send(ByteString.of(payload, 0, payload.length));
 	}
 
 	private JsonObject createObjectNode(Object packet) {
@@ -873,8 +893,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 */
 	@Override
 	public void onMessage(WebSocket webSocket, String text) {
-		// 消息解析与缓存更新在主线程执行，确保与渲染/tick 读写同线程。
-		enqueueMainThreadTask(() -> processCompleteMessage(text));
+		LOGGER.warn("Ignoring text websocket frame, expected MessagePack binary frame");
+	}
+
+	@Override
+	public void onMessage(WebSocket webSocket, ByteString bytes) {
+		if (bytes == null || bytes.size() == 0) {
+			return;
+		}
+		enqueueMainThreadTask(() -> processCompleteMessage(bytes.toByteArray()));
 	}
 
 	/**
@@ -911,14 +938,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - waypoints_update: 接收新的路标数据
 	 *    - waypoints_delete: 处理路标删除通知
 	 * 
-	 * 通用处理：
-	 * - 解析消息中的修订版本号(rev)
-	 * - 更新本地版本跟踪
-	 * - 统一的错误处理和日志记录
+	 * 通用处理：统一的错误处理和日志记录。
 	 */
-	private void processCompleteMessage(String message) {
+	private void processCompleteMessage(byte[] message) {
 		try {
-			if (message == null || message.trim().isEmpty()) {
+			if (message == null || message.length == 0) {
 				LOGGER.warn("Received empty message");
 				return;
 			}
@@ -927,11 +951,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			if (envelope == null || envelope.type == null || envelope.type.isBlank()) {
 				LOGGER.warn("Received invalid message envelope");
 				return;
-			}
-
-			Long incomingRev = envelope.rev != null ? envelope.rev : envelope.revision;
-			if (incomingRev != null) {
-				lastServerRevision = Math.max(lastServerRevision, incomingRev);
 			}
 
 			if ("handshake_ack".equals(envelope.type)) {
@@ -969,6 +988,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				return;
 			}
 
+			if ("report_rate_hint".equals(envelope.type)) {
+				ProtocolPackets.ReportRateHintInboundPacket packet = messageCodec.decode(
+						message,
+						ProtocolPackets.ReportRateHintInboundPacket.class
+				);
+				handleReportRateHint(packet);
+				return;
+			}
+
 			if ("waypoints_update".equals(envelope.type)) {
 				ProtocolPackets.WaypointsUpdateInboundPacket packet = messageCodec.decode(message,
 						ProtocolPackets.WaypointsUpdateInboundPacket.class);
@@ -996,7 +1024,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 
 		} catch (Exception e) {
-			LOGGER.error("PlayerESP Network - Error processing complete message: {}, message: {}", e.getMessage(), message);
+			LOGGER.error(
+				"PlayerESP Network - Error processing complete message: {}, bytes={}",
+				e.getMessage(),
+				message == null ? 0 : message.length,
+				e
+			);
 		}
 	}
 
@@ -1379,10 +1412,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		try {
 			ProtocolPackets.ResyncReqPacket req = new ProtocolPackets.ResyncReqPacket();
 			req.reason = reason;
-			req.ackRev = lastServerRevision;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
-				req.submitPlayerId = client.player.getUuid().toString();
+				req.submitPlayerId = UuidBinaryCodec.toBytes(client.player.getUuid());
 			}
 			sendPacket(req);
 		} catch (Exception e) {
@@ -1663,9 +1695,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			handshake.minimumCompatibleNetworkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
 			handshake.localProgramVersion = CLIENT_PROGRAM_VERSION;
 			handshake.roomCode = getRoomCode();
+			handshake.preferredReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
+			handshake.minReportIntervalTicks = 1;
+			handshake.maxReportIntervalTicks = 1000;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player != null) {
-				handshake.submitPlayerId = client.player.getUuid().toString();
+				handshake.submitPlayerId = UuidBinaryCodec.toBytes(client.player.getUuid());
 			}
 
 			sendPacket(handshake);
@@ -1689,8 +1724,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 *    - 控制数据同步频率
 	 * 
 	 * 3. 初始状态同步：
-	 *    - lastServerRevision: 服务端初始修订版本
-	 *    - 作为后续增量更新的基准版本
+	 *    - 下发服务端广播频率与建议上报间隔
+	 *    - 作为后续运行时拥塞协商基准
 	 * 
 	 * 4. 程序版本信息：
 	 *    - serverProgramVersion: 服务端程序版本
@@ -1718,11 +1753,59 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		}
 
 		digestIntervalSec = packet.digestIntervalSec != null ? packet.digestIntervalSec : 10;
-		if (packet.rev != null) {
-			lastServerRevision = packet.rev;
+		serverBroadcastHz = packet.broadcastHz != null ? packet.broadcastHz : 20.0;
+		if (packet.reportIntervalTicks != null && packet.reportIntervalTicks > 0) {
+			negotiatedReportIntervalTicks = packet.reportIntervalTicks;
 		}
-		LOGGER.info("Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s",
-				serverProtocolVersion, serverProgramVersion, digestIntervalSec);
+
+		int advertisedPlayerTimeoutSec = packet.playerTimeoutSec != null && packet.playerTimeoutSec > 0
+				? packet.playerTimeoutSec
+				: 0;
+		int advertisedEntityTimeoutSec = packet.entityTimeoutSec != null && packet.entityTimeoutSec > 0
+				? packet.entityTimeoutSec
+				: 0;
+		if (advertisedPlayerTimeoutSec > 0) {
+			playerKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedPlayerTimeoutSec);
+		}
+		if (advertisedEntityTimeoutSec > 0) {
+			entityKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedEntityTimeoutSec);
+		}
+
+		LOGGER.info(
+				"Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s, playerKeepalive={}ms(playerTimeout={}s), entityKeepalive={}ms(entityTimeout={}s)",
+				serverProtocolVersion,
+				serverProgramVersion,
+				digestIntervalSec,
+				playerKeepaliveIntervalMs,
+				advertisedPlayerTimeoutSec,
+				entityKeepaliveIntervalMs,
+				advertisedEntityTimeoutSec
+		);
+	}
+
+	private long calculateKeepaliveIntervalMs(int timeoutSec) {
+		long timeoutMs = Math.max(1L, (long) timeoutSec) * 1_000L;
+		long candidate = Math.round(timeoutMs * 0.6);
+		long upperBound = Math.max(1_000L, timeoutMs - 1_000L);
+		return Math.max(1_000L, Math.min(candidate, upperBound));
+	}
+
+	private void handleReportRateHint(ProtocolPackets.ReportRateHintInboundPacket packet) {
+		if (packet == null) {
+			return;
+		}
+		if (packet.broadcastHz != null && packet.broadcastHz > 0) {
+			serverBroadcastHz = packet.broadcastHz;
+		}
+		if (packet.reportIntervalTicks != null && packet.reportIntervalTicks > 0) {
+			negotiatedReportIntervalTicks = packet.reportIntervalTicks;
+			LOGGER.info(
+					"Applied report rate hint: interval={} ticks, broadcastHz={}, reason={}",
+					negotiatedReportIntervalTicks,
+					serverBroadcastHz,
+					packet.reason == null ? "runtime" : packet.reason
+			);
+		}
 	}
 
 	private String extractHandshakeRejectReason(ProtocolPackets.HandshakeAckInboundPacket packet) {
@@ -2024,6 +2107,106 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return delta;
 	}
 
+	private void updateObjectLivenessAfterPatch(
+			Map<String, Long> livenessMap,
+			Set<String> upsertIds,
+			List<String> deleteIds,
+			long nowMs
+	) {
+		if (upsertIds != null) {
+			for (String id : upsertIds) {
+				if (id != null && !id.isBlank()) {
+					livenessMap.put(id, nowMs);
+				}
+			}
+		}
+		if (deleteIds != null) {
+			for (String id : deleteIds) {
+				if (id != null && !id.isBlank()) {
+					livenessMap.remove(id);
+				}
+			}
+		}
+	}
+
+	private void sendObjectKeepaliveIfNeeded(
+			UUID submitPlayerId,
+			Map<String, Map<String, Object>> playerSnapshot,
+			Map<String, Map<String, Object>> entitySnapshot,
+			Set<String> playerUpsertIds,
+			Set<String> entityUpsertIds,
+			long nowMs
+	) {
+		if (webSocket == null || !isConnected || submitPlayerId == null) {
+			return;
+		}
+
+		List<String> keepalivePlayers = collectKeepaliveIds(
+				playerSnapshot,
+				playerUpsertIds,
+				lastPlayerObjectLivenessMs,
+				playerKeepaliveIntervalMs,
+				nowMs
+		);
+		List<String> keepaliveEntities = collectKeepaliveIds(
+				entitySnapshot,
+				entityUpsertIds,
+				lastEntityObjectLivenessMs,
+				entityKeepaliveIntervalMs,
+				nowMs
+		);
+
+		if (keepalivePlayers.isEmpty() && keepaliveEntities.isEmpty()) {
+			return;
+		}
+
+		ProtocolPackets.StateKeepalivePacket packet = new ProtocolPackets.StateKeepalivePacket();
+		packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+		packet.players = keepalivePlayers;
+		packet.entities = keepaliveEntities;
+		sendPacket(packet);
+	}
+
+	private List<String> collectKeepaliveIds(
+			Map<String, Map<String, Object>> snapshot,
+			Set<String> justUpsertedIds,
+			Map<String, Long> livenessMap,
+			long keepaliveIntervalMs,
+			long nowMs
+	) {
+		if (snapshot == null || snapshot.isEmpty()) {
+			return List.of();
+		}
+
+		Set<String> activeIds = new HashSet<>(snapshot.keySet());
+		livenessMap.keySet().retainAll(activeIds);
+
+		List<String> keepaliveIds = new ArrayList<>();
+		for (String objectId : activeIds) {
+			if (objectId == null || objectId.isBlank()) {
+				continue;
+			}
+			if (justUpsertedIds != null && justUpsertedIds.contains(objectId)) {
+				continue;
+			}
+			Long lastSeenMs = livenessMap.get(objectId);
+			if (lastSeenMs == null) {
+				livenessMap.put(objectId, nowMs);
+				continue;
+			}
+			if (nowMs - lastSeenMs < keepaliveIntervalMs) {
+				continue;
+			}
+			keepaliveIds.add(objectId);
+			livenessMap.put(objectId, nowMs);
+			if (keepaliveIds.size() >= KEEPALIVE_MAX_ITEMS_PER_PACKET) {
+				break;
+			}
+		}
+
+		return keepaliveIds;
+	}
+
 	private boolean shouldForcePlayersFullRefresh() {
 		long now = System.currentTimeMillis();
 		return now - lastPlayersPacketSentMs >= FORCE_FULL_REFRESH_MS;
@@ -2150,6 +2333,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				String waypointKind = data.has("waypointKind") && !data.get("waypointKind").isJsonNull()
 						? data.get("waypointKind").getAsString()
 						: null;
+				String tacticalType = data.has("tacticalType") && !data.get("tacticalType").isJsonNull()
+						? data.get("tacticalType").getAsString()
+						: null;
+				String sourceType = data.has("sourceType") && !data.get("sourceType").isJsonNull()
+						? data.get("sourceType").getAsString()
+						: null;
 
 				SharedWaypointInfo waypoint = new SharedWaypointInfo(
 						waypointId,
@@ -2167,7 +2356,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 						targetEntityId,
 						targetEntityType,
 						targetEntityName,
-						waypointKind);
+						waypointKind,
+						tacticalType,
+						sourceType);
 				result.put(waypointId, waypoint);
 			} catch (Exception e) {
 				LOGGER.error("Failed to parse shared waypoint {}: {}", entry.getKey(), e.getMessage());
@@ -2385,16 +2576,29 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
 		serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
 		digestIntervalSec = 10;
-		lastServerRevision = 0;
+		serverBroadcastHz = 20.0;
+		negotiatedReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
+		playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
+		entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
 		lastTabPlayersPacketSentMs = 0L;
 	}
 
+	public int getNegotiatedReportIntervalTicks() {
+		return Math.max(1, negotiatedReportIntervalTicks);
+	}
+
+	public double getServerBroadcastHz() {
+		return serverBroadcastHz;
+	}
+
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
+		lastPlayerObjectLivenessMs.clear();
+		lastEntityObjectLivenessMs.clear();
 		lastTabPlayersSignature = "";
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();

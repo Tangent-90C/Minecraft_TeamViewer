@@ -115,7 +115,7 @@ jobs:
       working-directory: ./minecraft-mod
       run: |    
         chmod +x ./gradlew
-        ./gradlew build --refresh-dependencies
+        ./gradlew build
 
 
 

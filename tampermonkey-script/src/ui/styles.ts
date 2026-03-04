@@ -1,8 +1,8 @@
 export const UI_STYLE_TEXT = `
-  #teamviewer-overlay-root {
-    --nmc-bg-main: rgba(245, 252, 255, 0.98);
-    --nmc-bg-panel: rgba(255, 255, 255, 0.98);
-    --nmc-bg-card: rgba(219, 234, 254, 0.65);
+  :host {
+    --nmc-bg-main: rgba(245, 252, 255, 0.52);
+    --nmc-bg-panel: rgba(255, 255, 255, 0.62);
+    --nmc-bg-card: rgba(219, 234, 254, 0.36);
     --nmc-border-strong: rgba(59, 130, 246, 0.35);
     --nmc-border-soft: rgba(37, 99, 235, 0.24);
     --nmc-text-main: #0f172a;
@@ -12,6 +12,7 @@ export const UI_STYLE_TEXT = `
     --nmc-primary-hover: #2563eb;
     --nmc-danger: #dc2626;
     --nmc-danger-hover: #b91c1c;
+    color-scheme: light;
   }
   #nodemc-overlay-fab {
     position: fixed;
@@ -22,7 +23,7 @@ export const UI_STYLE_TEXT = `
     border-radius: 999px;
     border: 1px solid rgba(191, 219, 254, 0.6);
     background: radial-gradient(circle at 28% 22%, #93c5fd, #3b82f6 65%, #1d4ed8);
-    color: #fff;
+    color: #000;
     font-size: 15px;
     font-weight: 700;
     line-height: 34px;
@@ -50,19 +51,21 @@ export const UI_STYLE_TEXT = `
     max-height: min(82vh, 760px);
     overflow: auto;
     background:
-      linear-gradient(150deg, rgba(147, 197, 253, 0.34) 0%, rgba(186, 230, 253, 0.18) 42%),
+      linear-gradient(150deg, rgba(147, 197, 253, 0.24) 0%, rgba(186, 230, 253, 0.12) 42%),
       var(--nmc-bg-main);
     border: 1px solid var(--nmc-border-strong);
     border-radius: 14px;
     color: var(--nmc-text-main);
     z-index: 2147483000;
-    box-shadow: 0 16px 38px rgba(30, 64, 175, 0.26);
+    box-shadow: 0 16px 38px rgba(30, 64, 175, 0.22);
     padding: 12px 12px 14px;
     font-size: 12px;
     display: none;
-    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(16px) saturate(1.18);
+    backdrop-filter: blur(16px) saturate(1.18);
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, .6) transparent;
+    color-scheme: light;
   }
   #nodemc-overlay-panel::-webkit-scrollbar {
     width: 8px;
@@ -118,14 +121,14 @@ export const UI_STYLE_TEXT = `
     padding: 10px;
     border-radius: 10px;
     border: 1px solid var(--nmc-border-soft);
-    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.52), rgba(239, 246, 255, 0.42));
   }
   #nodemc-overlay-panel .n-card {
     margin-bottom: 10px;
     padding: 10px;
     border-radius: 10px;
     border: 1px solid var(--nmc-border-soft);
-    background: linear-gradient(180deg, rgba(219, 234, 254, 0.82), rgba(239, 246, 255, 0.74));
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.52), rgba(239, 246, 255, 0.42));
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 10px;
@@ -181,10 +184,15 @@ export const UI_STYLE_TEXT = `
     border-radius: 9px;
     border: 1px solid rgba(59, 130, 246, 0.42);
     background: var(--nmc-bg-panel);
-    color: var(--nmc-text-main);
+    color: #000 !important;
+    -webkit-text-fill-color: #000;
     padding: 7px 9px;
     outline: none;
     transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+  }
+  #nodemc-overlay-panel option {
+    color: #000;
+    background: #fff;
   }
   #nodemc-overlay-panel input[type="text"]:focus,
   #nodemc-overlay-panel input[type="number"]:focus,
@@ -194,7 +202,17 @@ export const UI_STYLE_TEXT = `
     background: rgba(255, 255, 255, 1);
   }
   #nodemc-overlay-panel input::placeholder {
-    color: rgba(148, 163, 184, 0.9);
+    color: #000;
+    -webkit-text-fill-color: #000;
+  }
+  #nodemc-overlay-panel input:-webkit-autofill,
+  #nodemc-overlay-panel input:-webkit-autofill:hover,
+  #nodemc-overlay-panel input:-webkit-autofill:focus,
+  #nodemc-overlay-panel select:-webkit-autofill,
+  #nodemc-overlay-panel textarea:-webkit-autofill {
+    -webkit-text-fill-color: #000 !important;
+    box-shadow: 0 0 0 1000px #fff inset;
+    transition: background-color 9999s ease-out 0s;
   }
   #nodemc-overlay-panel .n-check {
     display: flex;
@@ -227,7 +245,7 @@ export const UI_STYLE_TEXT = `
   #nodemc-overlay-panel button {
     border: 1px solid rgba(147,197,253,.48);
     background: linear-gradient(180deg, var(--nmc-primary), var(--nmc-primary-hover));
-    color: #fff;
+    color: #000;
     border-radius: 9px;
     padding: 6px 10px;
     font-weight: 600;
@@ -261,7 +279,7 @@ export const UI_STYLE_TEXT = `
   #nodemc-overlay-panel .n-btn-danger {
     border: 1px solid rgba(254, 202, 202, 0.5);
     background: linear-gradient(180deg, var(--nmc-danger), var(--nmc-danger-hover));
-    color: #fff;
+    color: #000;
     box-shadow: 0 8px 18px rgba(185, 28, 28, 0.3);
   }
   #nodemc-overlay-panel .n-link-btn {
@@ -422,7 +440,7 @@ export const UI_STYLE_TEXT = `
 export const OVERLAY_STYLE_TEXT = `
   .nodemc-projection-label {
     background: rgba(0, 0, 0, 0.78);
-    color: #fff;
+    color: #000;
     border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 6px;
     padding: 3px 7px;
@@ -541,6 +559,25 @@ export const OVERLAY_STYLE_TEXT = `
     white-space: nowrap;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.4);
   }
+  .nodemc-tactical-anchor.is-preview .n-tactical-icon {
+    width: auto;
+    height: auto;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    line-height: 1;
+    font-size: 20px;
+    transform: translate(-50%, -95%);
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.95), 0 0 8px rgba(15, 23, 42, 0.25);
+  }
+  .nodemc-tactical-anchor.is-preview .n-tactical-label {
+    background: rgba(255, 255, 255, 0.78);
+    color: #0f172a;
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 10px 22px rgba(30, 64, 175, 0.24);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    backdrop-filter: blur(10px) saturate(1.1);
+  }
   .nodemc-tactical-menu {
     position: fixed;
     z-index: 2147483200;
@@ -548,17 +585,21 @@ export const OVERLAY_STYLE_TEXT = `
     max-width: calc(100vw - 24px);
     padding: 10px;
     border-radius: 10px;
-    border: 1px solid rgba(96, 165, 250, 0.45);
-    background: rgba(15, 23, 42, 0.94);
-    color: #e2e8f0;
-    box-shadow: 0 14px 30px rgba(2, 6, 23, 0.52);
-    backdrop-filter: blur(5px);
+    border: 1px solid rgba(59, 130, 246, 0.38);
+    background:
+      linear-gradient(150deg, rgba(147, 197, 253, 0.26) 0%, rgba(186, 230, 253, 0.14) 42%),
+      rgba(245, 252, 255, 0.52);
+    color: #000;
+    box-shadow: 0 14px 30px rgba(30, 64, 175, 0.24);
+    -webkit-backdrop-filter: blur(16px) saturate(1.18);
+    backdrop-filter: blur(16px) saturate(1.18);
     font-size: 12px;
     line-height: 1.35;
+    color-scheme: light;
   }
   .nodemc-tactical-menu .nmc-tactical-title {
     font-weight: 700;
-    color: #f8fafc;
+    color: #000;
     margin-bottom: 8px;
     letter-spacing: .2px;
   }
@@ -569,7 +610,7 @@ export const OVERLAY_STYLE_TEXT = `
     margin-bottom: 8px;
   }
   .nodemc-tactical-menu .nmc-tactical-row > span {
-    color: #cbd5e1;
+    color: #000;
     font-size: 11px;
   }
   .nodemc-tactical-menu select,
@@ -577,11 +618,16 @@ export const OVERLAY_STYLE_TEXT = `
     width: 100%;
     box-sizing: border-box;
     border-radius: 7px;
-    border: 1px solid rgba(148, 163, 184, 0.55);
-    background: rgba(30, 41, 59, 0.92);
-    color: #f8fafc;
+    border: 1px solid rgba(59, 130, 246, 0.42);
+    background: rgba(255, 255, 255, 0.64);
+    color: #000 !important;
+    -webkit-text-fill-color: #000;
     padding: 6px 8px;
     outline: none;
+  }
+  .nodemc-tactical-menu option {
+    color: #000;
+    background: #fff;
   }
   .nodemc-tactical-menu select:focus,
   .nodemc-tactical-menu input:focus {
@@ -600,8 +646,8 @@ export const OVERLAY_STYLE_TEXT = `
     padding: 6px 8px;
     cursor: pointer;
     font-weight: 600;
-    color: #f8fafc;
-    background: rgba(51, 65, 85, 0.9);
+    color: #000;
+    background: rgba(255, 255, 255, 0.62);
   }
   .nodemc-tactical-menu .nmc-tactical-confirm {
     border-color: rgba(96, 165, 250, 0.7);
@@ -609,6 +655,6 @@ export const OVERLAY_STYLE_TEXT = `
   }
   .nodemc-tactical-menu .nmc-tactical-cancel {
     border-color: rgba(100, 116, 139, 0.65);
-    background: rgba(51, 65, 85, 0.95);
+    background: rgba(255, 255, 255, 0.72);
   }
 `;

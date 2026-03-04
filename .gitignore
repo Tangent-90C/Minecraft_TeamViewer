@@ -38,3 +38,5 @@ minecraft-mod/run/
 tampermonkey-script/node_modules/
 tampermonkey-script/dist/
 tampermonkey-script/.vite/
+
+build-artifacts/

@@ -28,12 +28,12 @@ type MapProjectionDeps = {
     ttlSeconds: number | null;
     permanent: boolean;
   }) => boolean;
-  onRevisionChanged?: (revision: number | null) => void;
 };
 
 export function createMapProjection(deps: MapProjectionDeps) {
   const PAGE = deps.page;
   const CONFIG = deps.config;
+  const GLOBAL_MAP_KEY_REGEX = /(map|leaflet|square)/i;
 
   let leafletRef: any = null;
   let capturedMap: any = null;
@@ -43,8 +43,10 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let tacticalMenuEl: HTMLElement | null = null;
   let tacticalMenuOutsideClickHandler: ((event: MouseEvent) => void) | null = null;
   let tacticalMenuEscHandler: ((event: KeyboardEvent) => void) | null = null;
+  let tacticalPreviewMarker: any | null = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
+  const trackedWaypointPositions = new Map<string, { x: number; z: number }>();
   const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
 
   const MAP_HOVER_BLOCK_CLASS = 'nodemc-map-hover-popup-blocked';
@@ -113,6 +115,51 @@ export function createMapProjection(deps: MapProjectionDeps) {
       try { tacticalMenuEl.remove(); } catch (_) {}
       tacticalMenuEl = null;
     }
+    if (tacticalPreviewMarker) {
+      try { tacticalPreviewMarker.remove(); } catch (_) {}
+      tacticalPreviewMarker = null;
+    }
+  }
+
+  function buildTacticalPreviewHtml(label: string, color: string) {
+    const safeLabel = escapeHtml(label || '战术标点');
+    const safeColor = normalizeColor(color, '#ef4444');
+    return `<div class="nodemc-tactical-anchor is-preview"><span class="n-tactical-icon" style="color:${safeColor};">📍</span><span class="n-tactical-label">预标点 · ${safeLabel}</span></div>`;
+  }
+
+  function upsertTacticalPreviewMarker(
+    map: any,
+    worldPos: { x: number; z: number },
+    selectedType: { label: string; color: string }
+  ) {
+    if (!map || !leafletRef || !worldPos || !selectedType) return;
+
+    const latLng = worldToLatLng(map, worldPos.x, worldPos.z);
+    const html = buildTacticalPreviewHtml(selectedType.label, selectedType.color);
+
+    if (tacticalPreviewMarker) {
+      try {
+        tacticalPreviewMarker.setLatLng(latLng);
+        if (typeof tacticalPreviewMarker.setZIndexOffset === 'function') {
+          tacticalPreviewMarker.setZIndexOffset(getWaypointZIndexOffset() + 400);
+        }
+        tacticalPreviewMarker.setIcon(
+          leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] })
+        );
+        return;
+      } catch (_) {
+        try { tacticalPreviewMarker.remove(); } catch (_) {}
+        tacticalPreviewMarker = null;
+      }
+    }
+
+    tacticalPreviewMarker = leafletRef.marker(latLng, {
+      icon: leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] }),
+      zIndexOffset: getWaypointZIndexOffset() + 400,
+      interactive: false,
+      keyboard: false,
+    });
+    tacticalPreviewMarker.addTo(map);
   }
 
   function resolveTtlFromMenuValue(rawValue: string, customRawValue: string) {
@@ -196,6 +243,16 @@ export function createMapProjection(deps: MapProjectionDeps) {
       option.textContent = `${item.name}（${item.label}）`;
       typeSelect.appendChild(option);
     }
+
+    const syncPreviewFromSelection = () => {
+      const selectedType = typeOptions.find((item) => item.value === typeSelect.value) || typeOptions[0];
+      upsertTacticalPreviewMarker(map, worldPos, selectedType);
+    };
+    syncPreviewFromSelection();
+
+    typeSelect.addEventListener('change', () => {
+      syncPreviewFromSelection();
+    });
 
     menu.addEventListener('mousedown', (e) => {
       e.stopPropagation();
@@ -405,6 +462,19 @@ export function createMapProjection(deps: MapProjectionDeps) {
     );
   }
 
+  function getOwnDataPropertyValue(obj: any, key: string) {
+    if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return undefined;
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(obj, key);
+    } catch (_) {
+      return undefined;
+    }
+    if (!descriptor) return undefined;
+    if (!('value' in descriptor)) return undefined;
+    return descriptor.value;
+  }
+
   function captureMap(value: any) {
     if (!isLeafletMapCandidate(value)) return null;
     capturedMap = value;
@@ -450,7 +520,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   }
 
   function installLeafletHook() {
-    let _L = (PAGE as any).L;
+    let _L = getOwnDataPropertyValue(PAGE as any, 'L');
 
     try {
       Object.defineProperty(PAGE, 'L', {
@@ -515,12 +585,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const pageObj = PAGE as Record<string, any>;
     const keys = Object.keys(pageObj);
     for (const key of keys) {
-      let value: any;
-      try {
-        value = pageObj[key];
-      } catch (_) {
-        continue;
-      }
+      if (!GLOBAL_MAP_KEY_REGEX.test(key)) continue;
+      const value = getOwnDataPropertyValue(pageObj, key);
+      if (value === undefined) continue;
 
       if (isLeafletMapCandidate(value) && value._container === mapContainer) {
         return value;
@@ -530,12 +597,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
       const nestedKeys = Object.keys(value);
       for (const nestedKey of nestedKeys) {
-        let nested: any;
-        try {
-          nested = value[nestedKey];
-        } catch (_) {
-          continue;
-        }
+        if (!GLOBAL_MAP_KEY_REGEX.test(nestedKey)) continue;
+        const nested = getOwnDataPropertyValue(value, nestedKey);
+        if (nested === undefined) continue;
         if (isLeafletMapCandidate(nested) && nested._container === mapContainer) {
           return nested;
         }
@@ -596,6 +660,14 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const opacity = readNumber(CONFIG.REPORTER_CHUNK_OPACITY);
     if (opacity === null) return 0.11;
     return Math.max(0.02, Math.min(0.9, opacity));
+  }
+
+  function parseBooleanFlag(value: unknown) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const text = String(value || '').trim().toLowerCase();
+    if (!text) return false;
+    return text === '1' || text === 'true' || text === 'yes' || text === 'on';
   }
 
   function getReporterEffectColor(configColorKey: 'REPORTER_VISION_COLOR' | 'REPORTER_CHUNK_COLOR', fallbackColor: string) {
@@ -685,7 +757,17 @@ export function createMapProjection(deps: MapProjectionDeps) {
     return cells;
   }
 
-  function buildMarkerHtml(name: string, x: number, z: number, health: number | null, mark: any, townInfo: any, markerKind = 'player', isReporter = false) {
+  function buildMarkerHtml(
+    name: string,
+    x: number,
+    z: number,
+    health: number | null,
+    mark: any,
+    townInfo: any,
+    markerKind = 'player',
+    isReporter = false,
+    isRiding = false
+  ) {
     const team = mark ? normalizeTeam(mark.team) : 'neutral';
     const color = mark ? normalizeColor(mark.color, deps.getConfiguredTeamColor(team)) : deps.getConfiguredTeamColor(team);
     const showIcon = Boolean(CONFIG.SHOW_PLAYER_ICON);
@@ -705,11 +787,13 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const teamText = team === 'friendly' ? '友军' : team === 'enemy' ? '敌军' : '中立';
     const noteText = mark && mark.label ? String(mark.label) : '';
     const townText = townInfo && typeof townInfo.text === 'string' ? townInfo.text.trim() : '';
-    const townColor = normalizeColor(townInfo && townInfo.color, '#93c5fd');
     const safeName = escapeHtml(text);
     const safeTeam = escapeHtml(teamText);
     const safeNote = escapeHtml(noteText);
     const safeTown = escapeHtml(townText);
+    const ridingHtml = markerKind === 'player' && isRiding
+      ? `<span class="n-ride"> · 🐎</span>`
+      : '';
     const visual = getMarkerVisualConfig(markerKind);
     const useReporterStar = markerKind === 'player' && isReporter && Boolean(CONFIG.REPORTER_STAR_ICON);
     const iconSize = useReporterStar ? Math.max(18, visual.iconSize + 10) : visual.iconSize;
@@ -723,14 +807,14 @@ export function createMapProjection(deps: MapProjectionDeps) {
       ? `<span class="n-icon ${markerKind === 'horse' ? 'is-horse' : ''}${iconExtraClass}" style="${iconVisualStyle}width:${iconSize}px;height:${iconSize}px;line-height:${iconSize}px;font-size:${Math.max(9, Math.round(iconSize * 0.75))}px;">${iconContent}</span>`
       : '';
     const teamHtml = CONFIG.SHOW_LABEL_TEAM_INFO && markerKind !== 'horse'
-      ? `<span class="n-team" style="color:${color}">[${safeTeam}]</span>`
+      ? `<span class="n-team">[${safeTeam}]</span>`
       : '';
     const townHtml = CONFIG.SHOW_LABEL_TOWN_INFO && safeTown
-      ? ` <span class="n-town" style="color:${townColor}">${safeTown}</span>`
+      ? ` <span class="n-town">${safeTown}</span>`
       : '';
-    const gapAfterMeta = (teamHtml || safeNote || townHtml) ? ' ' : '';
+    const gapAfterMeta = (teamHtml || safeNote || townHtml || ridingHtml) ? ' ' : '';
     const textHtml = showText
-      ? `<span class="n-label" data-align="${showIcon ? 'with-icon' : 'left-anchor'}" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;left:${showIcon ? visual.labelOffset : 0}px;font-size:${visual.textSize}px;">${teamHtml}${safeNote ? `<span class="n-note"> · ${safeNote}</span>` : ''}${townHtml}${gapAfterMeta}${safeName}</span>`
+      ? `<span class="n-label" data-align="${showIcon ? 'with-icon' : 'left-anchor'}" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;left:${showIcon ? visual.labelOffset : 0}px;font-size:${visual.textSize}px;">${teamHtml}${safeNote ? `<span class="n-note"> · ${safeNote}</span>` : ''}${townHtml}${ridingHtml}${gapAfterMeta}${safeName}</span>`
       : '';
 
     return `<div class="nodemc-player-anchor">${iconHtml}${textHtml}</div>`;
@@ -741,12 +825,26 @@ export function createMapProjection(deps: MapProjectionDeps) {
     return 1000;
   }
 
+  function getWaypointZIndexOffset() {
+    return 3000;
+  }
+
   function upsertMarker(map: any, playerId: string, payload: any) {
     const existing = markersById.get(playerId);
     const latLng = worldToLatLng(map, payload.x, payload.z);
     const markerKind = payload.kind || 'player';
     const zIndexOffset = getMarkerZIndexOffset(markerKind);
-    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, markerKind, Boolean(payload.isReporter));
+    const html = buildMarkerHtml(
+      payload.name,
+      payload.x,
+      payload.z,
+      payload.health,
+      payload.mark,
+      payload.townInfo,
+      markerKind,
+      Boolean(payload.isReporter),
+      Boolean(payload.isRiding)
+    );
 
     if (!html) {
       if (existing) {
@@ -896,7 +994,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const showText = Boolean(CONFIG.SHOW_WAYPOINT_TEXT);
     if (!showIcon && !showText) return '';
 
-    const ownerHtml = owner ? `<span class="n-wp-owner" style="font-weight:600;display:inline-block;margin-right:6px;color:${color};">${escapeHtml(String(owner))}</span>` : '';
+    const ownerHtml = owner ? `<span class="n-wp-owner" style="font-weight:600;display:inline-block;margin-right:6px;">${escapeHtml(String(owner))}</span>` : '';
     const paddingLeft = showIcon ? Math.max(0, Math.round(visual.iconSize / 2) + 6) : 0;
     const textBg = 'background:rgba(255,255,255,0.85);color:#0f172a;padding:4px 6px;border-radius:6px;display:inline-block;';
 
@@ -905,7 +1003,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
       : '';
 
     const iconHtml = showIcon
-      ? `<span class="n-waypoint-icon" style="position:absolute;left:0;top:50%;transform:translate(-50%,-50%);background:${color};width:${visual.iconSize}px;height:${visual.iconSize}px;display:inline-block;border-radius:50%;line-height:${visual.iconSize}px;text-align:center;font-size:${Math.max(10, Math.round(visual.iconSize * 0.7))}px;z-index:2;">📍</span>`
+      ? `<span class="n-waypoint-icon" style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);background:${color};width:${visual.iconSize}px;height:${visual.iconSize}px;display:inline-block;border-radius:50%;line-height:${visual.iconSize}px;text-align:center;font-size:${Math.max(10, Math.round(visual.iconSize * 0.7))}px;z-index:2;">📍</span>`
       : '';
 
     return `<div class="nodemc-waypoint-anchor" style="position:relative;display:inline-block;white-space:nowrap;">${textHtml}${iconHtml}</div>`;
@@ -915,6 +1013,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const existing = waypointsById.get(waypointId);
     if (!payload || typeof payload !== 'object') return;
     const latLng = worldToLatLng(map, payload.x, payload.z);
+    const zIndexOffset = getWaypointZIndexOffset();
     const html = buildWaypointHtml(payload.label || payload.name || waypointId, payload.x, payload.z, payload);
 
     if (!html) {
@@ -928,6 +1027,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     if (existing) {
       try {
         existing.setLatLng(latLng);
+        if (typeof existing.setZIndexOffset === 'function') {
+          existing.setZIndexOffset(zIndexOffset);
+        }
         existing.setIcon(
           leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] })
         );
@@ -940,6 +1042,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
     const marker = leafletRef.marker(latLng, {
       icon: leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] }),
+      zIndexOffset,
       interactive: false,
       keyboard: false,
     });
@@ -961,7 +1064,88 @@ export function createMapProjection(deps: MapProjectionDeps) {
       if (nextIds.has(wpId)) continue;
       try { marker.remove(); } catch (_) {}
       waypointsById.delete(wpId);
+      trackedWaypointPositions.delete(wpId);
     }
+  }
+
+  function findTrackedPositionFromEntities(snapshot: any, targetEntityId: string, wantedDim: string) {
+    const entities = snapshot && typeof snapshot === 'object' ? snapshot.entities : null;
+    if (!entities || typeof entities !== 'object') return null;
+
+    const rawNode = (entities as Record<string, any>)[targetEntityId];
+    if (!rawNode) return null;
+    const data = getPlayerDataNode(rawNode);
+    if (!data) return null;
+
+    const dim = normalizeDimension(data.dimension);
+    if (wantedDim && dim !== wantedDim) return null;
+
+    const x = readNumber(data.x);
+    const z = readNumber(data.z);
+    if (x === null || z === null) return null;
+    return { x, z };
+  }
+
+  function findTrackedPositionFromPlayers(snapshot: any, targetEntityId: string, wantedDim: string) {
+    const players = snapshot && typeof snapshot === 'object' ? snapshot.players : null;
+    if (!players || typeof players !== 'object') return null;
+
+    const normalizedTargetId = String(targetEntityId || '').trim();
+    if (!normalizedTargetId) return null;
+
+    for (const [playerId, rawNode] of Object.entries(players as Record<string, any>)) {
+      const data = getPlayerDataNode(rawNode);
+      if (!data) continue;
+
+      const candidateIds = [
+        String(playerId || '').trim(),
+        String(data.playerUUID || data.uuid || data.id || '').trim(),
+      ];
+      if (!candidateIds.includes(normalizedTargetId)) continue;
+
+      const dim = normalizeDimension(data.dimension);
+      if (wantedDim && dim !== wantedDim) continue;
+
+      const x = readNumber(data.x);
+      const z = readNumber(data.z);
+      if (x === null || z === null) continue;
+      return { x, z };
+    }
+
+    return null;
+  }
+
+  function resolveWaypointTrackedPosition(snapshot: any, waypointId: string, data: any, wantedDim: string) {
+    const fallbackX = readNumber(data.x);
+    const fallbackZ = readNumber(data.z);
+    if (fallbackX === null || fallbackZ === null) return null;
+
+    const targetType = String(data.targetType || '').trim().toLowerCase();
+    const targetEntityId = String(data.targetEntityId || '').trim();
+    if (targetType !== 'entity' || !targetEntityId) {
+      const base = { x: fallbackX, z: fallbackZ };
+      trackedWaypointPositions.set(waypointId, base);
+      return base;
+    }
+
+    const entityPos = findTrackedPositionFromEntities(snapshot, targetEntityId, wantedDim);
+    if (entityPos) {
+      trackedWaypointPositions.set(waypointId, entityPos);
+      return entityPos;
+    }
+
+    const playerPos = findTrackedPositionFromPlayers(snapshot, targetEntityId, wantedDim);
+    if (playerPos) {
+      trackedWaypointPositions.set(waypointId, playerPos);
+      return playerPos;
+    }
+
+    const lastPos = trackedWaypointPositions.get(waypointId);
+    if (lastPos) return lastPos;
+
+    const initial = { x: fallbackX, z: fallbackZ };
+    trackedWaypointPositions.set(waypointId, initial);
+    return initial;
   }
 
   function removeMissingReporterEffects(nextIds: Set<string>) {
@@ -1052,10 +1236,11 @@ export function createMapProjection(deps: MapProjectionDeps) {
           }
         : null;
       const isReporter = isReportingPlayer(String(playerId), rawNode, data, reportingPlayerIds);
+      const isRiding = parseBooleanFlag((data as any).isRiding);
 
       nextIds.add(String(playerId));
       nextPlayerIds.add(String(playerId));
-      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter });
+      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter, isRiding });
       try {
         upsertReporterEffects(map, String(playerId), { x, z, mark: effectiveMark }, isReporter);
       } catch (_) {
@@ -1108,19 +1293,20 @@ export function createMapProjection(deps: MapProjectionDeps) {
         const dim = normalizeDimension((data as any).dimension);
         if (wantedDim && dim !== wantedDim) continue;
 
-        const x = readNumber((data as any).x);
-        const z = readNumber((data as any).z);
-        if (x === null || z === null) continue;
+        const resolvedPos = resolveWaypointTrackedPosition(snapshot, String(wpId), data, wantedDim);
+        if (!resolvedPos) continue;
 
         nextWaypointIds.add(String(wpId));
         upsertWaypoint(map, String(wpId), {
-          x,
-          z,
+          x: resolvedPos.x,
+          z: resolvedPos.z,
           label: (data as any).label || (data as any).name || (data as any).title || String(wpId),
           color: (data as any).color || ((data as any).colorHex ? (data as any).colorHex : null) || null,
           kind: (data as any).waypointKind || null,
           ownerName: (data as any).ownerName || null,
           ownerId: (data as any).ownerId || null,
+          targetType: (data as any).targetType || null,
+          targetEntityId: (data as any).targetEntityId || null,
         });
       }
     }
@@ -1131,7 +1317,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
     deps.maybeSyncAutoDetectedMarks(autoMarkSyncCandidates);
 
     (PAGE as any).__NODEMC_PLAYER_OVERLAY__ = {
-      revision: snapshot.revision,
       playersOnMap: markersById.size,
       waypointsOnMap: waypointsById.size,
       source: CONFIG.ADMIN_WS_URL,
@@ -1139,8 +1324,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
       wsConnected: deps.getWsConnected(),
       playerMarks: deps.getLatestPlayerMarks(),
     };
-
-    deps.onRevisionChanged?.(snapshot.revision ?? null);
   }
 
   function isMapReady() {

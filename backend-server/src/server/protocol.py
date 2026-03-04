@@ -20,6 +20,9 @@ class HandshakePacket(PacketModel):
     programVersion: str | None = None
     roomCode: str | None = None
     roomId: str | None = None
+    preferredReportIntervalTicks: int | None = None
+    minReportIntervalTicks: int | None = None
+    maxReportIntervalTicks: int | None = None
 
 
 class PingPacket(PacketModel):
@@ -104,6 +107,13 @@ class EntitiesPatchPacket(PacketModel):
     delete: list[str] = Field(default_factory=list)
 
 
+class StateKeepalivePacket(PacketModel):
+    type: Literal["state_keepalive"]
+    submitPlayerId: str | None = None
+    players: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+
+
 class WaypointsUpdatePacket(PacketModel):
     type: Literal["waypoints_update"]
     submitPlayerId: str | None = None
@@ -141,6 +151,7 @@ PlayerInboundPacket = Annotated[
     | PlayersPatchPacket
     | EntitiesUpdatePacket
     | EntitiesPatchPacket
+    | StateKeepalivePacket
     | WaypointsUpdatePacket
     | WaypointsDeletePacket
     | WaypointsEntityDeathCancelPacket
@@ -240,8 +251,10 @@ class HandshakeAckPacket(OutboundPacket):
     error: str | None = None
     rejectReason: str | None = None
     digestIntervalSec: int | None = None
-    rev: int | None = None
-    revision: int | None = None
+    broadcastHz: float | None = None
+    reportIntervalTicks: int | None = None
+    playerTimeoutSec: int | None = None
+    entityTimeoutSec: int | None = None
 
 
 class AdminAckPacket(OutboundPacket):
@@ -261,13 +274,10 @@ class AdminAckPacket(OutboundPacket):
 class PongPacket(OutboundPacket):
     type: Literal["pong"] = "pong"
     serverTime: float
-    revision: int
 
 
 class SnapshotFullPacket(OutboundPacket):
     type: Literal["snapshot_full"] = "snapshot_full"
-    rev: int | None = None
-    revision: int | None = None
     channel: str | None = None
     players: dict[str, Any] = Field(default_factory=dict)
     entities: dict[str, Any] = Field(default_factory=dict)
@@ -282,8 +292,6 @@ class SnapshotFullPacket(OutboundPacket):
 
 class PatchPacket(OutboundPacket):
     type: Literal["patch"] = "patch"
-    rev: int | None = None
-    revision: int | None = None
     channel: str | None = None
     players: dict[str, Any] = Field(default_factory=dict)
     entities: dict[str, Any] = Field(default_factory=dict)
@@ -294,7 +302,6 @@ class PatchPacket(OutboundPacket):
 
 class DigestPacket(OutboundPacket):
     type: Literal["digest"] = "digest"
-    rev: int
     hashes: dict[str, str]
 
 
@@ -302,6 +309,13 @@ class RefreshRequestOutboundPacket(OutboundPacket):
     type: Literal["refresh_req"] = "refresh_req"
     reason: str
     serverTime: float
-    rev: int
     players: list[str]
     entities: list[str]
+
+
+class ReportRateHintPacket(OutboundPacket):
+    type: Literal["report_rate_hint"] = "report_rate_hint"
+    reportIntervalTicks: int
+    broadcastHz: float
+    reason: str | None = None
+

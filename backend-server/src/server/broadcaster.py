@@ -1,8 +1,8 @@
 import logging
 import time
 
-from .codec import JsonMessageCodec
-from .protocol import DigestPacket, PatchPacket, RefreshRequestOutboundPacket, SnapshotFullPacket
+from .codec import MsgpackMessageCodec
+from .protocol import DigestPacket, PatchPacket, RefreshRequestOutboundPacket, ReportRateHintPacket, SnapshotFullPacket
 from .state import ServerState
 
 
@@ -21,27 +21,23 @@ class Broadcaster:
 
     def __init__(self, state: ServerState) -> None:
         self.state = state
-        self._codec = JsonMessageCodec()
+        self._codec = MsgpackMessageCodec()
         self._admin_last_states: dict[str, dict] = {}
+        self._last_player_report_hints: dict[str, int] = {}
         self._player_sync_scopes = ("players", "entities", "waypoints")
         self._admin_sync_scopes = ("players", "entities", "waypoints", "playerMarks")
 
-    def _encode_message(self, packet) -> str:
+    def _encode_message(self, packet) -> bytes:
         return self._codec.encode(packet)
 
     def _build_full_message(
         self,
-        revision: int,
         scope_state: dict,
         *,
-        revision_key: str,
         channel: str | None = None,
         extra: dict | None = None,
     ) -> SnapshotFullPacket:
-        message = {
-            revision_key: revision,
-            **scope_state,
-        }
+        message = {**scope_state}
         if channel:
             message["channel"] = channel
         if isinstance(extra, dict) and extra:
@@ -50,17 +46,12 @@ class Broadcaster:
 
     def _build_patch_message(
         self,
-        revision: int,
         scope_patch: dict,
         *,
-        revision_key: str,
         channel: str | None = None,
         extra: dict | None = None,
     ) -> PatchPacket:
-        message = {
-            revision_key: revision,
-            **scope_patch,
-        }
+        message = {**scope_patch}
         if channel:
             message["channel"] = channel
         if isinstance(extra, dict) and extra:
@@ -150,14 +141,12 @@ class Broadcaster:
         admin_room = self.state.get_admin_room(admin_id)
         view_state = self._build_admin_view_state(admin_room)
         message = self._build_full_message(
-            self.state.revision,
             view_state,
-            revision_key="revision",
             channel="admin",
             extra={"server_time": time.time()},
         )
 
-        await ws.send_text(self._encode_message(message))
+        await ws.send_bytes(self._encode_message(message))
         self._admin_last_states[admin_id] = view_state
 
     def _build_visible_state_for_player(self, player_id: str) -> dict:
@@ -184,8 +173,8 @@ class Broadcaster:
         visible = self._build_visible_state_for_player(player_id)
         compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
         compact_scopes["playerMarks"] = dict(self.state.player_marks)
-        message = self._build_full_message(self.state.revision, compact_scopes, revision_key="rev")
-        await ws.send_text(self._encode_message(message))
+        message = self._build_full_message(compact_scopes)
+        await ws.send_bytes(self._encode_message(message))
 
     async def maybe_send_digest(self, player_id: str, visible_state: dict | None = None) -> None:
         """按节流周期发送摘要，帮助客户端做状态一致性检测。"""
@@ -202,14 +191,13 @@ class Broadcaster:
         if visible_state is None:
             visible_state = self._build_visible_state_for_player(player_id)
         message = DigestPacket(
-            rev=self.state.revision,
             hashes={
                 "players": self.state.state_digest(visible_state["players"]),
                 "entities": self.state.state_digest(visible_state["entities"]),
                 "waypoints": self.state.state_digest(visible_state["waypoints"]),
             },
         )
-        await ws.send_text(self._encode_message(message))
+        await ws.send_bytes(self._encode_message(message))
 
     async def broadcast_admin_updates(self, force_full: bool = False) -> None:
         """向管理端广播增量（必要时全量）。"""
@@ -225,24 +213,20 @@ class Broadcaster:
 
                 if force_full or previous_state is None:
                     message = self._build_full_message(
-                        self.state.revision,
                         current_state,
-                        revision_key="revision",
                         channel="admin",
                         extra={"server_time": time.time()},
                     )
-                    await ws.send_text(self._encode_message(message))
+                    await ws.send_bytes(self._encode_message(message))
                 else:
                     patch_state = self._compute_admin_patch(previous_state, current_state)
                     if self._has_admin_patch_changes(patch_state):
                         message = self._build_patch_message(
-                            self.state.revision,
                             patch_state,
-                            revision_key="revision",
                             channel="admin",
                             extra={"server_time": time.time()},
                         )
-                        await ws.send_text(self._encode_message(message))
+                        await ws.send_bytes(self._encode_message(message))
 
                 self._admin_last_states[admin_id] = current_state
             except Exception as e:
@@ -264,17 +248,13 @@ class Broadcaster:
         changes = self.state.refresh_resolved_states()
 
         changed = self.state.has_patch_changes(changes)
-        if changed:
-            rev = self.state.next_revision()
-        else:
-            rev = self.state.revision
 
         disconnected = []
         for player_id, ws in list(self.state.connections.items()):
             if not self.state.websocket_is_connected(ws):
                 logger.debug(
                     f"Skip delta broadcast to disconnected websocket player={player_id} "
-                    f"state=({self.state.websocket_state_label(ws)}) rev={rev} changed={changed}"
+                    f"state=({self.state.websocket_state_label(ws)}) changed={changed}"
                 )
                 disconnected.append(player_id)
                 continue
@@ -286,8 +266,8 @@ class Broadcaster:
                     if force_full_to_delta or changed:
                         compact_scopes = self._compact_scope_state(visible, self._player_sync_scopes)
                         compact_scopes["playerMarks"] = dict(self.state.player_marks)
-                        full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
-                        await ws.send_text(self._encode_message(full_msg))
+                        full_msg = self._build_full_message(compact_scopes)
+                        await ws.send_bytes(self._encode_message(full_msg))
                     await self.maybe_send_digest(player_id, visible)
                 elif force_full_to_delta:
                     compact_scopes = self._compact_scope_state(
@@ -299,30 +279,30 @@ class Broadcaster:
                         self._player_sync_scopes,
                     )
                     compact_scopes["playerMarks"] = dict(self.state.player_marks)
-                    full_msg = self._build_full_message(rev, compact_scopes, revision_key="rev")
-                    await ws.send_text(self._encode_message(full_msg))
+                    full_msg = self._build_full_message(compact_scopes)
+                    await ws.send_bytes(self._encode_message(full_msg))
                 elif changed:
                     patch_state = {
                         "players": changes["players"],
                         "entities": changes["entities"],
                         "waypoints": changes["waypoints"],
                     }
-                    patch_msg = self._build_patch_message(rev, patch_state, revision_key="rev")
-                    await ws.send_text(self._encode_message(patch_msg))
+                    patch_msg = self._build_patch_message(patch_state)
+                    await ws.send_bytes(self._encode_message(patch_msg))
 
                 if not requires_scoped:
                     await self.maybe_send_digest(player_id)
             except RuntimeError as e:
                 logger.warning(
                     f"RuntimeError sending delta update to player={player_id} "
-                    f"state=({self.state.websocket_state_label(ws)}) rev={rev} changed={changed} "
+                    f"state=({self.state.websocket_state_label(ws)}) changed={changed} "
                     f"force_full={force_full_to_delta}: {e}"
                 )
                 disconnected.append(player_id)
             except Exception as e:
                 logger.warning(
                     f"Error sending delta update to player={player_id} "
-                    f"state=({self.state.websocket_state_label(ws)}) rev={rev} changed={changed} "
+                    f"state=({self.state.websocket_state_label(ws)}) changed={changed} "
                     f"force_full={force_full_to_delta}: {e}"
                 )
                 disconnected.append(player_id)
@@ -380,12 +360,11 @@ class Broadcaster:
         message = RefreshRequestOutboundPacket(
             reason=reason,
             serverTime=now,
-            rev=self.state.revision,
             players=players,
             entities=entities,
         )
         try:
-            await ws.send_text(self._encode_message(message))
+            await ws.send_bytes(self._encode_message(message))
             self.state.mark_refresh_request_sent(source_id, now)
             logger.debug(
                 "Sent refresh_req "
@@ -397,3 +376,40 @@ class Broadcaster:
                 f"state=({self.state.websocket_state_label(ws)}): {e}"
             )
             self.state.remove_connection(source_id)
+
+    async def broadcast_report_rate_hints(self, reason: str = "runtime") -> None:
+        broadcast_hz = self.state.broadcast_hz
+        for player_id, ws in list(self.state.connections.items()):
+            if not self.state.websocket_is_connected(ws):
+                continue
+
+            caps = self.state.connection_caps.get(player_id, {})
+            suggested_ticks = self.state.negotiate_report_interval_ticks(
+                player_id,
+                caps.get("preferredReportIntervalTicks"),
+                caps.get("minReportIntervalTicks"),
+                caps.get("maxReportIntervalTicks"),
+            )
+            previous_ticks = self._last_player_report_hints.get(player_id)
+            if previous_ticks == suggested_ticks:
+                continue
+
+            self._last_player_report_hints[player_id] = suggested_ticks
+            if isinstance(caps, dict):
+                caps["negotiatedReportIntervalTicks"] = suggested_ticks
+
+            packet = ReportRateHintPacket(
+                reportIntervalTicks=suggested_ticks,
+                broadcastHz=broadcast_hz,
+                reason=reason,
+            )
+            try:
+                await ws.send_bytes(self._encode_message(packet))
+            except Exception as e:
+                logger.warning(
+                    "Error sending report_rate_hint to player=%s state=(%s): %s",
+                    player_id,
+                    self.state.websocket_state_label(ws),
+                    e,
+                )
+                self.state.remove_connection(player_id)

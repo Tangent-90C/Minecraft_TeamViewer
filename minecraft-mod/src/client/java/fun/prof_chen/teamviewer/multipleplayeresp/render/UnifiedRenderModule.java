@@ -38,6 +38,7 @@ public class UnifiedRenderModule {
 	private static final float DEFAULT_LINE_WIDTH = 2.5F;
 	private static final float TRACER_LINE_WIDTH = 1.0F;
 	private static final Map<Double, RenderLayer> NO_DEPTH_DEBUG_LINE_LAYER_CACHE = new ConcurrentHashMap<>();
+	private static volatile RenderLayer NO_DEPTH_DEBUG_QUAD_LAYER;
 
 	private static final Method RENDER_LAYER_FACTORY_METHOD;
 	private static final Field MULTI_PHASE_PIPELINE_FIELD;
@@ -228,6 +229,89 @@ public class UnifiedRenderModule {
 		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
 	}
 
+	public static void drawVerticalBeam(MatrixStack matrices, Vec3d baseCenter, double height, double radius, int color, boolean depthTest) {
+		if (height <= 0.0D || radius <= 0.0D) {
+			return;
+		}
+
+		Tessellator tessellator = Tessellator.getInstance();
+		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
+
+		float r = ((color >> 16) & 0xFF) / 255.0f;
+		float g = ((color >> 8) & 0xFF) / 255.0f;
+		float b = (color & 0xFF) / 255.0f;
+		float a = ((color >> 24) & 0xFF) / 255.0f;
+		if (a == 0.0f && (color >> 24) == 0) {
+			a = 1.0f;
+		}
+
+		float minX = (float) (baseCenter.x - radius);
+		float maxX = (float) (baseCenter.x + radius);
+		float minZ = (float) (baseCenter.z - radius);
+		float maxZ = (float) (baseCenter.z + radius);
+		float minY = (float) baseCenter.y;
+		float maxY = (float) (baseCenter.y + height);
+
+		addQuad(buffer, matrix4f, minX, minY, minZ, minX, maxY, minZ, maxX, maxY, minZ, maxX, minY, minZ, r, g, b, a);
+		addQuad(buffer, matrix4f, maxX, minY, maxZ, maxX, maxY, maxZ, minX, maxY, maxZ, minX, minY, maxZ, r, g, b, a);
+		addQuad(buffer, matrix4f, minX, minY, maxZ, minX, maxY, maxZ, minX, maxY, minZ, minX, minY, minZ, r, g, b, a);
+		addQuad(buffer, matrix4f, maxX, minY, minZ, maxX, maxY, minZ, maxX, maxY, maxZ, maxX, minY, maxZ, r, g, b, a);
+
+		getDebugQuadLayer(depthTest).draw(buffer.end());
+	}
+
+	public static void drawHorizontalPlane(MatrixStack matrices, Vec3d center, double halfSize, int color, boolean depthTest) {
+		if (halfSize <= 0.0D) {
+			return;
+		}
+
+		Tessellator tessellator = Tessellator.getInstance();
+		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
+
+		float r = ((color >> 16) & 0xFF) / 255.0f;
+		float g = ((color >> 8) & 0xFF) / 255.0f;
+		float b = (color & 0xFF) / 255.0f;
+		float a = ((color >> 24) & 0xFF) / 255.0f;
+		if (a == 0.0f && (color >> 24) == 0) {
+			a = 1.0f;
+		}
+
+		float y = (float) center.y;
+		float minX = (float) (center.x - halfSize);
+		float maxX = (float) (center.x + halfSize);
+		float minZ = (float) (center.z - halfSize);
+		float maxZ = (float) (center.z + halfSize);
+
+		addQuad(buffer, matrix4f, minX, y, minZ, minX, y, maxZ, maxX, y, maxZ, maxX, y, minZ, r, g, b, a);
+		getDebugQuadLayer(depthTest).draw(buffer.end());
+	}
+
+	private static void addQuad(BufferBuilder buffer,
+								 Matrix4f matrix4f,
+								 float x1,
+								 float y1,
+								 float z1,
+								 float x2,
+								 float y2,
+								 float z2,
+								 float x3,
+								 float y3,
+								 float z3,
+								 float x4,
+								 float y4,
+								 float z4,
+								 float r,
+								 float g,
+								 float b,
+								 float a) {
+		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x3, y3, z3).color(r, g, b, a);
+		buffer.vertex(matrix4f, x4, y4, z4).color(r, g, b, a);
+	}
+
 	private static RenderLayer getDebugLineStripLayer(double lineWidth, boolean depthTest) {
 		if (depthTest) {
 			return RenderLayer.getDebugLineStrip(lineWidth);
@@ -236,6 +320,23 @@ public class UnifiedRenderModule {
 			RenderLayer baseLayer = RenderLayer.getDebugLineStrip(width);
 			return createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_line_strip_" + sanitizeLineWidth(width));
 		});
+	}
+
+	private static RenderLayer getDebugQuadLayer(boolean depthTest) {
+		if (depthTest) {
+			return RenderLayer.getDebugQuads();
+		}
+		RenderLayer cachedLayer = NO_DEPTH_DEBUG_QUAD_LAYER;
+		if (cachedLayer != null) {
+			return cachedLayer;
+		}
+		synchronized (UnifiedRenderModule.class) {
+			if (NO_DEPTH_DEBUG_QUAD_LAYER == null) {
+				RenderLayer baseLayer = RenderLayer.getDebugQuads();
+				NO_DEPTH_DEBUG_QUAD_LAYER = createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_quads");
+			}
+			return NO_DEPTH_DEBUG_QUAD_LAYER;
+		}
 	}
 
 	private static RenderLayer createNoDepthLayer(RenderLayer baseLayer, String newLayerName) {

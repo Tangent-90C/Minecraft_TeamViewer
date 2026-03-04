@@ -46,14 +46,13 @@ declare const unsafeWindow: Window | undefined;
 
   let latestSnapshot: Record<string, any> | null = null;
   let latestPlayerMarks: Record<string, any> = {};
-  let lastRevision: number | null = null;
   let lastErrorText: string | null = null;
   let wsConnected = false;
   let sameServerFilterEnabled = false;
   let overlayStarted = false;
   let lastAdminMessageType: string | null = null;
   let lastAdminMessageAt = 0;
-  let lastAdminMessageRevision: number | null = null;
+  let versionIncompatibilityAlerted = false;
 
   let wsClient: ReturnType<typeof createAdminWsClient> | null = null;
 
@@ -360,9 +359,6 @@ declare const unsafeWindow: Window | undefined;
       }
       return ok;
     },
-    onRevisionChanged: (revision) => {
-      lastRevision = revision;
-    },
   });
 
   function loadConfigFromStorage() {
@@ -470,9 +466,8 @@ declare const unsafeWindow: Window | undefined;
     const lastErr = lastErrorText ? `错误: ${lastErrorText}` : '正常';
     const wsText = wsConnected ? '已连接' : '未连接';
     const players = mapCounts.markers;
-    const revText = lastRevision === null || lastRevision === undefined ? '-' : String(lastRevision);
     const serverFilterText = sameServerFilterEnabled ? '同服过滤:开' : '同服过滤:关';
-    settingsUi.updateStatus(`状态: ${lastErr} | WS: ${wsText} | 标记: ${players} | ${serverFilterText} | Rev: ${revText}`);
+    settingsUi.updateStatus(`状态: ${lastErr} | WS: ${wsText} | 标记: ${players} | ${serverFilterText}`);
   }
 
   function resolvePlayerIdFromInput() {
@@ -673,7 +668,6 @@ declare const unsafeWindow: Window | undefined;
         return {
           wsConnected,
           wsReadyState: status.wsReadyState ?? -1,
-          revision: lastRevision,
           lastErrorText,
           sameServerFilterEnabled,
           playersCount: snapshot.players ? Object.keys(snapshot.players).length : 0,
@@ -683,7 +677,6 @@ declare const unsafeWindow: Window | undefined;
           waypointsOnMap: mapCounts.waypoints,
           lastAdminMessageType,
           lastAdminMessageAt,
-          lastAdminMessageRevision,
         };
       },
       snapshot() {
@@ -704,7 +697,6 @@ declare const unsafeWindow: Window | undefined;
         return {
           type: lastAdminMessageType,
           at: lastAdminMessageAt,
-          revision: lastAdminMessageRevision,
         };
       },
       resync(reason = 'manual_console_debug') {
@@ -766,7 +758,6 @@ declare const unsafeWindow: Window | undefined;
           ? snapshot.playerMarks
           : {};
         refreshPlayerLists();
-        lastRevision = snapshot?.revision ?? lastRevision;
         lastErrorText = null;
         mapProjection.applyLatestSnapshotIfPossible(snapshot);
         updateUiStatus();
@@ -777,9 +768,30 @@ declare const unsafeWindow: Window | undefined;
         lastErrorText = status.lastErrorText;
         lastAdminMessageType = status.lastAdminMessageType;
         lastAdminMessageAt = status.lastAdminMessageAt;
-        lastAdminMessageRevision = status.lastAdminMessageRevision;
-        lastRevision = status.lastRevision;
         updateUiStatus();
+      },
+      onVersionIncompatible: (payload) => {
+        updateUiStatus();
+        if (versionIncompatibilityAlerted) return;
+        versionIncompatibilityAlerted = true;
+
+        const lines = [
+          'Squaremap Overlay 连接失败：前后端版本不兼容。',
+          payload.message,
+        ];
+
+        if (payload.serverProtocolVersion || payload.minimumCompatibleVersion) {
+          lines.push(
+            `服务端协议: ${payload.serverProtocolVersion || '未知'}，脚本最低兼容协议: ${payload.minimumCompatibleVersion || '未知'}`,
+          );
+        }
+        lines.push('请更新油猴脚本或后端服务到兼容版本后再重试。');
+
+        try {
+          PAGE.alert(lines.join('\n'));
+        } catch (_) {
+          console.error('[Squaremap Overlay] 版本不兼容', payload);
+        }
       },
     });
 

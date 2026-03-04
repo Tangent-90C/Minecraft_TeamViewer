@@ -9,8 +9,6 @@ public final class ProtocolPackets {
 
 	public static class BaseInboundPacket {
 		public String type;
-		public Long rev;
-		public Long revision;
 	}
 
 	public static class HandshakeAckInboundPacket extends BaseInboundPacket {
@@ -23,6 +21,10 @@ public final class ProtocolPackets {
 		public String rejectReason;
 		public Boolean deltaEnabled;
 		public Integer digestIntervalSec;
+		public Double broadcastHz;
+		public Integer reportIntervalTicks;
+		public Integer playerTimeoutSec;
+		public Integer entityTimeoutSec;
 	}
 
 	public static class SnapshotFullInboundPacket extends BaseInboundPacket {
@@ -50,6 +52,12 @@ public final class ProtocolPackets {
 		public String reason;
 	}
 
+	public static class ReportRateHintInboundPacket extends BaseInboundPacket {
+		public Integer reportIntervalTicks;
+		public Double broadcastHz;
+		public String reason;
+	}
+
 	public static class WaypointsUpdateInboundPacket extends BaseInboundPacket {
 		public Map<String, Object> waypoints;
 	}
@@ -64,54 +72,60 @@ public final class ProtocolPackets {
 		public String minimumCompatibleNetworkProtocolVersion;
 		public String localProgramVersion;
 		public String roomCode;
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
+		public Integer preferredReportIntervalTicks;
+		public Integer minReportIntervalTicks;
+		public Integer maxReportIntervalTicks;
 	}
 
 	public static class PlayersPatchPacket {
 		public final String type = "players_patch";
-		public String submitPlayerId;
-		public long ackRev;
+		public byte[] submitPlayerId;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
 	}
 
 	public static class EntitiesPatchPacket {
 		public final String type = "entities_patch";
-		public String submitPlayerId;
-		public long ackRev;
+		public byte[] submitPlayerId;
 		public Map<String, Map<String, Object>> upsert;
 		public List<String> delete;
 	}
 
+	public static class StateKeepalivePacket {
+		public final String type = "state_keepalive";
+		public byte[] submitPlayerId;
+		public List<String> players;
+		public List<String> entities;
+	}
+
 	public static class WaypointsUpdatePacket {
 		public final String type = "waypoints_update";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public Map<String, Map<String, Object>> waypoints;
 	}
 
 	public static class TabPlayersUpdatePacket {
 		public final String type = "tab_players_update";
-		public String submitPlayerId;
-		public long ackRev;
+		public byte[] submitPlayerId;
 		public List<Map<String, Object>> tabPlayers;
 	}
 
 	public static class WaypointsDeletePacket {
 		public final String type = "waypoints_delete";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public List<String> waypointIds;
 	}
 
 	public static class WaypointsEntityDeathCancelPacket {
 		public final String type = "waypoints_entity_death_cancel";
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 		public List<String> targetEntityIds;
 	}
 
 	public static class ResyncReqPacket {
 		public final String type = "resync_req";
 		public String reason;
-		public long ackRev;
-		public String submitPlayerId;
+		public byte[] submitPlayerId;
 	}
 }

@@ -34,24 +34,22 @@ public class Config {
     private String tracerStartMode = TRACER_START_CROSSHAIR; // 追踪线起始点模式：crosshair 或 top
     private double tracerTopOffset = 0.42; // 顶部模式上抬偏移
     private boolean enableCompression = true; // 是否启用WebSocket压缩
-    private int updateInterval = 10; // 上报频率间隔（tick），默认20tick约每秒1次
+    private int updateInterval = 5; // 上报频率间隔（tick），默认20tick约每秒1次
     private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
     private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
     private boolean uploadSharedWaypoints = true; // 是否上报共享路标
     private boolean showSharedWaypoints = true; // 是否显示共享路标
     private boolean showOwnSharedWaypointsOnMinimap = true; // 是否在小地图显示自己的共享报点
-    private boolean xrayMarkersAndBoxes = false; // 是否让报点标记与方框可穿墙显示
+    private boolean xrayMarkersAndBoxes = true; // 是否让报点标记与方框可穿墙显示
     private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
     private boolean enableMiddleClickCancelWaypoint = true; // 是否启用中键单击取消报点
     private boolean autoCancelWaypointOnEntityDeath = true; // 标记实体死亡后自动取消报点
     private int waypointTimeoutSeconds = 60; // 报点超时秒数
     private boolean enableLongTermWaypoint = true; // 是否启用长期报点
     private int longTermWaypointTimeoutSeconds = 1800; // 长期报点超时秒数
-    private int maxQuickMarkCount = 1; // 最多保留的快捷报点数量
-    @Deprecated
-    private Boolean keepOnlyLatestQuickMark = null; // 兼容旧配置
+    private int maxQuickMarkCount = 3; // 最多保留的快捷报点数量
     private String waypointUiStyle = WAYPOINT_UI_BEACON; // 报点UI样式
-    private boolean useSystemProxy = true; // 连接服务器时是否使用系统代理
+    private boolean useSystemProxy = false; // 连接服务器时是否使用系统代理
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -357,9 +355,6 @@ public class Config {
 
     public int getMaxQuickMarkCount() {
         if (maxQuickMarkCount < 1) {
-            if (keepOnlyLatestQuickMark != null) {
-                return keepOnlyLatestQuickMark ? 1 : 10;
-            }
             return 1;
         }
         return Math.min(maxQuickMarkCount, 20);

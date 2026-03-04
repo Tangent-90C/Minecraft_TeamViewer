@@ -1,0 +1,45 @@
+# ServerState 运行配置
+# 所有数值都在服务端启动时加载；未配置项会回退到代码默认值。
+
+[timeouts]
+# 玩家对象无新上报时的超时时间（秒）
+playerTimeoutSec = 120
+# 实体对象无新上报时的超时时间（秒）
+entityTimeoutSec = 300
+# 路标对象基础超时时间（秒）；路标可被 payload.ttlSeconds 覆盖
+waypointTimeoutSec = 60
+
+[timeoutLog]
+# 超时清理日志最小输出间隔（秒）
+intervalSec = 2.0
+# 单次最多输出多少条样本明细
+sampleLimit = 20
+
+[refreshRequest]
+# 同一来源两次 refresh_req 的最小间隔（秒）
+cooldownSec = 1.5
+# 预过期窗口：remaining <= leadSec 时触发 refresh_req（秒）
+leadSec = 1.2
+# 单次 refresh_req 每个 scope 最多携带对象数量
+maxItemsPerScope = 64
+
+[protocol]
+# digest 下发间隔（秒）
+digestIntervalSec = 10
+# 默认广播频率（Hz）
+defaultBroadcastHz = 20.0
+# 广播频率下限（Hz）
+minBroadcastHz = 2.0
+# Tab 玩家列表报告超时（秒）
+tabReportTimeoutSec = 45
+# 拥塞级别：[[连接数阈值, 降级广播Hz], ...]
+# 建议按阈值从大到小写（代码会自动排序）
+congestionLevels = [
+  [40, 2.0],
+  [20, 5.0],
+  [8, 10.0],
+]
+
+[features]
+# 是否启用同服过滤（基于 Tab 列表归并来源）
+sameServerFilterEnabled = false
