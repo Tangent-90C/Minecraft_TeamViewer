@@ -32,8 +32,8 @@ from server.state import ServerState
 
 
 
-NETWORK_PROTOCOL_VERSION = "0.3.1" # 服务器使用的协议版本
-SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION = "0.3.0" # 服务器兼容的最低协议版本
+NETWORK_PROTOCOL_VERSION = "0.4.0" # 服务器使用的协议版本
+SERVER_MIN_COMPATIBLE_PROTOCOL_VERSION = "0.4.0" # 服务器兼容的最低协议版本
 SERVER_PROGRAM_VERSION = "teamviewer-server-dev"
 
 

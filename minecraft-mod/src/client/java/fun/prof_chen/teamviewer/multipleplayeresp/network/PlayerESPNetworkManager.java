@@ -1024,7 +1024,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 
 		} catch (Exception e) {
-			LOGGER.error("PlayerESP Network - Error processing complete message: {}, bytes={}", e.getMessage(), message == null ? 0 : message.length);
+			LOGGER.error(
+				"PlayerESP Network - Error processing complete message: {}, bytes={}",
+				e.getMessage(),
+				message == null ? 0 : message.length,
+				e
+			);
 		}
 	}
 

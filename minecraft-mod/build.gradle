@@ -119,6 +119,9 @@ dependencies {
 
     implementation "org.msgpack:jackson-dataformat-msgpack:0.9.8"
     include "org.msgpack:jackson-dataformat-msgpack:0.9.8"
+
+    implementation "org.msgpack:msgpack-core:0.9.8"
+    include "org.msgpack:msgpack-core:0.9.8"
 }
 
 processResources {

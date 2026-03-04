@@ -2,7 +2,12 @@ package fun.prof_chen.teamviewer.multipleplayeresp.network.protocol;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.msgpack.core.MessagePack;
+import org.msgpack.core.MessageUnpacker;
 import org.msgpack.jackson.dataformat.MessagePackFactory;
+import org.msgpack.value.MapValue;
+import org.msgpack.value.Value;
+import org.msgpack.value.ValueType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,11 +62,61 @@ public final class MsgpackMessageCodec implements MessageCodec {
 	@Override
 	public <T> T decode(byte[] payload, Class<T> packetType) {
 		try {
-			Object decoded = objectMapper.readValue(payload, Object.class);
+			Object decoded = unpackValueToJavaObject(payload);
 			Object normalized = normalizeUuidInbound(decoded, null);
 			return objectMapper.convertValue(normalized, packetType);
 		} catch (Exception e) {
 			throw new IllegalArgumentException("Failed to decode msgpack payload", e);
+		}
+	}
+
+	private Object unpackValueToJavaObject(byte[] payload) throws Exception {
+		try (MessageUnpacker unpacker = MessagePack.newDefaultUnpacker(payload)) {
+			Value value = unpacker.unpackValue();
+			return valueToJava(value);
+		}
+	}
+
+	private Object valueToJava(Value value) {
+		if (value == null) {
+			return null;
+		}
+
+		ValueType type = value.getValueType();
+		switch (type) {
+			case NIL:
+				return null;
+			case BOOLEAN:
+				return value.asBooleanValue().getBoolean();
+			case INTEGER:
+				return value.asIntegerValue().toLong();
+			case FLOAT:
+				return value.asFloatValue().toDouble();
+			case STRING:
+				return value.asStringValue().asString();
+			case BINARY:
+				return value.asBinaryValue().asByteArray();
+			case ARRAY: {
+				List<Object> array = new ArrayList<>();
+				for (Value item : value.asArrayValue()) {
+					array.add(valueToJava(item));
+				}
+				return array;
+			}
+			case MAP: {
+				Map<Object, Object> map = new LinkedHashMap<>();
+				MapValue mapValue = value.asMapValue();
+				for (Map.Entry<Value, Value> entry : mapValue.entrySet()) {
+					Object key = valueToJava(entry.getKey());
+					Object itemValue = valueToJava(entry.getValue());
+					map.put(key, itemValue);
+				}
+				return map;
+			}
+			case EXTENSION:
+				return value.asExtensionValue().getData();
+			default:
+				return null;
 		}
 	}
 
@@ -156,7 +211,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 			}
 		}
 
-		if (UUID_KEYED_MAP_KEYS.contains(parentKey) && rawKey instanceof String text) {
+		if (parentKey != null && UUID_KEYED_MAP_KEYS.contains(parentKey) && rawKey instanceof String text) {
 			String canonical = UuidBinaryCodec.toCanonicalString(text);
 			if (canonical != null) {
 				return canonical;
@@ -167,7 +222,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 	}
 
 	private Object normalizeOutboundMapKey(Object rawKey, String parentKey) {
-		if (UUID_KEYED_MAP_KEYS.contains(parentKey) && rawKey instanceof String text) {
+		if (parentKey != null && UUID_KEYED_MAP_KEYS.contains(parentKey) && rawKey instanceof String text) {
 			byte[] raw = UuidBinaryCodec.toBytes(text);
 			if (raw != null) {
 				return raw;

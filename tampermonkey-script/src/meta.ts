@@ -1,7 +1,7 @@
 export const USERSCRIPT_META = {
   name: '地图玩家投影 - squaremap 版',
   namespace: 'https://map.nodemc.cc/',
-  version: '0.3.1',
+  version: '0.4.0',
   description: '将远程玩家信息投影到 squaremap 地图',
   author: 'Prof. Chen',
   match: [
@@ -17,8 +17,8 @@ export const USERSCRIPT_META = {
 };
 
 export const PROTOCOL_META = {
-  adminNetworkProtocolVersion: '0.3.1',
-  adminMinCompatibleNetworkProtocolVersion: '0.3.0',
+  adminNetworkProtocolVersion: '0.4.0',
+  adminMinCompatibleNetworkProtocolVersion: '0.4.0',
 };
 
 export const APP_META = {
