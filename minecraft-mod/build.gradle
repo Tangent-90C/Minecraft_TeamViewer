@@ -71,9 +71,9 @@ configurations.configureEach {
 //                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${LZ4_requiredVersion}")
 //                }
 //            }
-            if (group == 'com.fasterxml.jackson.core' && name == 'jackson-core') {
-                // 直接指定版本范围
-                details.useVersion "[${Jackson_requiredVersion},)"
+            if (group == 'com.fasterxml.jackson.core' && (name == 'jackson-core' || name == 'jackson-databind' || name == 'jackson-annotations')) {
+                // 固定 Jackson 三件套到相同版本，避免运行时方法签名不兼容
+                details.useVersion "${Jackson_requiredVersion}"
 
                 // 可选：简化的版本警告（避免内部类）
                 if (details.requested.version) {
@@ -114,14 +114,20 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
     include "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
 
+    implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
+    include "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
+
+    implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
+    include "com.fasterxml.jackson.core:jackson-core:2.18.6"
+
     implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
     include "com.fasterxml.jackson.core:jackson-databind:2.18.6"
 
-    implementation "org.msgpack:jackson-dataformat-msgpack:0.9.8"
-    include "org.msgpack:jackson-dataformat-msgpack:0.9.8"
+    implementation "org.msgpack:jackson-dataformat-msgpack:0.9.11"
+    include "org.msgpack:jackson-dataformat-msgpack:0.9.11"
 
-    implementation "org.msgpack:msgpack-core:0.9.8"
-    include "org.msgpack:msgpack-core:0.9.8"
+    implementation "org.msgpack:msgpack-core:0.9.11"
+    include "org.msgpack:msgpack-core:0.9.11"
 }
 
 processResources {
