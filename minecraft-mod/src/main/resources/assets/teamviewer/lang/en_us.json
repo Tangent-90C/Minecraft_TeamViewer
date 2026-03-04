@@ -79,7 +79,6 @@
   "screen.multipleplayeresp.config.network_settings": "Network Settings",
   "screen.multipleplayeresp.config.done": "Save",
   "screen.multipleplayeresp.config.save_network_settings": "Save Server Settings",
-  "screen.multipleplayeresp.config.exit_save": "Save & Exit",
   "screen.multipleplayeresp.config.cancel": "Cancel",
   "screen.multipleplayeresp.config.back": "Back",
   "screen.multipleplayeresp.config.connect": "Connect",
