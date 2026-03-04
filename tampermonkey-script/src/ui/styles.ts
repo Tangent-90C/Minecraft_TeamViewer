@@ -559,6 +559,25 @@ export const OVERLAY_STYLE_TEXT = `
     white-space: nowrap;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.4);
   }
+  .nodemc-tactical-anchor.is-preview .n-tactical-icon {
+    width: auto;
+    height: auto;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    line-height: 1;
+    font-size: 20px;
+    transform: translate(-50%, -95%);
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.95), 0 0 8px rgba(15, 23, 42, 0.25);
+  }
+  .nodemc-tactical-anchor.is-preview .n-tactical-label {
+    background: rgba(255, 255, 255, 0.78);
+    color: #0f172a;
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 10px 22px rgba(30, 64, 175, 0.24);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    backdrop-filter: blur(10px) saturate(1.1);
+  }
   .nodemc-tactical-menu {
     position: fixed;
     z-index: 2147483200;
@@ -566,11 +585,14 @@ export const OVERLAY_STYLE_TEXT = `
     max-width: calc(100vw - 24px);
     padding: 10px;
     border-radius: 10px;
-    border: 1px solid rgba(96, 165, 250, 0.45);
-    background: rgba(15, 23, 42, 0.94);
+    border: 1px solid rgba(59, 130, 246, 0.38);
+    background:
+      linear-gradient(150deg, rgba(147, 197, 253, 0.26) 0%, rgba(186, 230, 253, 0.14) 42%),
+      rgba(245, 252, 255, 0.52);
     color: #000;
-    box-shadow: 0 14px 30px rgba(2, 6, 23, 0.52);
-    backdrop-filter: blur(5px);
+    box-shadow: 0 14px 30px rgba(30, 64, 175, 0.24);
+    -webkit-backdrop-filter: blur(16px) saturate(1.18);
+    backdrop-filter: blur(16px) saturate(1.18);
     font-size: 12px;
     line-height: 1.35;
     color-scheme: light;
@@ -596,8 +618,8 @@ export const OVERLAY_STYLE_TEXT = `
     width: 100%;
     box-sizing: border-box;
     border-radius: 7px;
-    border: 1px solid rgba(148, 163, 184, 0.55);
-    background: rgba(30, 41, 59, 0.92);
+    border: 1px solid rgba(59, 130, 246, 0.42);
+    background: rgba(255, 255, 255, 0.64);
     color: #000 !important;
     -webkit-text-fill-color: #000;
     padding: 6px 8px;
@@ -625,7 +647,7 @@ export const OVERLAY_STYLE_TEXT = `
     cursor: pointer;
     font-weight: 600;
     color: #000;
-    background: rgba(51, 65, 85, 0.9);
+    background: rgba(255, 255, 255, 0.62);
   }
   .nodemc-tactical-menu .nmc-tactical-confirm {
     border-color: rgba(96, 165, 250, 0.7);
@@ -633,6 +655,6 @@ export const OVERLAY_STYLE_TEXT = `
   }
   .nodemc-tactical-menu .nmc-tactical-cancel {
     border-color: rgba(100, 116, 139, 0.65);
-    background: rgba(51, 65, 85, 0.95);
+    background: rgba(255, 255, 255, 0.72);
   }
 `;

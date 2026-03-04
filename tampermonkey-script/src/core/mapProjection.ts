@@ -43,6 +43,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let tacticalMenuEl: HTMLElement | null = null;
   let tacticalMenuOutsideClickHandler: ((event: MouseEvent) => void) | null = null;
   let tacticalMenuEscHandler: ((event: KeyboardEvent) => void) | null = null;
+  let tacticalPreviewMarker: any | null = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
   const trackedWaypointPositions = new Map<string, { x: number; z: number }>();
@@ -114,6 +115,51 @@ export function createMapProjection(deps: MapProjectionDeps) {
       try { tacticalMenuEl.remove(); } catch (_) {}
       tacticalMenuEl = null;
     }
+    if (tacticalPreviewMarker) {
+      try { tacticalPreviewMarker.remove(); } catch (_) {}
+      tacticalPreviewMarker = null;
+    }
+  }
+
+  function buildTacticalPreviewHtml(label: string, color: string) {
+    const safeLabel = escapeHtml(label || '战术标点');
+    const safeColor = normalizeColor(color, '#ef4444');
+    return `<div class="nodemc-tactical-anchor is-preview"><span class="n-tactical-icon" style="color:${safeColor};">📍</span><span class="n-tactical-label">预标点 · ${safeLabel}</span></div>`;
+  }
+
+  function upsertTacticalPreviewMarker(
+    map: any,
+    worldPos: { x: number; z: number },
+    selectedType: { label: string; color: string }
+  ) {
+    if (!map || !leafletRef || !worldPos || !selectedType) return;
+
+    const latLng = worldToLatLng(map, worldPos.x, worldPos.z);
+    const html = buildTacticalPreviewHtml(selectedType.label, selectedType.color);
+
+    if (tacticalPreviewMarker) {
+      try {
+        tacticalPreviewMarker.setLatLng(latLng);
+        if (typeof tacticalPreviewMarker.setZIndexOffset === 'function') {
+          tacticalPreviewMarker.setZIndexOffset(getWaypointZIndexOffset() + 400);
+        }
+        tacticalPreviewMarker.setIcon(
+          leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] })
+        );
+        return;
+      } catch (_) {
+        try { tacticalPreviewMarker.remove(); } catch (_) {}
+        tacticalPreviewMarker = null;
+      }
+    }
+
+    tacticalPreviewMarker = leafletRef.marker(latLng, {
+      icon: leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] }),
+      zIndexOffset: getWaypointZIndexOffset() + 400,
+      interactive: false,
+      keyboard: false,
+    });
+    tacticalPreviewMarker.addTo(map);
   }
 
   function resolveTtlFromMenuValue(rawValue: string, customRawValue: string) {
@@ -197,6 +243,16 @@ export function createMapProjection(deps: MapProjectionDeps) {
       option.textContent = `${item.name}（${item.label}）`;
       typeSelect.appendChild(option);
     }
+
+    const syncPreviewFromSelection = () => {
+      const selectedType = typeOptions.find((item) => item.value === typeSelect.value) || typeOptions[0];
+      upsertTacticalPreviewMarker(map, worldPos, selectedType);
+    };
+    syncPreviewFromSelection();
+
+    typeSelect.addEventListener('change', () => {
+      syncPreviewFromSelection();
+    });
 
     menu.addEventListener('mousedown', (e) => {
       e.stopPropagation();
@@ -916,7 +972,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
       : '';
 
     const iconHtml = showIcon
-      ? `<span class="n-waypoint-icon" style="position:absolute;left:0;top:50%;transform:translate(-50%,-50%);background:${color};width:${visual.iconSize}px;height:${visual.iconSize}px;display:inline-block;border-radius:50%;line-height:${visual.iconSize}px;text-align:center;font-size:${Math.max(10, Math.round(visual.iconSize * 0.7))}px;z-index:2;">📍</span>`
+      ? `<span class="n-waypoint-icon" style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);background:${color};width:${visual.iconSize}px;height:${visual.iconSize}px;display:inline-block;border-radius:50%;line-height:${visual.iconSize}px;text-align:center;font-size:${Math.max(10, Math.round(visual.iconSize * 0.7))}px;z-index:2;">📍</span>`
       : '';
 
     return `<div class="nodemc-waypoint-anchor" style="position:relative;display:inline-block;white-space:nowrap;">${textHtml}${iconHtml}</div>`;
