@@ -20,6 +20,7 @@ public final class ReportDataSchemas {
             Map.entry("health", true),
             Map.entry("maxHealth", true),
             Map.entry("armor", true),
+            Map.entry("isRidingHorse", true),
             Map.entry("width", true),
             Map.entry("height", true));
 
@@ -73,6 +74,7 @@ public final class ReportDataSchemas {
             float health,
             float maxHealth,
             float armor,
+            boolean isRidingHorse,
             float width,
             float height) {
         public Map<String, Object> toMap() {
@@ -89,6 +91,7 @@ public final class ReportDataSchemas {
             data.put("health", health);
             data.put("maxHealth", maxHealth);
             data.put("armor", armor);
+            data.put("isRidingHorse", isRidingHorse);
             data.put("width", width);
             data.put("height", height);
             return data;

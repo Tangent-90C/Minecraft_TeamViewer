@@ -18,6 +18,7 @@ export type PlayerData = {
   health?: number;
   maxHealth?: number;
   armor?: number;
+  isRidingHorse?: boolean;
   width?: number;
   height?: number;
 };
@@ -74,6 +75,7 @@ export const PLAYER_DATA_RELIABILITY: Record<string, boolean> = {
   health: true,
   maxHealth: true,
   armor: true,
+  isRidingHorse: true,
   width: false,
   height: false,
 };

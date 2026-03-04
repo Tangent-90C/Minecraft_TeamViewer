@@ -662,6 +662,14 @@ export function createMapProjection(deps: MapProjectionDeps) {
     return Math.max(0.02, Math.min(0.9, opacity));
   }
 
+  function parseBooleanFlag(value: unknown) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const text = String(value || '').trim().toLowerCase();
+    if (!text) return false;
+    return text === '1' || text === 'true' || text === 'yes' || text === 'on';
+  }
+
   function getReporterEffectColor(configColorKey: 'REPORTER_VISION_COLOR' | 'REPORTER_CHUNK_COLOR', fallbackColor: string) {
     const text = String(CONFIG[configColorKey] || '').trim();
     if (!text) return fallbackColor;
@@ -749,7 +757,17 @@ export function createMapProjection(deps: MapProjectionDeps) {
     return cells;
   }
 
-  function buildMarkerHtml(name: string, x: number, z: number, health: number | null, mark: any, townInfo: any, markerKind = 'player', isReporter = false) {
+  function buildMarkerHtml(
+    name: string,
+    x: number,
+    z: number,
+    health: number | null,
+    mark: any,
+    townInfo: any,
+    markerKind = 'player',
+    isReporter = false,
+    isRidingHorse = false
+  ) {
     const team = mark ? normalizeTeam(mark.team) : 'neutral';
     const color = mark ? normalizeColor(mark.color, deps.getConfiguredTeamColor(team)) : deps.getConfiguredTeamColor(team);
     const showIcon = Boolean(CONFIG.SHOW_PLAYER_ICON);
@@ -773,6 +791,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const safeTeam = escapeHtml(teamText);
     const safeNote = escapeHtml(noteText);
     const safeTown = escapeHtml(townText);
+    const ridingHtml = markerKind === 'player' && isRidingHorse
+      ? `<span class="n-ride"> · 🐎</span>`
+      : '';
     const visual = getMarkerVisualConfig(markerKind);
     const useReporterStar = markerKind === 'player' && isReporter && Boolean(CONFIG.REPORTER_STAR_ICON);
     const iconSize = useReporterStar ? Math.max(18, visual.iconSize + 10) : visual.iconSize;
@@ -791,9 +812,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const townHtml = CONFIG.SHOW_LABEL_TOWN_INFO && safeTown
       ? ` <span class="n-town">${safeTown}</span>`
       : '';
-    const gapAfterMeta = (teamHtml || safeNote || townHtml) ? ' ' : '';
+    const gapAfterMeta = (teamHtml || safeNote || townHtml || ridingHtml) ? ' ' : '';
     const textHtml = showText
-      ? `<span class="n-label" data-align="${showIcon ? 'with-icon' : 'left-anchor'}" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;left:${showIcon ? visual.labelOffset : 0}px;font-size:${visual.textSize}px;">${teamHtml}${safeNote ? `<span class="n-note"> · ${safeNote}</span>` : ''}${townHtml}${gapAfterMeta}${safeName}</span>`
+      ? `<span class="n-label" data-align="${showIcon ? 'with-icon' : 'left-anchor'}" style="border-color:${color};box-shadow:0 0 0 1px ${color}55 inset;left:${showIcon ? visual.labelOffset : 0}px;font-size:${visual.textSize}px;">${teamHtml}${safeNote ? `<span class="n-note"> · ${safeNote}</span>` : ''}${townHtml}${ridingHtml}${gapAfterMeta}${safeName}</span>`
       : '';
 
     return `<div class="nodemc-player-anchor">${iconHtml}${textHtml}</div>`;
@@ -813,7 +834,17 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const latLng = worldToLatLng(map, payload.x, payload.z);
     const markerKind = payload.kind || 'player';
     const zIndexOffset = getMarkerZIndexOffset(markerKind);
-    const html = buildMarkerHtml(payload.name, payload.x, payload.z, payload.health, payload.mark, payload.townInfo, markerKind, Boolean(payload.isReporter));
+    const html = buildMarkerHtml(
+      payload.name,
+      payload.x,
+      payload.z,
+      payload.health,
+      payload.mark,
+      payload.townInfo,
+      markerKind,
+      Boolean(payload.isReporter),
+      Boolean(payload.isRidingHorse)
+    );
 
     if (!html) {
       if (existing) {
@@ -1205,10 +1236,11 @@ export function createMapProjection(deps: MapProjectionDeps) {
           }
         : null;
       const isReporter = isReportingPlayer(String(playerId), rawNode, data, reportingPlayerIds);
+      const isRidingHorse = parseBooleanFlag((data as any).isRidingHorse);
 
       nextIds.add(String(playerId));
       nextPlayerIds.add(String(playerId));
-      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter });
+      upsertMarker(map, String(playerId), { x, z, health, name, mark: effectiveMark, townInfo, isReporter, isRidingHorse });
       try {
         upsertReporterEffects(map, String(playerId), { x, z, mark: effectiveMark }, isReporter);
       } catch (_) {

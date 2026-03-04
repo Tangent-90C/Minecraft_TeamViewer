@@ -198,6 +198,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				UUID pid = p.getUuid();
 				Vec3d pos = p.getPos();
 				Vec3d vel = p.getVelocity();
+				boolean isRidingHorse = isPlayerRidingHorse(p);
 				ReportDataSchemas.PlayerDataPayload payload = new ReportDataSchemas.PlayerDataPayload(
 						pos.x,
 						pos.y,
@@ -211,12 +212,25 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 						p.getHealth(),
 						p.getMaxHealth(),
 						0,
+						isRidingHorse,
 						p.getWidth(),
 						p.getHeight());
 				players.put(pid, payload.toMap());
 			}
 		}
 		return players;
+	}
+
+	private boolean isPlayerRidingHorse(AbstractClientPlayerEntity player) {
+		if (player == null) {
+			return false;
+		}
+		Entity vehicle = player.getVehicle();
+		if (vehicle == null || vehicle.getType() == null) {
+			return false;
+		}
+		String entityTypeText = String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT);
+		return entityTypeText.contains("horse");
 	}
 	
 	private Map<String, Map<String, Object>> collectEntityData(MinecraftClient client) {

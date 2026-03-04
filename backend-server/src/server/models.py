@@ -17,6 +17,7 @@ class PlayerData(BaseModel):
     health: float = Field(default=0, ge=0, description="当前生命值", json_schema_extra={"reliableTransport": True})
     maxHealth: float = Field(default=20, ge=0, description="最大生命值", json_schema_extra={"reliableTransport": True})
     armor: float = Field(default=0, ge=0, description="护甲值", json_schema_extra={"reliableTransport": True})
+    isRidingHorse: bool = Field(default=False, description="是否正在骑马", json_schema_extra={"reliableTransport": True})
     width: float = Field(default=0.6, gt=0, description="碰撞箱宽度", json_schema_extra={"reliableTransport": True})
     height: float = Field(default=1.8, gt=0, description="碰撞箱高度", json_schema_extra={"reliableTransport": True})
 
