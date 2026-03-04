@@ -7,6 +7,7 @@ import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.util.Formatting;
 import java.util.ArrayList;
 import java.util.List;
 import fun.prof_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
@@ -21,6 +22,7 @@ public class PlayerESPConfigScreen extends Screen {
     private ButtonWidget displaySettingsButton;
     private ButtonWidget networkSettingsButton;
     private ButtonWidget disconnectButton;
+    private ButtonWidget saveButton;
     // 连接状态显示
     private TextWidget connectionStatusWidget;
     private TextWidget saveHintWidget;
@@ -227,11 +229,11 @@ public class PlayerESPConfigScreen extends Screen {
         // 完成和取消按钮（并排显示）
         int buttonsY = getNextButtonY();
         int buttonWidth = (COMPONENT_WIDTH - 2) / 2;
-        ButtonWidget doneButton = ButtonWidget.builder(
+        this.saveButton = ButtonWidget.builder(
                 Text.translatable("screen.multipleplayeresp.config.done"),
                 button -> saveAndClose()
         ).dimensions(componentX, buttonsY, buttonWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(doneButton);
+        this.addDrawableChild(this.saveButton);
         
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.cancel"),
@@ -454,6 +456,7 @@ public class PlayerESPConfigScreen extends Screen {
         );
         this.saveHintWidget.alignCenter();
         updateSaveHintWidget();
+        updateSaveButton();
         this.addDrawableChild(this.saveHintWidget);
     }
 
@@ -466,6 +469,19 @@ public class PlayerESPConfigScreen extends Screen {
         if (hasChanges) {
             this.saveHintWidget.setMessage(Text.translatable("screen.multipleplayeresp.config.save_required_hint"));
             this.saveHintWidget.setTextColor(SAVE_HINT_COLOR_HIGHLIGHT);
+        }
+    }
+
+    private void updateSaveButton() {
+        if (this.saveButton == null) {
+            return;
+        }
+        if (hasUnsavedChanges()) {
+            this.saveButton.setMessage(
+                Text.translatable("screen.multipleplayeresp.config.done").formatted(Formatting.GREEN)
+            );
+        } else {
+            this.saveButton.setMessage(Text.translatable("screen.multipleplayeresp.config.done"));
         }
     }
 
@@ -581,5 +597,6 @@ public class PlayerESPConfigScreen extends Screen {
         // 更新连接按钮状态
         updateConnectButton();
         updateSaveHintWidget();
+        updateSaveButton();
     }
 }
