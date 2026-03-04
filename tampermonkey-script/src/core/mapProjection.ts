@@ -33,6 +33,7 @@ type MapProjectionDeps = {
 export function createMapProjection(deps: MapProjectionDeps) {
   const PAGE = deps.page;
   const CONFIG = deps.config;
+  const GLOBAL_MAP_KEY_REGEX = /(map|leaflet|square)/i;
 
   let leafletRef: any = null;
   let capturedMap: any = null;
@@ -44,6 +45,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   let tacticalMenuEscHandler: ((event: KeyboardEvent) => void) | null = null;
   const markersById = new Map<string, any>();
   const waypointsById = new Map<string, any>();
+  const trackedWaypointPositions = new Map<string, { x: number; z: number }>();
   const reporterEffectsById = new Map<string, { vision: any | null; chunkArea: any | null }>();
 
   const MAP_HOVER_BLOCK_CLASS = 'nodemc-map-hover-popup-blocked';
@@ -404,6 +406,19 @@ export function createMapProjection(deps: MapProjectionDeps) {
     );
   }
 
+  function getOwnDataPropertyValue(obj: any, key: string) {
+    if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return undefined;
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(obj, key);
+    } catch (_) {
+      return undefined;
+    }
+    if (!descriptor) return undefined;
+    if (!('value' in descriptor)) return undefined;
+    return descriptor.value;
+  }
+
   function captureMap(value: any) {
     if (!isLeafletMapCandidate(value)) return null;
     capturedMap = value;
@@ -449,7 +464,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
   }
 
   function installLeafletHook() {
-    let _L = (PAGE as any).L;
+    let _L = getOwnDataPropertyValue(PAGE as any, 'L');
 
     try {
       Object.defineProperty(PAGE, 'L', {
@@ -514,12 +529,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const pageObj = PAGE as Record<string, any>;
     const keys = Object.keys(pageObj);
     for (const key of keys) {
-      let value: any;
-      try {
-        value = pageObj[key];
-      } catch (_) {
-        continue;
-      }
+      if (!GLOBAL_MAP_KEY_REGEX.test(key)) continue;
+      const value = getOwnDataPropertyValue(pageObj, key);
+      if (value === undefined) continue;
 
       if (isLeafletMapCandidate(value) && value._container === mapContainer) {
         return value;
@@ -529,12 +541,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
       const nestedKeys = Object.keys(value);
       for (const nestedKey of nestedKeys) {
-        let nested: any;
-        try {
-          nested = value[nestedKey];
-        } catch (_) {
-          continue;
-        }
+        if (!GLOBAL_MAP_KEY_REGEX.test(nestedKey)) continue;
+        const nested = getOwnDataPropertyValue(value, nestedKey);
+        if (nested === undefined) continue;
         if (isLeafletMapCandidate(nested) && nested._container === mapContainer) {
           return nested;
         }
@@ -704,7 +713,6 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const teamText = team === 'friendly' ? '友军' : team === 'enemy' ? '敌军' : '中立';
     const noteText = mark && mark.label ? String(mark.label) : '';
     const townText = townInfo && typeof townInfo.text === 'string' ? townInfo.text.trim() : '';
-    const townColor = normalizeColor(townInfo && townInfo.color, '#93c5fd');
     const safeName = escapeHtml(text);
     const safeTeam = escapeHtml(teamText);
     const safeNote = escapeHtml(noteText);
@@ -722,10 +730,10 @@ export function createMapProjection(deps: MapProjectionDeps) {
       ? `<span class="n-icon ${markerKind === 'horse' ? 'is-horse' : ''}${iconExtraClass}" style="${iconVisualStyle}width:${iconSize}px;height:${iconSize}px;line-height:${iconSize}px;font-size:${Math.max(9, Math.round(iconSize * 0.75))}px;">${iconContent}</span>`
       : '';
     const teamHtml = CONFIG.SHOW_LABEL_TEAM_INFO && markerKind !== 'horse'
-      ? `<span class="n-team" style="color:${color}">[${safeTeam}]</span>`
+      ? `<span class="n-team">[${safeTeam}]</span>`
       : '';
     const townHtml = CONFIG.SHOW_LABEL_TOWN_INFO && safeTown
-      ? ` <span class="n-town" style="color:${townColor}">${safeTown}</span>`
+      ? ` <span class="n-town">${safeTown}</span>`
       : '';
     const gapAfterMeta = (teamHtml || safeNote || townHtml) ? ' ' : '';
     const textHtml = showText
@@ -738,6 +746,10 @@ export function createMapProjection(deps: MapProjectionDeps) {
   function getMarkerZIndexOffset(markerKind: string) {
     if (markerKind === 'horse') return -1000;
     return 1000;
+  }
+
+  function getWaypointZIndexOffset() {
+    return 3000;
   }
 
   function upsertMarker(map: any, playerId: string, payload: any) {
@@ -895,9 +907,10 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const showText = Boolean(CONFIG.SHOW_WAYPOINT_TEXT);
     if (!showIcon && !showText) return '';
 
-    const ownerHtml = owner ? `<span class="n-wp-owner" style="font-weight:600;display:inline-block;margin-right:6px;color:${color};">${escapeHtml(String(owner))}</span>` : '';
+    const ownerHtml = owner ? `<span class="n-wp-owner" style="font-weight:600;display:inline-block;margin-right:6px;">${escapeHtml(String(owner))}</span>` : '';
     const paddingLeft = showIcon ? Math.max(0, Math.round(visual.iconSize / 2) + 6) : 0;
     const textBg = 'background:rgba(255,255,255,0.85);color:#0f172a;padding:4px 6px;border-radius:6px;display:inline-block;';
+    //const textBg = 'background:rgba(255,255,255,0.85);color:#000;padding:4px 6px;border-radius:6px;display:inline-block;';
 
     const textHtml = showText
       ? `<span class="n-waypoint-label" style="direction:ltr;white-space:nowrap;padding-left:${paddingLeft}px;${textBg};font-size:${visual.textSize}px;">${ownerHtml}${escapeHtml(safeName)}</span>`
@@ -914,6 +927,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
     const existing = waypointsById.get(waypointId);
     if (!payload || typeof payload !== 'object') return;
     const latLng = worldToLatLng(map, payload.x, payload.z);
+    const zIndexOffset = getWaypointZIndexOffset();
     const html = buildWaypointHtml(payload.label || payload.name || waypointId, payload.x, payload.z, payload);
 
     if (!html) {
@@ -927,6 +941,9 @@ export function createMapProjection(deps: MapProjectionDeps) {
     if (existing) {
       try {
         existing.setLatLng(latLng);
+        if (typeof existing.setZIndexOffset === 'function') {
+          existing.setZIndexOffset(zIndexOffset);
+        }
         existing.setIcon(
           leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] })
         );
@@ -939,6 +956,7 @@ export function createMapProjection(deps: MapProjectionDeps) {
 
     const marker = leafletRef.marker(latLng, {
       icon: leafletRef.divIcon({ className: '', html, iconSize: [0, 0], iconAnchor: [0, 0] }),
+      zIndexOffset,
       interactive: false,
       keyboard: false,
     });
@@ -960,7 +978,88 @@ export function createMapProjection(deps: MapProjectionDeps) {
       if (nextIds.has(wpId)) continue;
       try { marker.remove(); } catch (_) {}
       waypointsById.delete(wpId);
+      trackedWaypointPositions.delete(wpId);
     }
+  }
+
+  function findTrackedPositionFromEntities(snapshot: any, targetEntityId: string, wantedDim: string) {
+    const entities = snapshot && typeof snapshot === 'object' ? snapshot.entities : null;
+    if (!entities || typeof entities !== 'object') return null;
+
+    const rawNode = (entities as Record<string, any>)[targetEntityId];
+    if (!rawNode) return null;
+    const data = getPlayerDataNode(rawNode);
+    if (!data) return null;
+
+    const dim = normalizeDimension(data.dimension);
+    if (wantedDim && dim !== wantedDim) return null;
+
+    const x = readNumber(data.x);
+    const z = readNumber(data.z);
+    if (x === null || z === null) return null;
+    return { x, z };
+  }
+
+  function findTrackedPositionFromPlayers(snapshot: any, targetEntityId: string, wantedDim: string) {
+    const players = snapshot && typeof snapshot === 'object' ? snapshot.players : null;
+    if (!players || typeof players !== 'object') return null;
+
+    const normalizedTargetId = String(targetEntityId || '').trim();
+    if (!normalizedTargetId) return null;
+
+    for (const [playerId, rawNode] of Object.entries(players as Record<string, any>)) {
+      const data = getPlayerDataNode(rawNode);
+      if (!data) continue;
+
+      const candidateIds = [
+        String(playerId || '').trim(),
+        String(data.playerUUID || data.uuid || data.id || '').trim(),
+      ];
+      if (!candidateIds.includes(normalizedTargetId)) continue;
+
+      const dim = normalizeDimension(data.dimension);
+      if (wantedDim && dim !== wantedDim) continue;
+
+      const x = readNumber(data.x);
+      const z = readNumber(data.z);
+      if (x === null || z === null) continue;
+      return { x, z };
+    }
+
+    return null;
+  }
+
+  function resolveWaypointTrackedPosition(snapshot: any, waypointId: string, data: any, wantedDim: string) {
+    const fallbackX = readNumber(data.x);
+    const fallbackZ = readNumber(data.z);
+    if (fallbackX === null || fallbackZ === null) return null;
+
+    const targetType = String(data.targetType || '').trim().toLowerCase();
+    const targetEntityId = String(data.targetEntityId || '').trim();
+    if (targetType !== 'entity' || !targetEntityId) {
+      const base = { x: fallbackX, z: fallbackZ };
+      trackedWaypointPositions.set(waypointId, base);
+      return base;
+    }
+
+    const entityPos = findTrackedPositionFromEntities(snapshot, targetEntityId, wantedDim);
+    if (entityPos) {
+      trackedWaypointPositions.set(waypointId, entityPos);
+      return entityPos;
+    }
+
+    const playerPos = findTrackedPositionFromPlayers(snapshot, targetEntityId, wantedDim);
+    if (playerPos) {
+      trackedWaypointPositions.set(waypointId, playerPos);
+      return playerPos;
+    }
+
+    const lastPos = trackedWaypointPositions.get(waypointId);
+    if (lastPos) return lastPos;
+
+    const initial = { x: fallbackX, z: fallbackZ };
+    trackedWaypointPositions.set(waypointId, initial);
+    return initial;
   }
 
   function removeMissingReporterEffects(nextIds: Set<string>) {
@@ -1107,19 +1206,20 @@ export function createMapProjection(deps: MapProjectionDeps) {
         const dim = normalizeDimension((data as any).dimension);
         if (wantedDim && dim !== wantedDim) continue;
 
-        const x = readNumber((data as any).x);
-        const z = readNumber((data as any).z);
-        if (x === null || z === null) continue;
+        const resolvedPos = resolveWaypointTrackedPosition(snapshot, String(wpId), data, wantedDim);
+        if (!resolvedPos) continue;
 
         nextWaypointIds.add(String(wpId));
         upsertWaypoint(map, String(wpId), {
-          x,
-          z,
+          x: resolvedPos.x,
+          z: resolvedPos.z,
           label: (data as any).label || (data as any).name || (data as any).title || String(wpId),
           color: (data as any).color || ((data as any).colorHex ? (data as any).colorHex : null) || null,
           kind: (data as any).waypointKind || null,
           ownerName: (data as any).ownerName || null,
           ownerId: (data as any).ownerId || null,
+          targetType: (data as any).targetType || null,
+          targetEntityId: (data as any).targetEntityId || null,
         });
       }
     }

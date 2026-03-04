@@ -12,6 +12,7 @@ export const UI_STYLE_TEXT = `
     --nmc-primary-hover: #2563eb;
     --nmc-danger: #dc2626;
     --nmc-danger-hover: #b91c1c;
+    color-scheme: light;
   }
   #nodemc-overlay-fab {
     position: fixed;
@@ -22,7 +23,7 @@ export const UI_STYLE_TEXT = `
     border-radius: 999px;
     border: 1px solid rgba(191, 219, 254, 0.6);
     background: radial-gradient(circle at 28% 22%, #93c5fd, #3b82f6 65%, #1d4ed8);
-    color: #fff;
+    color: #000;
     font-size: 15px;
     font-weight: 700;
     line-height: 34px;
@@ -63,6 +64,7 @@ export const UI_STYLE_TEXT = `
     backdrop-filter: blur(10px);
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, .6) transparent;
+    color-scheme: light;
   }
   #nodemc-overlay-panel::-webkit-scrollbar {
     width: 8px;
@@ -181,10 +183,15 @@ export const UI_STYLE_TEXT = `
     border-radius: 9px;
     border: 1px solid rgba(59, 130, 246, 0.42);
     background: var(--nmc-bg-panel);
-    color: var(--nmc-text-main);
+    color: #000 !important;
+    -webkit-text-fill-color: #000;
     padding: 7px 9px;
     outline: none;
     transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+  }
+  #nodemc-overlay-panel option {
+    color: #000;
+    background: #fff;
   }
   #nodemc-overlay-panel input[type="text"]:focus,
   #nodemc-overlay-panel input[type="number"]:focus,
@@ -194,7 +201,17 @@ export const UI_STYLE_TEXT = `
     background: rgba(255, 255, 255, 1);
   }
   #nodemc-overlay-panel input::placeholder {
-    color: rgba(148, 163, 184, 0.9);
+    color: #000;
+    -webkit-text-fill-color: #000;
+  }
+  #nodemc-overlay-panel input:-webkit-autofill,
+  #nodemc-overlay-panel input:-webkit-autofill:hover,
+  #nodemc-overlay-panel input:-webkit-autofill:focus,
+  #nodemc-overlay-panel select:-webkit-autofill,
+  #nodemc-overlay-panel textarea:-webkit-autofill {
+    -webkit-text-fill-color: #000 !important;
+    box-shadow: 0 0 0 1000px #fff inset;
+    transition: background-color 9999s ease-out 0s;
   }
   #nodemc-overlay-panel .n-check {
     display: flex;
@@ -227,7 +244,7 @@ export const UI_STYLE_TEXT = `
   #nodemc-overlay-panel button {
     border: 1px solid rgba(147,197,253,.48);
     background: linear-gradient(180deg, var(--nmc-primary), var(--nmc-primary-hover));
-    color: #fff;
+    color: #000;
     border-radius: 9px;
     padding: 6px 10px;
     font-weight: 600;
@@ -261,7 +278,7 @@ export const UI_STYLE_TEXT = `
   #nodemc-overlay-panel .n-btn-danger {
     border: 1px solid rgba(254, 202, 202, 0.5);
     background: linear-gradient(180deg, var(--nmc-danger), var(--nmc-danger-hover));
-    color: #fff;
+    color: #000;
     box-shadow: 0 8px 18px rgba(185, 28, 28, 0.3);
   }
   #nodemc-overlay-panel .n-link-btn {
@@ -422,7 +439,7 @@ export const UI_STYLE_TEXT = `
 export const OVERLAY_STYLE_TEXT = `
   .nodemc-projection-label {
     background: rgba(0, 0, 0, 0.78);
-    color: #fff;
+    color: #000;
     border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 6px;
     padding: 3px 7px;
@@ -550,15 +567,16 @@ export const OVERLAY_STYLE_TEXT = `
     border-radius: 10px;
     border: 1px solid rgba(96, 165, 250, 0.45);
     background: rgba(15, 23, 42, 0.94);
-    color: #e2e8f0;
+    color: #000;
     box-shadow: 0 14px 30px rgba(2, 6, 23, 0.52);
     backdrop-filter: blur(5px);
     font-size: 12px;
     line-height: 1.35;
+    color-scheme: light;
   }
   .nodemc-tactical-menu .nmc-tactical-title {
     font-weight: 700;
-    color: #f8fafc;
+    color: #000;
     margin-bottom: 8px;
     letter-spacing: .2px;
   }
@@ -569,7 +587,7 @@ export const OVERLAY_STYLE_TEXT = `
     margin-bottom: 8px;
   }
   .nodemc-tactical-menu .nmc-tactical-row > span {
-    color: #cbd5e1;
+    color: #000;
     font-size: 11px;
   }
   .nodemc-tactical-menu select,
@@ -579,9 +597,14 @@ export const OVERLAY_STYLE_TEXT = `
     border-radius: 7px;
     border: 1px solid rgba(148, 163, 184, 0.55);
     background: rgba(30, 41, 59, 0.92);
-    color: #f8fafc;
+    color: #000 !important;
+    -webkit-text-fill-color: #000;
     padding: 6px 8px;
     outline: none;
+  }
+  .nodemc-tactical-menu option {
+    color: #000;
+    background: #fff;
   }
   .nodemc-tactical-menu select:focus,
   .nodemc-tactical-menu input:focus {
@@ -600,7 +623,7 @@ export const OVERLAY_STYLE_TEXT = `
     padding: 6px 8px;
     cursor: pointer;
     font-weight: 600;
-    color: #f8fafc;
+    color: #000;
     background: rgba(51, 65, 85, 0.9);
   }
   .nodemc-tactical-menu .nmc-tactical-confirm {

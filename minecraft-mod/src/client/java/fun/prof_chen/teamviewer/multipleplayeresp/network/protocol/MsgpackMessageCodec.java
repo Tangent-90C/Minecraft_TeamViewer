@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.network.protocol;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.msgpack.jackson.dataformat.MessagePackFactory;
 
@@ -8,6 +9,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 
 	public MsgpackMessageCodec() {
 		this.objectMapper = new ObjectMapper(new MessagePackFactory());
+		this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 	}
 
 	@Override

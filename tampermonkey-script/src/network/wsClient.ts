@@ -27,6 +27,12 @@ type WsClientDeps = {
     lastAdminMessageType: string | null;
     lastAdminMessageAt: number;
   }) => void;
+  onVersionIncompatible?: (payload: {
+    message: string;
+    serverProtocolVersion?: string;
+    minimumCompatibleVersion?: string;
+    rejectReason?: string;
+  }) => void;
 };
 
 export function createEmptyAdminSnapshot() {
@@ -208,10 +214,25 @@ export function createAdminWsClient(deps: WsClientDeps) {
     return text || 'unknown';
   }
 
-  function forceCloseForIncompatibleVersion(message: string) {
+  function forceCloseForIncompatibleVersion(
+    message: string,
+    details?: {
+      serverProtocolVersion?: string;
+      minimumCompatibleVersion?: string;
+      rejectReason?: string;
+    },
+  ) {
     reconnectSuppressedByVersionIncompatibility = true;
     wsConnected = false;
     lastErrorText = message;
+    try {
+      deps.onVersionIncompatible?.({
+        message,
+        serverProtocolVersion: details?.serverProtocolVersion,
+        minimumCompatibleVersion: details?.minimumCompatibleVersion,
+        rejectReason: details?.rejectReason,
+      });
+    } catch (_) {}
     if (adminWs) {
       try {
         adminWs.close(1008, message.slice(0, 120));
@@ -296,7 +317,9 @@ export function createAdminWsClient(deps: WsClientDeps) {
           const handshakePayload = payload as Record<string, unknown>;
           if (handshakePayload.ready === false) {
             const reason = formatHandshakeRejectReason(handshakePayload);
-            forceCloseForIncompatibleVersion(`服务端拒绝握手: ${reason}`);
+            forceCloseForIncompatibleVersion(`服务端拒绝握手: ${reason}`, {
+              rejectReason: reason,
+            });
             return;
           }
 
@@ -304,6 +327,10 @@ export function createAdminWsClient(deps: WsClientDeps) {
           if (!protocolAtLeast(serverProtocolVersion, ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION)) {
             forceCloseForIncompatibleVersion(
               `版本不兼容: 服务端协议 ${serverProtocolVersion} 低于脚本最低要求 ${ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION}`,
+              {
+                serverProtocolVersion,
+                minimumCompatibleVersion: ADMIN_MIN_COMPATIBLE_NETWORK_PROTOCOL_VERSION,
+              },
             );
             return;
           }

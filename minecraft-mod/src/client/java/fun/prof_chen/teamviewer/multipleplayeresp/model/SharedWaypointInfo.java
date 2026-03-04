@@ -18,5 +18,7 @@ public record SharedWaypointInfo(
 		String targetEntityId,
 		String targetEntityType,
 		String targetEntityName,
-		String waypointKind) {
+		String waypointKind,
+		String tacticalType,
+		String sourceType) {
 }

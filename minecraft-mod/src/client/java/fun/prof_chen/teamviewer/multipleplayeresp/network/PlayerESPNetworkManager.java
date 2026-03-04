@@ -2326,6 +2326,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 				String waypointKind = data.has("waypointKind") && !data.get("waypointKind").isJsonNull()
 						? data.get("waypointKind").getAsString()
 						: null;
+				String tacticalType = data.has("tacticalType") && !data.get("tacticalType").isJsonNull()
+						? data.get("tacticalType").getAsString()
+						: null;
+				String sourceType = data.has("sourceType") && !data.get("sourceType").isJsonNull()
+						? data.get("sourceType").getAsString()
+						: null;
 
 				SharedWaypointInfo waypoint = new SharedWaypointInfo(
 						waypointId,
@@ -2343,7 +2349,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 						targetEntityId,
 						targetEntityType,
 						targetEntityName,
-						waypointKind);
+						waypointKind,
+						tacticalType,
+						sourceType);
 				result.put(waypointId, waypoint);
 			} catch (Exception e) {
 				LOGGER.error("Failed to parse shared waypoint {}: {}", entry.getKey(), e.getMessage());

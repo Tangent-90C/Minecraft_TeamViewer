@@ -487,7 +487,9 @@ public final class XaeroWaypointShareBridge {
 					null,
 					null,
 					null,
-					"manual"));
+					"manual",
+					null,
+					null));
 		}
 
 		return result;
@@ -675,7 +677,9 @@ public final class XaeroWaypointShareBridge {
 				source.targetEntityId(),
 				source.targetEntityType(),
 				source.targetEntityName(),
-				source.waypointKind());
+				source.waypointKind(),
+				source.tacticalType(),
+				source.sourceType());
 	}
 
 	private static boolean waypointPositionChanged(Object waypointObject, int expectedX, int expectedY, int expectedZ) {

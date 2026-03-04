@@ -52,6 +52,7 @@ declare const unsafeWindow: Window | undefined;
   let overlayStarted = false;
   let lastAdminMessageType: string | null = null;
   let lastAdminMessageAt = 0;
+  let versionIncompatibilityAlerted = false;
 
   let wsClient: ReturnType<typeof createAdminWsClient> | null = null;
 
@@ -768,6 +769,29 @@ declare const unsafeWindow: Window | undefined;
         lastAdminMessageType = status.lastAdminMessageType;
         lastAdminMessageAt = status.lastAdminMessageAt;
         updateUiStatus();
+      },
+      onVersionIncompatible: (payload) => {
+        updateUiStatus();
+        if (versionIncompatibilityAlerted) return;
+        versionIncompatibilityAlerted = true;
+
+        const lines = [
+          'Squaremap Overlay 连接失败：前后端版本不兼容。',
+          payload.message,
+        ];
+
+        if (payload.serverProtocolVersion || payload.minimumCompatibleVersion) {
+          lines.push(
+            `服务端协议: ${payload.serverProtocolVersion || '未知'}，脚本最低兼容协议: ${payload.minimumCompatibleVersion || '未知'}`,
+          );
+        }
+        lines.push('请更新油猴脚本或后端服务到兼容版本后再重试。');
+
+        try {
+          PAGE.alert(lines.join('\n'));
+        } catch (_) {
+          console.error('[Squaremap Overlay] 版本不兼容', payload);
+        }
       },
     });
 
