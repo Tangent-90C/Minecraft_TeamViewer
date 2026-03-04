@@ -40,6 +40,29 @@ function bytesToUuid(value: unknown): string | null {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function decodeMapKeyToStringOrNumber(key: unknown): string | number {
+  if (typeof key === 'string' || typeof key === 'number') {
+    return key;
+  }
+
+  if (key instanceof Uint8Array) {
+    return bytesToUuid(key) ?? Array.from(key).join(',');
+  }
+
+  if (key instanceof ArrayBuffer) {
+    const asBytes = new Uint8Array(key);
+    return bytesToUuid(asBytes) ?? Array.from(asBytes).join(',');
+  }
+
+  if (ArrayBuffer.isView(key)) {
+    const view = key as ArrayBufferView;
+    const asBytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    return bytesToUuid(asBytes) ?? Array.from(asBytes).join(',');
+  }
+
+  return String(key);
+}
+
 function uuidToBytes(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array && value.length === 16) {
     return value;
@@ -176,7 +199,9 @@ export class MsgpackNetworkMessageCodec implements NetworkMessageCodec {
 
     let parsed: unknown;
     try {
-      parsed = decodeMsgpack(raw);
+      parsed = decodeMsgpack(raw, {
+        mapKeyConverter: decodeMapKeyToStringOrNumber,
+      });
     } catch {
       return null;
     }
