@@ -149,7 +149,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			handleAutoCancelWaypointOnEntityDeath(client);
 
 			// 同步远程玩家到Xaero世界地图
-			XaeroWorldMapBridge.tick(remotePlayers, espEnabled);
+			XaeroWorldMapBridge.tick(resolvePlayersForWorldMapBridge(), espEnabled);
 			XaeroWaypointShareBridge.tick(networkManager, espEnabled, config);
 			
 			// 发送玩家位置到服务器
@@ -382,7 +382,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		boolean depthTestEnabled = !config.isXrayMarkersAndBoxes();
 		
 		Vec3d cameraPos = context.camera().getPos();
-		Map<UUID, Vec3d> positions = useServerPositions ? serverPlayerPositions : playerPositions;
+		Map<UUID, Vec3d> positions = useServerPositions ? serverPlayerPositions : resolvePlayersForRender();
 		
 		// 渲染玩家位置框
 		for (Map.Entry<UUID, Vec3d> entry : positions.entrySet()) {
@@ -435,6 +435,41 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		}
 
 		renderSharedWaypointMarkers(context, cameraPos, depthTestEnabled);
+	}
+
+	private Map<UUID, Vec3d> resolvePlayersForRender() {
+		if (config == null || !config.isPreferLocalDataForEsp()) {
+			return playerPositions;
+		}
+
+		Map<UUID, Vec3d> mergedPositions = new HashMap<>(playerPositions);
+		mergedPositions.putAll(serverPlayerPositions);
+		return mergedPositions;
+	}
+
+	private Map<UUID, RemotePlayerInfo> resolvePlayersForWorldMapBridge() {
+		if (config == null || !config.isPreferLocalDataForEsp()) {
+			return remotePlayers;
+		}
+
+		Map<UUID, RemotePlayerInfo> mergedPlayers = new HashMap<>(remotePlayers);
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client.world != null) {
+			for (AbstractClientPlayerEntity player : client.world.getPlayers()) {
+				if (player == null || player == client.player) {
+					continue;
+				}
+				RemotePlayerInfo localInfo = new RemotePlayerInfo(
+					player.getUuid(),
+					player.getPos(),
+					player.getWorld().getRegistryKey(),
+					player.getName().getString()
+				);
+				mergedPlayers.put(player.getUuid(), localInfo);
+			}
+		}
+
+		return mergedPlayers;
 	}
 
 	private int resolveRenderColorByTeam(String teamTag, int fallbackColor) {

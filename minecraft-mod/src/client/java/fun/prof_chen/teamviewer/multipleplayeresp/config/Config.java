@@ -54,6 +54,7 @@ public class Config {
     private double tampermonkeyBeamWidth = 0.34D; // 网页下发顶天立地光柱宽度（半径）
     private double tampermonkeyBeamHeight = 384.0D; // 网页下发顶天立地光柱高度
     private boolean useSystemProxy = false; // 连接服务器时是否使用系统代理
+    private boolean preferLocalDataForEsp = true; // 本地可见玩家优先使用本地数据（降低远程延迟影响）
     
     public static Config load() {
         if (!Files.exists(CONFIG_PATH)) {
@@ -488,5 +489,13 @@ public class Config {
 
     public void setUseSystemProxy(boolean useSystemProxy) {
         this.useSystemProxy = useSystemProxy;
+    }
+
+    public boolean isPreferLocalDataForEsp() {
+        return preferLocalDataForEsp;
+    }
+
+    public void setPreferLocalDataForEsp(boolean preferLocalDataForEsp) {
+        this.preferLocalDataForEsp = preferLocalDataForEsp;
     }
 }
