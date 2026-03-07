@@ -32,7 +32,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'gradle' # 自动缓存Gradle依赖
-          cache-dependency-path: 'minecraft-mod/build.gradle' # 指定Mod的Gradle文件
+          cache-dependency-path: 'build.gradle' # 指定Mod的Gradle文件
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
