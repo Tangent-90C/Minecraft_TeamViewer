@@ -15,15 +15,11 @@ on:
   push:
     branches: [ "main", "dev" ]
     paths:
-      - 'backend-server/**'
-      - 'minecraft-mod/**'
-      - 'tampermonkey-script/**'
+      - 'src/**'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
-      - 'backend-server/**'
-      - 'minecraft-mod/**'
-      - 'tampermonkey-script/**'
+      - 'src/**'
   schedule:
     - cron: '21 14 * * 2'
 

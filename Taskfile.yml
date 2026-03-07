@@ -1,42 +1,10 @@
 version: '3'
 
-vars:
-  MONKEY_VERSION:
-    sh: python3 -c "import json;print(json.load(open('tampermonkey-script/package.json', encoding='utf-8'))['version'])"
-  BACKEND_VERSION:
-    sh: python3 -c "import tomllib;print(tomllib.load(open('backend-server/pyproject.toml','rb'))['project']['version'])"
-
 tasks:
-  ci-build-assets:
-    desc: Build versioned tampermonkey and backend artifacts for CI
-    deps:
-      - build-monkey-versioned
-      - package-backend-versioned
-      - build-mod
-
-  build-monkey-versioned:
-    desc: Build tampermonkey script and output versioned userscript file
-    dir: tampermonkey-script
-    cmds:
-      - pnpm install --frozen-lockfile
-      - pnpm run build
-      - mkdir -p ../build-artifacts
-      - |
-        script_file=$(ls dist/*.user.js | head -n 1)
-        cp "$script_file" "../build-artifacts/tampermonkey-script-v{{.MONKEY_VERSION}}.user.js"
-
-  package-backend-versioned:
-    desc: Package backend directory to versioned tar.gz
-    cmds:
-      - mkdir -p build-artifacts
-      - rm -f "build-artifacts/backend-server-v{{.BACKEND_VERSION}}.tar.gz"
-      - tar --exclude='.venv' --exclude='__pycache__' -czf "build-artifacts/backend-server-v{{.BACKEND_VERSION}}.tar.gz" backend-server
-
   build-mod:
     desc: Build minecraft mod with gradle wrapper
-    dir: minecraft-mod
     cmds:
       - chmod +x ./gradlew
       - ./gradlew build
-      - mkdir -p ../build-artifacts
-      - find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' -exec cp {} ../build-artifacts/ \;
+      - mkdir -p ./build-artifacts
+      - find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' -exec cp {} ./build-artifacts/ \;

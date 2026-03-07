@@ -5,15 +5,11 @@ on:
   push:
     branches: [ "main", "dev" ]
     paths:
-      - 'backend-server/**'
-      - 'minecraft-mod/**'
-      - 'tampermonkey-script/**'
+      - 'src/**'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
-      - 'backend-server/**'
-      - 'minecraft-mod/**'
-      - 'tampermonkey-script/**'
+      - 'src/**'
 
 jobs:
   build:
@@ -55,36 +51,14 @@ jobs:
 
       - name: Build versioned artifacts with Task
         shell: bash
-        run: task ci-build-assets
+        run: task build-mod
 
       - name: Read artifact versions
         id: versions
         shell: bash
         run: |
-          backend_version=$(python3 -c "import tomllib;print(tomllib.load(open('backend-server/pyproject.toml','rb'))['project']['version'])")
-          monkey_version=$(python3 -c "import json;print(json.load(open('tampermonkey-script/package.json', encoding='utf-8'))['version'])")
-          mod_version=$(python3 -c "import re;print(re.search(r'^\s*mod_version\s*=\s*(.+?)\s*$', open('minecraft-mod/gradle.properties', encoding='utf-8').read(), re.M).group(1))")
-          echo "backend_version=${backend_version}" >> "$GITHUB_OUTPUT"
-          echo "monkey_version=${monkey_version}" >> "$GITHUB_OUTPUT"
+          mod_version=$(python3 -c "import re;print(re.search(r'^\s*mod_version\s*=\s*(.+?)\s*$', open('gradle.properties', encoding='utf-8').read(), re.M).group(1))")
           echo "mod_version=${mod_version}" >> "$GITHUB_OUTPUT"
-
-      # 上传Backend产物包
-      - name: Upload Backend Package
-        id: upload-backend
-        uses: actions/upload-artifact@v4
-        with:
-          name: MC-Teamviewer-backend-server-v${{ steps.versions.outputs.backend_version }}
-          path: build-artifacts/backend-server-v${{ steps.versions.outputs.backend_version }}.tar.gz
-          if-no-files-found: error  # 若文件夹为空则报错（避免上传空artifact）
-      
-      # 上传油猴脚本
-      - name: Upload Monkey
-        id: upload-monkey
-        uses: actions/upload-artifact@v4
-        with:
-          name: MC-Teamviewer-mod-tampermonkey-script-v${{ steps.versions.outputs.monkey_version }}
-          path: build-artifacts/tampermonkey-script-v${{ steps.versions.outputs.monkey_version }}.user.js
-          if-no-files-found: error
       
       # 上传编译产物
       - name: Upload built mod JAR

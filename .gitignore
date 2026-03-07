@@ -24,19 +24,14 @@ hs_err_pid*
 replay_pid*
 
 
-minecraft-mod/.gradle/
+.gradle/
 .idea/
-minecraft-mod/build/
-minecraft-mod/run/
 .vscode/
+build/
+run/
 
 .gradle/
 
 **/__pycache__
-
-# Node / Vite (tampermonkey-script)
-tampermonkey-script/node_modules/
-tampermonkey-script/dist/
-tampermonkey-script/.vite/
 
 build-artifacts/
