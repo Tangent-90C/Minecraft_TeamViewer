@@ -24,8 +24,8 @@ public class Config {
     private String serverURL = "ws://localhost:8080/playeresp";
     private String roomCode = "default";
     private int renderDistance = 128000;
-    private boolean showLines = true;
-    private boolean showBoxes = true;
+    private boolean showLines = false;
+    private boolean showBoxes = false;
     private int boxColor = 0x80FF0000; // 50%不透明红色
     private int lineColor = 0xFFFF0000; // 不透明红色
     private int friendlyTeamColor = DEFAULT_FRIENDLY_TEAM_COLOR;

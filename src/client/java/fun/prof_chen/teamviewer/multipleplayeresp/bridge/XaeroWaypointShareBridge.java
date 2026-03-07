@@ -35,6 +35,8 @@ public final class XaeroWaypointShareBridge {
 	private static final Map<String, SharedWaypointInfo> knownLocalWaypoints = new ConcurrentHashMap<>();
 	private static final Map<String, SharedWaypointInfo> latestRemoteWaypoints = new ConcurrentHashMap<>();
 	private static final Map<String, Object> appliedRemoteWaypointObjects = new ConcurrentHashMap<>();
+	private static final Map<String, String> appliedRemoteWaypointNames = new ConcurrentHashMap<>();
+	private static final Map<String, String> appliedRemoteWaypointFingerprints = new ConcurrentHashMap<>();
 	private static final Map<String, Vec3d> trackedEntityWaypointLastPositions = new ConcurrentHashMap<>();
 	private static final Map<String, SharedWaypointInfo> pendingRemoteUpserts = new ConcurrentHashMap<>();
 	private static final Set<String> pendingRemoteDeletes = ConcurrentHashMap.newKeySet();
@@ -78,6 +80,8 @@ public final class XaeroWaypointShareBridge {
 		pendingRemoteDeletes.add(waypointId);
 		latestRemoteWaypoints.remove(waypointId);
 		pendingRemoteUpserts.remove(waypointId);
+		appliedRemoteWaypointNames.remove(waypointId);
+		appliedRemoteWaypointFingerprints.remove(waypointId);
 		trackedEntityWaypointLastPositions.remove(waypointId);
 	}
 
@@ -141,6 +145,7 @@ public final class XaeroWaypointShareBridge {
 			UUID ownerId = client.player.getUuid();
 			String ownerName = client.player.getName().getString();
 			String dimension = client.world.getRegistryKey().getValue().toString();
+			syncDeletedSharedWaypointsFromMinimap(networkManager, ownerId, dimension, config);
 
 			Map<String, SharedWaypointInfo> currentLocal = readCurrentLocalWaypoints(ownerId, ownerName, dimension);
 			if (!baselineInitialized) {
@@ -212,6 +217,85 @@ public final class XaeroWaypointShareBridge {
 		}
 	}
 
+	private static void syncDeletedSharedWaypointsFromMinimap(
+			PlayerESPNetworkManager networkManager,
+			UUID localPlayerId,
+			String currentDimension,
+			Config config) {
+		if (networkManager == null || localPlayerId == null || currentDimension == null || config == null) {
+			return;
+		}
+		if (!config.isShowSharedWaypoints()) {
+			return;
+		}
+
+		try {
+			Object minimapSession = getMinimapSession();
+			if (minimapSession == null) {
+				return;
+			}
+			Object worldManager = invokeNoArg(minimapSession, "getWorldManager");
+			Object currentWorld = invokeNoArg(worldManager, "getCurrentWorld");
+			if (currentWorld == null) {
+				return;
+			}
+			Object currentWaypointSet = invokeNoArg(currentWorld, "getCurrentWaypointSet");
+			if (currentWaypointSet == null) {
+				return;
+			}
+
+			boolean includeOwnSharedWaypoints = config.isShowOwnSharedWaypointsOnMinimap();
+			List<String> deletedIds = new ArrayList<>();
+			boolean removedDemotedWaypoint = false;
+
+			for (String waypointId : new ArrayList<>(appliedRemoteWaypointNames.keySet())) {
+				if (waypointId == null || waypointId.isBlank() || pendingRemoteDeletes.contains(waypointId)) {
+					continue;
+				}
+
+				SharedWaypointInfo waypoint = latestRemoteWaypoints.get(waypointId);
+				if (!shouldTrackSharedWaypointDeletion(waypoint, localPlayerId, currentDimension, includeOwnSharedWaypoints)) {
+					continue;
+				}
+
+				Object existingObject = appliedRemoteWaypointObjects.get(waypointId);
+				if (existingObject != null && containsWaypointObject(currentWaypointSet, existingObject)) {
+					continue;
+				}
+
+				String decoratedName = appliedRemoteWaypointNames.get(waypointId);
+				if (decoratedName == null || decoratedName.isBlank()) {
+					continue;
+				}
+
+				Object currentObject = findWaypointObjectByExactName(currentWaypointSet, decoratedName);
+				if (currentObject != null) {
+					appliedRemoteWaypointObjects.put(waypointId, currentObject);
+					continue;
+				}
+
+				Object demotedObject = findDemotedSharedWaypointObject(currentWaypointSet, waypoint, currentDimension);
+				if (demotedObject != null) {
+					invokeSingleArg(currentWaypointSet, "remove", demotedObject);
+					removedDemotedWaypoint = true;
+				}
+
+				deletedIds.add(waypointId);
+			}
+
+			if (removedDemotedWaypoint) {
+				saveWaypointWorld(minimapSession, currentWorld);
+			}
+
+			if (!deletedIds.isEmpty()) {
+				deleteSharedWaypoints(deletedIds);
+				networkManager.sendWaypointsDelete(localPlayerId, deletedIds);
+			}
+		} catch (Exception e) {
+			LOGGER.debug("Failed to detect shared waypoint deletions from minimap: {}", e.getMessage());
+		}
+	}
+
 	private static void syncRemoteWaypoints(Config config) {
 		try {
 			Object minimapSession = getMinimapSession();
@@ -258,17 +342,22 @@ public final class XaeroWaypointShareBridge {
 			boolean includeOwnSharedWaypoints = config.isShowOwnSharedWaypointsOnMinimap();
 			boolean changed = false;
 			Set<String> keepIds = new HashSet<>();
-			Map<String, String> decoratedNameToId = new HashMap<>();
+			Map<String, List<String>> fingerprintToIds = new HashMap<>();
 
 			if (remoteReconcileRequired) {
 				changed |= removeAllSharedWaypoints(currentWaypointSet);
 				appliedRemoteWaypointObjects.clear();
+				appliedRemoteWaypointNames.clear();
+				appliedRemoteWaypointFingerprints.clear();
 				remoteReconcileRequired = false;
 			}
 
 			for (Map.Entry<String, SharedWaypointInfo> entry : latestRemoteWaypoints.entrySet()) {
 				SharedWaypointInfo waypoint = entry.getValue();
 				if (waypoint == null) {
+					continue;
+				}
+				if (shouldSuppressRemoteWaypointOnMinimap(waypoint, localPlayerId, currentDimension, includeOwnSharedWaypoints)) {
 					continue;
 				}
 				if (!includeOwnSharedWaypoints && waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
@@ -278,15 +367,28 @@ public final class XaeroWaypointShareBridge {
 						&& !Objects.equals(waypoint.dimension(), currentDimension)) {
 					continue;
 				}
-				decoratedNameToId.put(decorateSharedName(waypoint), entry.getKey());
+				Vec3d trackedPos = resolveWaypointSyncPosition(waypoint, currentDimension);
+				SharedWaypointInfo renderWaypoint = waypoint;
+				if (trackedPos != null) {
+					renderWaypoint = copyWaypointWithPosition(waypoint,
+							(int) Math.floor(trackedPos.x),
+							(int) Math.floor(trackedPos.y),
+							(int) Math.floor(trackedPos.z));
+				}
+				String fingerprint = renderFingerprint(renderWaypoint);
+				fingerprintToIds.computeIfAbsent(fingerprint, ignored -> new ArrayList<>()).add(entry.getKey());
 			}
 
-			changed |= reconcileExistingSharedWaypointsByName(currentWaypointSet, decoratedNameToId);
+			changed |= reconcileExistingSharedWaypointsByFingerprint(currentWaypointSet, fingerprintToIds);
 
 			for (Map.Entry<String, SharedWaypointInfo> entry : latestRemoteWaypoints.entrySet()) {
 				String waypointId = entry.getKey();
 				SharedWaypointInfo waypoint = entry.getValue();
 				if (waypoint == null) {
+					continue;
+				}
+				if (shouldSuppressRemoteWaypointOnMinimap(waypoint, localPlayerId, currentDimension, includeOwnSharedWaypoints)) {
+					removeRemoteWaypointById(currentWaypointSet, waypointId);
 					continue;
 				}
 				if (!includeOwnSharedWaypoints && waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
@@ -307,20 +409,28 @@ public final class XaeroWaypointShareBridge {
 							(int) Math.floor(trackedPos.z));
 				}
 				String decoratedName = decorateSharedName(renderWaypoint);
+				String fingerprint = renderFingerprint(renderWaypoint);
 
 				Object existingObject = appliedRemoteWaypointObjects.get(waypointId);
 				if (existingObject != null && containsWaypointObject(currentWaypointSet, existingObject)) {
-					if (!waypointPositionChanged(existingObject, renderWaypoint.x(), renderWaypoint.y(), renderWaypoint.z())) {
+					if (!waypointRenderChanged(existingObject, renderWaypoint, fingerprint)) {
+						appliedRemoteWaypointNames.put(waypointId, decoratedName);
+						appliedRemoteWaypointFingerprints.put(waypointId, fingerprint);
 						continue;
 					}
 					removeRemoteWaypointById(currentWaypointSet, waypointId);
 					changed = true;
 				} else {
 					appliedRemoteWaypointObjects.remove(waypointId);
-				}
-
-				if (removeSharedWaypointsByExactName(currentWaypointSet, decoratedName, null)) {
-					changed = true;
+					appliedRemoteWaypointNames.remove(waypointId);
+					appliedRemoteWaypointFingerprints.remove(waypointId);
+					Object matchedObject = findWaypointObjectByFingerprint(currentWaypointSet, fingerprint, null);
+					if (matchedObject != null) {
+						appliedRemoteWaypointObjects.put(waypointId, matchedObject);
+						appliedRemoteWaypointNames.put(waypointId, decoratedName);
+						appliedRemoteWaypointFingerprints.put(waypointId, fingerprint);
+						continue;
+					}
 				}
 
 				Object newWaypoint = createXaeroWaypoint(decoratedName, renderWaypoint);
@@ -329,6 +439,8 @@ public final class XaeroWaypointShareBridge {
 				}
 				invokeSingleArg(currentWaypointSet, "add", newWaypoint);
 				appliedRemoteWaypointObjects.put(waypointId, newWaypoint);
+				appliedRemoteWaypointNames.put(waypointId, decoratedName);
+				appliedRemoteWaypointFingerprints.put(waypointId, fingerprint);
 				changed = true;
 			}
 
@@ -349,7 +461,7 @@ public final class XaeroWaypointShareBridge {
 		}
 	}
 
-	private static boolean reconcileExistingSharedWaypointsByName(Object waypointSet, Map<String, String> decoratedNameToId) {
+	private static boolean reconcileExistingSharedWaypointsByFingerprint(Object waypointSet, Map<String, List<String>> fingerprintToIds) {
 		boolean changed = false;
 		try {
 			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
@@ -358,7 +470,6 @@ public final class XaeroWaypointShareBridge {
 			}
 
 			List<Object> staleObjects = new ArrayList<>();
-			Map<String, Object> firstMatchedObjectById = new HashMap<>();
 			for (Object waypointObject : waypoints) {
 				if (waypointObject == null) {
 					continue;
@@ -368,22 +479,17 @@ public final class XaeroWaypointShareBridge {
 					continue;
 				}
 
-				String matchedId = decoratedNameToId.get(name);
-				if (matchedId == null) {
+				String fingerprint = renderFingerprint(waypointObject);
+				List<String> matchedIds = fingerprintToIds.get(fingerprint);
+				if (matchedIds == null || matchedIds.isEmpty()) {
 					staleObjects.add(waypointObject);
 					continue;
 				}
 
-				Object firstObject = firstMatchedObjectById.get(matchedId);
-				if (firstObject == null) {
-					firstMatchedObjectById.put(matchedId, waypointObject);
-					appliedRemoteWaypointObjects.put(matchedId, waypointObject);
-					continue;
-				}
-
-				if (firstObject != waypointObject) {
-					staleObjects.add(waypointObject);
-				}
+				String matchedId = matchedIds.remove(0);
+				appliedRemoteWaypointObjects.put(matchedId, waypointObject);
+				appliedRemoteWaypointNames.put(matchedId, name);
+				appliedRemoteWaypointFingerprints.put(matchedId, fingerprint);
 			}
 
 			for (Object staleObject : staleObjects) {
@@ -393,40 +499,6 @@ public final class XaeroWaypointShareBridge {
 		} catch (Exception e) {
 			LOGGER.debug("Failed to reconcile existing shared waypoints: {}", e.getMessage());
 		}
-		return changed;
-	}
-
-	private static boolean removeSharedWaypointsByExactName(Object waypointSet, String exactName, Object excludeObject) {
-		if (waypointSet == null || exactName == null || exactName.isBlank()) {
-			return false;
-		}
-
-		boolean changed = false;
-		try {
-			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
-			if (!(iterableObject instanceof Iterable<?> waypoints)) {
-				return false;
-			}
-
-			List<Object> toRemove = new ArrayList<>();
-			for (Object waypointObject : waypoints) {
-				if (waypointObject == null || waypointObject == excludeObject) {
-					continue;
-				}
-				String name = stringValue(invokeNoArg(waypointObject, "getName"));
-				if (exactName.equals(name)) {
-					toRemove.add(waypointObject);
-				}
-			}
-
-			for (Object waypointObject : toRemove) {
-				invokeSingleArg(waypointSet, "remove", waypointObject);
-				changed = true;
-			}
-		} catch (Exception e) {
-			LOGGER.debug("Failed to remove duplicated shared waypoints by name: {}", e.getMessage());
-		}
-
 		return changed;
 	}
 
@@ -497,6 +569,11 @@ public final class XaeroWaypointShareBridge {
 
 	private static boolean removeRemoteWaypointById(Object waypointSet, String waypointId) {
 		Object existingObject = appliedRemoteWaypointObjects.remove(waypointId);
+		appliedRemoteWaypointNames.remove(waypointId);
+		String fingerprint = appliedRemoteWaypointFingerprints.remove(waypointId);
+		if (existingObject == null && fingerprint != null) {
+			existingObject = findWaypointObjectByFingerprint(waypointSet, fingerprint, null);
+		}
 		if (existingObject == null) {
 			return false;
 		}
@@ -506,12 +583,6 @@ public final class XaeroWaypointShareBridge {
 		} catch (Exception e) {
 			LOGGER.warn("Failed to remove remote waypoint {}: {}", waypointId, e.getMessage());
 			return false;
-		}
-	}
-
-	private static void removeAllAppliedRemoteWaypoints(Object waypointSet) {
-		for (String waypointId : new ArrayList<>(appliedRemoteWaypointObjects.keySet())) {
-			removeRemoteWaypointById(waypointSet, waypointId);
 		}
 	}
 
@@ -559,6 +630,8 @@ public final class XaeroWaypointShareBridge {
 			LOGGER.debug("Failed to remove prefixed shared waypoints: {}", e.getMessage());
 		}
 		appliedRemoteWaypointObjects.clear();
+		appliedRemoteWaypointNames.clear();
+		appliedRemoteWaypointFingerprints.clear();
 		trackedEntityWaypointLastPositions.clear();
 		return changed;
 	}
@@ -682,6 +755,18 @@ public final class XaeroWaypointShareBridge {
 				source.sourceType());
 	}
 
+	private static boolean waypointRenderChanged(Object waypointObject, SharedWaypointInfo expectedWaypoint, String expectedFingerprint) {
+		try {
+			String currentFingerprint = renderFingerprint(waypointObject);
+			if (!Objects.equals(currentFingerprint, expectedFingerprint)) {
+				return true;
+			}
+			return waypointPositionChanged(waypointObject, expectedWaypoint.x(), expectedWaypoint.y(), expectedWaypoint.z());
+		} catch (Exception e) {
+			return true;
+		}
+	}
+
 	private static boolean waypointPositionChanged(Object waypointObject, int expectedX, int expectedY, int expectedZ) {
 		try {
 			int currentX = intValue(invokeNoArg(waypointObject, "getX"), expectedX);
@@ -758,6 +843,146 @@ public final class XaeroWaypointShareBridge {
 		return false;
 	}
 
+	private static Object findWaypointObjectByExactName(Object waypointSet, String exactName) {
+		if (waypointSet == null || exactName == null || exactName.isBlank()) {
+			return null;
+		}
+		try {
+			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
+			if (!(iterableObject instanceof Iterable<?> waypoints)) {
+				return null;
+			}
+			for (Object waypointObject : waypoints) {
+				if (waypointObject == null) {
+					continue;
+				}
+				String name = stringValue(invokeNoArg(waypointObject, "getName"));
+				if (exactName.equals(name)) {
+					return waypointObject;
+				}
+			}
+		} catch (Exception ignored) {
+		}
+		return null;
+	}
+
+	private static Object findWaypointObjectByFingerprint(Object waypointSet, String fingerprint, Object excludeObject) {
+		if (waypointSet == null || fingerprint == null || fingerprint.isBlank()) {
+			return null;
+		}
+		try {
+			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
+			if (!(iterableObject instanceof Iterable<?> waypoints)) {
+				return null;
+			}
+			for (Object waypointObject : waypoints) {
+				if (waypointObject == null || waypointObject == excludeObject) {
+					continue;
+				}
+				String name = stringValue(invokeNoArg(waypointObject, "getName"));
+				if (name == null || !name.startsWith(SHARED_PREFIX)) {
+					continue;
+				}
+				if (fingerprint.equals(renderFingerprint(waypointObject))) {
+					return waypointObject;
+				}
+			}
+		} catch (Exception ignored) {
+		}
+		return null;
+	}
+
+	private static Object findDemotedSharedWaypointObject(Object waypointSet, SharedWaypointInfo waypoint, String currentDimension) {
+		if (waypointSet == null || waypoint == null) {
+			return null;
+		}
+
+		Set<String> candidateNames = new HashSet<>();
+		String compactName = compactSharedWaypointName(waypoint);
+		if (compactName != null && !compactName.isBlank()) {
+			candidateNames.add(compactName.trim());
+		}
+		String rawName = waypoint.name();
+		if (rawName != null && !rawName.isBlank()) {
+			candidateNames.add(rawName.trim());
+		}
+		if (candidateNames.isEmpty()) {
+			return null;
+		}
+
+		Vec3d resolvedPos = resolveWaypointSyncPosition(waypoint, currentDimension);
+		int expectedX = resolvedPos != null ? (int) Math.floor(resolvedPos.x) : waypoint.x();
+		int expectedY = resolvedPos != null ? (int) Math.floor(resolvedPos.y) : waypoint.y();
+		int expectedZ = resolvedPos != null ? (int) Math.floor(resolvedPos.z) : waypoint.z();
+
+		try {
+			Object iterableObject = invokeNoArg(waypointSet, "getWaypoints");
+			if (!(iterableObject instanceof Iterable<?> waypoints)) {
+				return null;
+			}
+			for (Object waypointObject : waypoints) {
+				if (waypointObject == null) {
+					continue;
+				}
+				String name = stringValue(invokeNoArg(waypointObject, "getName"));
+				if (name == null || name.isBlank() || name.startsWith(SHARED_PREFIX)) {
+					continue;
+				}
+				if (!candidateNames.contains(name.trim())) {
+					continue;
+				}
+
+				int waypointX = intValue(invokeNoArg(waypointObject, "getX"), expectedX);
+				int waypointY = intValue(invokeNoArg(waypointObject, "getY"), expectedY);
+				int waypointZ = intValue(invokeNoArg(waypointObject, "getZ"), expectedZ);
+				if (waypointX == expectedX && waypointY == expectedY && waypointZ == expectedZ) {
+					return waypointObject;
+				}
+			}
+		} catch (Exception ignored) {
+		}
+
+		return null;
+	}
+
+	private static boolean shouldTrackSharedWaypointDeletion(
+			SharedWaypointInfo waypoint,
+			UUID localPlayerId,
+			String currentDimension,
+			boolean includeOwnSharedWaypoints) {
+		if (waypoint == null) {
+			return false;
+		}
+		if (!includeOwnSharedWaypoints && waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId)) {
+			return false;
+		}
+		return waypoint.dimension() == null
+				|| waypoint.dimension().isBlank()
+				|| Objects.equals(waypoint.dimension(), currentDimension);
+	}
+
+	private static boolean shouldSuppressRemoteWaypointOnMinimap(
+			SharedWaypointInfo waypoint,
+			UUID localPlayerId,
+			String currentDimension,
+			boolean includeOwnSharedWaypoints) {
+		if (waypoint == null) {
+			return false;
+		}
+		if (!includeOwnSharedWaypoints) {
+			return waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId);
+		}
+		if (waypoint.ownerId() == null || !waypoint.ownerId().equals(localPlayerId)) {
+			return false;
+		}
+		if (waypoint.dimension() != null && !waypoint.dimension().isBlank()
+				&& !Objects.equals(waypoint.dimension(), currentDimension)) {
+			return false;
+		}
+		String waypointId = waypoint.waypointId();
+		return waypointId != null && knownLocalWaypoints.containsKey(waypointId);
+	}
+
 	private static Object getMinimapSession() {
 		try {
 			Class<?> xaeroSessionClass = Class.forName("xaero.common.XaeroMinimapSession");
@@ -817,11 +1042,66 @@ public final class XaeroWaypointShareBridge {
 	}
 
 	private static String decorateSharedName(SharedWaypointInfo sharedWaypoint) {
+		String name = compactSharedWaypointName(sharedWaypoint);
+		if (isAdminTacticalWaypoint(sharedWaypoint)) {
+			return SHARED_PREFIX + name;
+		}
+
 		String ownerName = sharedWaypoint.ownerName() == null || sharedWaypoint.ownerName().isBlank()
 				? "Unknown"
-				: sharedWaypoint.ownerName();
-		String name = compactSharedWaypointName(sharedWaypoint);
+				: sharedWaypoint.ownerName().trim();
+		if (ownerName.equals(name)) {
+			return SHARED_PREFIX + name;
+		}
 		return SHARED_PREFIX + ownerName + ": " + name;
+	}
+
+	private static String renderFingerprint(SharedWaypointInfo waypoint) {
+		if (waypoint == null) {
+			return "";
+		}
+		return decorateSharedName(waypoint)
+				+ "|" + safeSymbol(waypoint.symbol())
+				+ "|" + waypoint.color()
+				+ "|" + waypoint.x()
+				+ "|" + waypoint.y()
+				+ "|" + waypoint.z();
+	}
+
+	private static String renderFingerprint(Object waypointObject) {
+		if (waypointObject == null) {
+			return "";
+		}
+		try {
+			String name = stringValue(invokeNoArg(waypointObject, "getName"));
+			String symbol = safeSymbol(stringValue(invokeNoArg(waypointObject, "getSymbol")));
+			int color = intValue(invokeNoArg(waypointObject, "getColor"), 0);
+			int x = intValue(invokeNoArg(waypointObject, "getX"), 0);
+			int y = intValue(invokeNoArg(waypointObject, "getY"), 0);
+			int z = intValue(invokeNoArg(waypointObject, "getZ"), 0);
+			return (name == null ? "" : name)
+					+ "|" + symbol
+					+ "|" + color
+					+ "|" + x
+					+ "|" + y
+					+ "|" + z;
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	private static boolean isAdminTacticalWaypoint(SharedWaypointInfo sharedWaypoint) {
+		if (sharedWaypoint == null) {
+			return false;
+		}
+
+		String sourceType = sharedWaypoint.sourceType();
+		if (sourceType != null && sourceType.equalsIgnoreCase("admin_tactical")) {
+			return true;
+		}
+
+		String waypointKind = sharedWaypoint.waypointKind();
+		return waypointKind != null && waypointKind.equalsIgnoreCase("admin_tactical");
 	}
 
 	private static String compactSharedWaypointName(SharedWaypointInfo sharedWaypoint) {
