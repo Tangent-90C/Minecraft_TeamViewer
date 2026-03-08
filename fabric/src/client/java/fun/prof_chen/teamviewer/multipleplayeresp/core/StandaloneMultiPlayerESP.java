@@ -92,7 +92,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 	// 鼠标中键双击报点
 	private static final long MARK_DOUBLE_CLICK_MS = 300L;
-	private static final double MARK_RAYCAST_DISTANCE = 256.0D;
+	private static final double MARK_INTERACTION_RAYCAST_DISTANCE = 256.0D;
 	private static final double MARK_CANCEL_BASE_RADIUS = 1.2D;
 	private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
 	private static final double MARK_CANCEL_MAX_RADIUS = 4.0D;
@@ -680,7 +680,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		String currentDimension = client.world.getRegistryKey().getValue().toString();
 		Vec3d eyePos = client.player.getCameraPosVec(1.0F);
 		Vec3d lookVec = client.player.getRotationVec(1.0F).normalize();
-		double maxDistance = Math.max(config.getRenderDistance(), MARK_RAYCAST_DISTANCE);
+		double maxDistance = MARK_INTERACTION_RAYCAST_DISTANCE;
 
 		String selectedWaypointId = null;
 		double selectedScore = Double.MAX_VALUE;
@@ -878,7 +878,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 
 		Vec3d eyePos = client.player.getCameraPosVec(1.0F);
 		Vec3d lookVec = client.player.getRotationVec(1.0F).normalize();
-		double maxDistance = Math.max(config.getRenderDistance(), MARK_RAYCAST_DISTANCE);
+		double maxDistance = MARK_INTERACTION_RAYCAST_DISTANCE;
 		Vec3d rayEnd = eyePos.add(lookVec.multiply(maxDistance));
 
 		BlockHitResult blockHit = client.world.raycast(new RaycastContext(
