@@ -1,8 +1,9 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.network.bridge;
 
-import fun.prof_chen.teamviewer.multipleplayeresp.config.TeamviewerModMetadata;
-import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspRuntimeGateway;
 import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftDimensionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.config.TeamviewerModMetadata;
+import fun.prof_chen.teamviewer.multipleplayeresp.config.FabricModVersionProvider;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspRuntimeGateway;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.world.World;
 
@@ -26,7 +27,7 @@ public final class FabricPlayerEspRuntimeGateway implements PlayerEspRuntimeGate
 
     @Override
     public String getClientProgramVersion() {
-        return TeamviewerModMetadata.getModVersion();
+        return FabricModVersionProvider.getModVersion();
     }
 
     @Override

@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction.SharedWaypointBridgeConfig;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspConfigGateway;
-import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,75 +17,99 @@ public class Config implements SharedWaypointBridgeConfig, PlayerEspConfigGatewa
     public static final String WAYPOINT_UI_PIN = "pin";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
     private static final int DEFAULT_FRIENDLY_TEAM_COLOR = 0xFF3B82F6;
     private static final int DEFAULT_NEUTRAL_TEAM_COLOR = 0xFFEAB308;
     private static final int DEFAULT_ENEMY_TEAM_COLOR = 0xFFEF4444;
-    
+
+    private transient Path storagePath;
+
     private String serverURL = "ws://localhost:8080/playeresp";
     private String roomCode = "default";
     private int renderDistance = 128000;
     private boolean showLines = false;
     private boolean showBoxes = false;
-    private int boxColor = 0x80FF0000; // 50%不透明红色
-    private int lineColor = 0xFFFF0000; // 不透明红色
+    private int boxColor = 0x80FF0000;
+    private int lineColor = 0xFFFF0000;
     private int friendlyTeamColor = DEFAULT_FRIENDLY_TEAM_COLOR;
     private int neutralTeamColor = DEFAULT_NEUTRAL_TEAM_COLOR;
     private int enemyTeamColor = DEFAULT_ENEMY_TEAM_COLOR;
-    private String tracerStartMode = TRACER_START_CROSSHAIR; // 追踪线起始点模式：crosshair 或 top
-    private double tracerTopOffset = 0.42; // 顶部模式上抬偏移
-    private boolean enableCompression = true; // 是否启用WebSocket压缩
-    private int updateInterval = 5; // 上报频率间隔（tick），默认20tick约每秒1次
-    private boolean enablePlayerESP = true; // 是否启用PlayerESP功能
-    private boolean uploadEntities = true; // 是否上传实体信息（网络开销较高）
-    private boolean uploadSharedWaypoints = true; // 是否上报共享路标
-    private boolean showSharedWaypoints = true; // 是否显示共享路标
-    private boolean showOwnSharedWaypointsOnMinimap = true; // 是否在小地图显示自己的共享报点
-    private boolean xrayMarkersAndBoxes = true; // 是否让报点标记与方框可穿墙显示
-    private boolean enableMiddleDoubleClickMark = true; // 是否启用中键双击报点
-    private boolean enableMiddleClickCancelWaypoint = true; // 是否启用中键单击取消报点
-    private boolean autoCancelWaypointOnEntityDeath = true; // 标记实体死亡后自动取消报点
-    private int waypointTimeoutSeconds = 60; // 报点超时秒数
-    private boolean enableLongTermWaypoint = true; // 是否启用长期报点
-    private int longTermWaypointTimeoutSeconds = 1800; // 长期报点超时秒数
-    private int maxQuickMarkCount = 3; // 最多保留的快捷报点数量
-    private String waypointUiStyle = WAYPOINT_UI_BEACON; // 报点UI样式
-    private double waypointBeaconBeamWidth = 0.32D; // 普通报点光柱宽度（半径）
-    private double waypointBeaconBeamHeight = 7.6D; // 普通报点光柱高度
-    private double tampermonkeyBeamWidth = 0.34D; // 网页下发顶天立地光柱宽度（半径）
-    private double tampermonkeyBeamHeight = 384.0D; // 网页下发顶天立地光柱高度
-    private boolean useSystemProxy = false; // 连接服务器时是否使用系统代理
-    private boolean preferLocalDataForEsp = true; // 本地可见玩家优先使用本地数据（降低远程延迟影响）
-    
-    public static Config load() {
-        if (!Files.exists(CONFIG_PATH)) {
-            return new Config();
+    private String tracerStartMode = TRACER_START_CROSSHAIR;
+    private double tracerTopOffset = 0.42;
+    private boolean enableCompression = true;
+    private int updateInterval = 5;
+    private boolean enablePlayerESP = true;
+    private boolean uploadEntities = true;
+    private boolean uploadSharedWaypoints = true;
+    private boolean showSharedWaypoints = true;
+    private boolean showOwnSharedWaypointsOnMinimap = true;
+    private boolean xrayMarkersAndBoxes = true;
+    private boolean enableMiddleDoubleClickMark = true;
+    private boolean enableMiddleClickCancelWaypoint = true;
+    private boolean autoCancelWaypointOnEntityDeath = true;
+    private int waypointTimeoutSeconds = 60;
+    private boolean enableLongTermWaypoint = true;
+    private int longTermWaypointTimeoutSeconds = 1800;
+    private int maxQuickMarkCount = 3;
+    private String waypointUiStyle = WAYPOINT_UI_BEACON;
+    private double waypointBeaconBeamWidth = 0.32D;
+    private double waypointBeaconBeamHeight = 7.6D;
+    private double tampermonkeyBeamWidth = 0.34D;
+    private double tampermonkeyBeamHeight = 384.0D;
+    private boolean useSystemProxy = false;
+    private boolean preferLocalDataForEsp = true;
+
+    public static Config load(Path configPath) {
+        if (!Files.exists(configPath)) {
+            return createWithStoragePath(configPath);
         }
-        
+
         try {
-            String content = Files.readString(CONFIG_PATH);
-            return GSON.fromJson(content, Config.class);
+            String content = Files.readString(configPath);
+            Config config = GSON.fromJson(content, Config.class);
+            if (config == null) {
+                return createWithStoragePath(configPath);
+            }
+            config.storagePath = configPath;
+            return config;
         } catch (Exception e) {
             System.err.println("Failed to load MultiPlayer ESP config: " + e.getMessage());
-            return new Config();
+            return createWithStoragePath(configPath);
         }
     }
-    
+
+    private static Config createWithStoragePath(Path configPath) {
+        Config config = new Config();
+        config.storagePath = configPath;
+        return config;
+    }
+
     public void save() {
+        if (storagePath == null) {
+            System.err.println("Failed to save MultiPlayer ESP config: storage path is not configured");
+            return;
+        }
+
         try {
+            Path parent = storagePath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
             String content = GSON.toJson(this);
-            Files.writeString(CONFIG_PATH, content);
+            Files.writeString(storagePath, content);
         } catch (IOException e) {
             System.err.println("Failed to save MultiPlayer ESP config: " + e.getMessage());
         }
     }
-    
-    // Getters and setters
+
+    public void setStoragePath(Path storagePath) {
+        this.storagePath = storagePath;
+    }
+
     @Override
     public String getServerURL() {
         return serverURL;
     }
-    
+
     @Override
     public void setServerURL(String serverURL) {
         this.serverURL = serverURL;
@@ -120,43 +143,43 @@ public class Config implements SharedWaypointBridgeConfig, PlayerEspConfigGatewa
         }
         this.roomCode = normalized.length() > 64 ? normalized.substring(0, 64) : normalized;
     }
-    
+
     public int getRenderDistance() {
         return renderDistance;
     }
-    
+
     public void setRenderDistance(int renderDistance) {
         this.renderDistance = renderDistance;
     }
-    
+
     public boolean isShowLines() {
         return showLines;
     }
-    
+
     public void setShowLines(boolean showLines) {
         this.showLines = showLines;
     }
-    
+
     public boolean isShowBoxes() {
         return showBoxes;
     }
-    
+
     public void setShowBoxes(boolean showBoxes) {
         this.showBoxes = showBoxes;
     }
-    
+
     public int getBoxColor() {
         return boxColor;
     }
-    
+
     public void setBoxColor(int boxColor) {
         this.boxColor = boxColor;
     }
-    
+
     public int getLineColor() {
         return lineColor;
     }
-    
+
     public void setLineColor(int lineColor) {
         this.lineColor = lineColor;
     }
@@ -234,30 +257,31 @@ public class Config implements SharedWaypointBridgeConfig, PlayerEspConfigGatewa
         }
         this.tracerTopOffset = Math.min(tracerTopOffset, 1.5);
     }
-    
+
     public boolean isEnableCompression() {
         return enableCompression;
     }
-    
+
     public void setEnableCompression(boolean enableCompression) {
         this.enableCompression = enableCompression;
     }
-    
+
     public int getUpdateInterval() {
         return updateInterval;
     }
-    
+
     public void setUpdateInterval(int updateInterval) {
-        // 限制最小值为1，最大值为1000tick（50秒）
         if (updateInterval < 1) {
             this.updateInterval = 1;
-        } else this.updateInterval = Math.min(updateInterval, 1000);
+        } else {
+            this.updateInterval = Math.min(updateInterval, 1000);
+        }
     }
-    
+
     public boolean isEnablePlayerESP() {
         return enablePlayerESP;
     }
-    
+
     public void setEnablePlayerESP(boolean enablePlayerESP) {
         this.enablePlayerESP = enablePlayerESP;
     }

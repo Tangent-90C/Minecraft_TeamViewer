@@ -27,6 +27,7 @@ import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
+import fun.prof_chen.teamviewer.multipleplayeresp.config.FabricConfigLoader;
 import fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction.MinimapBridgeRegistry;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
@@ -105,7 +106,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		LOGGER.info("Initializing MultiPlayer ESP mod");
 		
 		// 加载配置
-		config = Config.load();
+		config = FabricConfigLoader.load();
 		
 		// 初始化网络管理器
 		networkManager = new PlayerESPNetworkManager(
