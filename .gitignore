@@ -29,6 +29,9 @@ replay_pid*
 .vscode/
 build/
 run/
+fabric/bin/
+common/bin/
+forge/bin/
 
 .gradle/
 
