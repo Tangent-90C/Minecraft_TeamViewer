@@ -1,34 +1,44 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.registry;
 
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.abstraction.MapBridgeModule;
 import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.journey.JourneyMapBridgeModule;
 import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.xaero.XaeroMapBridgeModule;
 import net.fabricmc.loader.api.FabricLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 public final class FabricMapBridgeBootstrap {
-	private static final String JOURNEYMAP_MOD_ID = "journeymap";
-	private static final String XAERO_MINIMAP_MOD_ID = "xaerominimap";
-	private static final String XAERO_WORLDMAP_MOD_ID = "xaeroworldmap";
+	private static final Logger LOGGER = LoggerFactory.getLogger(FabricMapBridgeBootstrap.class);
+	private static final List<MapBridgeModule> MODULES = List.of(
+			new XaeroMapBridgeModule(),
+			new JourneyMapBridgeModule());
 
 	private FabricMapBridgeBootstrap() {
 	}
 
 	public static MapBridgeRegistry createRegistry() {
 		MapBridgeRegistry registry = new MapBridgeRegistry();
-		if (isXaeroInstalled()) {
-			new XaeroMapBridgeModule().register(registry);
-		}
-		if (isJourneyMapInstalled()) {
-			new JourneyMapBridgeModule().register(registry);
+		for (MapBridgeModule module : MODULES) {
+			if (!isActive(module)) {
+				LOGGER.debug("Skipping {} map bridge module: integrationMode={}, activationMods={}",
+						module.displayName(),
+						module.integrationMode(),
+						module.activationModIds());
+				continue;
+			}
+			module.register(registry);
+			LOGGER.info("Registered {} map bridge module: integrationMode={}, activationMods={}",
+					module.displayName(),
+					module.integrationMode(),
+					module.activationModIds());
 		}
 		return registry;
 	}
 
-	private static boolean isXaeroInstalled() {
+	private static boolean isActive(MapBridgeModule module) {
 		FabricLoader loader = FabricLoader.getInstance();
-		return loader.isModLoaded(XAERO_MINIMAP_MOD_ID) || loader.isModLoaded(XAERO_WORLDMAP_MOD_ID);
-	}
-
-	private static boolean isJourneyMapInstalled() {
-		return FabricLoader.getInstance().isModLoaded(JOURNEYMAP_MOD_ID);
+		return module.activationModIds().stream().anyMatch(loader::isModLoaded);
 	}
 }
