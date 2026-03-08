@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft;
+package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import net.minecraft.util.math.Vec3d;

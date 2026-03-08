@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.ui;
+package fun.prof_chen.teamviewer.multipleplayeresp.screen;
 
 import fun.prof_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
 import net.minecraft.client.MinecraftClient;

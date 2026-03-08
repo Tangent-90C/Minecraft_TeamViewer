@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.ui;
+package fun.prof_chen.teamviewer.multipleplayeresp.screen;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;

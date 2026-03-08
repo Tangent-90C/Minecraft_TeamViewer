@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft;
+package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;

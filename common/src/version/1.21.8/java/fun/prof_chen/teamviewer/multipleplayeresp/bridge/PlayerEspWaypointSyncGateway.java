@@ -1,9 +1,9 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.network;
+package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
-import fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft.MinecraftPositionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftPositionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.PlayerESPNetworkManager;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointUpdateListener;

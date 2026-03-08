@@ -3,13 +3,14 @@ package fun.prof_chen.teamviewer.multipleplayeresp.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction.SharedWaypointBridgeConfig;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspConfigGateway;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class Config implements SharedWaypointBridgeConfig {
+public class Config implements SharedWaypointBridgeConfig, PlayerEspConfigGateway {
     public static final String TRACER_START_CROSSHAIR = "crosshair";
     public static final String TRACER_START_TOP = "top";
     public static final String WAYPOINT_UI_BEACON = "beacon";
@@ -81,14 +82,17 @@ public class Config implements SharedWaypointBridgeConfig {
     }
     
     // Getters and setters
+    @Override
     public String getServerURL() {
         return serverURL;
     }
     
+    @Override
     public void setServerURL(String serverURL) {
         this.serverURL = serverURL;
     }
 
+    @Override
     public String getRoomCode() {
         if (roomCode == null) {
             return "default";
@@ -103,6 +107,7 @@ public class Config implements SharedWaypointBridgeConfig {
         return normalized;
     }
 
+    @Override
     public void setRoomCode(String roomCode) {
         if (roomCode == null) {
             this.roomCode = "default";
@@ -484,12 +489,19 @@ public class Config implements SharedWaypointBridgeConfig {
         this.tampermonkeyBeamHeight = Math.min(tampermonkeyBeamHeight, 1024.0D);
     }
 
+    @Override
     public boolean isUseSystemProxy() {
         return useSystemProxy;
     }
 
+    @Override
     public void setUseSystemProxy(boolean useSystemProxy) {
         this.useSystemProxy = useSystemProxy;
+    }
+
+    @Override
+    public int getUpdateIntervalTicks() {
+        return getUpdateInterval();
     }
 
     public boolean isPreferLocalDataForEsp() {

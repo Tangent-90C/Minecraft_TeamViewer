@@ -10,7 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft.MinecraftPositionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftPositionAdapter;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncPayload;
 

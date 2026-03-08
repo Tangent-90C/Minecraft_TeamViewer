@@ -30,8 +30,14 @@ sourceSets {
         resources.srcDirs = ["src/main/resources"]
     }
     client {
-        java.srcDirs = ["src/client/java"]
-        resources.srcDirs = ["src/client/resources"]
+        java.srcDirs = [
+                "src/client/java",
+                "../common/src/version/${project.minecraft_version}/java"
+        ]
+        resources.srcDirs = [
+                "src/client/resources",
+                "../common/src/version/${project.minecraft_version}/resources"
+        ]
     }
 }
 
@@ -128,7 +134,7 @@ java {
 
 jar {
     from(rootProject.file("LICENSE.txt")) {
-        rename { "${it}_${project.archivesBaseName}" }
+        rename { "${it}_${project.base.archivesName.get()}" }
     }
 }
 

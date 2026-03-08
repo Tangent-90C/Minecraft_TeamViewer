@@ -1,35 +1,29 @@
 // 玩家ESP网络通信管理器
 // 负责处理与服务器的WebSocket连接和数据同步
-package fun.prof_chen.teamviewer.multipleplayeresp.network;
+package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.Vec3d;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import okhttp3.WebSocket;
-import okhttp3.WebSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import fun.prof_chen.teamviewer.multipleplayeresp.config.TeamviewerModMetadata;
-import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspConfigGateway;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspRuntimeGateway;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspSocket;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspTransport;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspTransportListener;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.ProtocolPackets;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.UuidBinaryCodec;
-import fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft.MinecraftDimensionAdapter;
-import fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft.MinecraftPositionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftPositionAdapter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.net.Proxy;
-import java.net.ProxySelector;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -48,8 +42,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import okio.ByteString;
 
 /**
  * PlayerESP 网络层管理器 - 核心网络通信组件
@@ -70,8 +62,8 @@ import okio.ByteString;
  * - 状态变更通过任务队列串行化到Minecraft主线程
  * - 避免跨线程直接修改共享数据结构
  */
-// 网络管理器主类，继承WebSocketListener处理网络事件
-public class PlayerESPNetworkManager extends WebSocketListener {
+// 网络管理器主类：协议状态机 + 数据同步，不直接依赖具体网络栈
+public class PlayerESPNetworkManager {
 	/**
 	 * 连接状态监听器接口
 	 * 用于通知UI和其他模块网络连接状态变化
@@ -102,9 +94,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	// 日志记录器
 	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
 
-	// 客户端程序版本 - 从Mod元数据中获取
-	private static final String CLIENT_PROGRAM_VERSION = TeamviewerModMetadata.getModVersion();
-	
 	// 重同步冷却时间(毫秒) - 防止频繁重同步请求
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
 	
@@ -117,8 +106,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	// 单次 keepalive 报文最多携带对象数量
 	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
 
-	// 全局配置引用
-	private static Config config;
+	// 全局配置网关（由 loader 层注入）
+	private static PlayerEspConfigGateway configGateway;
+
+	private final PlayerEspRuntimeGateway runtimeGateway;
+	private final PlayerEspTransport transport;
 
 	// 本地玩家位置缓存 - 用于快速查找玩家坐标
 	private final Map<UUID, Vec3d> playerPositions;
@@ -151,8 +143,8 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private final Map<String, Long> lastPlayerObjectLivenessMs = new HashMap<>();
 	private final Map<String, Long> lastEntityObjectLivenessMs = new HashMap<>();
 
-	// WebSocket连接实例
-	private WebSocket webSocket;
+	// 传输连接实例
+	private PlayerEspSocket socket;
 	
 	// 重连调度器 - 负责连接失败后的自动重连
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -170,12 +162,6 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private final Gson gson = new Gson();
 	private final MessageCodec messageCodec = new MsgpackMessageCodec();
 	
-	// HTTP客户端 - 用于创建WebSocket连接
-	private OkHttpClient httpClient;
-	
-	// 代理设置状态 - 记录当前是否使用系统代理
-	private volatile boolean currentUseSystemProxy = true;
-
 	// 连接状态监听器列表 - 线程安全的监听器注册表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
 	
@@ -186,10 +172,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	private volatile String lastConnectionError = "";
 	
 	// 服务端协议版本 - 用于版本兼容性判断
-	private volatile String serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+	private volatile String serverProtocolVersion = "0.0.0";
 	
 	// 服务端程序版本 - 用于版本对比和调试
-	private volatile String serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
+	private volatile String serverProgramVersion = "unknown";
 	
 	// 摘要校验间隔(秒) - 控制数据一致性检查频率
 	private volatile int digestIntervalSec = 10;
@@ -247,18 +233,25 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * @param playerPositions 本地玩家位置映射的引用
 	 * @param remotePlayers 远程玩家信息映射的引用
 	 */
-	public PlayerESPNetworkManager(Map<UUID, Vec3d> playerPositions, Map<UUID, RemotePlayerInfo> remotePlayers) {
+	public PlayerESPNetworkManager(
+			Map<UUID, Vec3d> playerPositions,
+			Map<UUID, RemotePlayerInfo> remotePlayers,
+			PlayerEspRuntimeGateway runtimeGateway,
+			PlayerEspTransport transport
+	) {
 		this.playerPositions = playerPositions;
 		this.remotePlayers = remotePlayers;
-		this.httpClient = createHttpClient(true); // 默认启用系统代理
+		this.runtimeGateway = runtimeGateway;
+		this.transport = transport;
+		resetNegotiationState();
 	}
 
 	/**
-	 * 设置全局配置实例
-	 * @param config 配置对象引用
+	 * 设置全局配置网关
+	 * @param configGateway 配置网关
 	 */
-	public static void setConfig(Config config) {
-		PlayerESPNetworkManager.config = config;
+	public static void setConfigGateway(PlayerEspConfigGateway configGateway) {
+		PlayerESPNetworkManager.configGateway = configGateway;
 	}
 
 	/**
@@ -315,52 +308,49 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 自动调度重连机制
 	 */
 	public void connect() {
-		if (config == null) {
+		if (configGateway == null || transport == null) {
 			return;
 		}
 		shouldReconnect = true;
 		reconnectSuppressedForVersionMismatch = false;
 
-		boolean useSystemProxy = config.isUseSystemProxy();
-		if (this.httpClient == null || this.currentUseSystemProxy != useSystemProxy) {
-			this.httpClient = createHttpClient(useSystemProxy);
-			this.currentUseSystemProxy = useSystemProxy;
-		}
-
-		String uri = config.getServerURL();
-		Request.Builder builder = new Request.Builder().url(uri);
+		boolean useSystemProxy = configGateway.isUseSystemProxy();
+		String uri = configGateway.getServerURL();
 
 		try {
-			this.webSocket = httpClient.newWebSocket(builder.build(), this);
+			this.socket = transport.connect(uri, useSystemProxy, new PlayerEspTransportListener() {
+				@Override
+				public void onOpen(String negotiatedExtensions) {
+					handleTransportOpen(negotiatedExtensions);
+				}
+
+				@Override
+				public void onTextMessage(String text) {
+					handleTransportTextMessage(text);
+				}
+
+				@Override
+				public void onBinaryMessage(byte[] payload) {
+					handleTransportBinaryMessage(payload);
+				}
+
+				@Override
+				public void onClosed(int statusCode, String reason) {
+					handleTransportClosed(statusCode, reason);
+				}
+
+				@Override
+				public void onFailure(Throwable error) {
+					handleTransportFailure(error);
+				}
+			});
 		} catch (Exception e) {
 			this.isConnected = false;
 			this.lastConnectionError = formatThrowableReason(e);
-			LOGGER.error("Failed to connect to PlayerESP server at {}: {}", config.getServerURL(), e.getMessage());
+			LOGGER.error("Failed to connect to PlayerESP server at {}: {}", configGateway.getServerURL(), e.getMessage());
 			notifyConnectionStatusChanged(false);
 			scheduleReconnect();
 		}
-	}
-
-	/**
-	 * 创建HTTP客户端实例
-	 * 
-	 * 代理配置选项：
-	 * - useSystemProxy=true: 使用系统默认代理设置
-	 * - useSystemProxy=false: 不使用代理直接连接
-	 * 
-	 * 应用场景：
-	 * - 初始连接时根据配置创建客户端
-	 * - 代理设置改变时重新创建客户端
-	 * - 重连时可能需要更新代理配置
-	 */
-	private OkHttpClient createHttpClient(boolean useSystemProxy) {
-		OkHttpClient.Builder builder = new OkHttpClient.Builder();
-		if (useSystemProxy) {
-			builder.proxySelector(ProxySelector.getDefault());
-		} else {
-			builder.proxy(Proxy.NO_PROXY);
-		}
-		return builder.build();
 	}
 
 	/**
@@ -401,9 +391,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 */
 	public void disconnect() {
 		shouldReconnect = false;
-		if (webSocket != null) {
-			webSocket.close(1000, "Client disconnect");
-			webSocket = null;
+		if (socket != null) {
+			socket.close(1000, "Client disconnect");
+			socket = null;
 		}
 		resetNegotiationState();
 		clearLocalOutboundSnapshots();
@@ -478,7 +468,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 批量处理提高网络效率
 	 */
 	public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
-		if (webSocket == null || !isConnected || submitPlayerId == null || players == null) {
+		if (socket == null || !isConnected || submitPlayerId == null || players == null) {
 			return;
 		}
 		long now = System.currentTimeMillis();
@@ -557,7 +547,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 支持服务端主动刷新请求
 	 */
 	public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
-		if (webSocket == null || !isConnected || submitPlayerId == null || entities == null) {
+		if (socket == null || !isConnected || submitPlayerId == null || entities == null) {
 			return;
 		}
 		long now = System.currentTimeMillis();
@@ -643,7 +633,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 支持多种路标类型和属性
 	 */
 	public void sendWaypointsUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> waypoints) {
-		if (webSocket == null || !isConnected)
+		if (socket == null || !isConnected)
 			return;
 		if (waypoints == null || waypoints.isEmpty())
 			return;
@@ -688,7 +678,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 只传输必要字段减少数据量
 	 */
 	public void sendTabPlayersUpdate(UUID submitPlayerId, List<Map<String, Object>> tabPlayers) {
-		if (webSocket == null || !isConnected || submitPlayerId == null || tabPlayers == null) {
+		if (socket == null || !isConnected || submitPlayerId == null || tabPlayers == null) {
 			return;
 		}
 
@@ -758,7 +748,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 批量删除提高效率
 	 */
 	public void sendWaypointsDelete(UUID submitPlayerId, List<String> waypointIds) {
-		if (webSocket == null || !isConnected)
+		if (socket == null || !isConnected)
 			return;
 		if (waypointIds == null || waypointIds.isEmpty())
 			return;
@@ -801,7 +791,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * }
 	 */
 	public void sendWaypointEntityDeathCancel(UUID submitPlayerId, List<String> targetEntityIds) {
-		if (webSocket == null || !isConnected)
+		if (socket == null || !isConnected)
 			return;
 		if (submitPlayerId == null || targetEntityIds == null || targetEntityIds.isEmpty())
 			return;
@@ -825,11 +815,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private void sendPacket(Object packet) {
-		if (webSocket == null || packet == null) {
+		if (socket == null || packet == null) {
 			return;
 		}
 		byte[] payload = messageCodec.encode(packet);
-		webSocket.send(ByteString.of(payload, 0, payload.length));
+		socket.send(payload);
 	}
 
 	private JsonObject createObjectNode(Object packet) {
@@ -843,66 +833,31 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		return new JsonObject();
 	}
 
-	/**
-	 * WebSocket连接成功回调 - 协议握手启动点
-	 * 
-	 * 执行流程：
-	 * 1. 通过任务队列切换到主线程执行
-	 * 2. 更新连接状态标志
-	 * 3. 清理之前的协商状态和快照数据
-	 * 4. 记录连接成功日志
-	 * 5. 检查WebSocket扩展支持情况
-	 * 6. 通知所有监听器连接已建立
-	 * 7. 发送握手消息开始协议协商
-	 * 
-	 * 线程安全：
-	 * - 使用enqueueMainThreadTask确保状态变更在主线程执行
-	 * - 避免在回调线程直接修改共享数据结构
-	 */
-	@Override
-	public void onOpen(WebSocket webSocket, Response response) {
-		// 连接建立事件来自 OkHttp 线程，这里只投递任务，避免直接跨线程改共享状态。
+	private void handleTransportOpen(String negotiatedExtensions) {
+		// 连接建立事件来自传输线程，这里只投递任务，避免直接跨线程改共享状态。
 		enqueueMainThreadTask(() -> {
 			isConnected = true;
 			lastConnectionError = "";
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			LOGGER.info("WebSocket connection opened to PlayerESP server");
-			if (response != null) {
-				String negotiatedExtensions = response.header("Sec-WebSocket-Extensions", "");
-				if (!negotiatedExtensions.isBlank()) {
-					LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
-				}
+			if (negotiatedExtensions != null && !negotiatedExtensions.isBlank()) {
+				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
 			}
 			notifyConnectionStatusChanged(true);
 			sendHandshake();
 		});
 	}
 
-	/**
-	 * WebSocket消息接收回调 - 下行数据处理入口
-	 * 
-	 * 处理逻辑：
-	 * 1. 接收服务端发送的JSON文本消息
-	 * 2. 通过任务队列转发到主线程处理
-	 * 3. 调用processCompleteMessage进行完整的消息解析
-	 * 
-	 * 设计原则：
-	 * - 所有消息处理都在主线程执行
-	 * - 保证与游戏渲染循环的一致性
-	 * - 避免并发访问共享数据结构
-	 */
-	@Override
-	public void onMessage(WebSocket webSocket, String text) {
+	private void handleTransportTextMessage(String text) {
 		LOGGER.warn("Ignoring text websocket frame, expected MessagePack binary frame");
 	}
 
-	@Override
-	public void onMessage(WebSocket webSocket, ByteString bytes) {
-		if (bytes == null || bytes.size() == 0) {
+	private void handleTransportBinaryMessage(byte[] payload) {
+		if (payload == null || payload.length == 0) {
 			return;
 		}
-		enqueueMainThreadTask(() -> processCompleteMessage(bytes.toByteArray()));
+		enqueueMainThreadTask(() -> processCompleteMessage(payload));
 	}
 
 	/**
@@ -1407,15 +1362,15 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private void sendResyncRequest(String reason) {
-		if (webSocket == null || !isConnected) {
+		if (socket == null || !isConnected) {
 			return;
 		}
 		try {
 			ProtocolPackets.ResyncReqPacket req = new ProtocolPackets.ResyncReqPacket();
 			req.reason = reason;
-			MinecraftClient client = MinecraftClient.getInstance();
-			if (client.player != null) {
-				req.submitPlayerId = UuidBinaryCodec.toBytes(client.player.getUuid());
+			UUID localPlayerId = runtimeGateway.getLocalPlayerId();
+			if (localPlayerId != null) {
+				req.submitPlayerId = UuidBinaryCodec.toBytes(localPlayerId);
 			}
 			sendPacket(req);
 		} catch (Exception e) {
@@ -1442,11 +1397,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * 
 	 * 线程安全：与onOpen保持一致的处理模式
 	 */
-	@Override
-	public void onClosed(WebSocket webSocket, int statusCode, String reason) {
+	private void handleTransportClosed(int statusCode, String reason) {
 		// 关闭事件也切回主线程，统一处理状态重置与重连调度。
 		enqueueMainThreadTask(() -> {
 			isConnected = false;
+			socket = null;
 			if (statusCode == 1008) {
 				shouldReconnect = false;
 				reconnectSuppressedForVersionMismatch = true;
@@ -1491,12 +1446,12 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * - 合并多个异常的原因描述
 	 * - 提供清晰的错误诊断信息
 	 */
-	@Override
-	public void onFailure(WebSocket webSocket, Throwable error, Response response) {
+	private void handleTransportFailure(Throwable error) {
 		// 失败事件在网络线程触发，这里只入队，保证状态清理和通知时序一致。
 		enqueueMainThreadTask(() -> {
-			LOGGER.error("PlayerESP network error: {}", error.getMessage());
+			LOGGER.error("PlayerESP network error: {}", error == null ? "unknown" : error.getMessage());
 			isConnected = false;
+			socket = null;
 			lastConnectionError = formatThrowableReason(error);
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
@@ -1508,32 +1463,32 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	public static String getServerURL() {
-		return config != null ? config.getServerURL() : "ws://localhost:8080/playeresp";
+		return configGateway != null ? configGateway.getServerURL() : "ws://localhost:8080/playeresp";
 	}
 
 	public static void setServerURL(String serverURL) {
-		if (config != null) {
-			config.setServerURL(serverURL);
+		if (configGateway != null) {
+			configGateway.setServerURL(serverURL);
 		}
 	}
 
 		public static String getRoomCode() {
-			return config != null ? config.getRoomCode() : "default";
+			return configGateway != null ? configGateway.getRoomCode() : "default";
 		}
 
 		public static void setRoomCode(String roomCode) {
-			if (config != null) {
-				config.setRoomCode(roomCode);
+			if (configGateway != null) {
+				configGateway.setRoomCode(roomCode);
 			}
 		}
 
 	public static boolean isUseSystemProxy() {
-		return config == null || config.isUseSystemProxy();
+		return configGateway == null || configGateway.isUseSystemProxy();
 	}
 
 	public static void setUseSystemProxy(boolean useSystemProxy) {
-		if (config != null) {
-			config.setUseSystemProxy(useSystemProxy);
+		if (configGateway != null) {
+			configGateway.setUseSystemProxy(useSystemProxy);
 		}
 	}
 
@@ -1658,11 +1613,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private String getCurrentDimension() {
-		MinecraftClient client = MinecraftClient.getInstance();
-		if (client.world != null) {
-			return MinecraftDimensionAdapter.toDimensionId(client.world.getRegistryKey());
-		}
-		return MinecraftDimensionAdapter.toDimensionId(net.minecraft.world.World.OVERWORLD);
+		return runtimeGateway.getCurrentDimensionId();
 	}
 
 	/**
@@ -1687,21 +1638,21 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	 * 服务端响应：handshake_ack消息确认协商结果
 	 */
 	private void sendHandshake() {
-		if (webSocket == null || !isConnected)
+		if (socket == null || !isConnected)
 			return;
 
 		try {
 			ProtocolPackets.HandshakePacket handshake = new ProtocolPackets.HandshakePacket();
-			handshake.networkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_PROTOCOL_VERSION;
-			handshake.minimumCompatibleNetworkProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
-			handshake.localProgramVersion = CLIENT_PROGRAM_VERSION;
+			handshake.networkProtocolVersion = runtimeGateway.getClientProtocolVersion();
+			handshake.minimumCompatibleNetworkProtocolVersion = runtimeGateway.getClientMinCompatibleProtocolVersion();
+			handshake.localProgramVersion = runtimeGateway.getClientProgramVersion();
 			handshake.roomCode = getRoomCode();
-			handshake.preferredReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
+			handshake.preferredReportIntervalTicks = configGateway != null ? configGateway.getUpdateIntervalTicks() : 10;
 			handshake.minReportIntervalTicks = 1;
 			handshake.maxReportIntervalTicks = 1000;
-			MinecraftClient client = MinecraftClient.getInstance();
-			if (client.player != null) {
-				handshake.submitPlayerId = UuidBinaryCodec.toBytes(client.player.getUuid());
+			UUID localPlayerId = runtimeGateway.getLocalPlayerId();
+			if (localPlayerId != null) {
+				handshake.submitPlayerId = UuidBinaryCodec.toBytes(localPlayerId);
 			}
 
 			sendPacket(handshake);
@@ -1746,10 +1697,10 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			return;
 		}
 
-		if (!protocolAtLeast(serverProtocolVersion, TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION)) {
+		if (!protocolAtLeast(serverProtocolVersion, runtimeGateway.getClientMinCompatibleProtocolVersion())) {
 			rejectForVersionIncompatibility(
 					"版本不兼容: 服务端协议 " + serverProtocolVersion
-							+ " 低于客户端最低要求 " + TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION);
+							+ " 低于客户端最低要求 " + runtimeGateway.getClientMinCompatibleProtocolVersion());
 			return;
 		}
 
@@ -1836,9 +1787,9 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 		reconnectSuppressedForVersionMismatch = true;
 		notifyConnectionStatusChanged(false);
 
-		if (webSocket != null) {
+		if (socket != null) {
 			try {
-				webSocket.close(1008, truncateWebSocketCloseReason(finalReason));
+				socket.close(1008, truncateWebSocketCloseReason(finalReason));
 			} catch (Exception ignored) {
 			}
 		}
@@ -1917,7 +1868,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			}
 		} catch (Exception ignored) {
 		}
-		return TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+		return runtimeGateway.getServerProtocolFallbackVersion();
 	}
 
 	private String readProgramVersionFromHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
@@ -1939,7 +1890,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			} catch (Exception ignored) {
 			}
 		}
-		return TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
+		return runtimeGateway.getProgramVersionUnknown();
 	}
 
 	private void notifyConnectionStatusChanged(boolean connected) {
@@ -2138,7 +2089,7 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 			Set<String> entityUpsertIds,
 			long nowMs
 	) {
-		if (webSocket == null || !isConnected || submitPlayerId == null) {
+		if (socket == null || !isConnected || submitPlayerId == null) {
 			return;
 		}
 
@@ -2574,11 +2525,11 @@ public class PlayerESPNetworkManager extends WebSocketListener {
 	}
 
 	private void resetNegotiationState() {
-		serverProtocolVersion = TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
-		serverProgramVersion = TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
+		serverProtocolVersion = runtimeGateway.getServerProtocolFallbackVersion();
+		serverProgramVersion = runtimeGateway.getProgramVersionUnknown();
 		digestIntervalSec = 10;
 		serverBroadcastHz = 20.0;
-		negotiatedReportIntervalTicks = config != null ? config.getUpdateInterval() : 10;
+		negotiatedReportIntervalTicks = configGateway != null ? configGateway.getUpdateIntervalTicks() : 10;
 		playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 		entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 		lastResyncRequestMs = 0L;

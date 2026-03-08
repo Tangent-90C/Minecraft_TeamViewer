@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.render;
+package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.pipeline.BlendFunction;

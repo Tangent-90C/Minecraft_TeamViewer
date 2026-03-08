@@ -32,11 +32,14 @@ import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.ReportDataSchemas;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.network.PlayerESPNetworkManager;
-import fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft.MinecraftDimensionAdapter;
-import fun.prof_chen.teamviewer.multipleplayeresp.platform.minecraft.MinecraftPositionAdapter;
-import fun.prof_chen.teamviewer.multipleplayeresp.ui.PlayerESPConfigScreen;
-import fun.prof_chen.teamviewer.multipleplayeresp.render.UnifiedRenderModule;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.bridge.FabricPlayerEspRuntimeGateway;
+import fun.prof_chen.teamviewer.multipleplayeresp.network.transport.OkHttpPlayerEspTransport;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftDimensionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftPositionAdapter;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.PlayerESPNetworkManager;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.PlayerEspWaypointSyncGateway;
+import fun.prof_chen.teamviewer.multipleplayeresp.bridge.UnifiedRenderModule;
+import fun.prof_chen.teamviewer.multipleplayeresp.screen.PlayerESPConfigScreen;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.RemotePlayerRepository;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.SharedWaypointRepository;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncGateway;
@@ -44,7 +47,6 @@ import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.core.RemotePlayerProjectionCoordinator;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.core.SharedWaypointSyncCoordinator;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.minimap.FabricMinimapBridgeBootstrap;
-import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.network.PlayerEspWaypointSyncGateway;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.repository.MapBackedRemotePlayerRepository;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.repository.MapBackedSharedWaypointRepository;
 
@@ -107,8 +109,12 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		config = Config.load();
 		
 		// 初始化网络管理器
-		networkManager = new PlayerESPNetworkManager(playerPositions, remotePlayers);
-		PlayerESPNetworkManager.setConfig(config);
+		networkManager = new PlayerESPNetworkManager(
+				playerPositions,
+				remotePlayers,
+				new FabricPlayerEspRuntimeGateway(),
+				new OkHttpPlayerEspTransport());
+		PlayerESPNetworkManager.setConfigGateway(config);
 		waypointSyncGateway = new PlayerEspWaypointSyncGateway(networkManager);
 		remotePlayerRepository = new MapBackedRemotePlayerRepository(remotePlayers);
 		sharedWaypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
