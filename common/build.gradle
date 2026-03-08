@@ -1,0 +1,53 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${project.archives_base_name}-common"
+}
+
+dependencies {
+    implementation "com.google.code.gson:gson:2.11.0"
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.okio:okio-jvm:3.6.0"
+    compileOnly "org.slf4j:slf4j-api:2.0.16"
+    implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
+    implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
+    implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+    implementation "org.msgpack:jackson-dataformat-msgpack:0.9.11"
+    implementation "org.msgpack:msgpack-core:0.9.11"
+}
+
+sourceSets {
+    main {
+        java.srcDirs = ["src/main/java"]
+        resources.srcDirs = ["src/main/resources"]
+    }
+}
+
+def targetJavaVersion = 21
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = "${project.archives_base_name}-common"
+            from components.java
+        }
+    }
+}
