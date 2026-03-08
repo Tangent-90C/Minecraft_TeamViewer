@@ -66,7 +66,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	private static KeyBinding markKey;
 	
 	// Player position tracking
-	private static final Map<UUID, Vec3d> playerPositions = new ConcurrentHashMap<>();
 	private static final Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
 	private static final Map<UUID, Vec3d> serverPlayerPositions = new ConcurrentHashMap<>();
 	private static final Map<String, SharedWaypointInfo> sharedWaypoints = new ConcurrentHashMap<>();
@@ -110,7 +109,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		
 		// 初始化网络管理器
 		networkManager = new PlayerESPNetworkManager(
-				playerPositions,
 				remotePlayers,
 				new FabricPlayerEspRuntimeGateway(),
 				new OkHttpPlayerEspTransport());
@@ -470,13 +468,29 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	}
 
 	private Map<UUID, Vec3d> resolvePlayersForRender() {
+		Map<UUID, Vec3d> remotePlayerPositions = buildRemotePlayerPositions();
 		if (config == null || !config.isPreferLocalDataForEsp()) {
-			return playerPositions;
+			return remotePlayerPositions;
 		}
 
-		Map<UUID, Vec3d> mergedPositions = new HashMap<>(playerPositions);
+		Map<UUID, Vec3d> mergedPositions = new HashMap<>(remotePlayerPositions);
 		mergedPositions.putAll(serverPlayerPositions);
 		return mergedPositions;
+	}
+
+	private static Map<UUID, Vec3d> buildRemotePlayerPositions() {
+		Map<UUID, Vec3d> positions = new HashMap<>();
+		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
+			RemotePlayerInfo info = entry.getValue();
+			if (info == null || info.position() == null) {
+				continue;
+			}
+			Vec3d position = MinecraftPositionAdapter.toVec3d(info.position());
+			if (position != null) {
+				positions.put(entry.getKey(), position);
+			}
+		}
+		return positions;
 	}
 
 	private Map<UUID, RemotePlayerInfo> resolvePlayersForWorldMapBridge() {
@@ -1252,7 +1266,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	}
 	
 	public static Map<UUID, Vec3d> getPlayerPositions() {
-		return playerPositions;
+		return buildRemotePlayerPositions();
 	}
 	
 	public static Map<UUID, Vec3d> getServerPlayerPositions() {

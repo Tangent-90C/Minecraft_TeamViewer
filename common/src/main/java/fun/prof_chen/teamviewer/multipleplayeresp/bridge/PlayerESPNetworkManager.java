@@ -5,7 +5,6 @@ package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
@@ -20,7 +19,6 @@ import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.ProtocolPackets;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.protocol.UuidBinaryCodec;
-import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftPositionAdapter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -111,9 +109,6 @@ public class PlayerESPNetworkManager {
 
 	private final PlayerEspRuntimeGateway runtimeGateway;
 	private final PlayerEspTransport transport;
-
-	// 本地玩家位置缓存 - 用于快速查找玩家坐标
-	private final Map<UUID, Vec3d> playerPositions;
 	
 	// 远程玩家信息缓存 - 存储其他客户端玩家的位置和维度信息
 	private final Map<UUID, RemotePlayerInfo> remotePlayers;
@@ -230,16 +225,13 @@ public class PlayerESPNetworkManager {
 
 	/**
 	 * 构造函数
-	 * @param playerPositions 本地玩家位置映射的引用
 	 * @param remotePlayers 远程玩家信息映射的引用
 	 */
 	public PlayerESPNetworkManager(
-			Map<UUID, Vec3d> playerPositions,
 			Map<UUID, RemotePlayerInfo> remotePlayers,
 			PlayerEspRuntimeGateway runtimeGateway,
 			PlayerEspTransport transport
 	) {
-		this.playerPositions = playerPositions;
 		this.remotePlayers = remotePlayers;
 		this.runtimeGateway = runtimeGateway;
 		this.transport = transport;
@@ -1124,7 +1116,6 @@ public class PlayerESPNetworkManager {
 							String playerIdRaw = idElement.getAsString();
 							UUID playerId = UUID.fromString(playerIdRaw);
 							remotePlayers.remove(playerId);
-							playerPositions.remove(playerId);
 							remotePlayerDataCache.remove(playerId);
 							lastSentPlayersSnapshot.remove(playerIdRaw);
 						} catch (Exception ignored) {
@@ -1500,7 +1491,7 @@ public class PlayerESPNetworkManager {
 		return lastConnectionError;
 	}
 
-	public Vec3d getRemoteEntityPosition(String entityId, String expectedDimension) {
+	public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) {
 		if (entityId == null || entityId.isBlank()) {
 			return null;
 		}
@@ -1524,10 +1515,10 @@ public class PlayerESPNetworkManager {
 			return null;
 		}
 
-		return new Vec3d(x, y, z);
+		return new Position3D(x, y, z);
 	}
 
-	public Vec3d getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) {
+	public Position3D getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) {
 		UUID expectedUuid = null;
 		if (playerId != null && !playerId.isBlank()) {
 			try {
@@ -1539,13 +1530,13 @@ public class PlayerESPNetworkManager {
 		if (expectedUuid != null) {
 			RemotePlayerInfo info = remotePlayers.get(expectedUuid);
 			if (isRemotePlayerMatch(info, playerName, expectedDimension)) {
-				return MinecraftPositionAdapter.toVec3d(info.position());
+				return info.position();
 			}
 		}
 
 		for (RemotePlayerInfo info : remotePlayers.values()) {
 			if (isRemotePlayerMatch(info, playerName, expectedDimension)) {
-				return MinecraftPositionAdapter.toVec3d(info.position());
+				return info.position();
 			}
 		}
 
@@ -1987,7 +1978,6 @@ public class PlayerESPNetworkManager {
 
 				remotePlayerDataCache.put(playerId, mergedData);
 				remotePlayers.put(playerId, info);
-				playerPositions.put(playerId, MinecraftPositionAdapter.toVec3d(info.position()));
 			} catch (Exception e) {
 				LOGGER.error("PlayerESP Network - Error applying player patch: {}", e.getMessage());
 			}
@@ -2338,18 +2328,6 @@ public class PlayerESPNetworkManager {
 		}
 	}
 
-	private void reconcilePlayerPositions(Map<UUID, Vec3d> latestPositions) {
-		playerPositions.entrySet().removeIf(entry -> !latestPositions.containsKey(entry.getKey()));
-		for (Map.Entry<UUID, Vec3d> entry : latestPositions.entrySet()) {
-			UUID playerId = entry.getKey();
-			Vec3d latest = entry.getValue();
-			Vec3d existing = playerPositions.get(playerId);
-			if (!Objects.equals(existing, latest)) {
-				playerPositions.put(playerId, latest);
-			}
-		}
-	}
-
 	private void reconcileRemotePlayers(Map<UUID, RemotePlayerInfo> latestRemotePlayers) {
 		remotePlayers.entrySet().removeIf(entry -> !latestRemotePlayers.containsKey(entry.getKey()));
 		for (Map.Entry<UUID, RemotePlayerInfo> entry : latestRemotePlayers.entrySet()) {
@@ -2360,12 +2338,6 @@ public class PlayerESPNetworkManager {
 				remotePlayers.put(playerId, latest);
 			}
 		}
-
-		Map<UUID, Vec3d> latestPositions = new HashMap<>();
-		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
-			latestPositions.put(entry.getKey(), MinecraftPositionAdapter.toVec3d(entry.getValue().position()));
-		}
-		reconcilePlayerPositions(latestPositions);
 	}
 
 	private String computePlayersDigest() {

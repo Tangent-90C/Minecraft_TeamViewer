@@ -2,8 +2,6 @@ package fun.prof_chen.teamviewer.multipleplayeresp.bridge;
 
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.bridge.MinecraftPositionAdapter;
-import fun.prof_chen.teamviewer.multipleplayeresp.bridge.PlayerESPNetworkManager;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointUpdateListener;
@@ -89,11 +87,11 @@ public final class PlayerEspWaypointSyncGateway implements WaypointSyncGateway {
 
 	@Override
 	public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) {
-		return MinecraftPositionAdapter.fromVec3d(delegate.getRemoteEntityPosition(entityId, expectedDimension));
+		return delegate.getRemoteEntityPosition(entityId, expectedDimension);
 	}
 
 	@Override
 	public Position3D getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) {
-		return MinecraftPositionAdapter.fromVec3d(delegate.getRemotePlayerPosition(playerId, playerName, expectedDimension));
+		return delegate.getRemotePlayerPosition(playerId, playerName, expectedDimension);
 	}
 }
