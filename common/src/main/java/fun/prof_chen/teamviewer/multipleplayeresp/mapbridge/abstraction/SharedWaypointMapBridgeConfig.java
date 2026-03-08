@@ -1,6 +1,6 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction;
+package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.abstraction;
 
-public interface SharedWaypointBridgeConfig {
+public interface SharedWaypointMapBridgeConfig {
 	boolean isUploadSharedWaypoints();
 
 	boolean isEnableLongTermWaypoint();

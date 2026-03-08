@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.sync.api;
+package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.implementor;
 
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 

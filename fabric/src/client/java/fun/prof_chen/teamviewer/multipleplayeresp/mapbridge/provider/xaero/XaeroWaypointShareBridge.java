@@ -1,6 +1,6 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.minimap.xaero;
+package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.xaero;
 
-import fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction.SharedWaypointBridgeConfig;
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
@@ -27,8 +27,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class XaeroWaypointShareBridgeImpl {
-	private static final Logger LOGGER = LoggerFactory.getLogger(XaeroWaypointShareBridgeImpl.class);
+public final class XaeroWaypointShareBridge {
+	private static final Logger LOGGER = LoggerFactory.getLogger(XaeroWaypointShareBridge.class);
 	private static final String XAERO_MINIMAP_MOD_ID = "xaerominimap";
 	private static final String SHARED_PREFIX = "[TV] ";
 	private static final long LOCAL_SCAN_INTERVAL_MS = 1_500L;
@@ -46,7 +46,7 @@ public final class XaeroWaypointShareBridgeImpl {
 	private static volatile long lastLocalScanMs = 0L;
 	private static volatile long lastRemoteSyncMs = 0L;
 
-	private XaeroWaypointShareBridgeImpl() {
+	private XaeroWaypointShareBridge() {
 	}
 
 	public static boolean isAvailable() {
@@ -105,7 +105,7 @@ public final class XaeroWaypointShareBridgeImpl {
 		}
 	}
 
-	public static void tick(WaypointSyncGateway networkGateway, Map<String, SharedWaypointInfo> remoteWaypoints, boolean espEnabled, SharedWaypointBridgeConfig config) {
+	public static void tick(WaypointSyncGateway networkGateway, Map<String, SharedWaypointInfo> remoteWaypoints, boolean espEnabled, SharedWaypointMapBridgeConfig config) {
 		if (!espEnabled || networkGateway == null || config == null) {
 			return;
 		}
@@ -134,7 +134,7 @@ public final class XaeroWaypointShareBridgeImpl {
 		}
 	}
 
-	private static void scanAndSyncLocalWaypoints(WaypointSyncGateway networkGateway, SharedWaypointBridgeConfig config) {
+	private static void scanAndSyncLocalWaypoints(WaypointSyncGateway networkGateway, SharedWaypointMapBridgeConfig config) {
 		try {
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player == null || client.world == null) {
@@ -197,7 +197,7 @@ public final class XaeroWaypointShareBridgeImpl {
 			WaypointSyncGateway networkGateway,
 			UUID localPlayerId,
 			String currentDimension,
-			SharedWaypointBridgeConfig config) {
+			SharedWaypointMapBridgeConfig config) {
 		if (networkGateway == null || localPlayerId == null || currentDimension == null || config == null) {
 			return;
 		}
@@ -272,7 +272,7 @@ public final class XaeroWaypointShareBridgeImpl {
 		}
 	}
 
-	private static void syncRemoteWaypoints(WaypointSyncGateway networkGateway, SharedWaypointBridgeConfig config) {
+	private static void syncRemoteWaypoints(WaypointSyncGateway networkGateway, SharedWaypointMapBridgeConfig config) {
 		try {
 			Object minimapSession = getMinimapSession();
 			if (minimapSession == null) {

@@ -2,14 +2,14 @@ package fun.prof_chen.teamviewer.multipleplayeresp.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction.SharedWaypointBridgeConfig;
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
 import fun.prof_chen.teamviewer.multipleplayeresp.network.abstraction.PlayerEspConfigGateway;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class Config implements SharedWaypointBridgeConfig, PlayerEspConfigGateway {
+public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGateway {
     public static final String TRACER_START_CROSSHAIR = "crosshair";
     public static final String TRACER_START_TOP = "top";
     public static final String WAYPOINT_UI_BEACON = "beacon";

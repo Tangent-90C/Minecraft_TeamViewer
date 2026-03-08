@@ -1,4 +1,4 @@
-package fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.minimap.xaero;
+package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.xaero;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
  
-public final class XaeroWorldMapBridgeImpl {
-	private static final Logger LOGGER = LoggerFactory.getLogger(XaeroWorldMapBridgeImpl.class);
+public final class XaeroWorldMapBridge {
+	private static final Logger LOGGER = LoggerFactory.getLogger(XaeroWorldMapBridge.class);
 	private static final String XAERO_MOD_ID = "xaeroworldmap";
 	private static final String TRACKER_SYSTEM_ID = "teamviewer_remote_players";
 
@@ -29,7 +29,7 @@ public final class XaeroWorldMapBridgeImpl {
 	private static volatile Map<UUID, RemotePlayerInfo> remotePlayers = Collections.emptyMap();
 	private static volatile boolean espEnabled = false;
 
-	private XaeroWorldMapBridgeImpl() {
+	private XaeroWorldMapBridge() {
 	}
 
 	public static boolean isAvailable() {
@@ -57,7 +57,7 @@ public final class XaeroWorldMapBridgeImpl {
 
 	private static void tryRegister() {
 		try {
-			ClassLoader cl = XaeroWorldMapBridgeImpl.class.getClassLoader();
+			ClassLoader cl = XaeroWorldMapBridge.class.getClassLoader();
 			Class<?> worldMapClass = Class.forName("xaero.map.WorldMap", true, cl);
 			Object manager = worldMapClass.getField("playerTrackerSystemManager").get(null);
 			if (manager == null) {

@@ -28,7 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.Config;
 import fun.prof_chen.teamviewer.multipleplayeresp.config.FabricConfigLoader;
-import fun.prof_chen.teamviewer.multipleplayeresp.bridge.abstraction.MinimapBridgeRegistry;
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.registry.MapBridgeRegistry;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.ReportDataSchemas;
@@ -47,7 +47,7 @@ import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.core.RemotePlayerProjectionCoordinator;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.core.SharedWaypointSyncCoordinator;
-import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.minimap.FabricMinimapBridgeBootstrap;
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.registry.FabricMapBridgeBootstrap;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.repository.MapBackedRemotePlayerRepository;
 import fun.prof_chen.teamviewer.multipleplayeresp.sync.impl.repository.MapBackedSharedWaypointRepository;
 
@@ -117,7 +117,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		waypointSyncGateway = new PlayerEspWaypointSyncGateway(networkManager);
 		remotePlayerRepository = new MapBackedRemotePlayerRepository(remotePlayers);
 		sharedWaypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
-		MinimapBridgeRegistry minimapBridgeRegistry = FabricMinimapBridgeBootstrap.createRegistry();
+		MapBridgeRegistry minimapBridgeRegistry = FabricMapBridgeBootstrap.createRegistry();
 		remotePlayerProjectionCoordinator = new RemotePlayerProjectionCoordinator(minimapBridgeRegistry.remotePlayerProjections());
 		sharedWaypointSyncCoordinator = new SharedWaypointSyncCoordinator(
 				sharedWaypointRepository,

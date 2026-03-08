@@ -1,7 +1,7 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.sync.core;
 
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
-import fun.prof_chen.teamviewer.multipleplayeresp.sync.api.RemotePlayerProjection;
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.implementor.RemotePlayerProjection;
 
 import java.util.List;
 import java.util.Map;
