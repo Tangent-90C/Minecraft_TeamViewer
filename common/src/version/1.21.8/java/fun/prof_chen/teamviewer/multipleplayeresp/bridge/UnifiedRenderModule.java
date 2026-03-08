@@ -5,11 +5,13 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import fun.prof_chen.teamviewer.multipleplayeresp.model.Position3D;
+import fun.prof_chen.teamviewer.multipleplayeresp.renderbridge.abstraction.PlayerEspRenderBridge;
+import fun.prof_chen.teamviewer.multipleplayeresp.renderbridge.abstraction.RenderContextHandle;
+import fun.prof_chen.teamviewer.multipleplayeresp.renderbridge.model.AxisAlignedBox3D;
 import net.minecraft.client.render.*;
 import net.minecraft.client.gl.Defines;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 支持颜色和深度测试
  * - Minecraft 1.21.8 Fabric API 兼容
  */
-public class UnifiedRenderModule {
+public class UnifiedRenderModule implements PlayerEspRenderBridge {
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger("UnifiedRenderModule");
 	
@@ -69,12 +71,14 @@ public class UnifiedRenderModule {
 	 * 绘制方框轮廓
 	 * 表现为一个立方体的12条边
 	 * 
-	 * @param matrices MatrixStack用于变换矩阵操作
+	 * @param context 渲染上下文句柄
 	 * @param box      碰撞盒，包含min和max坐标
 	 * @param color    颜色值（ARGB格式，例如：0xFF0000FF代表不透明红色）
 	 * @param depthTest 是否启用深度测试
 	 */
-	public static void drawOutlinedBox(MatrixStack matrices, Box box, int color, boolean depthTest) {
+	@Override
+	public void drawOutlinedBox(RenderContextHandle context, AxisAlignedBox3D box, int color, boolean depthTest) {
+		MatrixStack matrices = requireMatrixStack(context);
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
 		
@@ -92,13 +96,13 @@ public class UnifiedRenderModule {
 	 * @param box      碰撞盒
 	 * @param color    颜色值（ARGB格式）
 	 */
-	public static void drawOutlinedBox(MatrixStack matrices, BufferBuilder buffer, Box box, int color) {
-		float x1 = (float) box.minX;
-		float y1 = (float) box.minY;
-		float z1 = (float) box.minZ;
-		float x2 = (float) box.maxX;
-		float y2 = (float) box.maxY;
-		float z2 = (float) box.maxZ;
+	private static void drawOutlinedBox(MatrixStack matrices, BufferBuilder buffer, AxisAlignedBox3D box, int color) {
+		float x1 = (float) box.minX();
+		float y1 = (float) box.minY();
+		float z1 = (float) box.minZ();
+		float x2 = (float) box.maxX();
+		float y2 = (float) box.maxY();
+		float z2 = (float) box.maxZ();
 		
 		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
 		
@@ -159,16 +163,14 @@ public class UnifiedRenderModule {
 	/**
 	 * 绘制单条直线
 	 * 
-	 * @param matrices MatrixStack用于变换矩阵操作
+	 * @param context 渲染上下文句柄
 	 * @param start    起点
 	 * @param end      终点
 	 * @param color    颜色值（ARGB格式）
 	 */
-	public static void drawLine(MatrixStack matrices, Vec3d start, Vec3d end, int color) {
-		drawLine(matrices, start, end, color, true);
-	}
-
-	public static void drawLine(MatrixStack matrices, Vec3d start, Vec3d end, int color, boolean depthTest) {
+	@Override
+	public void drawLine(RenderContextHandle context, Position3D start, Position3D end, int color, boolean depthTest) {
+		MatrixStack matrices = requireMatrixStack(context);
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
 		
@@ -185,8 +187,8 @@ public class UnifiedRenderModule {
 			a = 1.0f;
 		}
 		
-		buffer.vertex(matrix4f, (float) start.x, (float) start.y, (float) start.z).color(r, g, b, a);
-		buffer.vertex(matrix4f, (float) end.x, (float) end.y, (float) end.z).color(r, g, b, a);
+		buffer.vertex(matrix4f, (float) start.x(), (float) start.y(), (float) start.z()).color(r, g, b, a);
+		buffer.vertex(matrix4f, (float) end.x(), (float) end.y(), (float) end.z()).color(r, g, b, a);
 		
 		// 绘制缓冲区
 		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
@@ -196,44 +198,23 @@ public class UnifiedRenderModule {
 	 * 绘制从起点到终点的追踪线条
 	 * 常用于ESP功能中标记敌人或目标
 	 * 
-	 * @param matrices  MatrixStack用于变换矩阵操作
+	 * @param context 渲染上下文句柄
 	 * @param startPoint 起点（通常是摄像机位置向前偏移）
 	 * @param endPoint   终点（目标实体的位置）
 	 * @param color      颜色值（ARGB格式）
 	 */
-	public static void drawTracerLine(MatrixStack matrices, Vec3d startPoint, Vec3d endPoint, int color) {
-		drawTracerLine(matrices, startPoint, endPoint, color, true);
+	@Override
+	public void drawTracerLine(RenderContextHandle context, Position3D startPoint, Position3D endPoint, int color, boolean depthTest) {
+		drawLine(context, startPoint, endPoint, color, depthTest);
 	}
 
-	public static void drawTracerLine(MatrixStack matrices, Vec3d startPoint, Vec3d endPoint, int color, boolean depthTest) {
-		Tessellator tessellator = Tessellator.getInstance();
-		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
-		
-		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
-		
-		// 提取ARGB颜色分量
-		float r = ((color >> 16) & 0xFF) / 255.0f;
-		float g = ((color >> 8) & 0xFF) / 255.0f;
-		float b = (color & 0xFF) / 255.0f;
-		float a = ((color >> 24) & 0xFF) / 255.0f;
-		
-		// 如果alpha为0，设置默认值（防止完全透明）
-		if (a == 0.0f && (color >> 24) == 0) {
-			a = 1.0f;
-		}
-		
-		buffer.vertex(matrix4f, (float) startPoint.x, (float) startPoint.y, (float) startPoint.z).color(r, g, b, a);
-		buffer.vertex(matrix4f, (float) endPoint.x, (float) endPoint.y, (float) endPoint.z).color(r, g, b, a);
-		
-		// 绘制缓冲区
-		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
-	}
-
-	public static void drawVerticalBeam(MatrixStack matrices, Vec3d baseCenter, double height, double radius, int color, boolean depthTest) {
+	@Override
+	public void drawVerticalBeam(RenderContextHandle context, Position3D baseCenter, double height, double radius, int color, boolean depthTest) {
 		if (height <= 0.0D || radius <= 0.0D) {
 			return;
 		}
 
+		MatrixStack matrices = requireMatrixStack(context);
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
 		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
@@ -246,12 +227,12 @@ public class UnifiedRenderModule {
 			a = 1.0f;
 		}
 
-		float minX = (float) (baseCenter.x - radius);
-		float maxX = (float) (baseCenter.x + radius);
-		float minZ = (float) (baseCenter.z - radius);
-		float maxZ = (float) (baseCenter.z + radius);
-		float minY = (float) baseCenter.y;
-		float maxY = (float) (baseCenter.y + height);
+		float minX = (float) (baseCenter.x() - radius);
+		float maxX = (float) (baseCenter.x() + radius);
+		float minZ = (float) (baseCenter.z() - radius);
+		float maxZ = (float) (baseCenter.z() + radius);
+		float minY = (float) baseCenter.y();
+		float maxY = (float) (baseCenter.y() + height);
 
 		addQuad(buffer, matrix4f, minX, minY, minZ, minX, maxY, minZ, maxX, maxY, minZ, maxX, minY, minZ, r, g, b, a);
 		addQuad(buffer, matrix4f, maxX, minY, maxZ, maxX, maxY, maxZ, minX, maxY, maxZ, minX, minY, maxZ, r, g, b, a);
@@ -261,11 +242,13 @@ public class UnifiedRenderModule {
 		getDebugQuadLayer(depthTest).draw(buffer.end());
 	}
 
-	public static void drawHorizontalPlane(MatrixStack matrices, Vec3d center, double halfSize, int color, boolean depthTest) {
+	@Override
+	public void drawHorizontalPlane(RenderContextHandle context, Position3D center, double halfSize, int color, boolean depthTest) {
 		if (halfSize <= 0.0D) {
 			return;
 		}
 
+		MatrixStack matrices = requireMatrixStack(context);
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
 		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
@@ -278,14 +261,18 @@ public class UnifiedRenderModule {
 			a = 1.0f;
 		}
 
-		float y = (float) center.y;
-		float minX = (float) (center.x - halfSize);
-		float maxX = (float) (center.x + halfSize);
-		float minZ = (float) (center.z - halfSize);
-		float maxZ = (float) (center.z + halfSize);
+		float y = (float) center.y();
+		float minX = (float) (center.x() - halfSize);
+		float maxX = (float) (center.x() + halfSize);
+		float minZ = (float) (center.z() - halfSize);
+		float maxZ = (float) (center.z() + halfSize);
 
 		addQuad(buffer, matrix4f, minX, y, minZ, minX, y, maxZ, maxX, y, maxZ, maxX, y, minZ, r, g, b, a);
 		getDebugQuadLayer(depthTest).draw(buffer.end());
+	}
+
+	private static MatrixStack requireMatrixStack(RenderContextHandle context) {
+		return context.requireNativeContext(MatrixStack.class);
 	}
 
 	private static void addQuad(BufferBuilder buffer,
