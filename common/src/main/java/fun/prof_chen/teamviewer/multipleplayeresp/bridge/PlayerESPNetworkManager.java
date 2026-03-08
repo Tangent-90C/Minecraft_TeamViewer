@@ -102,6 +102,7 @@ public class PlayerESPNetworkManager {
 	private static final long DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS = 12_000L;
 	private static final int UNLIMITED_RECONNECT_ATTEMPTS = -1;
 	private static final long DEFAULT_RECONNECT_DELAY_MS = 5_000L;
+	private static final List<String> SOURCE_STATE_CLEAR_SCOPES = List.of("players", "entities", "tab_players", "waypoints");
 
 	// 单次 keepalive 报文最多携带对象数量
 	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
@@ -410,8 +411,10 @@ public class PlayerESPNetworkManager {
 	 * 注意事项：这是一个干净的关闭过程，不会触发重连机制
 	 */
 	public void disconnect() {
+		UUID localPlayerId = runtimeGateway != null ? runtimeGateway.getLocalPlayerId() : null;
 		shouldReconnect = false;
 		resetReconnectPolicy();
+		sendSourceStateClear(localPlayerId);
 		if (socket != null) {
 			socket.close(1000, "Client disconnect");
 			socket = null;
@@ -665,6 +668,20 @@ public class PlayerESPNetworkManager {
 			sendPacket(packet);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send waypoints_update to PlayerESP server: {}", e.getMessage());
+		}
+	}
+
+	private void sendSourceStateClear(UUID submitPlayerId) {
+		if (socket == null || !isConnected || submitPlayerId == null) {
+			return;
+		}
+		try {
+			ProtocolPackets.SourceStateClearPacket packet = new ProtocolPackets.SourceStateClearPacket();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+			packet.scopes = SOURCE_STATE_CLEAR_SCOPES;
+			sendPacket(packet);
+		} catch (Exception e) {
+			LOGGER.warn("Failed to send source_state_clear before disconnect: {}", e.getMessage());
 		}
 	}
 

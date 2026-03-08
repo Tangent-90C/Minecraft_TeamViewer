@@ -99,6 +99,12 @@ public final class ProtocolPackets {
 		public List<String> entities;
 	}
 
+	public static class SourceStateClearPacket {
+		public final String type = "source_state_clear";
+		public byte[] submitPlayerId;
+		public List<String> scopes;
+	}
+
 	public static class WaypointsUpdatePacket {
 		public final String type = "waypoints_update";
 		public byte[] submitPlayerId;
