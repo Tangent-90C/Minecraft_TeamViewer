@@ -1,191 +1,43 @@
 plugins {
-    id 'fabric-loom' version '1.15.4'
-    id 'maven-publish'
+    id 'base'
 }
 
 version = project.mod_version
 group = project.maven_group
 
-base {
-    archivesName = project.archives_base_name
-}
+allprojects {
+    group = rootProject.group
+    version = rootProject.version
 
-loom {
-    splitEnvironmentSourceSets()
-
-    mods {
-        "teamviewer" {
-            sourceSet sourceSets.main
-            sourceSet sourceSets.client
-        }
-    }
-}
-
-fabricApi {
-    configureDataGeneration {
-        client = true
-    }
-}
-
-repositories {
-    // Add repositories to retrieve artifacts from in here.
-    // You should only use this when depending on other mods because
-    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-    // for more information about repositories.
-    maven {
-        name = "Terraformers"
-        url = "https://maven.terraformersmc.com/"
-    }
-    mavenCentral()
-}
-
-configurations.configureEach {
-    resolutionStrategy {
-        // 移除有问题的内部类调用，改用 Gradle 内置的版本范围管控
-        eachDependency { DependencyResolveDetails details ->
-            def group = details.requested.group
-            def name = details.requested.name
-            def Log4j_requiredVersion = "2.25.3"
-            def LZ4_requiredVersion = "1.8.1"
-            def Jackson_requiredVersion = "2.18.6"
-            def Json_requiredVersion = "2.5.2"
-
-            // 只管控 log4j-api 和 log4j-core
-            // 这个太新会有别的问题
-//            if (group == 'org.apache.logging.log4j' && (name == 'log4j-api' || name == 'log4j-core')) {
-//                // 直接指定版本范围
-//                details.useVersion "[${Log4j_requiredVersion},)"
-//
-//                // 可选：简化的版本警告（避免内部类）
-//                if (details.requested.version) {
-//                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${Log4j_requiredVersion}")
-//                }
-//            }
-//            if (group == 'org.lz4' && name == 'lz4-java') {
-//                // 直接指定版本范围
-//                details.useVersion "[${LZ4_requiredVersion},)"
-//
-//                // 可选：简化的版本警告（避免内部类）
-//                if (details.requested.version) {
-//                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${LZ4_requiredVersion}")
-//                }
-//            }
-            if (group == 'com.fasterxml.jackson.core' && (name == 'jackson-core' || name == 'jackson-databind' || name == 'jackson-annotations')) {
-                // 固定 Jackson 三件套到相同版本，避免运行时方法签名不兼容
-                details.useVersion "${Jackson_requiredVersion}"
-
-                // 可选：简化的版本警告（避免内部类）
-                if (details.requested.version) {
-                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${Jackson_requiredVersion}")
-                }
-            }
-            else if (group == 'net.minidev' && name == 'json-smart') {
-                // 直接指定版本范围
-                details.useVersion "[${Json_requiredVersion},)"
-
-                // 可选：简化的版本警告（避免内部类）
-                if (details.requested.version) {
-                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${Json_requiredVersion}")
-                }
-            }
-
-        }
-    }
-}
-
-dependencies {
-    // To change the versions see the gradle.properties file
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-
-    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
-    modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
-
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    include "com.squareup.okhttp3:okhttp:4.12.0"
-
-    implementation "com.squareup.okio:okio-jvm:3.6.0"
-    include "com.squareup.okio:okio-jvm:3.6.0"
-
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
-    include "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
-
-    implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
-    include "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
-
-    implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
-    include "com.fasterxml.jackson.core:jackson-core:2.18.6"
-
-    implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
-    include "com.fasterxml.jackson.core:jackson-databind:2.18.6"
-
-    implementation "org.msgpack:jackson-dataformat-msgpack:0.9.11"
-    include "org.msgpack:jackson-dataformat-msgpack:0.9.11"
-
-    implementation "org.msgpack:msgpack-core:0.9.11"
-    include "org.msgpack:msgpack-core:0.9.11"
-}
-
-processResources {
-    inputs.property "version", project.version
-    inputs.property "minecraft_version", project.minecraft_version
-    inputs.property "loader_version", project.loader_version
-    filteringCharset = "UTF-8"
-
-    filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version
-    }
-}
-
-def targetJavaVersion = 21
-tasks.withType(JavaCompile).configureEach {
-    // ensure that the encoding is set to UTF-8, no matter what the system default is
-    // this fixes some edge cases with special characters not displaying correctly
-    // see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
-    // If Javadoc is generated, this must be specified in that task too.
-    it.options.encoding = "UTF-8"
-    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
-        it.options.release.set(targetJavaVersion)
-    }
-}
-
-java {
-    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
-    if (JavaVersion.current() < javaVersion) {
-        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
-    }
-    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-    // if it is present.
-    // If you remove this line, sources will not be generated.
-    withSourcesJar()
-}
-
-jar {
-    from("LICENSE") {
-        rename { "${it}_${project.archivesBaseName}"}
-    }
-}
-
-// configure the maven publication
-publishing {
-    publications {
-        create("mavenJava", MavenPublication) {
-            artifactId = project.archives_base_name
-            from components.java
-        }
-    }
-
-    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
     repositories {
-        // Add repositories to publish to here.
-        // Notice: This block does NOT have the same function as the block in the top level.
-        // The repositories here will be used for publishing your artifact, not for
-        // retrieving dependencies.
+        maven {
+            name = "Terraformers"
+            url = "https://maven.terraformersmc.com/"
+        }
+        mavenCentral()
+    }
+}
+
+tasks.named("build") {
+    dependsOn(":fabric:build")
+}
+
+tasks.named("clean") {
+    dependsOn(":common:clean", ":fabric:clean", ":forge:clean")
+}
+
+["runClient", "runclient"].each { taskName ->
+    tasks.register(taskName) {
+        group = "fabric"
+        description = "Delegates to :fabric:runClient"
+        dependsOn(":fabric:runClient")
+    }
+}
+
+["compileClientJava", "compileclientjava"].each { taskName ->
+    tasks.register(taskName) {
+        group = "build"
+        description = "Delegates to :fabric:compileClientJava"
+        dependsOn(":fabric:compileClientJava")
     }
 }

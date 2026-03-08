@@ -1,0 +1,142 @@
+plugins {
+    id 'fabric-loom' version '1.15.4'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = project.archives_base_name
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        "teamviewer" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+fabricApi {
+    configureDataGeneration {
+        client = true
+    }
+}
+
+sourceSets {
+    main {
+        java.srcDirs = ["src/main/java"]
+        resources.srcDirs = ["src/main/resources"]
+    }
+    client {
+        java.srcDirs = ["src/client/java"]
+        resources.srcDirs = ["src/client/resources"]
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        eachDependency { DependencyResolveDetails details ->
+            def group = details.requested.group
+            def name = details.requested.name
+            def jacksonRequiredVersion = "2.18.6"
+            def jsonRequiredVersion = "2.5.2"
+
+            if (group == 'com.fasterxml.jackson.core' && (name == 'jackson-core' || name == 'jackson-databind' || name == 'jackson-annotations')) {
+                details.useVersion jacksonRequiredVersion
+                if (details.requested.version) {
+                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${jacksonRequiredVersion}")
+                }
+            } else if (group == 'net.minidev' && name == 'json-smart') {
+                details.useVersion "[${jsonRequiredVersion},)"
+                if (details.requested.version) {
+                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${jsonRequiredVersion}")
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+    modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+    implementation project(":common")
+    include project(":common")
+
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    include "com.squareup.okhttp3:okhttp:4.12.0"
+
+    implementation "com.squareup.okio:okio-jvm:3.6.0"
+    include "com.squareup.okio:okio-jvm:3.6.0"
+
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
+    include "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
+
+    implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
+    include "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
+
+    implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
+    include "com.fasterxml.jackson.core:jackson-core:2.18.6"
+
+    implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+    include "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+
+    implementation "org.msgpack:jackson-dataformat-msgpack:0.9.11"
+    include "org.msgpack:jackson-dataformat-msgpack:0.9.11"
+
+    implementation "org.msgpack:msgpack-core:0.9.11"
+    include "org.msgpack:msgpack-core:0.9.11"
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+    filteringCharset = "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": project.minecraft_version,
+                "loader_version": project.loader_version
+    }
+}
+
+def targetJavaVersion = 21
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+jar {
+    from(rootProject.file("LICENSE.txt")) {
+        rename { "${it}_${project.archivesBaseName}" }
+    }
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+}
