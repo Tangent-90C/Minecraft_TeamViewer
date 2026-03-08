@@ -26,6 +26,8 @@
   "screen.multipleplayeresp.config.enable_player_esp": "Enable PlayerESP",
   "screen.multipleplayeresp.config.show_tracking_lines": "Show Tracking Lines",
   "screen.multipleplayeresp.config.show_tracking_lines.tooltip": "Toggle player ESP tracer rendering.",
+  "screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints": "JourneyMap Remote Waypoints",
+  "screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints.tooltip": "JourneyMap only. When disabled, unmarked remote players are no longer shown as automatic JourneyMap waypoints; shared marks are unaffected.",
   "screen.multipleplayeresp.config.middle_double_click_mark": "Middle Double-Click Mark",
   "screen.multipleplayeresp.config.middle_double_click_mark.tooltip": "Enable quick marking via middle mouse double-click.",
   "screen.multipleplayeresp.config.middle_click_cancel_waypoint": "Middle-Click Cancel Mark",

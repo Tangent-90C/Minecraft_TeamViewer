@@ -935,6 +935,9 @@ public final class XaeroWaypointShareBridge {
 		if (waypoint == null) {
 			return false;
 		}
+		if (isLocalPlayerTargetedWaypoint(waypoint, localPlayerId, currentDimension)) {
+			return true;
+		}
 		if (!includeOwnSharedWaypoints) {
 			return waypoint.ownerId() != null && waypoint.ownerId().equals(localPlayerId);
 		}
@@ -947,6 +950,41 @@ public final class XaeroWaypointShareBridge {
 		}
 		String waypointId = waypoint.waypointId();
 		return waypointId != null && knownLocalWaypoints.containsKey(waypointId);
+	}
+
+	private static boolean isLocalPlayerTargetedWaypoint(SharedWaypointInfo waypoint, UUID localPlayerId,
+			String currentDimension) {
+		if (waypoint == null || localPlayerId == null) {
+			return false;
+		}
+		if (waypoint.dimension() != null && !waypoint.dimension().isBlank()
+				&& !Objects.equals(waypoint.dimension(), currentDimension)) {
+			return false;
+		}
+		if (!"entity".equalsIgnoreCase(waypoint.targetType())) {
+			return false;
+		}
+
+		String targetEntityId = waypoint.targetEntityId();
+		if (targetEntityId != null && !targetEntityId.isBlank()) {
+			try {
+				if (localPlayerId.equals(UUID.fromString(targetEntityId))) {
+					return true;
+				}
+			} catch (IllegalArgumentException ignored) {
+			}
+		}
+
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client.player != null) {
+			String targetEntityName = waypoint.targetEntityName();
+			if (targetEntityName != null && !targetEntityName.isBlank()) {
+				String localName = client.player.getName().getString();
+				return localName != null && localName.equalsIgnoreCase(targetEntityName);
+			}
+		}
+
+		return false;
 	}
 
 	private static Object getMinimapSession() {

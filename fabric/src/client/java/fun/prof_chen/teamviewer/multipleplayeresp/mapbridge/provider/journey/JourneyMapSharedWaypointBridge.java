@@ -204,6 +204,9 @@ final class JourneyMapSharedWaypointBridge {
 			if (waypoint == null || waypoint.waypointId() == null || waypoint.waypointId().isBlank()) {
 				continue;
 			}
+			if (isLocalPlayerTargetedWaypoint(client, waypoint, currentDimension)) {
+				continue;
+			}
 			if (!config.isShowOwnSharedWaypointsOnMinimap() && waypoint.ownerId() != null
 					&& waypoint.ownerId().equals(localPlayerId)) {
 				continue;
@@ -301,6 +304,34 @@ final class JourneyMapSharedWaypointBridge {
 
 	private static boolean isPlayerTarget(SharedWaypointInfo waypoint) {
 		return waypoint.targetEntityType() != null && "minecraft:player".equalsIgnoreCase(waypoint.targetEntityType());
+	}
+
+	private static boolean isLocalPlayerTargetedWaypoint(MinecraftClient client, SharedWaypointInfo waypoint,
+			String currentDimension) {
+		if (client == null || client.player == null || waypoint == null) {
+			return false;
+		}
+		if (waypoint.dimension() != null && !waypoint.dimension().isBlank()
+				&& !Objects.equals(waypoint.dimension(), currentDimension)) {
+			return false;
+		}
+		if (!"entity".equalsIgnoreCase(waypoint.targetType())) {
+			return false;
+		}
+
+		String targetEntityId = waypoint.targetEntityId();
+		if (targetEntityId != null && !targetEntityId.isBlank()
+				&& targetEntityId.equals(client.player.getUuidAsString())) {
+			return true;
+		}
+
+		String targetEntityName = waypoint.targetEntityName();
+		if (targetEntityName != null && !targetEntityName.isBlank()) {
+			String localName = client.player.getName().getString();
+			return localName != null && localName.equalsIgnoreCase(targetEntityName);
+		}
+
+		return false;
 	}
 
 	private static Vec3d resolveLocalPlayerPositionFallback(MinecraftClient client, String targetEntityId,

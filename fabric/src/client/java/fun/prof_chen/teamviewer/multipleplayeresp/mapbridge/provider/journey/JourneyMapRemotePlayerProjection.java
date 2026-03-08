@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.journey;
 
+import fun.prof_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
 import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.multipleplayeresp.model.RemotePlayerInfo;
 
@@ -19,6 +20,7 @@ public final class JourneyMapRemotePlayerProjection implements RemotePlayerProje
 
 	@Override
 	public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
-		JourneyMapRemotePlayerBridge.tick(players, enabled);
+		boolean journeyMapRemotePlayersEnabled = StandaloneMultiPlayerESP.getConfig().isShowJourneyMapRemotePlayerWaypoints();
+		JourneyMapRemotePlayerBridge.tick(players, enabled && journeyMapRemotePlayersEnabled);
 	}
 }

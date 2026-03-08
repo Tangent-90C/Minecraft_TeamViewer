@@ -42,6 +42,7 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
     private boolean uploadSharedWaypoints = true;
     private boolean showSharedWaypoints = true;
     private boolean showOwnSharedWaypointsOnMinimap = true;
+    private boolean showJourneyMapRemotePlayerWaypoints = true;
     private boolean xrayMarkersAndBoxes = true;
     private boolean enableMiddleDoubleClickMark = true;
     private boolean enableMiddleClickCancelWaypoint = true;
@@ -316,6 +317,14 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
 
     public void setShowOwnSharedWaypointsOnMinimap(boolean showOwnSharedWaypointsOnMinimap) {
         this.showOwnSharedWaypointsOnMinimap = showOwnSharedWaypointsOnMinimap;
+    }
+
+    public boolean isShowJourneyMapRemotePlayerWaypoints() {
+        return showJourneyMapRemotePlayerWaypoints;
+    }
+
+    public void setShowJourneyMapRemotePlayerWaypoints(boolean showJourneyMapRemotePlayerWaypoints) {
+        this.showJourneyMapRemotePlayerWaypoints = showJourneyMapRemotePlayerWaypoints;
     }
 
     public boolean isXrayMarkersAndBoxes() {

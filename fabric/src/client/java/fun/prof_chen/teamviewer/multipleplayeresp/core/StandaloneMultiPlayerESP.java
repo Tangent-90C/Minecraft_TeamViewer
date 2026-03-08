@@ -3,9 +3,11 @@ package fun.prof_chen.teamviewer.multipleplayeresp.core;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
@@ -103,6 +105,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	private static final int MARKER_COLOR_RGB = 0xFF8C00;
 	private static boolean middlePressedLastTick = false;
 	private static long lastMiddleClickTs = 0L;
+	private static String lastLocalMarkedActionBarFingerprint = "";
+	private static boolean localPlayerMarkedActive = false;
+	private static String localPlayerMarkedIndicatorText = "TV!";
 	
 	@Override
 	public void onInitializeClient() {
@@ -182,6 +187,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			updatePlayerPositions();
 			handleMiddleMouseDoubleClickMarking(client);
 			handleAutoCancelWaypointOnEntityDeath(client);
+			handleLocalPlayerMarkedReminder(client);
 
 			remotePlayerProjectionCoordinator.tick(resolvePlayersForWorldMapBridge(), espEnabled);
 			sharedWaypointSyncCoordinator.tick(espEnabled, config);
@@ -196,6 +202,12 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 		WorldRenderEvents.AFTER_ENTITIES.register(context -> {
 			if (espEnabled) {
 				renderESP(context);
+			}
+		});
+
+		HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
+			if (espEnabled && localPlayerMarkedActive) {
+				renderLocalMarkedIndicator(drawContext);
 			}
 		});
 		
@@ -215,6 +227,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			sharedWaypointSyncCoordinator.clear();
 			remotePlayerProjectionCoordinator.clear();
 			trackedEntityWaypointLastPositions.clear();
+			lastLocalMarkedActionBarFingerprint = "";
+			localPlayerMarkedActive = false;
+			localPlayerMarkedIndicatorText = "TV!";
 			LOGGER.info("MultiPlayer ESP disabled");
 		}
 		
@@ -948,6 +963,9 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			if (waypoint == null) {
 				continue;
 			}
+			if (isLocalPlayerTargetedWaypoint(client, waypoint, currentDimension)) {
+				continue;
+			}
 			if (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(currentDimension)) {
 				continue;
 			}
@@ -970,6 +988,107 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			Vec3d relativePos = worldPos.subtract(cameraPos);
 			renderWaypointMarkerStyle(context, relativePos, color, depthTestEnabled);
 		}
+	}
+
+	private void handleLocalPlayerMarkedReminder(MinecraftClient client) {
+		if (client == null || client.player == null || client.world == null || sharedWaypoints.isEmpty()) {
+			lastLocalMarkedActionBarFingerprint = "";
+			localPlayerMarkedActive = false;
+			localPlayerMarkedIndicatorText = "TV!";
+			return;
+		}
+
+		String currentDimension = client.world.getRegistryKey().getValue().toString();
+		List<SharedWaypointInfo> localTargetWaypoints = collectLocalPlayerTargetedWaypoints(client, currentDimension);
+		if (localTargetWaypoints.isEmpty()) {
+			lastLocalMarkedActionBarFingerprint = "";
+			localPlayerMarkedActive = false;
+			localPlayerMarkedIndicatorText = "TV!";
+			return;
+		}
+
+		Set<String> ownerNames = new LinkedHashSet<>();
+		for (SharedWaypointInfo waypoint : localTargetWaypoints) {
+			String ownerName = waypoint.ownerName();
+			if (ownerName != null && !ownerName.isBlank()) {
+				ownerNames.add(ownerName.trim());
+			}
+		}
+
+		String ownerSummary;
+		if (ownerNames.isEmpty()) {
+			ownerSummary = "队友";
+		} else if (ownerNames.size() == 1) {
+			ownerSummary = ownerNames.iterator().next();
+		} else {
+			ownerSummary = ownerNames.iterator().next() + " 等" + ownerNames.size() + " 人";
+		}
+
+		String fingerprint = localTargetWaypoints.size() + "|" + ownerSummary;
+		localPlayerMarkedActive = true;
+		localPlayerMarkedIndicatorText = localTargetWaypoints.size() > 1 ? "TV! x" + localTargetWaypoints.size() : "TV!";
+		if (!fingerprint.equals(lastLocalMarkedActionBarFingerprint)) {
+			client.player.sendMessage(Text.literal("§e[TV] 你已被标记，来源: " + ownerSummary), true);
+			lastLocalMarkedActionBarFingerprint = fingerprint;
+		}
+	}
+
+	private void renderLocalMarkedIndicator(DrawContext context) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client == null || client.textRenderer == null || context == null) {
+			return;
+		}
+
+		String text = localPlayerMarkedIndicatorText == null || localPlayerMarkedIndicatorText.isBlank()
+				? "TV!"
+				: localPlayerMarkedIndicatorText;
+		int textWidth = client.textRenderer.getWidth(text);
+		int paddingX = 4;
+		int paddingY = 3;
+		int x = context.getScaledWindowWidth() - textWidth - paddingX * 2 - 6;
+		int y = 6;
+
+		context.fill(x, y, x + textWidth + paddingX * 2, y + 12 + paddingY * 2, 0x66000000);
+		context.drawTextWithShadow(client.textRenderer, text, x + paddingX, y + paddingY + 1, 0xFFFF6B6B);
+	}
+
+	private List<SharedWaypointInfo> collectLocalPlayerTargetedWaypoints(MinecraftClient client, String currentDimension) {
+		if (client == null || client.player == null) {
+			return List.of();
+		}
+
+		List<SharedWaypointInfo> result = new ArrayList<>();
+		for (SharedWaypointInfo waypoint : sharedWaypoints.values()) {
+			if (isLocalPlayerTargetedWaypoint(client, waypoint, currentDimension)) {
+				result.add(waypoint);
+			}
+		}
+		return result;
+	}
+
+	private boolean isLocalPlayerTargetedWaypoint(MinecraftClient client, SharedWaypointInfo waypoint, String currentDimension) {
+		if (client == null || client.player == null || waypoint == null) {
+			return false;
+		}
+		if (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(currentDimension)) {
+			return false;
+		}
+		if (!"entity".equalsIgnoreCase(waypoint.targetType())) {
+			return false;
+		}
+
+		String targetEntityId = waypoint.targetEntityId();
+		if (targetEntityId != null && !targetEntityId.isBlank() && targetEntityId.equals(client.player.getUuidAsString())) {
+			return true;
+		}
+
+		String targetEntityName = waypoint.targetEntityName();
+		if (targetEntityName != null && !targetEntityName.isBlank()) {
+			String localName = client.player.getName().getString();
+			return localName != null && localName.equalsIgnoreCase(targetEntityName);
+		}
+
+		return false;
 	}
 
 	private boolean isTampermonkeyWaypoint(SharedWaypointInfo waypoint) {

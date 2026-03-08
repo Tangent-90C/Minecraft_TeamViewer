@@ -26,6 +26,8 @@
   "screen.multipleplayeresp.config.enable_player_esp": "启用PlayerESP",
   "screen.multipleplayeresp.config.show_tracking_lines": "显示追踪线",
   "screen.multipleplayeresp.config.show_tracking_lines.tooltip": "开关玩家ESP追踪线渲染。",
+  "screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints": "JourneyMap远程路标",
+  "screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints.tooltip": "仅影响JourneyMap。关闭后，未被标点的远程玩家不会再以JourneyMap路标形式自动显示；共享报点不受影响。",
   "screen.multipleplayeresp.config.middle_double_click_mark": "中键双击报点",
   "screen.multipleplayeresp.config.middle_double_click_mark.tooltip": "启用后可通过中键双击快速报点。",
   "screen.multipleplayeresp.config.middle_click_cancel_waypoint": "中键单击取消报点",

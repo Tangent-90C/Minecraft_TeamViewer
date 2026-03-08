@@ -20,6 +20,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private ButtonWidget tracerStartModeButton;
     private ButtonWidget showBoxesButton;
     private ButtonWidget showLinesButton;
+    private ButtonWidget journeyMapRemotePlayersButton;
     private ButtonWidget xrayMarkersAndBoxesButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget waypointSettingsButton;
@@ -163,15 +164,22 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         ).dimensions(rightX, subSettingsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.waypointSettingsButton);
 
-        int backButtonY = getNextButtonY();
+        int journeyMapToggleY = getNextButtonY();
+        this.journeyMapRemotePlayersButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints"),
+            button -> toggleJourneyMapRemotePlayerWaypoints()
+        ).dimensions(leftX, journeyMapToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.journeyMapRemotePlayersButton);
+
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.back"),
             button -> close()
-        ).dimensions(leftX, backButtonY, COMPONENT_WIDTH * 2 + COLUMN_GAP, COMPONENT_HEIGHT).build());
+        ).dimensions(rightX, journeyMapToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
 
         updateTracerStartModeButton();
         updateShowBoxesButton();
         updateShowLinesButton();
+        updateJourneyMapRemotePlayerWaypointsButton();
         updateXrayMarkersAndBoxesButton();
     }
 
@@ -205,6 +213,10 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
         if (this.xrayMarkersAndBoxesButton != null && this.xrayMarkersAndBoxesButton.isMouseOver(mouseX, mouseY)) {
             drawTooltip(context, "screen.multipleplayeresp.config.xray_markers_and_boxes.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.journeyMapRemotePlayersButton != null && this.journeyMapRemotePlayersButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints.tooltip", mouseX, mouseY);
             return;
         }
         if (this.tracerStartModeButton != null && this.tracerStartModeButton.isMouseOver(mouseX, mouseY)) {
@@ -322,6 +334,21 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleJourneyMapRemotePlayerWaypoints() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isShowJourneyMapRemotePlayerWaypoints();
+        StandaloneMultiPlayerESP.getConfig().setShowJourneyMapRemotePlayerWaypoints(!currentStatus);
+        updateJourneyMapRemotePlayerWaypointsButton();
+    }
+
+    private void updateJourneyMapRemotePlayerWaypointsButton() {
+        if (this.journeyMapRemotePlayersButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isShowJourneyMapRemotePlayerWaypoints();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.show_journeymap_remote_player_waypoints").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.journeyMapRemotePlayersButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void toggleXrayMarkersAndBoxes() {
         boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isXrayMarkersAndBoxes();
         StandaloneMultiPlayerESP.getConfig().setXrayMarkersAndBoxes(!currentStatus);
@@ -362,6 +389,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
         updateTracerStartModeButton();
         updateShowBoxesButton();
         updateShowLinesButton();
+        updateJourneyMapRemotePlayerWaypointsButton();
         updateXrayMarkersAndBoxesButton();
     }
 }
