@@ -30,6 +30,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 			"targetEntityIds",
 			"players",
 			"delete",
+			"deleteReports",
 			"connections",
 			"members",
 			"waypointIds"
@@ -40,6 +41,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 			"waypoints",
 			"playerMarks",
 			"reports",
+			"upsertReports",
 			"sourceToGroup",
 			"upsert"
 	);
@@ -139,7 +141,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 					List<Object> converted = new ArrayList<>(list.size());
 					for (Object item : list) {
 						String canonical = UuidBinaryCodec.toCanonicalString(item);
-						converted.add(canonical != null ? canonical : item);
+						converted.add(canonical != null ? canonical : normalizeUuidInbound(item, childKey));
 					}
 					normalized.put(normalizedKey, converted);
 					continue;
@@ -181,7 +183,7 @@ public final class MsgpackMessageCodec implements MessageCodec {
 					for (Object item : list) {
 						String canonical = UuidBinaryCodec.toCanonicalString(item);
 						byte[] raw = UuidBinaryCodec.toBytes(canonical);
-						converted.add(raw != null ? raw : item);
+						converted.add(raw != null ? raw : normalizeUuidOutbound(item, childKey));
 					}
 					normalized.put(normalizedKey, converted);
 					continue;

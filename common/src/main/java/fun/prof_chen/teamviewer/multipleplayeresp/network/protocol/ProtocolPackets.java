@@ -111,6 +111,13 @@ public final class ProtocolPackets {
 		public List<Map<String, Object>> tabPlayers;
 	}
 
+	public static class TabPlayersPatchPacket {
+		public final String type = "tab_players_patch";
+		public byte[] submitPlayerId;
+		public Map<String, Map<String, Object>> upsert;
+		public List<String> delete;
+	}
+
 	public static class WaypointsDeletePacket {
 		public final String type = "waypoints_delete";
 		public byte[] submitPlayerId;

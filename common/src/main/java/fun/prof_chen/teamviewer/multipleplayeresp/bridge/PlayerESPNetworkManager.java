@@ -134,6 +134,9 @@ public class PlayerESPNetworkManager {
 	// 上次发送的实体快照 - 用于计算增量更新
 	private final Map<String, Map<String, Object>> lastSentEntitiesSnapshot = new HashMap<>();
 
+	// 上次发送的 TAB 玩家快照 - 用于计算增量更新
+	private final Map<String, Map<String, Object>> lastSentTabPlayersSnapshot = new HashMap<>();
+
 	// 对象级保活时间戳：记录某个对象最近一次被显式保活/上报的时刻
 	private final Map<String, Long> lastPlayerObjectLivenessMs = new HashMap<>();
 	private final Map<String, Long> lastEntityObjectLivenessMs = new HashMap<>();
@@ -189,12 +192,6 @@ public class PlayerESPNetworkManager {
 	
 	// 上次发送实体数据包的时间 - 用于强制刷新判断
 	private volatile long lastEntitiesPacketSentMs = 0L;
-	
-	// 上次发送Tab玩家列表的时间 - 用于去重优化
-	private volatile long lastTabPlayersPacketSentMs = 0L;
-	
-	// 上次发送Tab玩家列表的签名 - 用于内容变化检测
-	private volatile String lastTabPlayersSignature = "";
 	
 	// 待刷新的玩家ID集合 - 响应服务端刷新请求
 	private final Set<String> pendingPlayerRefreshIds = new HashSet<>();
@@ -647,27 +644,17 @@ public class PlayerESPNetworkManager {
 	 * 主要用于玩家标记和队伍识别功能
 	 * 
 	 * 优化策略：
-	 * - 内容签名去重：相同内容不重复发送
-	 * - 时间间隔控制：避免过于频繁的更新
-	 * - 数据标准化：提取必要的字段信息
+	 * - 首次发送完整基线，后续仅发送增量 patch
+	 * - 玩家级别 diff，避免整表重传
+	 * - 不再执行 TAB 的定时保底全量刷新
 	 * 
-	 * 协议格式(tab_players_update)：
+	 * 协议格式(tab_players_patch)：
 	 * {
-	 *   "type": "tab_players_update",
+	 *   "type": "tab_players_patch",
 	 *   "submitPlayerId": "发送者UUID",
-	 *   "tabPlayers": [
-	 *     {
-	 *       "id": "玩家UUID",
-	 *       "name": "玩家名",
-	 *       "displayName": "显示名称"
-	 *     }
-	 *   ]
+	 *   "upsert": {"玩家Key": 变更字段},
+	 *   "delete": ["要删除的玩家Key"]
 	 * }
-	 * 
-	 * 性能考虑：
-	 * - 25秒强制刷新确保数据新鲜度
-	 * - JSON签名比较避免网络浪费
-	 * - 只传输必要字段减少数据量
 	 */
 	public void sendTabPlayersUpdate(UUID submitPlayerId, List<Map<String, Object>> tabPlayers) {
 		if (socket == null || !isConnected || submitPlayerId == null || tabPlayers == null) {
@@ -675,48 +662,43 @@ public class PlayerESPNetworkManager {
 		}
 
 		try {
-			List<Map<String, Object>> normalized = new ArrayList<>();
-			for (Map<String, Object> raw : tabPlayers) {
-				if (raw == null || raw.isEmpty()) {
+			Map<String, Map<String, Object>> currentSnapshot = buildTabPlayersSnapshot(tabPlayers);
+			Map<String, Map<String, Object>> upsert = new HashMap<>();
+			List<String> delete = new ArrayList<>();
+
+			for (Map.Entry<String, Map<String, Object>> entry : currentSnapshot.entrySet()) {
+				Map<String, Object> previous = lastSentTabPlayersSnapshot.get(entry.getKey());
+				if (previous == null) {
+					upsert.put(entry.getKey(), entry.getValue());
 					continue;
 				}
-				Map<String, Object> copy = new HashMap<>();
-				Object idValue = raw.get("playerUUID");
-				Object nameValue = raw.get("name");
-				Object displayName = raw.get("prefixColored");
 
-				if (idValue != null && !String.valueOf(idValue).isBlank()) {
-					byte[] uuidBytes = UuidBinaryCodec.toBytes(String.valueOf(idValue));
-					copy.put("id", uuidBytes != null ? uuidBytes : String.valueOf(idValue));
-				}
-				if (nameValue != null && !String.valueOf(nameValue).isBlank()) {
-					copy.put("name", String.valueOf(nameValue));
-				}
-				if (displayName != null && !String.valueOf(displayName).isBlank()) {
-					copy.put("displayName", String.valueOf(displayName));
-				}
-
-				if (!copy.isEmpty()) {
-					normalized.add(copy);
+				Map<String, Object> fieldDelta = computeFieldDelta(previous, entry.getValue());
+				if (!fieldDelta.isEmpty()) {
+					upsert.put(entry.getKey(), entry.getValue());
 				}
 			}
 
-			String signature = gson.toJson(normalized);
-			long now = System.currentTimeMillis();
-			if (Objects.equals(signature, lastTabPlayersSignature)
-					&& now - lastTabPlayersPacketSentMs < FORCE_FULL_REFRESH_MS) {
+			for (String previousId : lastSentTabPlayersSnapshot.keySet()) {
+				if (!currentSnapshot.containsKey(previousId)) {
+					delete.add(previousId);
+				}
+			}
+
+			if (upsert.isEmpty() && delete.isEmpty()) {
 				return;
 			}
 
-			ProtocolPackets.TabPlayersUpdatePacket packet = new ProtocolPackets.TabPlayersUpdatePacket();
+			ProtocolPackets.TabPlayersPatchPacket packet = new ProtocolPackets.TabPlayersPatchPacket();
 			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
-			packet.tabPlayers = normalized;
+			packet.upsert = upsert;
+			packet.delete = delete;
 			sendPacket(packet);
 
-			lastTabPlayersSignature = signature;
-			lastTabPlayersPacketSentMs = now;
+			lastSentTabPlayersSnapshot.clear();
+			lastSentTabPlayersSnapshot.putAll(currentSnapshot);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send tab_players_update: {}", e.getMessage());
+			LOGGER.error("Failed to send tab_players_patch: {}", e.getMessage());
 		}
 	}
 
@@ -2496,6 +2478,67 @@ public class PlayerESPNetworkManager {
 		return copy;
 	}
 
+	private Map<String, Map<String, Object>> buildTabPlayersSnapshot(List<Map<String, Object>> tabPlayers) {
+		Map<String, Map<String, Object>> snapshot = new HashMap<>();
+		for (Map<String, Object> raw : tabPlayers) {
+			if (raw == null || raw.isEmpty()) {
+				continue;
+			}
+
+			String playerId = normalizeUuidText(raw.get("playerUUID"));
+			String name = normalizeNullableText(raw.get("name"));
+			String displayName = normalizeNullableText(raw.get("prefixColored"));
+			String prefixedName = normalizeNullableText(raw.get("prefixText"));
+
+			String entryKey = buildTabPlayerEntryKey(playerId, name, displayName, prefixedName);
+			if (entryKey == null) {
+				continue;
+			}
+
+			Map<String, Object> snapshotEntry = new HashMap<>();
+			if (playerId != null) {
+				snapshotEntry.put("id", playerId);
+			}
+			snapshotEntry.put("name", name);
+			snapshotEntry.put("displayName", displayName);
+			snapshotEntry.put("prefixedName", prefixedName);
+			snapshot.put(entryKey, snapshotEntry);
+		}
+		return snapshot;
+	}
+
+	private String buildTabPlayerEntryKey(String playerId, String name, String displayName, String prefixedName) {
+		if (playerId != null && !playerId.isBlank()) {
+			return playerId;
+		}
+		if (name != null && !name.isBlank()) {
+			return "name:" + name.toLowerCase();
+		}
+		if (displayName != null && !displayName.isBlank()) {
+			return "display:" + displayName;
+		}
+		if (prefixedName != null && !prefixedName.isBlank()) {
+			return "prefix:" + prefixedName;
+		}
+		return null;
+	}
+
+	private String normalizeUuidText(Object value) {
+		String canonical = UuidBinaryCodec.toCanonicalString(value);
+		if (canonical != null && !canonical.isBlank()) {
+			return canonical;
+		}
+		return normalizeNullableText(value);
+	}
+
+	private String normalizeNullableText(Object value) {
+		if (value == null) {
+			return null;
+		}
+		String text = String.valueOf(value).trim();
+		return text.isEmpty() ? null : text;
+	}
+
 	private void resetNegotiationState() {
 		serverProtocolVersion = runtimeGateway.getServerProtocolFallbackVersion();
 		serverProgramVersion = runtimeGateway.getProgramVersionUnknown();
@@ -2507,7 +2550,6 @@ public class PlayerESPNetworkManager {
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
-		lastTabPlayersPacketSentMs = 0L;
 	}
 
 	public int getNegotiatedReportIntervalTicks() {
@@ -2521,9 +2563,9 @@ public class PlayerESPNetworkManager {
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
+		lastSentTabPlayersSnapshot.clear();
 		lastPlayerObjectLivenessMs.clear();
 		lastEntityObjectLivenessMs.clear();
-		lastTabPlayersSignature = "";
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();
 		remotePlayerDataCache.clear();
