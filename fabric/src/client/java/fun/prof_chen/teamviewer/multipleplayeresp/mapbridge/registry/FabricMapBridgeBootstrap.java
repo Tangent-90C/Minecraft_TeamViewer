@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.registry;
 
+import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.journey.JourneyMapBridgeModule;
 import fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.xaero.XaeroMapBridgeModule;
 
 public final class FabricMapBridgeBootstrap {
@@ -9,6 +10,7 @@ public final class FabricMapBridgeBootstrap {
 	public static MapBridgeRegistry createRegistry() {
 		MapBridgeRegistry registry = new MapBridgeRegistry();
 		new XaeroMapBridgeModule().register(registry);
+		new JourneyMapBridgeModule().register(registry);
 		return registry;
 	}
 }

@@ -24,6 +24,13 @@ fabricApi {
     }
 }
 
+repositories {
+    maven {
+        name = "JourneyMap"
+        url = "https://jm.gserv.me/repository/maven-snapshots/"
+    }
+}
+
 sourceSets {
     main {
         java.srcDirs = ["src/main/java"]
@@ -73,6 +80,8 @@ dependencies {
 
     modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
     modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+    modCompileOnly "info.journeymap:journeymap-api-fabric:2.0.0-1.21.1-SNAPSHOT"
 
     implementation project(":common")
     include project(":common")
