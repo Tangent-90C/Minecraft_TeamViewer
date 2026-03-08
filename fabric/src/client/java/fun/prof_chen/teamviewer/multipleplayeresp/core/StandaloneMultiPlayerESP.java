@@ -2,6 +2,7 @@ package fun.prof_chen.teamviewer.multipleplayeresp.core;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
@@ -103,6 +104,8 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
 	private static final double MARK_CANCEL_MAX_RADIUS = 4.0D;
 	private static final int MARKER_COLOR_RGB = 0xFF8C00;
+	private static final int AUTO_CONNECT_MAX_RETRIES = 2;
+	private static final long AUTO_CONNECT_RETRY_DELAY_MS = 10_000L;
 	private static boolean middlePressedLastTick = false;
 	private static long lastMiddleClickTs = 0L;
 	private static String lastLocalMarkedActionBarFingerprint = "";
@@ -210,6 +213,15 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 				renderLocalMarkedIndicator(drawContext);
 			}
 		});
+
+		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+			if (handler == null || handler.getConnection().isLocal()) {
+				return;
+			}
+			handleJoinedMultiplayer(client);
+		});
+
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> handleLeftPlaySession());
 		
 		LOGGER.info("MultiPlayer ESP mod initialized");
 	}
@@ -222,18 +234,49 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			networkManager.connect();
 			LOGGER.info("MultiPlayer ESP enabled");
 		} else {
-			// 禁用ESP，断开连接
-			networkManager.disconnect();
-			sharedWaypointSyncCoordinator.clear();
-			remotePlayerProjectionCoordinator.clear();
-			trackedEntityWaypointLastPositions.clear();
-			lastLocalMarkedActionBarFingerprint = "";
-			localPlayerMarkedActive = false;
-			localPlayerMarkedIndicatorText = "TV!";
+			shutdownNetworkSession();
 			LOGGER.info("MultiPlayer ESP disabled");
 		}
 		
 		// 重置计数器
+		tickCounter = 0;
+	}
+
+	private void handleJoinedMultiplayer(MinecraftClient client) {
+		if (client == null || config == null || !config.isAutoConnectOnMultiplayerJoin()) {
+			return;
+		}
+		espEnabled = true;
+		if (networkManager != null) {
+			networkManager.disconnect();
+			networkManager.connectWithReconnectLimit(AUTO_CONNECT_MAX_RETRIES, AUTO_CONNECT_RETRY_DELAY_MS);
+		}
+		tickCounter = 0;
+		LOGGER.info("Auto-connect enabled; started PlayerESP connection for multiplayer session");
+	}
+
+	private void handleLeftPlaySession() {
+		shutdownNetworkSession();
+		LOGGER.info("Left play session; stopped PlayerESP network session");
+	}
+
+	private void shutdownNetworkSession() {
+		if (networkManager != null) {
+			networkManager.disconnect();
+		}
+		remotePlayers.clear();
+		serverPlayerPositions.clear();
+		sharedWaypoints.clear();
+		trackedEntityWaypointLastPositions.clear();
+		if (sharedWaypointSyncCoordinator != null) {
+			sharedWaypointSyncCoordinator.clear();
+		}
+		if (remotePlayerProjectionCoordinator != null) {
+			remotePlayerProjectionCoordinator.clear();
+		}
+		lastLocalMarkedActionBarFingerprint = "";
+		localPlayerMarkedActive = false;
+		localPlayerMarkedIndicatorText = "TV!";
 		tickCounter = 0;
 	}
 	

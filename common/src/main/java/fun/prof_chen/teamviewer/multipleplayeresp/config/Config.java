@@ -56,6 +56,7 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
     private double waypointBeaconBeamHeight = 7.6D;
     private double tampermonkeyBeamWidth = 0.34D;
     private double tampermonkeyBeamHeight = 384.0D;
+    private boolean autoConnectOnMultiplayerJoin = false;
     private boolean useSystemProxy = false;
     private boolean preferLocalDataForEsp = true;
 
@@ -520,6 +521,14 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
             return;
         }
         this.tampermonkeyBeamHeight = Math.min(tampermonkeyBeamHeight, 1024.0D);
+    }
+
+    public boolean isAutoConnectOnMultiplayerJoin() {
+        return autoConnectOnMultiplayerJoin;
+    }
+
+    public void setAutoConnectOnMultiplayerJoin(boolean autoConnectOnMultiplayerJoin) {
+        this.autoConnectOnMultiplayerJoin = autoConnectOnMultiplayerJoin;
     }
 
     @Override

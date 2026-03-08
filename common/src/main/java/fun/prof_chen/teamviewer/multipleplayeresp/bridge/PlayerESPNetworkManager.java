@@ -100,6 +100,8 @@ public class PlayerESPNetworkManager {
 	
 	// 对象级保活默认间隔(毫秒) - 若握手未下发 timeout，则使用该值
 	private static final long DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS = 12_000L;
+	private static final int UNLIMITED_RECONNECT_ATTEMPTS = -1;
+	private static final long DEFAULT_RECONNECT_DELAY_MS = 5_000L;
 
 	// 单次 keepalive 报文最多携带对象数量
 	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
@@ -152,6 +154,9 @@ public class PlayerESPNetworkManager {
 	
 	// 重连意愿标志 - 控制是否应该尝试重连
 	private volatile boolean shouldReconnect = false;
+	private volatile int maxReconnectAttempts = UNLIMITED_RECONNECT_ATTEMPTS;
+	private volatile int reconnectAttemptsRemaining = UNLIMITED_RECONNECT_ATTEMPTS;
+	private volatile long reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS;
 	
 	// 版本不兼容导致的重连抑制标志
 	private volatile boolean reconnectSuppressedForVersionMismatch = false;
@@ -297,11 +302,29 @@ public class PlayerESPNetworkManager {
 	 * - 自动调度重连机制
 	 */
 	public void connect() {
+		startConnection(UNLIMITED_RECONNECT_ATTEMPTS, DEFAULT_RECONNECT_DELAY_MS);
+	}
+
+	public void connectWithReconnectLimit(int maxReconnectAttempts, long reconnectDelayMs) {
+		startConnection(maxReconnectAttempts, reconnectDelayMs);
+	}
+
+	private void startConnection(int maxReconnectAttempts, long reconnectDelayMs) {
 		if (configGateway == null || transport == null) {
 			return;
 		}
 		shouldReconnect = true;
 		reconnectSuppressedForVersionMismatch = false;
+		this.maxReconnectAttempts = normalizeReconnectAttempts(maxReconnectAttempts);
+		reconnectAttemptsRemaining = this.maxReconnectAttempts;
+		this.reconnectDelayMs = normalizeReconnectDelayMs(reconnectDelayMs);
+		doConnectAttempt();
+	}
+
+	private void doConnectAttempt() {
+		if (configGateway == null || transport == null) {
+			return;
+		}
 
 		boolean useSystemProxy = configGateway.isUseSystemProxy();
 		String uri = configGateway.getServerURL();
@@ -358,8 +381,16 @@ public class PlayerESPNetworkManager {
 		if (!shouldReconnect) {
 			return;
 		}
+		if (reconnectAttemptsRemaining == 0) {
+			shouldReconnect = false;
+			LOGGER.info("Reconnect retry budget exhausted; stopping automatic reconnects");
+			return;
+		}
+		if (reconnectAttemptsRemaining > 0) {
+			reconnectAttemptsRemaining--;
+		}
 		try {
-			reconnectExecutor.schedule(this::connect, 5, TimeUnit.SECONDS);
+			reconnectExecutor.schedule(this::doConnectAttempt, reconnectDelayMs, TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			LOGGER.warn("Reconnect scheduler is unavailable: {}", e.getMessage());
 		}
@@ -380,6 +411,7 @@ public class PlayerESPNetworkManager {
 	 */
 	public void disconnect() {
 		shouldReconnect = false;
+		resetReconnectPolicy();
 		if (socket != null) {
 			socket.close(1000, "Client disconnect");
 			socket = null;
@@ -812,6 +844,7 @@ public class PlayerESPNetworkManager {
 		enqueueMainThreadTask(() -> {
 			isConnected = true;
 			lastConnectionError = "";
+			reconnectAttemptsRemaining = maxReconnectAttempts;
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			LOGGER.info("WebSocket connection opened to PlayerESP server");
@@ -1471,6 +1504,20 @@ public class PlayerESPNetworkManager {
 
 	public String getLastConnectionError() {
 		return lastConnectionError;
+	}
+
+	private int normalizeReconnectAttempts(int attempts) {
+		return attempts < 0 ? UNLIMITED_RECONNECT_ATTEMPTS : attempts;
+	}
+
+	private long normalizeReconnectDelayMs(long delayMs) {
+		return Math.max(1_000L, delayMs);
+	}
+
+	private void resetReconnectPolicy() {
+		maxReconnectAttempts = UNLIMITED_RECONNECT_ATTEMPTS;
+		reconnectAttemptsRemaining = UNLIMITED_RECONNECT_ATTEMPTS;
+		reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS;
 	}
 
 	public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) {
