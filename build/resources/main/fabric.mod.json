@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "teamviewer",
+  "version": "0.4.3",
+
+  "name": "TeamViewer",
+  "description": "",
+  "authors": [],
+  "contact": {},
+
+  "license": "MIT",
+  "icon": "assets/teamviewer/icon.ico",
+
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "fun.prof_chen.teamviewer.client.TeamviewerDataGenerator"
+    ],
+    "client": [
+      "fun.prof_chen.teamviewer.client.TeamviewerClient"
+    ],
+    "modmenu": [
+      "fun.prof_chen.teamviewer.client.TeamviewerModMenuApi"
+    ],
+    "journeymap": [
+      "fun.prof_chen.teamviewer.multipleplayeresp.bridge.JourneyMapBridge"
+    ]
+  },
+
+  "mixins": [
+    "teamviewer.mixins.json"
+    ,{
+      "config": "teamviewer.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.17.2",
+    "fabric": "*",
+    "minecraft": "1.21.8"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
