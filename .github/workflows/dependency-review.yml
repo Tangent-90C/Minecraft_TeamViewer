@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: [ "main"]
     paths:
-      - 'src/**'
+      - 'common/**'
+      - 'fabric/**'
+      - 'forge/**'
 
 jobs:
   dependency-review:

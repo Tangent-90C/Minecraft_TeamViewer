@@ -31,6 +31,9 @@ jobs:
         with:
           # When pr-mode is set to true, Qodana analyzes only the files that have been changed
           pr-mode: false
+          # Bust stale IDE/Gradle import caches after the repository layout changed.
+          primary-cache-key: qodana-2025.3-root-layout-v2-${{ github.ref }}-${{ github.sha }}
+          additional-cache-key: qodana-2025.3-root-layout-v2-${{ github.ref }}
           use-caches: true
           post-pr-comment: true
           use-annotations: true

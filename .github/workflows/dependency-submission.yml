@@ -4,11 +4,15 @@ on:
   push:
     branches: [ "main"]
     paths:
-      - 'src/**'
+      - 'common/**'
+      - 'fabric/**'
+      - 'forge/**'
   pull_request:
     branches: [ "main"]
     paths:
-      - 'src/**'
+      - 'common/**'
+      - 'fabric/**'
+      - 'forge/**'
 
 jobs:
 
@@ -26,8 +30,5 @@ jobs:
         java-version: 21
     - name: Generate and submit dependency graph
       uses: gradle/actions/dependency-submission@v5
-      with:
-        # The gradle project is not in the root of the repository.
-        build-root-directory: minecraft-mod
 
 

@@ -15,11 +15,15 @@ on:
   push:
     branches: [ "main", "dev" ]
     paths:
-      - 'src/**'
+      - 'common/**'
+      - 'fabric/**'
+      - 'forge/**'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
-      - 'src/**'
+      - 'common/**'
+      - 'fabric/**'
+      - 'forge/**'
   schedule:
     - cron: '21 14 * * 2'
 
