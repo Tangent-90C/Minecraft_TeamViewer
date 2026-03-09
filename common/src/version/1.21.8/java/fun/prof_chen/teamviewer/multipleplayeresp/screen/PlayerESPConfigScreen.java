@@ -18,6 +18,7 @@ public class PlayerESPConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
     private TextFieldWidget roomCodeField;
+    private ButtonWidget autoConnectOnMultiplayerJoinButton;
     private ButtonWidget connectButton;
     private ButtonWidget displaySettingsButton;
     private ButtonWidget networkSettingsButton;
@@ -32,6 +33,7 @@ public class PlayerESPConfigScreen extends Screen {
     // 保存原始值，用于取消时恢复
     private String originalURL;
     private String originalRoomCode;
+    private boolean originalAutoConnectOnMultiplayerJoin;
     
     // 自动布局相关变量
     private static final int COMPONENT_WIDTH = 200;
@@ -39,6 +41,7 @@ public class PlayerESPConfigScreen extends Screen {
     private static final int COMPONENT_SPACING = 30;
     private static final int LABEL_SPACING = 12;
     private static final int BUTTON_SPACING = 25;
+    private static final int HALF_COMPONENT_GAP = 4;
     private static final int URL_MAX_LENGTH = 2048;
     private static final int ROOM_CODE_MAX_LENGTH = 64;
     private static final int SAVE_HINT_COLOR_HIGHLIGHT = 0xFFAA00;
@@ -50,6 +53,7 @@ public class PlayerESPConfigScreen extends Screen {
         this.parent = parent;
         this.originalURL = PlayerESPNetworkManager.getServerURL();
         this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
+        this.originalAutoConnectOnMultiplayerJoin = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -98,6 +102,10 @@ public class PlayerESPConfigScreen extends Screen {
     private int getComponentX() {
         return (this.width - COMPONENT_WIDTH) / 2;
     }
+
+    private int getHalfComponentWidth() {
+        return (COMPONENT_WIDTH - HALF_COMPONENT_GAP) / 2;
+    }
     
     // 连接状态监听器实例
     private final ConnectionStatusListener connectionListener = connected -> MinecraftClient.getInstance().execute(() -> {
@@ -139,13 +147,14 @@ public class PlayerESPConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
 
-        // 房间号输入框
+        // 房间号输入框 + 自动连接开关
         int roomCodeY = getNextY();
+        int halfComponentWidth = getHalfComponentWidth();
         this.roomCodeField = new TextFieldWidget(
             this.textRenderer,
             componentX,
             roomCodeY,
-            COMPONENT_WIDTH,
+            halfComponentWidth,
             COMPONENT_HEIGHT,
             Text.translatable("screen.multipleplayeresp.config.room_code")
         );
@@ -160,6 +169,13 @@ public class PlayerESPConfigScreen extends Screen {
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
+
+        this.autoConnectOnMultiplayerJoinButton = ButtonWidget.builder(
+            Text.translatable("screen.multipleplayeresp.config.auto_connect_compact"),
+            button -> toggleAutoConnectOnMultiplayerJoin()
+        ).dimensions(componentX + halfComponentWidth + HALF_COMPONENT_GAP, roomCodeY, halfComponentWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.autoConnectOnMultiplayerJoinButton);
+        updateAutoConnectOnMultiplayerJoinButton();
         
         // 显示设置/网络设置按钮（左右布局）
         int settingsY = getNextButtonY();
@@ -245,9 +261,10 @@ public class PlayerESPConfigScreen extends Screen {
         // 移除连接状态监听器
         StandaloneMultiPlayerESP.getNetworkManager().removeConnectionStatusListener(connectionListener);
         
-        // 仅恢复高危参数：服务器URL与房间号
+        // 恢复未保存的一级页面设置
         PlayerESPNetworkManager.setServerURL(this.originalURL);
         PlayerESPNetworkManager.setRoomCode(this.originalRoomCode);
+        StandaloneMultiPlayerESP.getConfig().setAutoConnectOnMultiplayerJoin(this.originalAutoConnectOnMultiplayerJoin);
         
         MinecraftClient.getInstance().setScreen(this.parent);
     }
@@ -269,6 +286,7 @@ public class PlayerESPConfigScreen extends Screen {
             // 刷新“已保存”基线，避免保存后被取消回滚
             this.originalURL = PlayerESPNetworkManager.getServerURL();
             this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
+            this.originalAutoConnectOnMultiplayerJoin = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
             updateSaveHintWidget();
             updateSaveButton();
         } catch (NumberFormatException e) {
@@ -325,6 +343,21 @@ public class PlayerESPConfigScreen extends Screen {
 
     private void openNetworkSettings() {
         MinecraftClient.getInstance().setScreen(new PlayerESPNetworkConfigScreen(this));
+    }
+
+    private void toggleAutoConnectOnMultiplayerJoin() {
+        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
+        StandaloneMultiPlayerESP.getConfig().setAutoConnectOnMultiplayerJoin(!currentStatus);
+        updateAutoConnectOnMultiplayerJoinButton();
+    }
+
+    private void updateAutoConnectOnMultiplayerJoinButton() {
+        if (this.autoConnectOnMultiplayerJoinButton != null) {
+            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
+            String buttonText = Text.translatable("screen.multipleplayeresp.config.auto_connect_compact").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.autoConnectOnMultiplayerJoinButton.setMessage(Text.of(buttonText));
+        }
     }
 
     /**
@@ -420,6 +453,11 @@ public class PlayerESPConfigScreen extends Screen {
             return true;
         }
 
+        boolean currentAutoConnect = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
+        if (currentAutoConnect != this.originalAutoConnectOnMultiplayerJoin) {
+            return true;
+        }
+
         return false;
     }
     
@@ -496,6 +534,7 @@ public class PlayerESPConfigScreen extends Screen {
         
         // 更新连接按钮状态
         updateConnectButton();
+        updateAutoConnectOnMultiplayerJoinButton();
         updateSaveHintWidget();
         updateSaveButton();
     }

@@ -12,7 +12,6 @@ import fun.prof_chen.teamviewer.multipleplayeresp.core.StandaloneMultiPlayerESP;
 public class PlayerESPNetworkConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget updateIntervalField;
-    private ButtonWidget autoConnectOnMultiplayerJoinButton;
     private ButtonWidget uploadEntitiesButton;
     private ButtonWidget uploadSharedWaypointsButton;
     private ButtonWidget preferLocalDataForEspButton;
@@ -35,7 +34,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         int totalHeight = 0;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
-        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -92,13 +90,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
 
-        int autoConnectY = getNextButtonY();
-        this.autoConnectOnMultiplayerJoinButton = ButtonWidget.builder(
-            Text.translatable("screen.multipleplayeresp.config.auto_connect_on_multiplayer_join"),
-            button -> toggleAutoConnectOnMultiplayerJoin()
-        ).dimensions(componentX, autoConnectY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.autoConnectOnMultiplayerJoinButton);
-
         int uploadEntitiesY = getNextButtonY();
         this.uploadEntitiesButton = ButtonWidget.builder(
             Text.translatable("screen.multipleplayeresp.config.upload_entities"),
@@ -136,7 +127,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
         updatePreferLocalDataForEspButton();
-        updateAutoConnectOnMultiplayerJoinButton();
         updateUseSystemProxyButton();
     }
 
@@ -179,12 +169,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
         updateUploadEntitiesButton();
     }
 
-    private void toggleAutoConnectOnMultiplayerJoin() {
-        boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
-        StandaloneMultiPlayerESP.getConfig().setAutoConnectOnMultiplayerJoin(!currentStatus);
-        updateAutoConnectOnMultiplayerJoinButton();
-    }
-
     private void toggleUploadSharedWaypoints() {
         boolean currentStatus = StandaloneMultiPlayerESP.getConfig().isUploadSharedWaypoints();
         StandaloneMultiPlayerESP.getConfig().setUploadSharedWaypoints(!currentStatus);
@@ -209,15 +193,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
             String buttonText = Text.translatable("screen.multipleplayeresp.config.upload_entities").getString();
             buttonText += isEnabled ? " [ON]" : " [OFF]";
             this.uploadEntitiesButton.setMessage(Text.of(buttonText));
-        }
-    }
-
-    private void updateAutoConnectOnMultiplayerJoinButton() {
-        if (this.autoConnectOnMultiplayerJoinButton != null) {
-            boolean isEnabled = StandaloneMultiPlayerESP.getConfig().isAutoConnectOnMultiplayerJoin();
-            String buttonText = Text.translatable("screen.multipleplayeresp.config.auto_connect_on_multiplayer_join").getString();
-            buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.autoConnectOnMultiplayerJoinButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -251,7 +226,6 @@ public class PlayerESPNetworkConfigScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
-        updateAutoConnectOnMultiplayerJoinButton();
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
         updatePreferLocalDataForEspButton();

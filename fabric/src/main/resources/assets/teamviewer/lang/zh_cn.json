@@ -40,6 +40,7 @@
   "screen.multipleplayeresp.config.quick_mark_max_count_hint": "例如: 3 (范围 1-20)",
   "screen.multipleplayeresp.config.quick_mark_max_count.tooltip": "快捷报点允许同时保留的最大数量；超过后会自动清理较旧的快捷报点。",
   "screen.multipleplayeresp.config.auto_connect_on_multiplayer_join": "进入多人游戏自动连接",
+  "screen.multipleplayeresp.config.auto_connect_compact": "多人自动连",
   "screen.multipleplayeresp.config.upload_entities": "上传实体信息",
   "screen.multipleplayeresp.config.upload_shared_waypoints": "上报共享路标",
   "screen.multipleplayeresp.config.prefer_local_data_for_esp": "ESP优先使用本地数据",

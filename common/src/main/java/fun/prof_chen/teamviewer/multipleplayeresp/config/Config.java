@@ -39,7 +39,7 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
     private int updateInterval = 5;
     private boolean enablePlayerESP = true;
     private boolean uploadEntities = true;
-    private boolean uploadSharedWaypoints = true;
+    private boolean uploadSharedWaypoints = false;
     private boolean showSharedWaypoints = true;
     private boolean showOwnSharedWaypointsOnMinimap = true;
     private boolean showJourneyMapRemotePlayerWaypoints = true;
