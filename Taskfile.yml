@@ -25,4 +25,40 @@ tasks:
       - chmod +x ./gradlew
       - ./gradlew :fabric:build
       - mkdir -p ./build-artifacts
-      - find fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' -exec cp {} ./build-artifacts/ \;
+      - |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import shutil
+
+          root = pathlib.Path('.')
+          gradle_properties = (root / 'gradle.properties').read_text(encoding='utf-8')
+
+          def read_property(name: str) -> str:
+              match = re.search(rf'^\s*{re.escape(name)}\s*=\s*(.+?)\s*$', gradle_properties, re.MULTILINE)
+              if not match:
+                  raise SystemExit(f'Missing {name} in gradle.properties')
+              return match.group(1)
+
+          mod_version = read_property('mod_version')
+          archives_base_name = read_property('archives_base_name')
+          network_protocol_version = read_property('network_protocol_version')
+          output_name = f'MCTeamViewer-v{mod_version}-proto{network_protocol_version}.jar'
+          source_name = f'{archives_base_name}-{mod_version}.jar'
+
+          build_artifacts_dir = root / 'build-artifacts'
+          for old_file in build_artifacts_dir.glob('*.jar'):
+              old_file.unlink()
+
+          libs_dir = root / 'fabric' / 'build' / 'libs'
+          source_jar = libs_dir / source_name
+          if not source_jar.is_file():
+              available = sorted(jar.name for jar in libs_dir.glob('*.jar'))
+              raise SystemExit(
+                  f'Expected distributable jar {source_name} not found in {libs_dir}. '
+                  f'Available jars: {available}'
+              )
+
+          shutil.copy2(source_jar, build_artifacts_dir / output_name)
+          print(f'Created {build_artifacts_dir / output_name}')
+          PY

@@ -48,12 +48,14 @@ jobs:
         shell: bash
         run: |
           mod_version=$(python3 -c "import re;print(re.search(r'^\s*mod_version\s*=\s*(.+?)\s*$', open('gradle.properties', encoding='utf-8').read(), re.M).group(1))")
+          network_protocol_version=$(python3 -c "import re;print(re.search(r'^\s*network_protocol_version\s*=\s*(.+?)\s*$', open('gradle.properties', encoding='utf-8').read(), re.M).group(1))")
           echo "mod_version=${mod_version}" >> "$GITHUB_OUTPUT"
+          echo "network_protocol_version=${network_protocol_version}" >> "$GITHUB_OUTPUT"
       
       # 上传编译产物
       - name: Upload built mod JAR
         uses: actions/upload-artifact@v4
         with:
-          name: MC-Teamviewer-mod-v${{ steps.versions.outputs.mod_version }}-fabric
-          path: build-artifacts/*.jar
+          name: MCTeamViewer-v${{ steps.versions.outputs.mod_version }}-proto${{ steps.versions.outputs.network_protocol_version }}
+          path: build-artifacts/MCTeamViewer-v${{ steps.versions.outputs.mod_version }}-proto${{ steps.versions.outputs.network_protocol_version }}.jar
                   

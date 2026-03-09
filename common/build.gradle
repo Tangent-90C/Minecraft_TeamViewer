@@ -26,6 +26,19 @@ sourceSets {
     }
 }
 
+processResources {
+    inputs.property "network_protocol_version", project.network_protocol_version
+    inputs.property "network_min_compatible_protocol_version", project.network_min_compatible_protocol_version
+    filteringCharset = "UTF-8"
+
+    filesMatching("teamviewer-build.properties") {
+        expand(
+                "network_protocol_version": project.network_protocol_version,
+                "network_min_compatible_protocol_version": project.network_min_compatible_protocol_version
+        )
+    }
+}
+
 def targetJavaVersion = 21
 
 tasks.withType(JavaCompile).configureEach {

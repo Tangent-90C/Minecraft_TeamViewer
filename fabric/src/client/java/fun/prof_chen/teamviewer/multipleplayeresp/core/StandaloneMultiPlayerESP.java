@@ -304,7 +304,7 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 						pid.toString(),
 						p.getHealth(),
 						p.getMaxHealth(),
-						0,
+						p.getArmor(),
 						isRiding,
 						p.getWidth(),
 						p.getHeight());
