@@ -2,66 +2,25 @@
 
 用于 Minecraft 团队协同作战的“视野与报点共享”系统，当前以 **1.21.8 Fabric** 为主版本进行开发和验证。
 
-本仓库包含三部分：
-
-- `minecraft-mod/`：客户端 Fabric Mod（玩家框线渲染、共享报点、房间隔离、与 Xaero 联动）
-- `backend-server/`：Python FastAPI WebSocket 服务端（聚合并广播玩家/实体/路标数据）
-- `tampermonkey-script/`：管理端油猴脚本工程（接入 `adminws`，可进行战术标注等）
 
 ## 1. 核心功能
 
 - 团队玩家信息共享：同步玩家位置、实体信息、共享路标
-- 客户端 ESP：远程玩家方框 + 追踪线 + 敌友颜色映射
 - 快速报点：按键/中键双击一键报点，支持中键取消、超时清理、数量上限
 - Xaero 联动（可选）：
 	- 与 Xaero Minimap 双向同步共享路标
 	- 与 Xaero World Map 同步远程玩家追踪
+ - journeymap 联动（可选）：
+ 	- 可共享路标，和远程玩家地图显示 
 - 房间隔离：通过 `roomCode` 分房，互不干扰
-- 管理端通道：`/adminws` 实时订阅状态，支持战术路标下发
 
 ## 2. 版本与环境
 
 - Minecraft：`1.21.8`
-- Fabric Loader：`0.17.2`
-- Fabric API：`0.131.0+1.21.8`
-- Java：`21`（mod 构建目标）
-- Python：`>=3.12`（后端）
-- Node.js + pnpm（油猴脚本构建）
 
-## 3. 快速开始（完整链路）
+## 3. 快速开始
 
-### 3.1 启动后端服务
-
-后端默认监听 `0.0.0.0:8765`。
-
-```bash
-cd backend-server/src
-uv run main.py
-```
-
-可选健康检查：
-
-```bash
-curl http://127.0.0.1:8765/health
-```
-
-主要端点：
-
-- 玩家客户端：`ws://127.0.0.1:8765/playeresp`
-- 管理端：`ws://127.0.0.1:8765/adminws`
-- 快照调试：`http://127.0.0.1:8765/snapshot`
-
-### 3.2 构建或获取 Mod
-
-```bash
-cd minecraft-mod
-chmod +x ./gradlew
-./gradlew build
-```
-
-输出 jar 位于 `minecraft-mod/build/libs/`（`Taskfile.yml` 也支持一键打包到 `build-artifacts/`）。
-
-### 3.3 安装 Mod（客户端）
+### 3.1 安装 Mod（客户端）
 
 至少安装：
 
@@ -74,15 +33,15 @@ chmod +x ./gradlew
 - Mod Menu（用于在 Mod 列表中直接打开配置页）
 - Xaero Minimap（共享路标联动）
 - Xaero World Map（远程玩家追踪联动）
+- journeymap （远程玩家追踪联动）
 
 ### 3.4 游戏内首次配置
 
 1. 进入游戏后按 `O` 打开配置页（默认快捷键）。
-2. 将服务器地址改为：`ws://127.0.0.1:8765/playeresp`。
+2. 服务器默认地址为：`ws://127.0.0.1:8765/playeresp`（改为自己的）
 3. 选择房间号（默认 `default`，同房间互相可见）。
 4. 点击“保存服务器设置”，再点击“连接”。
 
-> 注意：当前配置默认值是 `ws://localhost:8080/playeresp`，若后端按默认端口 `8765` 启动，需要手动改地址。
 
 ## 4. Mod 介绍与使用
 
@@ -119,20 +78,6 @@ chmod +x ./gradlew
 
 配置文件为 `config/multipleplayeresp.json`（Fabric 标准配置目录）。
 
-## 5. 管理端脚本（Tampermonkey）
-
-开发与构建：
-
-```bash
-cd tampermonkey-script
-pnpm install
-pnpm build
-```
-
-构建产物在 `tampermonkey-script/dist/*.user.js`，导入 Tampermonkey 即可。
-
-默认管理端 WS：`ws://127.0.0.1:8765/adminws`。
-
 ## 6. 常见问题
 
 - 连接失败：优先检查 Mod 配置的 `Server URL` 是否与后端端口一致（常见是 8080/8765 不一致）
@@ -140,7 +85,9 @@ pnpm build
 - 报点无效：需先启用 ESP + 建立连接；若使用按键报点，请先手动绑定快捷键
 - Xaero 功能不生效：确认已安装对应 Xaero 模组（`xaerominimap` / `xaeroworldmap`）
 
-## 7. 协议与设计文档
+版本号说明
+该程序采用双版本号体系，例如 v0.2.1-proto0.3.0 ，具体含义如下：
 
-- `docs/PLAYER_ESP_NETWORK_PROTOCOL.md`：网络协议与消息结构（0.4.x）
-- `docs/RENDER_MODULE_MIGRATION.md`：渲染模块迁移记录
+程序版本号为 0.2.1，此版本号主要标识程序自身的功能迭代与更新情况。
+网络协议版本号为 0.3.0，该版本号用于界定与其他配套程序进行网络通信时所采用的网络协议版本。
+只有各个程序间使用相似甚至完全相同的网络协议版本号，才能实现相互连接并正常协同使用。
