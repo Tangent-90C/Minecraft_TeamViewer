@@ -1,0 +1,28 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build Fabric mod (module-aware)
+    cmds:
+      - chmod +x ./gradlew
+      - ./gradlew :fabric:build
+
+  compile:
+    desc: Fast compile check for Fabric client sources
+    cmds:
+      - chmod +x ./gradlew
+      - ./gradlew :fabric:compileClientJava
+
+  clean:
+    desc: Clean all module build outputs
+    cmds:
+      - chmod +x ./gradlew
+      - ./gradlew clean
+
+  build-mod:
+    desc: Build Fabric mod and collect distributable jars
+    cmds:
+      - chmod +x ./gradlew
+      - ./gradlew :fabric:build
+      - mkdir -p ./build-artifacts
+      - find fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' -exec cp {} ./build-artifacts/ \;

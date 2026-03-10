@@ -1,0 +1,20 @@
+name: Dependency Review
+
+
+# 工作流监听多个事件
+on:
+  pull_request:
+    branches: [ "main"]
+    paths:
+      - 'src/**'
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v6
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4

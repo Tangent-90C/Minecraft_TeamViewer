@@ -1,0 +1,43 @@
+plugins {
+    id 'base'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+allprojects {
+    group = rootProject.group
+    version = rootProject.version
+
+    repositories {
+        maven {
+            name = "Terraformers"
+            url = "https://maven.terraformersmc.com/"
+        }
+        mavenCentral()
+    }
+}
+
+tasks.named("build") {
+    dependsOn(":fabric:build")
+}
+
+tasks.named("clean") {
+    dependsOn(":common:clean", ":fabric:clean", ":forge:clean")
+}
+
+["runClient", "runclient"].each { taskName ->
+    tasks.register(taskName) {
+        group = "fabric"
+        description = "Delegates to :fabric:runClient"
+        dependsOn(":fabric:runClient")
+    }
+}
+
+["compileClientJava", "compileclientjava"].each { taskName ->
+    tasks.register(taskName) {
+        group = "build"
+        description = "Delegates to :fabric:compileClientJava"
+        dependsOn(":fabric:compileClientJava")
+    }
+}

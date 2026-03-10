@@ -1,0 +1,59 @@
+# Minecraft Mod 编译的 GitHub Actions 配置
+name: Minecraft Mod CI
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+    paths:
+      - 'src/**'
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - 'src/**'
+
+jobs:
+  build:
+    # 使用最新的Ubuntu系统
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # 1. 检出代码仓库
+      - uses: actions/checkout@v6
+        # 如果你使用了git子模块（比如Fabric API），需要添加这行
+        with:
+          submodules: true
+
+      # 2. 设置环境
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle' # 自动缓存Gradle依赖
+          cache-dependency-path: 'build.gradle' # 指定Mod的Gradle文件
+
+      - name: Setup Task
+        uses: DiyRex/action-setup-taskfile@v1.0.0
+
+      # 3. 开始编译
+
+      - name: Build versioned artifacts with Task
+        shell: bash
+        run: task build-mod
+
+      - name: Read artifact versions
+        id: versions
+        shell: bash
+        run: |
+          mod_version=$(python3 -c "import re;print(re.search(r'^\s*mod_version\s*=\s*(.+?)\s*$', open('gradle.properties', encoding='utf-8').read(), re.M).group(1))")
+          echo "mod_version=${mod_version}" >> "$GITHUB_OUTPUT"
+      
+      # 上传编译产物
+      - name: Upload built mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: MC-Teamviewer-mod-v${{ steps.versions.outputs.mod_version }}-fabric
+          path: build-artifacts/*.jar
+                  
