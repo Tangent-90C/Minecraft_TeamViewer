@@ -83,9 +83,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 	private static final Map<UUID, Entity> entityUuidCache = new ConcurrentHashMap<>();
 	private static String lastCachedDimension = null;
 	
-	// Performance optimization: cached team relations (updated each tick, not each frame)
-	private static final Map<UUID, TeamRelationHelper.TeamRelation> cachedTeamRelations = new ConcurrentHashMap<>();
-	
 	// Network manager
 	private static PlayerESPNetworkManager networkManager;
 	private static WaypointSyncGateway waypointSyncGateway;
@@ -197,7 +194,6 @@ public class StandaloneMultiPlayerESP implements ClientModInitializer {
 			// 更新玩家位置信息
 			updatePlayerPositions();
 			updateEntityCache(client);
-			updateTeamRelationCache(client);
 			handleMiddleMouseDoubleClickMarking(client);
 			handleAutoCancelWaypointOnEntityDeath(client);
 			handleLocalPlayerMarkedReminder(client);
