@@ -12,10 +12,10 @@ import net.minecraft.util.Formatting;
 import java.util.ArrayList;
 import java.util.List;
 
-import fun.prof_chen.teamviewer.main_code.bridge.PlayerESPNetworkManager;
-import fun.prof_chen.teamviewer.main_code.bridge.PlayerESPNetworkManager.ConnectionStatusListener;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager.ConnectionStatusListener;
 
-public class PlayerESPConfigScreen extends Screen {
+public class ConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
     private TextFieldWidget roomCodeField;
@@ -49,11 +49,11 @@ public class PlayerESPConfigScreen extends Screen {
     private int startY;
     private int currentY;
     
-    public PlayerESPConfigScreen(Screen parent) {
+    public ConfigScreen(Screen parent) {
         super(Text.translatable("screen.mc_teamviewer.config.title"));
         this.parent = parent;
-        this.originalURL = PlayerESPNetworkManager.getServerURL();
-        this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
+        this.originalURL = NetworkManager.getServerURL();
+        this.originalRoomCode = NetworkManager.getRoomCode();
         this.originalAutoConnectOnMultiplayerJoin = PlayerProcesses.getConfig().isAutoConnectOnMultiplayerJoin();
         // 初始化连接状态
         updateConnectionStatus();
@@ -136,7 +136,7 @@ public class PlayerESPConfigScreen extends Screen {
             Text.translatable("screen.mc_teamviewer.config.url")
         );
         this.urlField.setMaxLength(URL_MAX_LENGTH);
-        this.urlField.setText(PlayerESPNetworkManager.getServerURL());
+        this.urlField.setText(NetworkManager.getServerURL());
         this.urlField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.url_hint"));
         this.addDrawableChild(this.urlField);
         
@@ -160,7 +160,7 @@ public class PlayerESPConfigScreen extends Screen {
             Text.translatable("screen.mc_teamviewer.config.room_code")
         );
         this.roomCodeField.setMaxLength(ROOM_CODE_MAX_LENGTH);
-        this.roomCodeField.setText(PlayerESPNetworkManager.getRoomCode());
+        this.roomCodeField.setText(NetworkManager.getRoomCode());
         this.roomCodeField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.room_code_hint"));
         this.addDrawableChild(this.roomCodeField);
 
@@ -263,8 +263,8 @@ public class PlayerESPConfigScreen extends Screen {
         PlayerProcesses.getNetworkManager().removeConnectionStatusListener(connectionListener);
         
         // 恢复未保存的一级页面设置
-        PlayerESPNetworkManager.setServerURL(this.originalURL);
-        PlayerESPNetworkManager.setRoomCode(this.originalRoomCode);
+        NetworkManager.setServerURL(this.originalURL);
+        NetworkManager.setRoomCode(this.originalRoomCode);
         PlayerProcesses.getConfig().setAutoConnectOnMultiplayerJoin(this.originalAutoConnectOnMultiplayerJoin);
         
         MinecraftClient.getInstance().setScreen(this.parent);
@@ -275,18 +275,18 @@ public class PlayerESPConfigScreen extends Screen {
         try {
             String url = this.urlField.getText().trim();
             if (!url.isEmpty()) {
-                PlayerESPNetworkManager.setServerURL(url);
+                NetworkManager.setServerURL(url);
             }
             String roomCode = this.roomCodeField.getText().trim();
-            PlayerESPNetworkManager.setRoomCode(roomCode);
+            NetworkManager.setRoomCode(roomCode);
             
             // 显示/网络开关设置在二级页面中实时保存
             // 保存配置到文件
             PlayerProcesses.getConfig().save();
 
             // 刷新“已保存”基线，避免保存后被取消回滚
-            this.originalURL = PlayerESPNetworkManager.getServerURL();
-            this.originalRoomCode = PlayerESPNetworkManager.getRoomCode();
+            this.originalURL = NetworkManager.getServerURL();
+            this.originalRoomCode = NetworkManager.getRoomCode();
             this.originalAutoConnectOnMultiplayerJoin = PlayerProcesses.getConfig().isAutoConnectOnMultiplayerJoin();
             updateSaveHintWidget();
             updateSaveButton();
@@ -339,11 +339,11 @@ public class PlayerESPConfigScreen extends Screen {
     }
     
     private void openDisplaySettings() {
-        MinecraftClient.getInstance().setScreen(new PlayerESPDisplayConfigScreen(this));
+        MinecraftClient.getInstance().setScreen(new DisplayConfigScreen(this));
     }
 
     private void openNetworkSettings() {
-        MinecraftClient.getInstance().setScreen(new PlayerESPNetworkConfigScreen(this));
+        MinecraftClient.getInstance().setScreen(new NetworkConfigScreen(this));
     }
 
     private void toggleAutoConnectOnMultiplayerJoin() {
@@ -365,7 +365,7 @@ public class PlayerESPConfigScreen extends Screen {
      * 更新连接状态文本
      */
     private void updateConnectionStatus() {
-        PlayerESPNetworkManager networkManager = PlayerProcesses.getNetworkManager();
+        NetworkManager networkManager = PlayerProcesses.getNetworkManager();
         if (networkManager.isConnected()) {
             this.currentConnectionStatus = "Connected";
         } else if (!networkManager.getLastConnectionError().isBlank()) {

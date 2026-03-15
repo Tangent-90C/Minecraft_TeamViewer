@@ -3,7 +3,7 @@ package fun.prof_chen.teamviewer.main_code.renderbridge.abstraction;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.AxisAlignedBox3D;
 
-public interface PlayerEspRenderBridge {
+public interface RenderBridge {
 	void drawOutlinedBox(RenderContextHandle context, AxisAlignedBox3D box, int color, boolean depthTest);
 
 	void drawLine(RenderContextHandle context, Position3D start, Position3D end, int color, boolean depthTest);

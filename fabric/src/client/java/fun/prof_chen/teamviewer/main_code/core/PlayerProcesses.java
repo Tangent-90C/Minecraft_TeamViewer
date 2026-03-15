@@ -36,20 +36,19 @@ import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.ReportDataSchemas;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.main_code.network.bridge.FabricPlayerEspRuntimeGateway;
-import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpPlayerEspTransport;
+import fun.prof_chen.teamviewer.main_code.network.bridge.FabricRuntimeGateway;
+import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpTransportProcess;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftPositionAdapter;
-import fun.prof_chen.teamviewer.main_code.bridge.PlayerESPNetworkManager;
-import fun.prof_chen.teamviewer.main_code.bridge.PlayerEspWaypointSyncGateway;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
+import fun.prof_chen.teamviewer.main_code.bridge.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.bridge.UnifiedRenderModule;
-import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.PlayerEspRenderBridge;
+import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.RenderBridge;
 import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.RenderContextHandle;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.AxisAlignedBox3D;
-import fun.prof_chen.teamviewer.main_code.screen.PlayerESPConfigScreen;
+import fun.prof_chen.teamviewer.main_code.screen.ConfigScreen;
 import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
-import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
 import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
@@ -79,13 +78,13 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static final Map<String, Vec3d> trackedEntityWaypointLastPositions = new ConcurrentHashMap<>();
 	
 	// Network manager
-	private static PlayerESPNetworkManager networkManager;
-	private static WaypointSyncGateway waypointSyncGateway;
+	private static NetworkManager networkManager;
+	private static fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway waypointSyncGateway;
 	private static RemotePlayerRepository remotePlayerRepository;
 	private static SharedWaypointRepository sharedWaypointRepository;
 	private static RemotePlayerProjectionCoordinator remotePlayerProjectionCoordinator;
 	private static SharedWaypointSyncCoordinator sharedWaypointSyncCoordinator;
-	private static final PlayerEspRenderBridge RENDER_BRIDGE = new UnifiedRenderModule();
+	private static final RenderBridge RENDER_BRIDGE = new UnifiedRenderModule();
 	
 	// Config
 	private static Config config;
@@ -121,12 +120,12 @@ public class PlayerProcesses implements ClientModInitializer {
 		config = FabricConfigLoader.load();
 		
 		// 初始化网络管理器
-		networkManager = new PlayerESPNetworkManager(
+		networkManager = new NetworkManager(
 				remotePlayers,
-				new FabricPlayerEspRuntimeGateway(),
-				new OkHttpPlayerEspTransport());
-		PlayerESPNetworkManager.setConfigGateway(config);
-		waypointSyncGateway = new PlayerEspWaypointSyncGateway(networkManager);
+				new FabricRuntimeGateway(),
+				new OkHttpTransportProcess());
+		NetworkManager.setConfigGateway(config);
+		waypointSyncGateway = new WaypointSyncGateway(networkManager);
 		remotePlayerRepository = new MapBackedRemotePlayerRepository(remotePlayers);
 		sharedWaypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
 		MapBridgeRegistry minimapBridgeRegistry = FabricMapBridgeBootstrap.createRegistry();
@@ -139,26 +138,26 @@ public class PlayerProcesses implements ClientModInitializer {
 		
 		// 注册按键绑定
 		toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-			"key.main_code.toggle",
+			"key.mc_teamviewer.toggle",
 			InputUtil.Type.KEYSYM,
 			GLFW.GLFW_KEY_UNKNOWN, // 默认不绑定，玩家自行设置
-			"category.main_code.general"
+			"category.mc_teamviewer.general"
 		));
 		
 		// 注册配置界面按键
 		configKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-			"key.main_code.config",
+			"key.mc_teamviewer.config",
 			InputUtil.Type.KEYSYM,
 			GLFW.GLFW_KEY_O, // 默认绑定O键
-			"category.main_code.general"
+			"category.mc_teamviewer.general"
 		));
 
 		// 注册报点按键（可在游戏控制设置中自定义）
 		markKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-			"key.main_code.mark",
+			"key.mc_teamviewer.mark",
 			InputUtil.Type.KEYSYM,
 			GLFW.GLFW_KEY_UNKNOWN, // 默认不绑定，玩家自行设置
-			"category.main_code.general"
+			"category.mc_teamviewer.general"
 		));
 		
 		// 注册客户端tick事件
@@ -252,12 +251,12 @@ public class PlayerProcesses implements ClientModInitializer {
 			networkManager.connectWithReconnectLimit(AUTO_CONNECT_MAX_RETRIES, AUTO_CONNECT_RETRY_DELAY_MS);
 		}
 		tickCounter = 0;
-		LOGGER.info("Auto-connect enabled; started PlayerESP connection for multiplayer session");
+		LOGGER.info("Auto-connect enabled; started connection for multiplayer session");
 	}
 
 	private void handleLeftPlaySession() {
 		shutdownNetworkSession();
-		LOGGER.info("Left play session; stopped PlayerESP network session");
+		LOGGER.info("Left play session; stopped network session");
 	}
 
 	private void shutdownNetworkSession() {
@@ -281,7 +280,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	}
 	
 	private void openConfigScreen() {
-		MC.setScreen(new PlayerESPConfigScreen(MC.currentScreen));
+		MC.setScreen(new ConfigScreen(MC.currentScreen));
 	}
 	
 	private Map<UUID, Map<String, Object>> collectPlayerData(MinecraftClient client) {
@@ -1458,7 +1457,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		return serverPlayerPositions;
 	}
 	
-	public static PlayerESPNetworkManager getNetworkManager() {
+	public static NetworkManager getNetworkManager() {
 		return networkManager;
 	}
 }

@@ -2,7 +2,7 @@ package fun.prof_chen.teamviewer.main_code.network.abstraction;
 
 import java.util.UUID;
 
-public interface PlayerEspRuntimeGateway {
+public interface RuntimeGateway {
     String getCurrentDimensionId();
 
     UUID getLocalPlayerId();

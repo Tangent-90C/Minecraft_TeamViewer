@@ -6,7 +6,7 @@
   
   "screen.mc_teamviewer.config.title": "MC-Teamviewer Configuration",
   "screen.mc_teamviewer.config.url": "Server URL",
-  "screen.mc_teamviewer.config.url_hint": "e.g. ws://127.0.0.1:8080/playeresp",
+  "screen.mc_teamviewer.config.url_hint": "e.g. ws://127.0.0.1:8080/mc-client",
   "screen.mc_teamviewer.config.room_code": "Room Code",
   "screen.mc_teamviewer.config.room_code_hint": "e.g. default or pvp-1",
   "screen.mc_teamviewer.config.render_distance": "Render Distance",
@@ -23,7 +23,6 @@
   "screen.mc_teamviewer.config.update_interval_hint": "Ticks between updates (1-1000)",
   "screen.mc_teamviewer.config.show_boxes": "Show Boxes",
   "screen.mc_teamviewer.config.show_boxes.tooltip": "Toggle player ESP box rendering.",
-  "screen.mc_teamviewer.config.enable_player_esp": "Enable PlayerESP",
   "screen.mc_teamviewer.config.show_tracking_lines": "Show Tracking Lines",
   "screen.mc_teamviewer.config.show_tracking_lines.tooltip": "Toggle player ESP tracer rendering.",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_waypoints": "JourneyMap Remote Waypoints",

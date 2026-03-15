@@ -12,7 +12,7 @@ import net.minecraft.text.Text;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlayerESPWaypointShapeConfigScreen extends Screen {
+public class WaypointShapeConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget waypointBeamWidthField;
     private TextFieldWidget waypointBeamHeightField;
@@ -28,7 +28,7 @@ public class PlayerESPWaypointShapeConfigScreen extends Screen {
     private int startY;
     private int currentY;
 
-    public PlayerESPWaypointShapeConfigScreen(Screen parent) {
+    public WaypointShapeConfigScreen(Screen parent) {
         super(Text.translatable("screen.mc_teamviewer.waypoint_shape_config.title"));
         this.parent = parent;
     }

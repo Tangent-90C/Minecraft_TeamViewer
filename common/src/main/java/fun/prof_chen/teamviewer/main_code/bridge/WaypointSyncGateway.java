@@ -2,7 +2,6 @@ package fun.prof_chen.teamviewer.main_code.bridge;
 
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
 
@@ -13,11 +12,11 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class PlayerEspWaypointSyncGateway implements WaypointSyncGateway {
-	private final PlayerESPNetworkManager delegate;
-	private final Map<WaypointUpdateListener, PlayerESPNetworkManager.WaypointUpdateListener> listenerMap = new ConcurrentHashMap<>();
+public final class WaypointSyncGateway implements fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway {
+	private final NetworkManager delegate;
+	private final Map<WaypointUpdateListener, NetworkManager.WaypointUpdateListener> listenerMap = new ConcurrentHashMap<>();
 
-	public PlayerEspWaypointSyncGateway(PlayerESPNetworkManager delegate) {
+	public WaypointSyncGateway(NetworkManager delegate) {
 		this.delegate = Objects.requireNonNull(delegate, "delegate");
 	}
 
@@ -31,7 +30,7 @@ public final class PlayerEspWaypointSyncGateway implements WaypointSyncGateway {
 		if (listener == null) {
 			return;
 		}
-		PlayerESPNetworkManager.WaypointUpdateListener adapted = new PlayerESPNetworkManager.WaypointUpdateListener() {
+		NetworkManager.WaypointUpdateListener adapted = new NetworkManager.WaypointUpdateListener() {
 			@Override
 			public void onWaypointsReceived(Map<String, SharedWaypointInfo> waypoints) {
 				listener.onWaypointsReceived(waypoints);
@@ -42,7 +41,7 @@ public final class PlayerEspWaypointSyncGateway implements WaypointSyncGateway {
 				listener.onWaypointsDeleted(waypointIds);
 			}
 		};
-		PlayerESPNetworkManager.WaypointUpdateListener previous = listenerMap.putIfAbsent(listener, adapted);
+		NetworkManager.WaypointUpdateListener previous = listenerMap.putIfAbsent(listener, adapted);
 		if (previous == null) {
 			delegate.addWaypointUpdateListener(adapted);
 		}
@@ -53,7 +52,7 @@ public final class PlayerEspWaypointSyncGateway implements WaypointSyncGateway {
 		if (listener == null) {
 			return;
 		}
-		PlayerESPNetworkManager.WaypointUpdateListener adapted = listenerMap.remove(listener);
+		NetworkManager.WaypointUpdateListener adapted = listenerMap.remove(listener);
 		if (adapted != null) {
 			delegate.removeWaypointUpdateListener(adapted);
 		}

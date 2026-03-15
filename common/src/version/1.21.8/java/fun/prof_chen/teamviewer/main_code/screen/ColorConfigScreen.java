@@ -9,7 +9,7 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.text.Text;
 
-public class PlayerESPColorConfigScreen extends Screen {
+public class ColorConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget boxColorField;
     private TextFieldWidget lineColorField;
@@ -24,7 +24,7 @@ public class PlayerESPColorConfigScreen extends Screen {
     private int startY;
     private int currentY;
 
-    public PlayerESPColorConfigScreen(Screen parent) {
+    public ColorConfigScreen(Screen parent) {
         super(Text.translatable("screen.mc_teamviewer.color_config.title"));
         this.parent = parent;
     }

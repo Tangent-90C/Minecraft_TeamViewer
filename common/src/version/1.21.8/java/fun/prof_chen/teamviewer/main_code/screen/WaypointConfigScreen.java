@@ -13,7 +13,7 @@ import net.minecraft.text.Text;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlayerESPWaypointConfigScreen extends Screen {
+public class WaypointConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget waypointTimeoutField;
     private TextFieldWidget longTermWaypointTimeoutField;
@@ -36,7 +36,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
     private int startY;
     private int currentY;
 
-    public PlayerESPWaypointConfigScreen(Screen parent) {
+    public WaypointConfigScreen(Screen parent) {
         super(Text.translatable("screen.mc_teamviewer.waypoint_config.title"));
         this.parent = parent;
     }
@@ -437,7 +437,7 @@ public class PlayerESPWaypointConfigScreen extends Screen {
     }
 
     private void openWaypointShapeConfig() {
-        MinecraftClient.getInstance().setScreen(new PlayerESPWaypointShapeConfigScreen(this));
+        MinecraftClient.getInstance().setScreen(new WaypointShapeConfigScreen(this));
     }
 
     private void applyFieldValues() {

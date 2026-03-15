@@ -3,13 +3,13 @@ package fun.prof_chen.teamviewer.main_code.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import fun.prof_chen.teamviewer.main_code.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspConfigGateway;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGateway {
+public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     public static final String TRACER_START_CROSSHAIR = "crosshair";
     public static final String TRACER_START_TOP = "top";
     public static final String WAYPOINT_UI_BEACON = "beacon";
@@ -23,7 +23,7 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
 
     private transient Path storagePath;
 
-    private String serverURL = "ws://localhost:8080/playeresp";
+    private String serverURL = "ws://localhost:8080/mc-client";
     private String roomCode = "default";
     private int renderDistance = 128000;
     private boolean showLines = false;
@@ -37,7 +37,6 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
     private double tracerTopOffset = 0.42;
     private boolean enableCompression = true;
     private int updateInterval = 5;
-    private boolean enablePlayerESP = true;
     private boolean uploadEntities = true;
     private boolean uploadSharedWaypoints = false;
     private boolean showSharedWaypoints = true;
@@ -278,14 +277,6 @@ public class Config implements SharedWaypointMapBridgeConfig, PlayerEspConfigGat
         } else {
             this.updateInterval = Math.min(updateInterval, 1000);
         }
-    }
-
-    public boolean isEnablePlayerESP() {
-        return enablePlayerESP;
-    }
-
-    public void setEnablePlayerESP(boolean enablePlayerESP) {
-        this.enablePlayerESP = enablePlayerESP;
     }
 
     public boolean isUploadEntities() {

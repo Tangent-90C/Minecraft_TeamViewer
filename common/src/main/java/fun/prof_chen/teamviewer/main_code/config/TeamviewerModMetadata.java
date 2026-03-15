@@ -36,8 +36,8 @@ public final class TeamviewerModMetadata {
     /**
      * 玩家 ESP 网络协议元信息（作为全局元信息的一部分）。
      */
-    public static final class PlayerEspProtocol {
-        private PlayerEspProtocol() {
+    public static final class MetaProtocol {
+        private MetaProtocol() {
         }
 
         public static final String CLIENT_PROTOCOL_VERSION = getBuildProperty("network_protocol_version", "0.5.0");

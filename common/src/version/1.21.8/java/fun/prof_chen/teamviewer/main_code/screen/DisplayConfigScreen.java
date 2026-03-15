@@ -13,7 +13,7 @@ import net.minecraft.text.Text;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlayerESPDisplayConfigScreen extends Screen {
+public class DisplayConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget renderDistanceField;
     private TextFieldWidget tracerTopOffsetField;
@@ -34,7 +34,7 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     private int startY;
     private int currentY;
 
-    public PlayerESPDisplayConfigScreen(Screen parent) {
+    public DisplayConfigScreen(Screen parent) {
         super(Text.translatable("screen.mc_teamviewer.display_config.title"));
         this.parent = parent;
     }
@@ -274,11 +274,11 @@ public class PlayerESPDisplayConfigScreen extends Screen {
     }
 
     private void openColorConfig() {
-        MinecraftClient.getInstance().setScreen(new PlayerESPColorConfigScreen(this));
+        MinecraftClient.getInstance().setScreen(new ColorConfigScreen(this));
     }
 
     private void openWaypointConfig() {
-        MinecraftClient.getInstance().setScreen(new PlayerESPWaypointConfigScreen(this));
+        MinecraftClient.getInstance().setScreen(new WaypointConfigScreen(this));
     }
 
     private void toggleTracerStartMode() {

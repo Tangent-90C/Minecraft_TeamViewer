@@ -10,11 +10,11 @@ import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspConfigGateway;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspRuntimeGateway;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspSocket;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspTransport;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspTransportListener;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.SocketProcess;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportListener;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolPackets;
@@ -42,7 +42,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * PlayerESP 网络层管理器 - 核心网络通信组件
+ * MC-Teamviewer 网络层管理器 - 核心网络通信组件
  * 
  * ## 核心功能
  * 1) WebSocket连接管理：建立、维护、重连、断开连接
@@ -61,7 +61,7 @@ import java.util.concurrent.TimeUnit;
  * - 避免跨线程直接修改共享数据结构
  */
 // 网络管理器主类：协议状态机 + 数据同步，不直接依赖具体网络栈
-public class PlayerESPNetworkManager {
+public class NetworkManager {
 	/**
 	 * 连接状态监听器接口
 	 * 用于通知UI和其他模块网络连接状态变化
@@ -90,7 +90,7 @@ public class PlayerESPNetworkManager {
 	}
 
 	// 日志记录器
-	private static final Logger LOGGER = LoggerFactory.getLogger(PlayerESPNetworkManager.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(NetworkManager.class);
 
 	// 重同步冷却时间(毫秒) - 防止频繁重同步请求
 	private static final long RESYNC_COOLDOWN_MS = 3_000L;
@@ -108,10 +108,10 @@ public class PlayerESPNetworkManager {
 	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
 
 	// 全局配置网关（由 loader 层注入）
-	private static PlayerEspConfigGateway configGateway;
+	private static ConfigGateway configGateway;
 
-	private final PlayerEspRuntimeGateway runtimeGateway;
-	private final PlayerEspTransport transport;
+	private final RuntimeGateway runtimeGateway;
+	private final TransportProcess transport;
 	
 	// 远程玩家信息缓存 - 存储其他客户端玩家的位置和维度信息
 	private final Map<UUID, RemotePlayerInfo> remotePlayers;
@@ -145,7 +145,7 @@ public class PlayerESPNetworkManager {
 	private final Map<String, Long> lastEntityObjectLivenessMs = new HashMap<>();
 
 	// 传输连接实例
-	private PlayerEspSocket socket;
+	private SocketProcess socket;
 	
 	// 重连调度器 - 负责连接失败后的自动重连
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -230,10 +230,10 @@ public class PlayerESPNetworkManager {
 	 * 构造函数
 	 * @param remotePlayers 远程玩家信息映射的引用
 	 */
-	public PlayerESPNetworkManager(
+	public NetworkManager(
 			Map<UUID, RemotePlayerInfo> remotePlayers,
-			PlayerEspRuntimeGateway runtimeGateway,
-			PlayerEspTransport transport
+			RuntimeGateway runtimeGateway,
+			TransportProcess transport
 	) {
 		this.remotePlayers = remotePlayers;
 		this.runtimeGateway = runtimeGateway;
@@ -245,14 +245,14 @@ public class PlayerESPNetworkManager {
 	 * 设置全局配置网关
 	 * @param configGateway 配置网关
 	 */
-	public static void setConfigGateway(PlayerEspConfigGateway configGateway) {
-		PlayerESPNetworkManager.configGateway = configGateway;
+	public static void setConfigGateway(ConfigGateway configGateway) {
+		NetworkManager.configGateway = configGateway;
 	}
 
 	/**
 	 * 处理主线程任务队列 - 核心线程同步机制
 	 * 
-	 * 执行时机：在StandaloneMultiPlayerESP的END_CLIENT_TICK事件中调用
+	 * 执行时机：在StandaloneMultiPlayer的END_CLIENT_TICK事件中调用
 	 * 功能说明：
 	 * - 顺序执行所有排队的网络任务
 	 * - 将异步网络回调的结果应用到主线程状态
@@ -331,7 +331,7 @@ public class PlayerESPNetworkManager {
 		String uri = configGateway.getServerURL();
 
 		try {
-			this.socket = transport.connect(uri, useSystemProxy, new PlayerEspTransportListener() {
+			this.socket = transport.connect(uri, useSystemProxy, new TransportListener() {
 				@Override
 				public void onOpen(String negotiatedExtensions) {
 					handleTransportOpen(negotiatedExtensions);
@@ -360,7 +360,7 @@ public class PlayerESPNetworkManager {
 		} catch (Exception e) {
 			this.isConnected = false;
 			this.lastConnectionError = formatThrowableReason(e);
-			LOGGER.error("Failed to connect to PlayerESP server at {}: {}", configGateway.getServerURL(), e.getMessage());
+			LOGGER.error("Failed to connect to MC-Teamviewer server at {}: {}", configGateway.getServerURL(), e.getMessage());
 			notifyConnectionStatusChanged(false);
 			scheduleReconnect();
 		}
@@ -667,7 +667,7 @@ public class PlayerESPNetworkManager {
 			packet.waypoints = waypoints;
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send waypoints_update to PlayerESP server: {}", e.getMessage());
+			LOGGER.error("Failed to send waypoints_update to MC-Teamviewer server: {}", e.getMessage());
 		}
 	}
 
@@ -790,7 +790,7 @@ public class PlayerESPNetworkManager {
 			packet.waypointIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send waypoints_delete to PlayerESP server: {}", e.getMessage());
+			LOGGER.error("Failed to send waypoints_delete to MC-Teamviewer server: {}", e.getMessage());
 		}
 	}
 
@@ -833,7 +833,7 @@ public class PlayerESPNetworkManager {
 			packet.targetEntityIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send waypoints_entity_death_cancel to PlayerESP server: {}", e.getMessage());
+			LOGGER.error("Failed to send waypoints_entity_death_cancel to MC-Teamviewer server: {}", e.getMessage());
 		}
 	}
 
@@ -864,7 +864,7 @@ public class PlayerESPNetworkManager {
 			reconnectAttemptsRemaining = maxReconnectAttempts;
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
-			LOGGER.info("WebSocket connection opened to PlayerESP server");
+			LOGGER.info("WebSocket connection opened to MC-Teamviewer server");
 			if (negotiatedExtensions != null && !negotiatedExtensions.isBlank()) {
 				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
 			}
@@ -1005,7 +1005,7 @@ public class PlayerESPNetworkManager {
 
 		} catch (Exception e) {
 			LOGGER.error(
-				"PlayerESP Network - Error processing complete message: {}, bytes={}",
+				"MC-Teamviewer Network - Error processing complete message: {}, bytes={}",
 				e.getMessage(),
 				message == null ? 0 : message.length,
 				e
@@ -1438,7 +1438,7 @@ public class PlayerESPNetworkManager {
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			notifyConnectionStatusChanged(false);
-			LOGGER.info("Disconnected from PlayerESP server. Status: {}, Reason: {}", statusCode, reason);
+			LOGGER.info("Disconnected from MC-Teamviewer server. Status: {}, Reason: {}", statusCode, reason);
 			if (shouldReconnect && !reconnectSuppressedForVersionMismatch) {
 				scheduleReconnect();
 			}
@@ -1472,7 +1472,7 @@ public class PlayerESPNetworkManager {
 	private void handleTransportFailure(Throwable error) {
 		// 失败事件在网络线程触发，这里只入队，保证状态清理和通知时序一致。
 		enqueueMainThreadTask(() -> {
-			LOGGER.error("PlayerESP network error: {}", error == null ? "unknown" : error.getMessage());
+			LOGGER.error("MC-Teamviewer network error: {}", error == null ? "unknown" : error.getMessage());
 			isConnected = false;
 			socket = null;
 			lastConnectionError = formatThrowableReason(error);
@@ -1486,7 +1486,7 @@ public class PlayerESPNetworkManager {
 	}
 
 	public static String getServerURL() {
-		return configGateway != null ? configGateway.getServerURL() : "ws://localhost:8080/playeresp";
+		return configGateway != null ? configGateway.getServerURL() : "ws://localhost:8080/mc-client";
 	}
 
 	public static void setServerURL(String serverURL) {
@@ -1991,7 +1991,7 @@ public class PlayerESPNetworkManager {
 				remotePlayerDataCache.put(playerId, mergedData);
 				newRemotePlayers.put(playerId, info);
 			} catch (Exception e) {
-				LOGGER.error("PlayerESP Network - Error parsing player data: {}", e.getMessage());
+				LOGGER.error("MC-Teamviewer Network - Error parsing player data: {}", e.getMessage());
 			}
 		}
 
@@ -2025,7 +2025,7 @@ public class PlayerESPNetworkManager {
 				remotePlayerDataCache.put(playerId, mergedData);
 				remotePlayers.put(playerId, info);
 			} catch (Exception e) {
-				LOGGER.error("PlayerESP Network - Error applying player patch: {}", e.getMessage());
+				LOGGER.error("MC-Teamviewer Network - Error applying player patch: {}", e.getMessage());
 			}
 		}
 	}
@@ -2423,7 +2423,7 @@ public class PlayerESPNetworkManager {
 				merged.putAll(jsonObjectToValueMap(dataNode));
 				remoteEntityDataCache.put(entityId, merged);
 			} catch (Exception e) {
-				LOGGER.error("PlayerESP Network - Error applying entity patch: {}", e.getMessage());
+				LOGGER.error("MC-Teamviewer Network - Error applying entity patch: {}", e.getMessage());
 			}
 		}
 	}

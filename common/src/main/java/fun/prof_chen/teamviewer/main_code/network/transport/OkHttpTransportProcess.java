@@ -1,8 +1,8 @@
 package fun.prof_chen.teamviewer.main_code.network.transport;
 
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspSocket;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspTransport;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspTransportListener;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.SocketProcess;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportListener;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -13,9 +13,9 @@ import okio.ByteString;
 import java.net.Proxy;
 import java.net.ProxySelector;
 
-public final class OkHttpPlayerEspTransport implements PlayerEspTransport {
+public final class OkHttpTransportProcess implements TransportProcess {
     @Override
-    public PlayerEspSocket connect(String uri, boolean useSystemProxy, PlayerEspTransportListener listener) {
+    public SocketProcess connect(String uri, boolean useSystemProxy, TransportListener listener) {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
         if (useSystemProxy) {
             builder.proxySelector(ProxySelector.getDefault());
@@ -55,7 +55,7 @@ public final class OkHttpPlayerEspTransport implements PlayerEspTransport {
             }
         });
 
-        return new PlayerEspSocket() {
+        return new SocketProcess() {
             @Override
             public void send(byte[] payload) {
                 if (payload == null) {

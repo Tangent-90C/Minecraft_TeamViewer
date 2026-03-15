@@ -3,13 +3,13 @@ package fun.prof_chen.teamviewer.main_code.network.bridge;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.main_code.config.FabricModVersionProvider;
-import fun.prof_chen.teamviewer.main_code.network.abstraction.PlayerEspRuntimeGateway;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.world.World;
 
 import java.util.UUID;
 
-public final class FabricPlayerEspRuntimeGateway implements PlayerEspRuntimeGateway {
+public final class FabricRuntimeGateway implements RuntimeGateway {
     @Override
     public String getCurrentDimensionId() {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -32,17 +32,17 @@ public final class FabricPlayerEspRuntimeGateway implements PlayerEspRuntimeGate
 
     @Override
     public String getClientProtocolVersion() {
-        return TeamviewerModMetadata.PlayerEspProtocol.CLIENT_PROTOCOL_VERSION;
+        return TeamviewerModMetadata.MetaProtocol.CLIENT_PROTOCOL_VERSION;
     }
 
     @Override
     public String getClientMinCompatibleProtocolVersion() {
-        return TeamviewerModMetadata.PlayerEspProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
+        return TeamviewerModMetadata.MetaProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
     }
 
     @Override
     public String getServerProtocolFallbackVersion() {
-        return TeamviewerModMetadata.PlayerEspProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+        return TeamviewerModMetadata.MetaProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
     }
 
     @Override

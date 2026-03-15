@@ -6,7 +6,7 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
-import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.PlayerEspRenderBridge;
+import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.RenderBridge;
 import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.RenderContextHandle;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.AxisAlignedBox3D;
 import net.minecraft.client.render.*;
@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - 支持颜色和深度测试
  * - Minecraft 1.21.8 Fabric API 兼容
  */
-public class UnifiedRenderModule implements PlayerEspRenderBridge {
+public class UnifiedRenderModule implements RenderBridge {
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger("UnifiedRenderModule");
 	

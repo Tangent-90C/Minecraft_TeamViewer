@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @JourneyMapPlugin(apiVersion = "2.0.0")
+@journeymap.api.v2.common.JourneyMapPlugin(apiVersion = "2.0.0")
 public final class JourneyMapClientPlugin implements IClientPlugin {
 	static final String JOURNEYMAP_MOD_ID = "journeymap";
 	static final String TEAMVIEWER_MOD_ID = "teamviewer";

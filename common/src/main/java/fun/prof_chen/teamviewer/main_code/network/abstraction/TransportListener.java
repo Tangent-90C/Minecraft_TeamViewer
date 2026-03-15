@@ -1,6 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.network.abstraction;
 
-public interface PlayerEspTransportListener {
+public interface TransportListener {
     void onOpen(String negotiatedExtensions);
 
     void onTextMessage(String text);

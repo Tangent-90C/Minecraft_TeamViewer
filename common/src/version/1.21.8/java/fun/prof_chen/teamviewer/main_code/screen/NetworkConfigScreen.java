@@ -9,7 +9,7 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.text.Text;
 
-public class PlayerESPNetworkConfigScreen extends Screen {
+public class NetworkConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget updateIntervalField;
     private ButtonWidget uploadEntitiesButton;
@@ -25,7 +25,7 @@ public class PlayerESPNetworkConfigScreen extends Screen {
     private int startY;
     private int currentY;
 
-    public PlayerESPNetworkConfigScreen(Screen parent) {
+    public NetworkConfigScreen(Screen parent) {
         super(Text.translatable("screen.mc_teamviewer.network_config.title"));
         this.parent = parent;
     }
