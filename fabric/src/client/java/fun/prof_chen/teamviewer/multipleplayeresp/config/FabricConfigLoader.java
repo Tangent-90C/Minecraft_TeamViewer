@@ -5,7 +5,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.nio.file.Path;
 
 public final class FabricConfigLoader {
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("multipleplayeresp.json");
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("MC-Teamviewer.json");
 
     private FabricConfigLoader() {
     }

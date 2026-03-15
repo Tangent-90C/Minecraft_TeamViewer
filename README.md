@@ -76,7 +76,7 @@
 - 网络设置页：上报频率、实体上报开关、共享路标上报、系统代理
 - 报点设置页：报点显示、中键交互、长期报点、样式、形状参数
 
-配置文件为 `config/multipleplayeresp.json`（Fabric 标准配置目录）。
+配置文件为 `config/MC-Teamviewer.json`（Fabric 标准配置目录）。
 
 ## 6. 常见问题
 
