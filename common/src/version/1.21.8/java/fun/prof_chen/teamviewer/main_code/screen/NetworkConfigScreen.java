@@ -14,7 +14,7 @@ public class NetworkConfigScreen extends Screen {
     private TextFieldWidget updateIntervalField;
     private ButtonWidget uploadEntitiesButton;
     private ButtonWidget uploadSharedWaypointsButton;
-    private ButtonWidget preferLocalDataForEspButton;
+    private ButtonWidget preferLocalDataForRenderButton;
     private ButtonWidget useSystemProxyButton;
 
     private static final int COMPONENT_WIDTH = 200;
@@ -105,11 +105,11 @@ public class NetworkConfigScreen extends Screen {
         this.addDrawableChild(this.uploadSharedWaypointsButton);
 
         int preferLocalDataY = getNextButtonY();
-        this.preferLocalDataForEspButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.prefer_local_data_for_esp"),
-            button -> togglePreferLocalDataForEsp()
+        this.preferLocalDataForRenderButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.prefer_local_data_for_rendering"),
+            button -> togglePreferLocalDataForRender()
         ).dimensions(componentX, preferLocalDataY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.preferLocalDataForEspButton);
+        this.addDrawableChild(this.preferLocalDataForRenderButton);
 
         int useSystemProxyY = getNextButtonY();
         this.useSystemProxyButton = ButtonWidget.builder(
@@ -126,7 +126,7 @@ public class NetworkConfigScreen extends Screen {
 
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
-        updatePreferLocalDataForEspButton();
+        updatePreferLocalDataForRenderButton();
         updateUseSystemProxyButton();
     }
 
@@ -181,10 +181,10 @@ public class NetworkConfigScreen extends Screen {
         updateUseSystemProxyButton();
     }
 
-    private void togglePreferLocalDataForEsp() {
-        boolean currentStatus = PlayerProcesses.getConfig().isPreferLocalDataForEsp();
-        PlayerProcesses.getConfig().setPreferLocalDataForEsp(!currentStatus);
-        updatePreferLocalDataForEspButton();
+    private void togglePreferLocalDataForRender() {
+        boolean currentStatus = PlayerProcesses.getConfig().isPreferLocalDataForRender();
+        PlayerProcesses.getConfig().setPreferLocalDataForRender(!currentStatus);
+        updatePreferLocalDataForRenderButton();
     }
 
     private void updateUploadEntitiesButton() {
@@ -214,12 +214,12 @@ public class NetworkConfigScreen extends Screen {
         }
     }
 
-    private void updatePreferLocalDataForEspButton() {
-        if (this.preferLocalDataForEspButton != null) {
-            boolean isEnabled = PlayerProcesses.getConfig().isPreferLocalDataForEsp();
-            String buttonText = Text.translatable("screen.mc_teamviewer.config.prefer_local_data_for_esp").getString();
+    private void updatePreferLocalDataForRenderButton() {
+        if (this.preferLocalDataForRenderButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isPreferLocalDataForRender();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.prefer_local_data_for_rendering").getString();
             buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.preferLocalDataForEspButton.setMessage(Text.of(buttonText));
+            this.preferLocalDataForRenderButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -228,7 +228,7 @@ public class NetworkConfigScreen extends Screen {
         super.tick();
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
-        updatePreferLocalDataForEspButton();
+        updatePreferLocalDataForRenderButton();
         updateUseSystemProxyButton();
     }
 }

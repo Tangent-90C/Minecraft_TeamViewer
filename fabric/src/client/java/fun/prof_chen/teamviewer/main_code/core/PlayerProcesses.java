@@ -89,8 +89,8 @@ public class PlayerProcesses implements ClientModInitializer {
 	// Config
 	private static Config config;
 	
-	// ESP settings
-	private static boolean espEnabled = false;
+	// Render settings
+	private static boolean ModEnable = false;
 	private static final boolean useServerPositions = false;
 
     // 用于控制位置更新频率
@@ -114,7 +114,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		// 初始化客户端功能
-		LOGGER.info("Initializing MultiPlayer ESP mod");
+		LOGGER.info("Initializing MC-Teamviewer mod");
 		
 		// 加载配置
 		config = FabricConfigLoader.load();
@@ -170,7 +170,7 @@ public class PlayerProcesses implements ClientModInitializer {
 
 			// 处理按键输入
 			while (toggleKey.wasPressed()) {
-				toggleESP();
+				toggleMOD();
 			}
 			
 			// 处理配置界面按键
@@ -191,24 +191,24 @@ public class PlayerProcesses implements ClientModInitializer {
 			handleAutoCancelWaypointOnEntityDeath(client);
 			handleLocalPlayerMarkedReminder(client);
 
-			remotePlayerProjectionCoordinator.tick(resolvePlayersForWorldMapBridge(), espEnabled);
-			sharedWaypointSyncCoordinator.tick(espEnabled, config);
+			remotePlayerProjectionCoordinator.tick(resolvePlayersForWorldMapBridge(), ModEnable);
+			sharedWaypointSyncCoordinator.tick(ModEnable, config);
 			
 			// 发送玩家位置到服务器
-			if (espEnabled && networkManager != null) {
+			if (ModEnable && networkManager != null) {
 				handleRegistrationAndPositionUpdates();
 			}
 		});
 		
 		// 注册世界渲染事件
 		WorldRenderEvents.AFTER_ENTITIES.register(context -> {
-			if (espEnabled) {
-				renderESP(context);
+			if (ModEnable) {
+				renderMOD(context);
 			}
 		});
 
 		HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
-			if (espEnabled && localPlayerMarkedActive) {
+			if (ModEnable && localPlayerMarkedActive) {
 				renderLocalMarkedIndicator(drawContext);
 			}
 		});
@@ -222,19 +222,19 @@ public class PlayerProcesses implements ClientModInitializer {
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> handleLeftPlaySession());
 		
-		LOGGER.info("MultiPlayer ESP mod initialized");
+		LOGGER.info("MC-Teamviewer mod initialized");
 	}
 	
-	private void toggleESP() {
-		espEnabled = !espEnabled;
+	private void toggleMOD() {
+		ModEnable = !ModEnable;
 		
-		if (espEnabled) {
-			// 启用ESP，连接到服务器
+		if (ModEnable) {
+			// 连接到服务器
 			networkManager.connect();
-			LOGGER.info("MultiPlayer ESP enabled");
+			LOGGER.info("MC-Teamviewer enabled");
 		} else {
 			shutdownNetworkSession();
-			LOGGER.info("MultiPlayer ESP disabled");
+			LOGGER.info("MC-Teamviewer disabled");
 		}
 		
 		// 重置计数器
@@ -245,7 +245,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		if (client == null || config == null || !config.isAutoConnectOnMultiplayerJoin()) {
 			return;
 		}
-		espEnabled = true;
+		ModEnable = true;
 		if (networkManager != null) {
 			networkManager.disconnect();
 			networkManager.connectWithReconnectLimit(AUTO_CONNECT_MAX_RETRIES, AUTO_CONNECT_RETRY_DELAY_MS);
@@ -468,7 +468,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		return null;
 	}
 
-	private void renderESP(WorldRenderContext context) {
+	private void renderMOD(WorldRenderContext context) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) return;
 		boolean depthTestEnabled = !config.isXrayMarkersAndBoxes();
@@ -531,7 +531,7 @@ public class PlayerProcesses implements ClientModInitializer {
 
 	private Map<UUID, Vec3d> resolvePlayersForRender() {
 		Map<UUID, Vec3d> remotePlayerPositions = buildRemotePlayerPositions();
-		if (config == null || !config.isPreferLocalDataForEsp()) {
+		if (config == null || !config.isPreferLocalDataForRender()) {
 			return remotePlayerPositions;
 		}
 
@@ -556,7 +556,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	}
 
 	private Map<UUID, RemotePlayerInfo> resolvePlayersForWorldMapBridge() {
-		if (config == null || !config.isPreferLocalDataForEsp()) {
+		if (config == null || !config.isPreferLocalDataForRender()) {
 			return remotePlayerRepository == null ? remotePlayers : remotePlayerRepository.snapshot();
 		}
 
@@ -802,7 +802,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	}
 
 	private boolean canCreateMark(MinecraftClient client) {
-		return espEnabled
+		return ModEnable
 			&& client != null
 			&& client.player != null
 			&& client.world != null
@@ -1429,19 +1429,19 @@ public class PlayerProcesses implements ClientModInitializer {
 	public static void reconnectToServer() {
 		if (networkManager != null) {
 			networkManager.disconnect();
-			if (espEnabled) {
+			if (ModEnable) {
 				networkManager.connect();
 			}
 		}
 	}
 	
 	// Getter和Setter方法
-	public static boolean isEspEnabled() {
-		return espEnabled;
+	public static boolean isModEnable() {
+		return ModEnable;
 	}
 	
-	public static void setEspEnabled(boolean espEnabled) {
-		PlayerProcesses.espEnabled = espEnabled;
+	public static void setModEnable(boolean espEnabled) {
+		PlayerProcesses.ModEnable = espEnabled;
 	}
 	
 	

@@ -1,4 +1,4 @@
-// 玩家ESP网络通信管理器
+// 玩家渲染网络通信管理器
 // 负责处理与服务器的WebSocket连接和数据同步
 package fun.prof_chen.teamviewer.main_code.bridge;
 

@@ -34,7 +34,7 @@ public final class TeamviewerModMetadata {
     }
 
     /**
-     * 玩家 ESP 网络协议元信息（作为全局元信息的一部分）。
+     * 玩家 渲染 网络协议元信息（作为全局元信息的一部分）。
      */
     public static final class MetaProtocol {
         private MetaProtocol() {

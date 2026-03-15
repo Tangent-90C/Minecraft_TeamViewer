@@ -57,7 +57,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private double tampermonkeyBeamHeight = 384.0D;
     private boolean autoConnectOnMultiplayerJoin = false;
     private boolean useSystemProxy = false;
-    private boolean preferLocalDataForEsp = true;
+    private boolean preferLocalDataForRender = true;
 
     public static Config load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -73,7 +73,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
             config.storagePath = configPath;
             return config;
         } catch (Exception e) {
-            System.err.println("Failed to load MultiPlayer ESP config: " + e.getMessage());
+            System.err.println("Failed to load MC-Teamviewer config: " + e.getMessage());
             return createWithStoragePath(configPath);
         }
     }
@@ -86,7 +86,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
     public void save() {
         if (storagePath == null) {
-            System.err.println("Failed to save MultiPlayer ESP config: storage path is not configured");
+            System.err.println("Failed to save MC-Teamviewer config: storage path is not configured");
             return;
         }
 
@@ -98,7 +98,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
             String content = GSON.toJson(this);
             Files.writeString(storagePath, content);
         } catch (IOException e) {
-            System.err.println("Failed to save MultiPlayer ESP config: " + e.getMessage());
+            System.err.println("Failed to save MC-Teamviewer config: " + e.getMessage());
         }
     }
 
@@ -537,11 +537,11 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
         return getUpdateInterval();
     }
 
-    public boolean isPreferLocalDataForEsp() {
-        return preferLocalDataForEsp;
+    public boolean isPreferLocalDataForRender() {
+        return preferLocalDataForRender;
     }
 
-    public void setPreferLocalDataForEsp(boolean preferLocalDataForEsp) {
-        this.preferLocalDataForEsp = preferLocalDataForEsp;
+    public void setPreferLocalDataForRender(boolean preferLocalDataForRender) {
+        this.preferLocalDataForRender = preferLocalDataForRender;
     }
 }

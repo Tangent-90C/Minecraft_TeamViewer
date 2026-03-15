@@ -307,31 +307,31 @@ public class ConfigScreen extends Screen {
         saveSettings();
         
         // 尝试连接到服务器
-        if (PlayerProcesses.isEspEnabled()) {
-            // 如果ESP已启用，重新连接
+        if (PlayerProcesses.isModEnable()) {
+            // 如果已启用，重新连接
             PlayerProcesses.reconnectToServer();
         } else {
-            // 如果ESP未启用，启用它
-            PlayerProcesses.setEspEnabled(true);
+            // 如果未启用，启用它
+            PlayerProcesses.setModEnable(true);
             PlayerProcesses.reconnectToServer();
         }
     }
     
     private void updateConnectButton() {
-        if (PlayerProcesses.isEspEnabled()) {
+        if (PlayerProcesses.isModEnable()) {
             this.connectButton.setMessage(Text.translatable("screen.mc_teamviewer.config.reconnect"));
         } else {
             this.connectButton.setMessage(Text.translatable("screen.mc_teamviewer.config.connect"));
         }
 
         if (this.disconnectButton != null) {
-            this.disconnectButton.active = PlayerProcesses.isEspEnabled()
+            this.disconnectButton.active = PlayerProcesses.isModEnable()
                 || PlayerProcesses.getNetworkManager().isConnected();
         }
     }
 
     private void disconnectFromServer() {
-        PlayerProcesses.setEspEnabled(false);
+        PlayerProcesses.setModEnable(false);
         PlayerProcesses.getNetworkManager().disconnect();
         updateConnectionStatus();
         updateConnectionStatusWidget();

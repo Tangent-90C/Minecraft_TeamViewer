@@ -23,7 +23,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 统一的3D渲染模块 - 独立的ESP和追踪渲染工具
+ * 统一的3D渲染模块 - 独立的渲染工具
  * 
  * 特性：
  * - 绘制3D碰撞盒轮廓（Outlined Boxes）
@@ -196,7 +196,7 @@ public class UnifiedRenderModule implements RenderBridge {
 	
 	/**
 	 * 绘制从起点到终点的追踪线条
-	 * 常用于ESP功能中标记敌人或目标
+	 * 常用于渲染模块中标记敌人或目标
 	 * 
 	 * @param context 渲染上下文句柄
 	 * @param startPoint 起点（通常是摄像机位置向前偏移）
