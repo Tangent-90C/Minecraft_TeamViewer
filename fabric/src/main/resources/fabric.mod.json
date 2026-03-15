@@ -20,7 +20,7 @@
       "fun.prof_chen.teamviewer.client.TeamviewerClient"
     ],
     "journeymap": [
-      "fun.prof_chen.teamviewer.multipleplayeresp.mapbridge.provider.journey.JourneyMapClientPlugin"
+      "fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapClientPlugin"
     ],
     "modmenu": [
       "fun.prof_chen.teamviewer.client.TeamviewerModMenuApi"
