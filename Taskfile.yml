@@ -42,20 +42,18 @@ tasks:
 
           mod_version = read_property('mod_version')
           archives_base_name = read_property('archives_base_name')
-          network_protocol_version = read_property('network_protocol_version')
-          output_name = f'MCTeamViewer-v{mod_version}-proto{network_protocol_version}.jar'
-          source_name = f'{archives_base_name}-{mod_version}.jar'
+          output_name = f'{archives_base_name}-{mod_version}.jar'
 
           build_artifacts_dir = root / 'build-artifacts'
           for old_file in build_artifacts_dir.glob('*.jar'):
               old_file.unlink()
 
           libs_dir = root / 'fabric' / 'build' / 'libs'
-          source_jar = libs_dir / source_name
+          source_jar = libs_dir / output_name
           if not source_jar.is_file():
               available = sorted(jar.name for jar in libs_dir.glob('*.jar'))
               raise SystemExit(
-                  f'Expected distributable jar {source_name} not found in {libs_dir}. '
+                  f'Expected distributable jar {output_name} not found in {libs_dir}. '
                   f'Available jars: {available}'
               )
 
