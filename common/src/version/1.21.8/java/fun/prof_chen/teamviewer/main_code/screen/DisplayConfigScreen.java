@@ -196,39 +196,39 @@ public class DisplayConfigScreen extends Screen {
         );
 
         if (this.renderDistanceField != null && this.renderDistanceField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.render_distance.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.render_distance.tooltip", mouseX, mouseY);
             return;
         }
         if (this.tracerTopOffsetField != null && this.tracerTopOffsetField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.tracer_top_offset.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.tracer_top_offset.tooltip", mouseX, mouseY);
             return;
         }
         if (this.showBoxesButton != null && this.showBoxesButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.show_boxes.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.show_boxes.tooltip", mouseX, mouseY);
             return;
         }
         if (this.showLinesButton != null && this.showLinesButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.show_tracking_lines.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.show_tracking_lines.tooltip", mouseX, mouseY);
             return;
         }
         if (this.xrayMarkersAndBoxesButton != null && this.xrayMarkersAndBoxesButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.xray_markers_and_boxes.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.xray_markers_and_boxes.tooltip", mouseX, mouseY);
             return;
         }
         if (this.journeyMapRemotePlayersButton != null && this.journeyMapRemotePlayersButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.show_journeymap_remote_player_waypoints.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.show_journeymap_remote_player_waypoints.tooltip", mouseX, mouseY);
             return;
         }
         if (this.tracerStartModeButton != null && this.tracerStartModeButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.tracer_start_mode.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.tracer_start_mode.tooltip", mouseX, mouseY);
             return;
         }
         if (this.colorSettingsButton != null && this.colorSettingsButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.color_settings.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.color_settings.tooltip", mouseX, mouseY);
             return;
         }
         if (this.waypointSettingsButton != null && this.waypointSettingsButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.waypoint_settings.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.waypoint_settings.tooltip", mouseX, mouseY);
         }
     }
 
@@ -295,8 +295,8 @@ public class DisplayConfigScreen extends Screen {
         if (this.tracerStartModeButton != null) {
             Config config = PlayerProcesses.getConfig();
             String modeKey = config.isTracerStartTop()
-                ? "screen.main_code.config.tracer_start_mode.top"
-                : "screen.main_code.config.tracer_start_mode.crosshair";
+                ? "screen.mc_teamviewer.config.tracer_start_mode.top"
+                : "screen.mc_teamviewer.config.tracer_start_mode.crosshair";
             String buttonText = Text.translatable("screen.mc_teamviewer.config.tracer_start_mode").getString()
                 + ": "
                 + Text.translatable(modeKey).getString();

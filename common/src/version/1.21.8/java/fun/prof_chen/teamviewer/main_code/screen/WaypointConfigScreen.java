@@ -230,47 +230,47 @@ public class WaypointConfigScreen extends Screen {
         );
 
         if (this.waypointTimeoutField != null && this.waypointTimeoutField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.waypoint_timeout.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.waypoint_timeout.tooltip", mouseX, mouseY);
             return;
         }
         if (this.longTermWaypointTimeoutField != null && this.longTermWaypointTimeoutField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.long_term_waypoint_timeout.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.long_term_waypoint_timeout.tooltip", mouseX, mouseY);
             return;
         }
         if (this.quickMarkMaxCountField != null && this.quickMarkMaxCountField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.quick_mark_max_count.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.quick_mark_max_count.tooltip", mouseX, mouseY);
             return;
         }
         if (this.waypointUiStyleButton != null && this.waypointUiStyleButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.waypoint_ui_style.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.waypoint_ui_style.tooltip", mouseX, mouseY);
             return;
         }
         if (this.showSharedWaypointsButton != null && this.showSharedWaypointsButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.show_shared_waypoints.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.show_shared_waypoints.tooltip", mouseX, mouseY);
             return;
         }
         if (this.showOwnSharedWaypointsOnMinimapButton != null && this.showOwnSharedWaypointsOnMinimapButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.show_own_shared_waypoints_on_minimap.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.show_own_shared_waypoints_on_minimap.tooltip", mouseX, mouseY);
             return;
         }
         if (this.middleDoubleClickMarkButton != null && this.middleDoubleClickMarkButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.middle_double_click_mark.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.middle_double_click_mark.tooltip", mouseX, mouseY);
             return;
         }
         if (this.middleClickCancelWaypointButton != null && this.middleClickCancelWaypointButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.middle_click_cancel_waypoint.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.middle_click_cancel_waypoint.tooltip", mouseX, mouseY);
             return;
         }
         if (this.autoCancelWaypointOnEntityDeathButton != null && this.autoCancelWaypointOnEntityDeathButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.auto_cancel_waypoint_on_entity_death.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.auto_cancel_waypoint_on_entity_death.tooltip", mouseX, mouseY);
             return;
         }
         if (this.enableLongTermWaypointButton != null && this.enableLongTermWaypointButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.enable_long_term_waypoint.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.enable_long_term_waypoint.tooltip", mouseX, mouseY);
             return;
         }
         if (this.waypointShapeSettingsButton != null && this.waypointShapeSettingsButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.waypoint_shape_settings.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.waypoint_shape_settings.tooltip", mouseX, mouseY);
         }
     }
 
@@ -423,11 +423,11 @@ public class WaypointConfigScreen extends Screen {
             String style = PlayerProcesses.getConfig().getWaypointUiStyle();
             String styleKey;
             if (Config.WAYPOINT_UI_RING.equals(style)) {
-                styleKey = "screen.main_code.config.waypoint_ui_style.ring";
+                styleKey = "screen.mc_teamviewer.config.waypoint_ui_style.ring";
             } else if (Config.WAYPOINT_UI_PIN.equals(style)) {
-                styleKey = "screen.main_code.config.waypoint_ui_style.pin";
+                styleKey = "screen.mc_teamviewer.config.waypoint_ui_style.pin";
             } else {
-                styleKey = "screen.main_code.config.waypoint_ui_style.beacon";
+                styleKey = "screen.mc_teamviewer.config.waypoint_ui_style.beacon";
             }
             String buttonText = Text.translatable("screen.mc_teamviewer.config.waypoint_ui_style").getString()
                 + ": "

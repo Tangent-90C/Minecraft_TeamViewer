@@ -177,19 +177,19 @@ public class WaypointShapeConfigScreen extends Screen {
         );
 
         if (this.waypointBeamWidthField != null && this.waypointBeamWidthField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.waypoint_beacon_beam_width.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.waypoint_beacon_beam_width.tooltip", mouseX, mouseY);
             return;
         }
         if (this.waypointBeamHeightField != null && this.waypointBeamHeightField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.waypoint_beacon_beam_height.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.waypoint_beacon_beam_height.tooltip", mouseX, mouseY);
             return;
         }
         if (this.tmBeamWidthField != null && this.tmBeamWidthField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.tampermonkey_beam_width.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.tampermonkey_beam_width.tooltip", mouseX, mouseY);
             return;
         }
         if (this.tmBeamHeightField != null && this.tmBeamHeightField.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.main_code.config.tampermonkey_beam_height.tooltip", mouseX, mouseY);
+            drawTooltip(context, "screen.mc_teamviewer.config.tampermonkey_beam_height.tooltip", mouseX, mouseY);
         }
     }
 
