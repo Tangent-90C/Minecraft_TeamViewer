@@ -1,6 +1,5 @@
 package fun.prof_chen.teamviewer.main_code.battlemap;
 
-import fun.prof_chen.teamviewer.main_code.model.ReportDataSchemas;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.scoreboard.ScoreboardDisplaySlot;
@@ -10,7 +9,6 @@ import net.minecraft.scoreboard.Team;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
-import net.minecraft.util.math.ChunkPos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,9 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,8 +30,6 @@ public final class ScoreboardBattleMapParser {
 
     public Optional<ParsedBattleMapSnapshot> parse(
             MinecraftClient client,
-            String roomCode,
-            UUID reporterId,
             boolean debugLogging
     ) {
         if (client == null || client.world == null || client.player == null) {
@@ -84,40 +78,23 @@ public final class ScoreboardBattleMapParser {
         }
 
         AnchorPosition anchor = resolveAnchor(mapLines, resolvedSize);
-        ChunkPos playerChunk = new ChunkPos(client.player.getBlockPos());
         String dimension = client.player.getWorld().getRegistryKey().getValue().toString();
-        String reporterIdText = reporterId == null ? null : reporterId.toString();
-        long observedAt = System.currentTimeMillis();
 
         if (hintedSize != null && hintedSize != resolvedSize && debugLogging) {
             LOGGER.info("Battle map size hint mismatch: hinted={}, parsed={}", hintedSize, resolvedSize);
         }
 
-        Map<String, BattleChunkObservation> chunks = new HashMap<>();
+        List<RelativeBattleChunkCell> cells = new ArrayList<>();
         for (int rowIndex = 0; rowIndex < mapLines.size(); rowIndex++) {
             ParsedScoreboardLine line = mapLines.get(rowIndex);
             for (int columnIndex = 0; columnIndex < line.cells().size(); columnIndex++) {
                 ParsedGlyphCell cell = line.cells().get(columnIndex);
-                int chunkX = playerChunk.x + (columnIndex - anchor.columnIndex());
-                int chunkZ = playerChunk.z + (rowIndex - anchor.rowIndex());
                 if (isCenterGlyph(cell.symbol())) {
                     continue;
                 }
-                String chunkId = buildChunkId(roomCode, dimension, chunkX, chunkZ);
-
-                BattleChunkObservation observation = new BattleChunkObservation(
-                        chunkId,
-                        chunkX,
-                        chunkZ,
-                        dimension,
-                        cell.symbol(),
-                        cell.colorRaw(),
-                        null,
-                        observedAt,
-                        reporterIdText,
-                        roomCode
-                );
-                chunks.put(chunkId, observation);
+                int relChunkX = columnIndex - anchor.columnIndex();
+                int relChunkZ = rowIndex - anchor.rowIndex();
+                cells.add(new RelativeBattleChunkCell(relChunkX, relChunkZ, cell.symbol(), cell.colorRaw()));
             }
         }
 
@@ -126,7 +103,8 @@ public final class ScoreboardBattleMapParser {
                 anchor.rowIndex(),
                 anchor.columnIndex(),
                 hintedSize,
-                chunks
+                dimension,
+                cells
         ));
     }
 
@@ -164,7 +142,7 @@ public final class ScoreboardBattleMapParser {
             }
         }
 
-        Map<Integer, Integer> counts = new HashMap<>();
+        HashMap<Integer, Integer> counts = new HashMap<>();
         for (ParsedScoreboardLine line : lines) {
             int size = line.cells().size();
             if (size <= 0) {
@@ -175,7 +153,7 @@ public final class ScoreboardBattleMapParser {
 
         int bestSize = 0;
         int bestFrequency = 0;
-        for (Map.Entry<Integer, Integer> entry : counts.entrySet()) {
+        for (var entry : counts.entrySet()) {
             int size = entry.getKey();
             int frequency = entry.getValue();
             if (frequency >= size && size > bestSize) {
@@ -290,12 +268,6 @@ public final class ScoreboardBattleMapParser {
                 || block == Character.UnicodeBlock.MISCELLANEOUS_SYMBOLS;
     }
 
-    private String buildChunkId(String roomCode, String dimension, int chunkX, int chunkZ) {
-        String safeRoomCode = roomCode == null || roomCode.isBlank() ? "default" : roomCode.trim();
-        String safeDimension = dimension == null || dimension.isBlank() ? "minecraft:overworld" : dimension.trim();
-        return safeRoomCode + "|" + safeDimension + "|" + chunkX + "|" + chunkZ;
-    }
-
     private record ParsedGlyphCell(String symbol, String colorRaw) {
     }
 
@@ -305,30 +277,11 @@ public final class ScoreboardBattleMapParser {
     private record AnchorPosition(int rowIndex, int columnIndex) {
     }
 
-    public record BattleChunkObservation(
-            String chunkId,
-            int chunkX,
-            int chunkZ,
-            String dimension,
+    public record RelativeBattleChunkCell(
+            int relChunkX,
+            int relChunkZ,
             String symbol,
-            String colorRaw,
-            String colorNote,
-            long observedAt,
-            String reporterId,
-            String roomCode) {
-        public ReportDataSchemas.BattleChunkDataPayload toPayload() {
-            return new ReportDataSchemas.BattleChunkDataPayload(
-                    chunkX,
-                    chunkZ,
-                    dimension,
-                    symbol,
-                    colorRaw,
-                    colorNote,
-                    observedAt,
-                    reporterId,
-                    roomCode
-            );
-        }
+            String colorRaw) {
     }
 
     public record ParsedBattleMapSnapshot(
@@ -336,13 +289,7 @@ public final class ScoreboardBattleMapParser {
             int anchorRow,
             int anchorColumn,
             Integer hintedSize,
-            Map<String, BattleChunkObservation> chunks) {
-        public Map<String, Map<String, Object>> toProtocolMap() {
-            Map<String, Map<String, Object>> protocolMap = new HashMap<>();
-            for (Map.Entry<String, BattleChunkObservation> entry : chunks.entrySet()) {
-                protocolMap.put(entry.getKey(), entry.getValue().toPayload().toMap());
-            }
-            return protocolMap;
-        }
+            String dimension,
+            List<RelativeBattleChunkCell> cells) {
     }
 }

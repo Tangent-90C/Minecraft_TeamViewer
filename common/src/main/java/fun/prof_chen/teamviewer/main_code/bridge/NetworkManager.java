@@ -801,68 +801,25 @@ public class NetworkManager {
 		}
 	}
 
-	public void sendBattleChunksPatch(UUID submitPlayerId, Map<String, Map<String, Object>> upsert, List<String> delete) {
-		if (socket == null || !isConnected || submitPlayerId == null) {
-			return;
-		}
-
-		Map<String, Map<String, Object>> sanitizedUpsert = new HashMap<>();
-		if (upsert != null) {
-			for (Map.Entry<String, Map<String, Object>> entry : upsert.entrySet()) {
-				String chunkId = entry.getKey();
-				if (chunkId == null || chunkId.isBlank() || entry.getValue() == null || entry.getValue().isEmpty()) {
-					continue;
-				}
-				sanitizedUpsert.put(chunkId, copyValueMap(entry.getValue()));
-			}
-		}
-
-		List<String> sanitizedDelete = new ArrayList<>();
-		if (delete != null) {
-			for (String chunkId : delete) {
-				if (chunkId != null && !chunkId.isBlank()) {
-					sanitizedDelete.add(chunkId);
-				}
-			}
-		}
-
-		if (sanitizedUpsert.isEmpty() && sanitizedDelete.isEmpty()) {
+	public void sendBattleMapObservation(UUID submitPlayerId, Map<String, Object> observation) {
+		if (socket == null || !isConnected || submitPlayerId == null || observation == null || observation.isEmpty()) {
 			return;
 		}
 
 		try {
-			ProtocolPackets.BattleChunksPatchPacket packet = new ProtocolPackets.BattleChunksPatchPacket();
+			ProtocolPackets.BattleMapObservationPacket packet = new ProtocolPackets.BattleMapObservationPacket();
 			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
-			packet.upsert = sanitizedUpsert;
-			packet.delete = sanitizedDelete;
+			packet.dimension = normalizeNullableText(observation.get("dimension"));
+			packet.mapSize = toIntegerOrNull(observation.get("mapSize"));
+			packet.anchorRow = toIntegerOrNull(observation.get("anchorRow"));
+			packet.anchorCol = toIntegerOrNull(observation.get("anchorCol"));
+			packet.snapshotObservedAt = toLongOrNull(observation.get("snapshotObservedAt"));
+			packet.parsedAt = toLongOrNull(observation.get("parsedAt"));
+			packet.candidates = copyValueList(observation.get("candidates"));
+			packet.cells = copyValueList(observation.get("cells"));
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send battle_chunks_patch: {}", e.getMessage());
-		}
-	}
-
-	public void sendBattleChunksKeepalive(UUID submitPlayerId, List<String> chunkIds) {
-		if (socket == null || !isConnected || submitPlayerId == null || chunkIds == null || chunkIds.isEmpty()) {
-			return;
-		}
-
-		List<String> ids = new ArrayList<>();
-		for (String chunkId : chunkIds) {
-			if (chunkId != null && !chunkId.isBlank()) {
-				ids.add(chunkId);
-			}
-		}
-		if (ids.isEmpty()) {
-			return;
-		}
-
-		try {
-			ProtocolPackets.BattleChunksKeepalivePacket packet = new ProtocolPackets.BattleChunksKeepalivePacket();
-			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
-			packet.chunkIds = ids;
-			sendPacket(packet);
-		} catch (Exception e) {
-			LOGGER.error("Failed to send battle_chunks_keepalive: {}", e.getMessage());
+			LOGGER.error("Failed to send battle_map_observation: {}", e.getMessage());
 		}
 	}
 
@@ -2696,6 +2653,48 @@ public class NetworkManager {
 			copy.put(entry.getKey(), entry.getValue());
 		}
 		return copy;
+	}
+
+	@SuppressWarnings("unchecked")
+	private List<Map<String, Object>> copyValueList(Object source) {
+		if (!(source instanceof List<?> listValue)) {
+			return List.of();
+		}
+		List<Map<String, Object>> copy = new ArrayList<>();
+		for (Object item : listValue) {
+			if (item instanceof Map<?, ?> rawMap) {
+				Map<String, Object> normalized = new HashMap<>();
+				for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+					normalized.put(String.valueOf(entry.getKey()), entry.getValue());
+				}
+				copy.add(normalized);
+			}
+		}
+		return copy;
+	}
+
+	private Integer toIntegerOrNull(Object value) {
+		if (value instanceof Number numberValue) {
+			return numberValue.intValue();
+		}
+		try {
+			String text = normalizeNullableText(value);
+			return text == null ? null : Integer.parseInt(text);
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private Long toLongOrNull(Object value) {
+		if (value instanceof Number numberValue) {
+			return numberValue.longValue();
+		}
+		try {
+			String text = normalizeNullableText(value);
+			return text == null ? null : Long.parseLong(text);
+		} catch (Exception ignored) {
+			return null;
+		}
 	}
 
 	private Map<String, Map<String, Object>> buildTabPlayersSnapshot(List<Map<String, Object>> tabPlayers) {

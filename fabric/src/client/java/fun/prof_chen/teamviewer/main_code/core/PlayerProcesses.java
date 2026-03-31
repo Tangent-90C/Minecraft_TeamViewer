@@ -29,10 +29,10 @@ import net.minecraft.world.RaycastContext;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import net.fabricmc.loader.api.FabricLoader;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.config.FabricConfigLoader;
-import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCacheStore;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapPositionHistory;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapSidebarSnapshotTracker;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardBattleMapParser;
 import fun.prof_chen.teamviewer.main_code.mapbridge.registry.MapBridgeRegistry;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
@@ -60,7 +60,6 @@ import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePl
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -115,13 +114,10 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static String lastLocalMarkedActionBarFingerprint = "";
 	private static boolean localPlayerMarkedActive = false;
 	private static String localPlayerMarkedIndicatorText = "TV!";
-	private static final Path BATTLE_MAP_CACHE_PATH = FabricLoader.getInstance()
-			.getConfigDir()
-			.resolve("MC-Teamviewer-battle-map-cache.json");
 	private static final ScoreboardBattleMapParser SCOREBOARD_BATTLE_MAP_PARSER = new ScoreboardBattleMapParser();
-	private static BattleMapCacheStore battleMapCacheStore;
-	private static final Set<String> lastObservedBattleChunkIds = new HashSet<>();
-	private static volatile boolean battleMapRequireFullResync = true;
+	private static final BattleMapPositionHistory BATTLE_MAP_POSITION_HISTORY = new BattleMapPositionHistory(120);
+	private static volatile boolean battleMapObservationPending = true;
+	private static volatile long lastUploadedBattleMapSidebarRevision = -1L;
 	
 	@Override
 	public void onInitializeClient() {
@@ -130,8 +126,6 @@ public class PlayerProcesses implements ClientModInitializer {
 		
 		// 加载配置
 		config = FabricConfigLoader.load();
-		battleMapCacheStore = new BattleMapCacheStore(BATTLE_MAP_CACHE_PATH);
-		battleMapCacheStore.load();
 		
 		// 初始化网络管理器
 		networkManager = new NetworkManager(
@@ -140,8 +134,7 @@ public class PlayerProcesses implements ClientModInitializer {
 				new OkHttpTransportProcess());
 		networkManager.addConnectionStatusListener(connected -> {
 			battleMapTickCounter = 0;
-			lastObservedBattleChunkIds.clear();
-			battleMapRequireFullResync = true;
+			markBattleMapObservationPending();
 		});
 		NetworkManager.setConfigGateway(config);
 		waypointSyncGateway = new WaypointSyncGateway(networkManager);
@@ -206,6 +199,7 @@ public class PlayerProcesses implements ClientModInitializer {
 			
 			// 更新玩家位置信息
 			updatePlayerPositions();
+			recordBattleMapPositionHistory(client);
 			handleMiddleMouseDoubleClickMarking(client);
 			handleAutoCancelWaypointOnEntityDeath(client);
 			handleLocalPlayerMarkedReminder(client);
@@ -260,7 +254,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		// 重置计数器
 		tickCounter = 0;
 		battleMapTickCounter = 0;
-		battleMapRequireFullResync = true;
+		markBattleMapObservationPending();
 	}
 
 	private void handleJoinedMultiplayer(MinecraftClient client) {
@@ -274,8 +268,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		}
 		tickCounter = 0;
 		battleMapTickCounter = 0;
-		lastObservedBattleChunkIds.clear();
-		battleMapRequireFullResync = true;
+		clearBattleMapObservationContext();
 		LOGGER.info("Auto-connect enabled; started connection for multiplayer session");
 	}
 
@@ -303,8 +296,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		localPlayerMarkedIndicatorText = "TV!";
 		tickCounter = 0;
 		battleMapTickCounter = 0;
-		lastObservedBattleChunkIds.clear();
-		battleMapRequireFullResync = true;
+		clearBattleMapObservationContext();
 	}
 	
 	private void openConfigScreen() {
@@ -439,155 +431,84 @@ public class PlayerProcesses implements ClientModInitializer {
 
 		Optional<ScoreboardBattleMapParser.ParsedBattleMapSnapshot> parsed = SCOREBOARD_BATTLE_MAP_PARSER.parse(
 				client,
-				NetworkManager.getRoomCode(),
-				client.player.getUuid(),
 				config.isBattleMapDebugEnabled()
 		);
-		if (parsed.isEmpty() || parsed.get().chunks().isEmpty()) {
-			clearMissingBattleMapSnapshot(client.player.getUuid());
+		if (parsed.isEmpty() || parsed.get().cells().isEmpty()) {
+			return;
+		}
+		long currentSidebarRevision = BattleMapSidebarSnapshotTracker.currentRevision();
+		if (!battleMapObservationPending && currentSidebarRevision == lastUploadedBattleMapSidebarRevision) {
 			return;
 		}
 
-		Map<String, Map<String, Object>> currentSnapshot = parsed.get().toProtocolMap();
-		UUID submitPlayerId = client.player.getUuid();
-		long now = System.currentTimeMillis();
-		boolean cacheDirty = false;
-		boolean forceFullUpsert = battleMapRequireFullResync || lastObservedBattleChunkIds.isEmpty();
-
-		Map<String, Map<String, Object>> upsert = new HashMap<>();
-		for (Map.Entry<String, Map<String, Object>> entry : currentSnapshot.entrySet()) {
-			String chunkId = entry.getKey();
-			Map<String, Object> payload = entry.getValue();
-			String stateHash = buildBattleChunkStateHash(payload);
-			BattleMapCacheStore.CacheEntry cacheEntry = battleMapCacheStore == null ? null : battleMapCacheStore.get(chunkId);
-			if (forceFullUpsert || cacheEntry == null || !Objects.equals(cacheEntry.getStateHash(), stateHash)) {
-				upsert.put(chunkId, payload);
-			}
+		long snapshotObservedAt = BattleMapSidebarSnapshotTracker.lastSidebarObservedAt();
+		if (snapshotObservedAt <= 0L) {
+			snapshotObservedAt = System.currentTimeMillis();
 		}
-
-		List<String> delete = new ArrayList<>();
-		for (String previousChunkId : new HashSet<>(lastObservedBattleChunkIds)) {
-			if (!currentSnapshot.containsKey(previousChunkId)) {
-				delete.add(previousChunkId);
+		List<BattleMapPositionHistory.ObservationCandidate> candidates = BATTLE_MAP_POSITION_HISTORY.selectCandidates(
+				snapshotObservedAt,
+				parsed.get().dimension()
+		);
+		if (candidates.isEmpty()) {
+			if (config.isBattleMapDebugEnabled()) {
+				LOGGER.info(
+						"Skip battle_map_observation: no aligned history sample revision={} observedAt={}",
+						currentSidebarRevision,
+						snapshotObservedAt
+				);
 			}
-		}
-
-		Set<String> pendingRefreshChunkIds = networkManager.drainPendingBattleChunkRefreshIds();
-		if (!pendingRefreshChunkIds.isEmpty()) {
-			Set<String> deleteSet = new HashSet<>(delete);
-			for (String chunkId : pendingRefreshChunkIds) {
-				Map<String, Object> payload = currentSnapshot.get(chunkId);
-				if (payload != null) {
-					upsert.put(chunkId, payload);
-				} else {
-					deleteSet.add(chunkId);
-				}
-			}
-			delete.clear();
-			delete.addAll(deleteSet);
-		}
-
-		if (!upsert.isEmpty() || !delete.isEmpty()) {
-			networkManager.sendBattleChunksPatch(submitPlayerId, upsert, delete);
-			if (!currentSnapshot.isEmpty()) {
-				battleMapRequireFullResync = false;
-			}
-			if (battleMapCacheStore != null) {
-				for (Map.Entry<String, Map<String, Object>> entry : upsert.entrySet()) {
-					String stateHash = buildBattleChunkStateHash(entry.getValue());
-					battleMapCacheStore.put(
-							entry.getKey(),
-							new BattleMapCacheStore.CacheEntry(stateHash, now, now)
-					);
-					cacheDirty = true;
-				}
-				for (String deleteId : delete) {
-					battleMapCacheStore.remove(deleteId);
-					cacheDirty = true;
-				}
-			}
-		}
-
-		List<String> keepaliveIds = new ArrayList<>();
-		long configuredKeepaliveMs = Math.max(5L, config.getBattleMapKeepaliveIntervalSeconds()) * 1000L;
-		long negotiatedKeepaliveMs = networkManager.getBattleChunkKeepaliveIntervalMs();
-		long effectiveKeepaliveMs = negotiatedKeepaliveMs > 0
-				? Math.min(configuredKeepaliveMs, negotiatedKeepaliveMs)
-				: configuredKeepaliveMs;
-		for (String chunkId : currentSnapshot.keySet()) {
-			if (upsert.containsKey(chunkId) || battleMapCacheStore == null) {
-				continue;
-			}
-			BattleMapCacheStore.CacheEntry cacheEntry = battleMapCacheStore.get(chunkId);
-			if (cacheEntry == null) {
-				String stateHash = buildBattleChunkStateHash(currentSnapshot.get(chunkId));
-				battleMapCacheStore.put(chunkId, new BattleMapCacheStore.CacheEntry(stateHash, now, 0L));
-				cacheDirty = true;
-				continue;
-			}
-			if (now - cacheEntry.getLastHeartbeatAt() < effectiveKeepaliveMs) {
-				continue;
-			}
-			keepaliveIds.add(chunkId);
-		}
-
-		if (!keepaliveIds.isEmpty()) {
-			networkManager.sendBattleChunksKeepalive(submitPlayerId, keepaliveIds);
-			if (battleMapCacheStore != null) {
-				for (String chunkId : keepaliveIds) {
-					BattleMapCacheStore.CacheEntry cacheEntry = battleMapCacheStore.get(chunkId);
-					String stateHash = cacheEntry == null
-							? buildBattleChunkStateHash(currentSnapshot.get(chunkId))
-							: cacheEntry.getStateHash();
-					battleMapCacheStore.put(chunkId, new BattleMapCacheStore.CacheEntry(stateHash, now, now));
-					cacheDirty = true;
-				}
-			}
-		}
-
-		if (battleMapCacheStore != null) {
-			long cutoff = now - Math.max(60L, config.getBattleMapCacheRetentionSeconds()) * 1000L;
-			cacheDirty = battleMapCacheStore.pruneOlderThan(cutoff) || cacheDirty;
-			if (cacheDirty) {
-				battleMapCacheStore.save();
-			}
-		}
-
-		lastObservedBattleChunkIds.clear();
-		lastObservedBattleChunkIds.addAll(currentSnapshot.keySet());
-	}
-
-	private String buildBattleChunkStateHash(Map<String, Object> payload) {
-		if (payload == null || payload.isEmpty()) {
-			return "";
-		}
-		String symbol = normalizeBattleChunkStateField(payload.get("symbol"));
-		String colorRaw = normalizeBattleChunkStateField(payload.get("colorRaw"));
-		String colorNote = normalizeBattleChunkStateField(payload.get("colorNote"));
-		String dimension = normalizeBattleChunkStateField(payload.get("dimension"));
-		return dimension + "|" + symbol + "|" + colorRaw + "|" + colorNote;
-	}
-
-	private String normalizeBattleChunkStateField(Object value) {
-		return value == null ? "" : String.valueOf(value);
-	}
-
-	private void clearMissingBattleMapSnapshot(UUID submitPlayerId) {
-		if (submitPlayerId == null || lastObservedBattleChunkIds.isEmpty()) {
-			lastObservedBattleChunkIds.clear();
 			return;
 		}
 
-		List<String> delete = new ArrayList<>(lastObservedBattleChunkIds);
-		networkManager.sendBattleChunksPatch(submitPlayerId, Map.of(), delete);
-		if (battleMapCacheStore != null) {
-			for (String chunkId : delete) {
-				battleMapCacheStore.remove(chunkId);
-			}
-			battleMapCacheStore.save();
+		List<Map<String, Object>> candidatePayloads = new ArrayList<>();
+		for (BattleMapPositionHistory.ObservationCandidate candidate : candidates) {
+			candidatePayloads.add(new ReportDataSchemas.BattleMapObservationCandidatePayload(
+					candidate.baseChunkX(),
+					candidate.baseChunkZ(),
+					candidate.positionSampledAt(),
+					candidate.source()
+			).toMap());
 		}
-		lastObservedBattleChunkIds.clear();
-		battleMapRequireFullResync = true;
+
+		List<Map<String, Object>> cellPayloads = new ArrayList<>();
+		for (ScoreboardBattleMapParser.RelativeBattleChunkCell cell : parsed.get().cells()) {
+			cellPayloads.add(new ReportDataSchemas.BattleMapObservationCellPayload(
+					cell.relChunkX(),
+					cell.relChunkZ(),
+					cell.symbol(),
+					cell.colorRaw()
+			).toMap());
+		}
+
+		long parsedAt = System.currentTimeMillis();
+		ReportDataSchemas.BattleMapObservationPayload payload = new ReportDataSchemas.BattleMapObservationPayload(
+				parsed.get().dimension(),
+				parsed.get().size(),
+				parsed.get().anchorRow(),
+				parsed.get().anchorColumn(),
+				snapshotObservedAt,
+				parsedAt,
+				candidatePayloads,
+				cellPayloads
+		);
+		networkManager.sendBattleMapObservation(client.player.getUuid(), payload.toMap());
+		lastUploadedBattleMapSidebarRevision = currentSidebarRevision;
+		battleMapObservationPending = false;
+	}
+
+	private void recordBattleMapPositionHistory(MinecraftClient client) {
+		BATTLE_MAP_POSITION_HISTORY.recordCurrentPlayer(client);
+	}
+
+	private void markBattleMapObservationPending() {
+		battleMapObservationPending = true;
+		lastUploadedBattleMapSidebarRevision = -1L;
+	}
+
+	private void clearBattleMapObservationContext() {
+		BATTLE_MAP_POSITION_HISTORY.clear();
+		BattleMapSidebarSnapshotTracker.reset();
+		markBattleMapObservationPending();
 	}
 
 	private List<Map<String, Object>> collectTabPlayers(MinecraftClient client) {

@@ -103,12 +103,6 @@ public final class ProtocolPackets {
 		public List<String> entities;
 	}
 
-	public static class BattleChunksKeepalivePacket {
-		public final String type = "battle_chunks_keepalive";
-		public byte[] submitPlayerId;
-		public List<String> chunkIds;
-	}
-
 	public static class SourceStateClearPacket {
 		public final String type = "source_state_clear";
 		public byte[] submitPlayerId;
@@ -146,11 +140,17 @@ public final class ProtocolPackets {
 		public List<String> targetEntityIds;
 	}
 
-	public static class BattleChunksPatchPacket {
-		public final String type = "battle_chunks_patch";
+	public static class BattleMapObservationPacket {
+		public final String type = "battle_map_observation";
 		public byte[] submitPlayerId;
-		public Map<String, Map<String, Object>> upsert;
-		public List<String> delete;
+		public String dimension;
+		public Integer mapSize;
+		public Integer anchorRow;
+		public Integer anchorCol;
+		public Long snapshotObservedAt;
+		public Long parsedAt;
+		public List<Map<String, Object>> candidates;
+		public List<Map<String, Object>> cells;
 	}
 
 	public static class ResyncReqPacket {

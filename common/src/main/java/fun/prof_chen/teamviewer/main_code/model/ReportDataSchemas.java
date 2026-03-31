@@ -69,6 +69,8 @@ public final class ReportDataSchemas {
             Map.entry("colorRaw", true),
             Map.entry("colorNote", true),
             Map.entry("observedAt", true),
+            Map.entry("positionSampledAt", true),
+            Map.entry("alignmentSource", true),
             Map.entry("reporterId", true),
             Map.entry("roomCode", true));
 
@@ -197,6 +199,8 @@ public final class ReportDataSchemas {
             String colorRaw,
             String colorNote,
             long observedAt,
+            Long positionSampledAt,
+            String alignmentSource,
             String reporterId,
             String roomCode) {
         public Map<String, Object> toMap() {
@@ -208,8 +212,63 @@ public final class ReportDataSchemas {
             data.put("colorRaw", colorRaw);
             data.put("colorNote", colorNote);
             data.put("observedAt", observedAt);
+            data.put("positionSampledAt", positionSampledAt);
+            data.put("alignmentSource", alignmentSource);
             data.put("reporterId", reporterId);
             data.put("roomCode", roomCode);
+            return data;
+        }
+    }
+
+    public record BattleMapObservationCandidatePayload(
+            int baseChunkX,
+            int baseChunkZ,
+            long positionSampledAt,
+            String source) {
+        public Map<String, Object> toMap() {
+            Map<String, Object> data = new HashMap<>();
+            data.put("baseChunkX", baseChunkX);
+            data.put("baseChunkZ", baseChunkZ);
+            data.put("positionSampledAt", positionSampledAt);
+            data.put("source", source);
+            return data;
+        }
+    }
+
+    public record BattleMapObservationCellPayload(
+            int relChunkX,
+            int relChunkZ,
+            String symbol,
+            String colorRaw) {
+        public Map<String, Object> toMap() {
+            Map<String, Object> data = new HashMap<>();
+            data.put("relChunkX", relChunkX);
+            data.put("relChunkZ", relChunkZ);
+            data.put("symbol", symbol);
+            data.put("colorRaw", colorRaw);
+            return data;
+        }
+    }
+
+    public record BattleMapObservationPayload(
+            String dimension,
+            int mapSize,
+            int anchorRow,
+            int anchorCol,
+            long snapshotObservedAt,
+            long parsedAt,
+            java.util.List<Map<String, Object>> candidates,
+            java.util.List<Map<String, Object>> cells) {
+        public Map<String, Object> toMap() {
+            Map<String, Object> data = new HashMap<>();
+            data.put("dimension", dimension);
+            data.put("mapSize", mapSize);
+            data.put("anchorRow", anchorRow);
+            data.put("anchorCol", anchorCol);
+            data.put("snapshotObservedAt", snapshotObservedAt);
+            data.put("parsedAt", parsedAt);
+            data.put("candidates", candidates);
+            data.put("cells", cells);
             return data;
         }
     }
