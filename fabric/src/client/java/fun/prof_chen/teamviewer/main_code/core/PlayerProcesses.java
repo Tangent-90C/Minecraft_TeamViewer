@@ -121,6 +121,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static final ScoreboardBattleMapParser SCOREBOARD_BATTLE_MAP_PARSER = new ScoreboardBattleMapParser();
 	private static BattleMapCacheStore battleMapCacheStore;
 	private static final Set<String> lastObservedBattleChunkIds = new HashSet<>();
+	private static volatile boolean battleMapRequireFullResync = true;
 	
 	@Override
 	public void onInitializeClient() {
@@ -137,6 +138,11 @@ public class PlayerProcesses implements ClientModInitializer {
 				remotePlayers,
 				new FabricRuntimeGateway(),
 				new OkHttpTransportProcess());
+		networkManager.addConnectionStatusListener(connected -> {
+			battleMapTickCounter = 0;
+			lastObservedBattleChunkIds.clear();
+			battleMapRequireFullResync = true;
+		});
 		NetworkManager.setConfigGateway(config);
 		waypointSyncGateway = new WaypointSyncGateway(networkManager);
 		remotePlayerRepository = new MapBackedRemotePlayerRepository(remotePlayers);
@@ -254,6 +260,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		// 重置计数器
 		tickCounter = 0;
 		battleMapTickCounter = 0;
+		battleMapRequireFullResync = true;
 	}
 
 	private void handleJoinedMultiplayer(MinecraftClient client) {
@@ -268,6 +275,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		tickCounter = 0;
 		battleMapTickCounter = 0;
 		lastObservedBattleChunkIds.clear();
+		battleMapRequireFullResync = true;
 		LOGGER.info("Auto-connect enabled; started connection for multiplayer session");
 	}
 
@@ -296,6 +304,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		tickCounter = 0;
 		battleMapTickCounter = 0;
 		lastObservedBattleChunkIds.clear();
+		battleMapRequireFullResync = true;
 	}
 	
 	private void openConfigScreen() {
@@ -443,7 +452,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		UUID submitPlayerId = client.player.getUuid();
 		long now = System.currentTimeMillis();
 		boolean cacheDirty = false;
-		boolean forceFullUpsert = lastObservedBattleChunkIds.isEmpty();
+		boolean forceFullUpsert = battleMapRequireFullResync || lastObservedBattleChunkIds.isEmpty();
 
 		Map<String, Map<String, Object>> upsert = new HashMap<>();
 		for (Map.Entry<String, Map<String, Object>> entry : currentSnapshot.entrySet()) {
@@ -463,8 +472,26 @@ public class PlayerProcesses implements ClientModInitializer {
 			}
 		}
 
+		Set<String> pendingRefreshChunkIds = networkManager.drainPendingBattleChunkRefreshIds();
+		if (!pendingRefreshChunkIds.isEmpty()) {
+			Set<String> deleteSet = new HashSet<>(delete);
+			for (String chunkId : pendingRefreshChunkIds) {
+				Map<String, Object> payload = currentSnapshot.get(chunkId);
+				if (payload != null) {
+					upsert.put(chunkId, payload);
+				} else {
+					deleteSet.add(chunkId);
+				}
+			}
+			delete.clear();
+			delete.addAll(deleteSet);
+		}
+
 		if (!upsert.isEmpty() || !delete.isEmpty()) {
 			networkManager.sendBattleChunksPatch(submitPlayerId, upsert, delete);
+			if (!currentSnapshot.isEmpty()) {
+				battleMapRequireFullResync = false;
+			}
 			if (battleMapCacheStore != null) {
 				for (Map.Entry<String, Map<String, Object>> entry : upsert.entrySet()) {
 					String stateHash = buildBattleChunkStateHash(entry.getValue());
@@ -560,6 +587,7 @@ public class PlayerProcesses implements ClientModInitializer {
 			battleMapCacheStore.save();
 		}
 		lastObservedBattleChunkIds.clear();
+		battleMapRequireFullResync = true;
 	}
 
 	private List<Map<String, Object>> collectTabPlayers(MinecraftClient client) {

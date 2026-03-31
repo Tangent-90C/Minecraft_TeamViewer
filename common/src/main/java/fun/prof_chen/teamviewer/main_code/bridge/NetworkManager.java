@@ -208,6 +208,9 @@ public class NetworkManager {
 	
 	// 待刷新的实体ID集合 - 响应服务端刷新请求
 	private final Set<String> pendingEntityRefreshIds = new HashSet<>();
+
+	// 待刷新的战局区块ID集合 - 响应服务端刷新请求
+	private final Set<String> pendingBattleChunkRefreshIds = new HashSet<>();
 	/**
 	 * 主线程任务队列 - 线程安全的任务传递机制
 	 * 
@@ -2308,12 +2311,19 @@ public class NetworkManager {
 	private void handleRefreshRequest(ProtocolPackets.RefreshReqInboundPacket packet) {
 		List<String> players = packet != null && packet.players != null ? packet.players : List.of();
 		List<String> entities = packet != null && packet.entities != null ? packet.entities : List.of();
+		List<String> battleChunks = packet != null && packet.battleChunks != null ? packet.battleChunks : List.of();
 
 		pendingPlayerRefreshIds.addAll(players);
 		pendingEntityRefreshIds.addAll(entities);
+		pendingBattleChunkRefreshIds.addAll(battleChunks);
 
-		if (!players.isEmpty() || !entities.isEmpty()) {
-			LOGGER.info("Received refresh_req: players={}, entities={}", players.size(), entities.size());
+		if (!players.isEmpty() || !entities.isEmpty() || !battleChunks.isEmpty()) {
+			LOGGER.info(
+					"Received refresh_req: players={}, entities={}, battleChunks={}",
+					players.size(),
+					entities.size(),
+					battleChunks.size()
+			);
 		}
 	}
 
@@ -2775,6 +2785,15 @@ public class NetworkManager {
 		return battleChunkKeepaliveIntervalMs;
 	}
 
+	public Set<String> drainPendingBattleChunkRefreshIds() {
+		if (pendingBattleChunkRefreshIds.isEmpty()) {
+			return Set.of();
+		}
+		Set<String> drained = new HashSet<>(pendingBattleChunkRefreshIds);
+		pendingBattleChunkRefreshIds.clear();
+		return drained;
+	}
+
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
@@ -2783,6 +2802,7 @@ public class NetworkManager {
 		lastEntityObjectLivenessMs.clear();
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();
+		pendingBattleChunkRefreshIds.clear();
 		remotePlayerDataCache.clear();
 		remoteEntityDataCache.clear();
 		remoteWaypointDataCache.clear();

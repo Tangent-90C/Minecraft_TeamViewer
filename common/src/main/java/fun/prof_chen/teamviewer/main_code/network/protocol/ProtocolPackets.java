@@ -52,6 +52,7 @@ public final class ProtocolPackets {
 	public static class RefreshReqInboundPacket extends BaseInboundPacket {
 		public List<String> players;
 		public List<String> entities;
+		public List<String> battleChunks;
 		public String reason;
 	}
 

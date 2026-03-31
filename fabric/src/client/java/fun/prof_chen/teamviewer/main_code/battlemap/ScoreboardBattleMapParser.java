@@ -100,6 +100,9 @@ public final class ScoreboardBattleMapParser {
                 ParsedGlyphCell cell = line.cells().get(columnIndex);
                 int chunkX = playerChunk.x + (columnIndex - anchor.columnIndex());
                 int chunkZ = playerChunk.z + (rowIndex - anchor.rowIndex());
+                if (isCenterGlyph(cell.symbol())) {
+                    continue;
+                }
                 String chunkId = buildChunkId(roomCode, dimension, chunkX, chunkZ);
 
                 BattleChunkObservation observation = new BattleChunkObservation(
@@ -266,6 +269,10 @@ public final class ScoreboardBattleMapParser {
             return colorName.toLowerCase();
         }
         return String.format("#%06X", textColor.getRgb() & 0xFFFFFF);
+    }
+
+    private boolean isCenterGlyph(String symbol) {
+        return "┼".equals(symbol);
     }
 
     private boolean isBattleMapGlyph(String symbol) {
