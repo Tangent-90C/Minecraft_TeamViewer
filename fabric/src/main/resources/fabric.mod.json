@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "teamviewer",
+  "id": "team-view-relay",
   "version": "${version}",
 
-  "name": "MC-TeamViewer",
-  "description": "用于 Minecraft 团队协同作战的视野与报点共享系统。支持同步玩家位置、实体信息、共享路标，可与 Xaero Minimap/World Map 和 journeymap 联动。该项目需自建服务器来实现视野信息的传递,详情请看主页介绍。",
+  "name": "TeamViewRelay",
+  "description": "用于团队协同作战的视野与报点共享系统。支持同步玩家位置、实体信息、共享路标，可与 Xaero Minimap/World Map 和 journeymap 联动。该项目需自建服务器来实现视野信息的传递，详情请看主页介绍。",
   "authors": ["Prof. Chen"],
   "contact": {
     "homepage": "https://github.com/MC-TeamViewer/Minecraft_TeamViewer",

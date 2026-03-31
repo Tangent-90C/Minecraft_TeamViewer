@@ -1,10 +1,10 @@
 {
-  "key.mc_teamviewer.toggle": "Toggle connection to the MC-Teamviewer server",
-  "key.mc_teamviewer.config": "Open MC-Teamviewer configuration panel",
+  "key.mc_teamviewer.toggle": "Toggle connection to the TeamViewRelay server",
+  "key.mc_teamviewer.config": "Open TeamViewRelay configuration panel",
   "key.mc_teamviewer.mark": "Quick Mark",
-  "category.mc_teamviewer.general": "MC-Teamviewer",
+  "category.mc_teamviewer.general": "TeamViewRelay",
   
-  "screen.mc_teamviewer.config.title": "MC-Teamviewer Configuration",
+  "screen.mc_teamviewer.config.title": "TeamViewRelay Configuration",
   "screen.mc_teamviewer.config.url": "Server URL",
   "screen.mc_teamviewer.config.url_hint": "e.g. ws://127.0.0.1:8080/mc-client",
   "screen.mc_teamviewer.config.room_code": "Room Code",

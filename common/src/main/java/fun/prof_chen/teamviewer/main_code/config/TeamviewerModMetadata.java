@@ -5,7 +5,7 @@ import java.io.InputStream;
 import java.util.Properties;
 
 /**
- * Teamviewer Mod 全局元信息。
+ * TeamViewRelay Mod 全局元信息。
  */
 public final class TeamviewerModMetadata {
     private static final Properties BUILD_PROPERTIES = loadBuildProperties();
@@ -14,7 +14,7 @@ public final class TeamviewerModMetadata {
     }
 
     public static final String MOD_ID = "teamviewer";
-    public static final String MOD_VERSION_FALLBACK = "teamviewer-mod-dev";
+    public static final String MOD_VERSION_FALLBACK = "team-view-relay-mod-dev";
     public static final String PROGRAM_VERSION_UNKNOWN = "unknown";
 
     private static Properties loadBuildProperties() {

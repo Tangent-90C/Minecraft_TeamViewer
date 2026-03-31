@@ -125,7 +125,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		// 初始化客户端功能
-		LOGGER.info("Initializing MC-Teamviewer mod");
+		LOGGER.info("Initializing TeamViewRelay mod");
 		
 		// 加载配置
 		config = FabricConfigLoader.load();
@@ -236,7 +236,7 @@ public class PlayerProcesses implements ClientModInitializer {
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> handleLeftPlaySession());
 		
-		LOGGER.info("MC-Teamviewer mod initialized");
+		LOGGER.info("TeamViewRelay mod initialized");
 	}
 	
 	private void toggleMOD() {
@@ -245,10 +245,10 @@ public class PlayerProcesses implements ClientModInitializer {
 		if (ModEnable) {
 			// 连接到服务器
 			networkManager.connect();
-			LOGGER.info("MC-Teamviewer enabled");
+			LOGGER.info("TeamViewRelay enabled");
 		} else {
 			shutdownNetworkSession();
-			LOGGER.info("MC-Teamviewer disabled");
+			LOGGER.info("TeamViewRelay disabled");
 		}
 		
 		// 重置计数器

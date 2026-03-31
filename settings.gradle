@@ -8,7 +8,7 @@ pluginManagement {
     }
 }
 
-rootProject.name = "Minecraft_TeamViewer"
+rootProject.name = "TeamViewRelay"
 
 include("common")
 include("fabric")

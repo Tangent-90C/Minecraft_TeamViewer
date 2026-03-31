@@ -79,7 +79,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
             config.storagePath = configPath;
             return config;
         } catch (Exception e) {
-            System.err.println("Failed to load MC-Teamviewer config: " + e.getMessage());
+            System.err.println("Failed to load TeamViewRelay config: " + e.getMessage());
             return createWithStoragePath(configPath);
         }
     }
@@ -92,7 +92,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
     public void save() {
         if (storagePath == null) {
-            System.err.println("Failed to save MC-Teamviewer config: storage path is not configured");
+            System.err.println("Failed to save TeamViewRelay config: storage path is not configured");
             return;
         }
 
@@ -104,7 +104,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
             String content = GSON.toJson(this);
             Files.writeString(storagePath, content);
         } catch (IOException e) {
-            System.err.println("Failed to save MC-Teamviewer config: " + e.getMessage());
+            System.err.println("Failed to save TeamViewRelay config: " + e.getMessage());
         }
     }
 

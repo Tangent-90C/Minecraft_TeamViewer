@@ -42,7 +42,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * MC-Teamviewer 网络层管理器 - 核心网络通信组件
+ * TeamViewRelay 网络层管理器 - 核心网络通信组件
  * 
  * ## 核心功能
  * 1) WebSocket连接管理：建立、维护、重连、断开连接
@@ -364,7 +364,7 @@ public class NetworkManager {
 		} catch (Exception e) {
 			this.isConnected = false;
 			this.lastConnectionError = formatThrowableReason(e);
-			LOGGER.error("Failed to connect to MC-Teamviewer server at {}: {}", configGateway.getServerURL(), e.getMessage());
+			LOGGER.error("Failed to connect to TeamViewRelay server at {}: {}", configGateway.getServerURL(), e.getMessage());
 			notifyConnectionStatusChanged(false);
 			scheduleReconnect();
 		}
@@ -671,7 +671,7 @@ public class NetworkManager {
 			packet.waypoints = waypoints;
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send waypoints_update to MC-Teamviewer server: {}", e.getMessage());
+			LOGGER.error("Failed to send waypoints_update to TeamViewRelay server: {}", e.getMessage());
 		}
 	}
 
@@ -794,7 +794,7 @@ public class NetworkManager {
 			packet.waypointIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send waypoints_delete to MC-Teamviewer server: {}", e.getMessage());
+			LOGGER.error("Failed to send waypoints_delete to TeamViewRelay server: {}", e.getMessage());
 		}
 	}
 
@@ -902,7 +902,7 @@ public class NetworkManager {
 			packet.targetEntityIds = ids;
 			sendPacket(packet);
 		} catch (Exception e) {
-			LOGGER.error("Failed to send waypoints_entity_death_cancel to MC-Teamviewer server: {}", e.getMessage());
+			LOGGER.error("Failed to send waypoints_entity_death_cancel to TeamViewRelay server: {}", e.getMessage());
 		}
 	}
 
@@ -933,7 +933,7 @@ public class NetworkManager {
 			reconnectAttemptsRemaining = maxReconnectAttempts;
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
-			LOGGER.info("WebSocket connection opened to MC-Teamviewer server");
+			LOGGER.info("WebSocket connection opened to TeamViewRelay server");
 			if (negotiatedExtensions != null && !negotiatedExtensions.isBlank()) {
 				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
 			}
@@ -1085,7 +1085,7 @@ public class NetworkManager {
 
 		} catch (Exception e) {
 			LOGGER.error(
-				"MC-Teamviewer Network - Error processing complete message: {}, bytes={}",
+				"TeamViewRelay Network - Error processing complete message: {}, bytes={}",
 				e.getMessage(),
 				message == null ? 0 : message.length,
 				e
@@ -1530,7 +1530,7 @@ public class NetworkManager {
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			notifyConnectionStatusChanged(false);
-			LOGGER.info("Disconnected from MC-Teamviewer server. Status: {}, Reason: {}", statusCode, reason);
+			LOGGER.info("Disconnected from TeamViewRelay server. Status: {}, Reason: {}", statusCode, reason);
 			if (shouldReconnect && !reconnectSuppressedForVersionMismatch) {
 				scheduleReconnect();
 			}
@@ -1564,7 +1564,7 @@ public class NetworkManager {
 	private void handleTransportFailure(Throwable error) {
 		// 失败事件在网络线程触发，这里只入队，保证状态清理和通知时序一致。
 		enqueueMainThreadTask(() -> {
-			LOGGER.error("MC-Teamviewer network error: {}", error == null ? "unknown" : error.getMessage());
+			LOGGER.error("TeamViewRelay network error: {}", error == null ? "unknown" : error.getMessage());
 			isConnected = false;
 			socket = null;
 			lastConnectionError = formatThrowableReason(error);
@@ -2091,7 +2091,7 @@ public class NetworkManager {
 				remotePlayerDataCache.put(playerId, mergedData);
 				newRemotePlayers.put(playerId, info);
 			} catch (Exception e) {
-				LOGGER.error("MC-Teamviewer Network - Error parsing player data: {}", e.getMessage());
+				LOGGER.error("TeamViewRelay Network - Error parsing player data: {}", e.getMessage());
 			}
 		}
 
@@ -2125,7 +2125,7 @@ public class NetworkManager {
 				remotePlayerDataCache.put(playerId, mergedData);
 				remotePlayers.put(playerId, info);
 			} catch (Exception e) {
-				LOGGER.error("MC-Teamviewer Network - Error applying player patch: {}", e.getMessage());
+				LOGGER.error("TeamViewRelay Network - Error applying player patch: {}", e.getMessage());
 			}
 		}
 	}
@@ -2527,7 +2527,7 @@ public class NetworkManager {
 				merged.putAll(jsonObjectToValueMap(dataNode));
 				remoteEntityDataCache.put(entityId, merged);
 			} catch (Exception e) {
-				LOGGER.error("MC-Teamviewer Network - Error applying entity patch: {}", e.getMessage());
+				LOGGER.error("TeamViewRelay Network - Error applying entity patch: {}", e.getMessage());
 			}
 		}
 	}
@@ -2548,7 +2548,7 @@ public class NetworkManager {
 				merged.putAll(jsonObjectToValueMap(dataNode));
 				remoteBattleChunkDataCache.put(chunkId, merged);
 			} catch (Exception e) {
-				LOGGER.error("MC-Teamviewer Network - Error applying battle chunk patch: {}", e.getMessage());
+				LOGGER.error("TeamViewRelay Network - Error applying battle chunk patch: {}", e.getMessage());
 			}
 		}
 	}

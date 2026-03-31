@@ -2,9 +2,9 @@
   "key.mc_teamviewer.toggle": "开/关与视野共享服务器的连接",
   "key.mc_teamviewer.config": "打开视野信息共享配置面板",
   "key.mc_teamviewer.mark": "快速报点",
-  "category.mc_teamviewer.general": "视野信息共享",
+  "category.mc_teamviewer.general": "TeamViewRelay",
   
-  "screen.mc_teamviewer.config.title": "视野信息共享配置",
+  "screen.mc_teamviewer.config.title": "TeamViewRelay 配置",
   "screen.mc_teamviewer.config.url": "服务器URL",
   "screen.mc_teamviewer.config.url_hint": "例如: ws://127.0.0.1:8080/mc-client",
   "screen.mc_teamviewer.config.room_code": "房间号",
