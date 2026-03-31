@@ -58,6 +58,12 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean autoConnectOnMultiplayerJoin = false;
     private boolean useSystemProxy = false;
     private boolean preferLocalDataForRender = true;
+    private boolean battleMapSyncEnabled = true;
+    private boolean battleMapScoreboardDetectionEnabled = true;
+    private int battleMapUpdateIntervalTicks = 10;
+    private int battleMapKeepaliveIntervalSeconds = 30;
+    private int battleMapCacheRetentionSeconds = 7200;
+    private boolean battleMapDebugEnabled = false;
 
     public static Config load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -543,5 +549,74 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
     public void setPreferLocalDataForRender(boolean preferLocalDataForRender) {
         this.preferLocalDataForRender = preferLocalDataForRender;
+    }
+
+    public boolean isBattleMapSyncEnabled() {
+        return battleMapSyncEnabled;
+    }
+
+    public void setBattleMapSyncEnabled(boolean battleMapSyncEnabled) {
+        this.battleMapSyncEnabled = battleMapSyncEnabled;
+    }
+
+    public boolean isBattleMapScoreboardDetectionEnabled() {
+        return battleMapScoreboardDetectionEnabled;
+    }
+
+    public void setBattleMapScoreboardDetectionEnabled(boolean battleMapScoreboardDetectionEnabled) {
+        this.battleMapScoreboardDetectionEnabled = battleMapScoreboardDetectionEnabled;
+    }
+
+    public int getBattleMapUpdateIntervalTicks() {
+        if (battleMapUpdateIntervalTicks < 1) {
+            return 1;
+        }
+        return Math.min(battleMapUpdateIntervalTicks, 1000);
+    }
+
+    public void setBattleMapUpdateIntervalTicks(int battleMapUpdateIntervalTicks) {
+        if (battleMapUpdateIntervalTicks < 1) {
+            this.battleMapUpdateIntervalTicks = 1;
+            return;
+        }
+        this.battleMapUpdateIntervalTicks = Math.min(battleMapUpdateIntervalTicks, 1000);
+    }
+
+    public int getBattleMapKeepaliveIntervalSeconds() {
+        if (battleMapKeepaliveIntervalSeconds < 5) {
+            return 5;
+        }
+        return Math.min(battleMapKeepaliveIntervalSeconds, 3600);
+    }
+
+    public void setBattleMapKeepaliveIntervalSeconds(int battleMapKeepaliveIntervalSeconds) {
+        if (battleMapKeepaliveIntervalSeconds < 5) {
+            this.battleMapKeepaliveIntervalSeconds = 5;
+            return;
+        }
+        this.battleMapKeepaliveIntervalSeconds = Math.min(battleMapKeepaliveIntervalSeconds, 3600);
+    }
+
+    public int getBattleMapCacheRetentionSeconds() {
+        if (battleMapCacheRetentionSeconds < 60) {
+            return 60;
+        }
+        return Math.min(battleMapCacheRetentionSeconds, 604800);
+    }
+
+    public void setBattleMapCacheRetentionSeconds(int battleMapCacheRetentionSeconds) {
+        if (battleMapCacheRetentionSeconds < 60) {
+            this.battleMapCacheRetentionSeconds = 60;
+            return;
+        }
+        this.battleMapCacheRetentionSeconds = Math.min(battleMapCacheRetentionSeconds, 604800);
+    }
+
+    public boolean isBattleMapDebugEnabled() {
+        return battleMapDebugEnabled;
+    }
+
+    public void setBattleMapDebugEnabled(boolean battleMapDebugEnabled) {
+        this.battleMapDebugEnabled = battleMapDebugEnabled;
     }
 }

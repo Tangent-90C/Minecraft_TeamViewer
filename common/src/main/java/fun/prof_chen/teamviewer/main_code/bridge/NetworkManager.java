@@ -102,7 +102,7 @@ public class NetworkManager {
 	private static final long DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS = 12_000L;
 	private static final int UNLIMITED_RECONNECT_ATTEMPTS = -1;
 	private static final long DEFAULT_RECONNECT_DELAY_MS = 5_000L;
-	private static final List<String> SOURCE_STATE_CLEAR_SCOPES = List.of("players", "entities", "tab_players", "waypoints");
+	private static final List<String> SOURCE_STATE_CLEAR_SCOPES = List.of("players", "entities", "tab_players", "waypoints", "battle_chunks");
 
 	// 单次 keepalive 报文最多携带对象数量
 	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
@@ -124,6 +124,9 @@ public class NetworkManager {
 	
 	// 远程路标原始数据缓存 - 存储路标的完整数据结构
 	private final Map<String, Map<String, Object>> remoteWaypointDataCache = new HashMap<>();
+
+	// 远程战局区块缓存 - 存储服务端裁决后的战局区块数据
+	private final Map<String, Map<String, Object>> remoteBattleChunkDataCache = new HashMap<>();
 	
 	// 远程路标对象缓存 - 存储解析后的SharedWaypointInfo对象
 	private final Map<String, SharedWaypointInfo> remoteWaypointCache = new HashMap<>();
@@ -189,6 +192,7 @@ public class NetworkManager {
 	private volatile int negotiatedReportIntervalTicks = 10;
 	private volatile long playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 	private volatile long entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
+	private volatile long battleChunkKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 	
 	// 上次重同步请求时间戳 - 防止重复请求
 	private volatile long lastResyncRequestMs = 0L;
@@ -794,6 +798,71 @@ public class NetworkManager {
 		}
 	}
 
+	public void sendBattleChunksPatch(UUID submitPlayerId, Map<String, Map<String, Object>> upsert, List<String> delete) {
+		if (socket == null || !isConnected || submitPlayerId == null) {
+			return;
+		}
+
+		Map<String, Map<String, Object>> sanitizedUpsert = new HashMap<>();
+		if (upsert != null) {
+			for (Map.Entry<String, Map<String, Object>> entry : upsert.entrySet()) {
+				String chunkId = entry.getKey();
+				if (chunkId == null || chunkId.isBlank() || entry.getValue() == null || entry.getValue().isEmpty()) {
+					continue;
+				}
+				sanitizedUpsert.put(chunkId, copyValueMap(entry.getValue()));
+			}
+		}
+
+		List<String> sanitizedDelete = new ArrayList<>();
+		if (delete != null) {
+			for (String chunkId : delete) {
+				if (chunkId != null && !chunkId.isBlank()) {
+					sanitizedDelete.add(chunkId);
+				}
+			}
+		}
+
+		if (sanitizedUpsert.isEmpty() && sanitizedDelete.isEmpty()) {
+			return;
+		}
+
+		try {
+			ProtocolPackets.BattleChunksPatchPacket packet = new ProtocolPackets.BattleChunksPatchPacket();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+			packet.upsert = sanitizedUpsert;
+			packet.delete = sanitizedDelete;
+			sendPacket(packet);
+		} catch (Exception e) {
+			LOGGER.error("Failed to send battle_chunks_patch: {}", e.getMessage());
+		}
+	}
+
+	public void sendBattleChunksKeepalive(UUID submitPlayerId, List<String> chunkIds) {
+		if (socket == null || !isConnected || submitPlayerId == null || chunkIds == null || chunkIds.isEmpty()) {
+			return;
+		}
+
+		List<String> ids = new ArrayList<>();
+		for (String chunkId : chunkIds) {
+			if (chunkId != null && !chunkId.isBlank()) {
+				ids.add(chunkId);
+			}
+		}
+		if (ids.isEmpty()) {
+			return;
+		}
+
+		try {
+			ProtocolPackets.BattleChunksKeepalivePacket packet = new ProtocolPackets.BattleChunksKeepalivePacket();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+			packet.chunkIds = ids;
+			sendPacket(packet);
+		} catch (Exception e) {
+			LOGGER.error("Failed to send battle_chunks_keepalive: {}", e.getMessage());
+		}
+	}
+
 	/**
 	 * 发送实体死亡取消请求 - 路标关联实体保护
 	 * 
@@ -1003,6 +1072,17 @@ public class NetworkManager {
 				return;
 			}
 
+			if ("battle_chunks_patch".equals(envelope.type)) {
+				ProtocolPackets.PatchInboundPacket packet = messageCodec.decode(message,
+						ProtocolPackets.PatchInboundPacket.class);
+				if (packet != null && packet.battleChunks != null) {
+					JsonObject payload = new JsonObject();
+					payload.add("battleChunks", createObjectNode(packet.battleChunks));
+					applyBattleChunkPatch(payload.getAsJsonObject("battleChunks"));
+				}
+				return;
+			}
+
 		} catch (Exception e) {
 			LOGGER.error(
 				"MC-Teamviewer Network - Error processing complete message: {}, bytes={}",
@@ -1072,6 +1152,11 @@ public class NetworkManager {
 			if (!receivedWaypoints.isEmpty()) {
 				notifyWaypointsReceived(receivedWaypoints);
 			}
+		}
+
+		if (json.has("battleChunks") && json.get("battleChunks").isJsonObject()) {
+			remoteBattleChunkDataCache.clear();
+			mergeBattleChunksPatchUpsert(json.getAsJsonObject("battleChunks"));
 		}
 
 		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
@@ -1207,6 +1292,10 @@ public class NetworkManager {
 					notifyWaypointsReceived(upserts);
 				}
 			}
+		}
+
+		if (json.has("battleChunks") && json.get("battleChunks").isJsonObject()) {
+			applyBattleChunkPatch(json.getAsJsonObject("battleChunks"));
 		}
 
 		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
@@ -1362,14 +1451,17 @@ public class NetworkManager {
 		String serverPlayerHash = packet.hashes.get("players");
 		String serverEntityHash = packet.hashes.get("entities");
 		String serverWaypointHash = packet.hashes.get("waypoints");
+		String serverBattleChunkHash = packet.hashes.get("battleChunks");
 
 		String localPlayerHash = computePlayersDigest();
 		String localEntityHash = computeEntitiesDigest();
 		String localWaypointHash = computeWaypointDigest();
+		String localBattleChunkHash = computeBattleChunkDigest();
 
 		boolean mismatch = !Objects.equals(serverPlayerHash, localPlayerHash)
 				|| !Objects.equals(serverEntityHash, localEntityHash)
-				|| !Objects.equals(serverWaypointHash, localWaypointHash);
+				|| !Objects.equals(serverWaypointHash, localWaypointHash)
+				|| (serverBattleChunkHash != null && !Objects.equals(serverBattleChunkHash, localBattleChunkHash));
 
 		if (!mismatch) {
 			return;
@@ -1759,16 +1851,24 @@ public class NetworkManager {
 		if (advertisedEntityTimeoutSec > 0) {
 			entityKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedEntityTimeoutSec);
 		}
+		int advertisedBattleChunkTimeoutSec = packet.battleChunkTimeoutSec != null && packet.battleChunkTimeoutSec > 0
+				? packet.battleChunkTimeoutSec
+				: 0;
+		if (advertisedBattleChunkTimeoutSec > 0) {
+			battleChunkKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedBattleChunkTimeoutSec);
+		}
 
 		LOGGER.info(
-				"Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s, playerKeepalive={}ms(playerTimeout={}s), entityKeepalive={}ms(entityTimeout={}s)",
+				"Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s, playerKeepalive={}ms(playerTimeout={}s), entityKeepalive={}ms(entityTimeout={}s), battleChunkKeepalive={}ms(battleChunkTimeout={}s)",
 				serverProtocolVersion,
 				serverProgramVersion,
 				digestIntervalSec,
 				playerKeepaliveIntervalMs,
 				advertisedPlayerTimeoutSec,
 				entityKeepaliveIntervalMs,
-				advertisedEntityTimeoutSec
+				advertisedEntityTimeoutSec,
+				battleChunkKeepaliveIntervalMs,
+				advertisedBattleChunkTimeoutSec
 		);
 	}
 
@@ -2402,6 +2502,10 @@ public class NetworkManager {
 		return stateDigest(remoteWaypointDataCache);
 	}
 
+	private String computeBattleChunkDigest() {
+		return stateDigest(remoteBattleChunkDataCache);
+	}
+
 	private void replaceEntityCache(JsonObject entitiesJson) {
 		remoteEntityDataCache.clear();
 		mergeEntityPatchUpsert(entitiesJson);
@@ -2426,6 +2530,48 @@ public class NetworkManager {
 				LOGGER.error("MC-Teamviewer Network - Error applying entity patch: {}", e.getMessage());
 			}
 		}
+	}
+
+	private void mergeBattleChunksPatchUpsert(JsonObject upsertJson) {
+		for (Map.Entry<String, JsonElement> entry : upsertJson.entrySet()) {
+			try {
+				if (!entry.getValue().isJsonObject()) {
+					continue;
+				}
+				String chunkId = entry.getKey();
+				JsonObject dataNode = extractDataNode(entry.getValue().getAsJsonObject());
+				Map<String, Object> merged = new HashMap<>();
+				Map<String, Object> existing = remoteBattleChunkDataCache.get(chunkId);
+				if (existing != null) {
+					merged.putAll(existing);
+				}
+				merged.putAll(jsonObjectToValueMap(dataNode));
+				remoteBattleChunkDataCache.put(chunkId, merged);
+			} catch (Exception e) {
+				LOGGER.error("MC-Teamviewer Network - Error applying battle chunk patch: {}", e.getMessage());
+			}
+		}
+	}
+
+	private void applyBattleChunkPatch(JsonObject battleChunkPatch) {
+		if (battleChunkPatch == null) {
+			return;
+		}
+		if (battleChunkPatch.has("delete") && battleChunkPatch.get("delete").isJsonArray()) {
+			for (JsonElement idElement : battleChunkPatch.getAsJsonArray("delete")) {
+				if (idElement != null && idElement.isJsonPrimitive()) {
+					String chunkId = idElement.getAsString();
+					if (chunkId != null && !chunkId.isBlank()) {
+						remoteBattleChunkDataCache.remove(chunkId);
+					}
+				}
+			}
+		}
+		if (battleChunkPatch.has("upsert") && battleChunkPatch.get("upsert").isJsonObject()) {
+			mergeBattleChunksPatchUpsert(battleChunkPatch.getAsJsonObject("upsert"));
+			return;
+		}
+		mergeBattleChunksPatchUpsert(battleChunkPatch);
 	}
 
 	private String stateDigest(Map<String, Map<String, Object>> state) {
@@ -2611,6 +2757,7 @@ public class NetworkManager {
 		negotiatedReportIntervalTicks = configGateway != null ? configGateway.getUpdateIntervalTicks() : 10;
 		playerKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 		entityKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
+		battleChunkKeepaliveIntervalMs = DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS;
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
@@ -2624,6 +2771,10 @@ public class NetworkManager {
 		return serverBroadcastHz;
 	}
 
+	public long getBattleChunkKeepaliveIntervalMs() {
+		return battleChunkKeepaliveIntervalMs;
+	}
+
 	private void clearLocalOutboundSnapshots() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
@@ -2635,6 +2786,7 @@ public class NetworkManager {
 		remotePlayerDataCache.clear();
 		remoteEntityDataCache.clear();
 		remoteWaypointDataCache.clear();
+		remoteBattleChunkDataCache.clear();
 		remoteWaypointCache.clear();
 		remotePlayerMarks.clear();
 	}

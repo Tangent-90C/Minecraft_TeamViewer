@@ -61,6 +61,17 @@ public final class ReportDataSchemas {
             Map.entry("tacticalType", true),
             Map.entry("sourceType", true));
 
+    public static final Map<String, Boolean> BATTLE_CHUNK_DATA_RELIABILITY = Map.ofEntries(
+            Map.entry("chunkX", true),
+            Map.entry("chunkZ", true),
+            Map.entry("dimension", true),
+            Map.entry("symbol", true),
+            Map.entry("colorRaw", true),
+            Map.entry("colorNote", true),
+            Map.entry("observedAt", true),
+            Map.entry("reporterId", true),
+            Map.entry("roomCode", true));
+
     public record PlayerDataPayload(
             double x,
             double y,
@@ -174,6 +185,31 @@ public final class ReportDataSchemas {
             data.put("permanent", permanent);
             data.put("tacticalType", tacticalType);
             data.put("sourceType", sourceType);
+            return data;
+        }
+    }
+
+    public record BattleChunkDataPayload(
+            int chunkX,
+            int chunkZ,
+            String dimension,
+            String symbol,
+            String colorRaw,
+            String colorNote,
+            long observedAt,
+            String reporterId,
+            String roomCode) {
+        public Map<String, Object> toMap() {
+            Map<String, Object> data = new HashMap<>();
+            data.put("chunkX", chunkX);
+            data.put("chunkZ", chunkZ);
+            data.put("dimension", dimension);
+            data.put("symbol", symbol);
+            data.put("colorRaw", colorRaw);
+            data.put("colorNote", colorNote);
+            data.put("observedAt", observedAt);
+            data.put("reporterId", reporterId);
+            data.put("roomCode", roomCode);
             return data;
         }
     }

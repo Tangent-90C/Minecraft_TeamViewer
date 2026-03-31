@@ -12,10 +12,16 @@ import net.minecraft.text.Text;
 public class NetworkConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget updateIntervalField;
+    private TextFieldWidget battleMapUpdateIntervalField;
+    private TextFieldWidget battleMapKeepaliveField;
+    private TextFieldWidget battleMapCacheRetentionField;
     private ButtonWidget uploadEntitiesButton;
     private ButtonWidget uploadSharedWaypointsButton;
     private ButtonWidget preferLocalDataForRenderButton;
     private ButtonWidget useSystemProxyButton;
+    private ButtonWidget battleMapSyncButton;
+    private ButtonWidget battleMapScoreboardDetectionButton;
+    private ButtonWidget battleMapDebugButton;
 
     private static final int COMPONENT_WIDTH = 200;
     private static final int COMPONENT_HEIGHT = 20;
@@ -35,6 +41,13 @@ public class NetworkConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += BUTTON_SPACING;
+        totalHeight += BUTTON_SPACING;
+        totalHeight += BUTTON_SPACING;
+        totalHeight += BUTTON_SPACING;
+        totalHeight += BUTTON_SPACING;
+        totalHeight += COMPONENT_SPACING;
+        totalHeight += COMPONENT_SPACING;
+        totalHeight += COMPONENT_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -118,6 +131,87 @@ public class NetworkConfigScreen extends Screen {
         ).dimensions(componentX, useSystemProxyY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.useSystemProxyButton);
 
+        int battleMapUpdateIntervalY = getNextY();
+        this.battleMapUpdateIntervalField = new TextFieldWidget(
+            this.textRenderer,
+            componentX,
+            battleMapUpdateIntervalY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.mc_teamviewer.config.battle_map_update_interval")
+        );
+        this.battleMapUpdateIntervalField.setText(String.valueOf(PlayerProcesses.getConfig().getBattleMapUpdateIntervalTicks()));
+        this.battleMapUpdateIntervalField.setMaxLength(5);
+        this.battleMapUpdateIntervalField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.battle_map_update_interval_hint"));
+        this.addDrawableChild(this.battleMapUpdateIntervalField);
+        this.addDrawableChild(
+            new TextWidget(componentX, battleMapUpdateIntervalY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.mc_teamviewer.config.battle_map_update_interval"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+
+        int battleMapKeepaliveY = getNextY();
+        this.battleMapKeepaliveField = new TextFieldWidget(
+            this.textRenderer,
+            componentX,
+            battleMapKeepaliveY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.mc_teamviewer.config.battle_map_keepalive_interval")
+        );
+        this.battleMapKeepaliveField.setText(String.valueOf(PlayerProcesses.getConfig().getBattleMapKeepaliveIntervalSeconds()));
+        this.battleMapKeepaliveField.setMaxLength(5);
+        this.battleMapKeepaliveField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.battle_map_keepalive_interval_hint"));
+        this.addDrawableChild(this.battleMapKeepaliveField);
+        this.addDrawableChild(
+            new TextWidget(componentX, battleMapKeepaliveY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.mc_teamviewer.config.battle_map_keepalive_interval"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+
+        int battleMapCacheRetentionY = getNextY();
+        this.battleMapCacheRetentionField = new TextFieldWidget(
+            this.textRenderer,
+            componentX,
+            battleMapCacheRetentionY,
+            COMPONENT_WIDTH,
+            COMPONENT_HEIGHT,
+            Text.translatable("screen.mc_teamviewer.config.battle_map_cache_retention")
+        );
+        this.battleMapCacheRetentionField.setText(String.valueOf(PlayerProcesses.getConfig().getBattleMapCacheRetentionSeconds()));
+        this.battleMapCacheRetentionField.setMaxLength(6);
+        this.battleMapCacheRetentionField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.battle_map_cache_retention_hint"));
+        this.addDrawableChild(this.battleMapCacheRetentionField);
+        this.addDrawableChild(
+            new TextWidget(componentX, battleMapCacheRetentionY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+                Text.translatable("screen.mc_teamviewer.config.battle_map_cache_retention"), this.textRenderer)
+                .alignLeft()
+                .setTextColor(0xFFFFFF)
+        );
+
+        int battleMapSyncY = getNextButtonY();
+        this.battleMapSyncButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.battle_map_sync"),
+            button -> toggleBattleMapSync()
+        ).dimensions(componentX, battleMapSyncY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.battleMapSyncButton);
+
+        int battleMapScoreboardDetectionY = getNextButtonY();
+        this.battleMapScoreboardDetectionButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.battle_map_scoreboard_detection"),
+            button -> toggleBattleMapScoreboardDetection()
+        ).dimensions(componentX, battleMapScoreboardDetectionY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.battleMapScoreboardDetectionButton);
+
+        int battleMapDebugY = getNextButtonY();
+        this.battleMapDebugButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.battle_map_debug"),
+            button -> toggleBattleMapDebug()
+        ).dimensions(componentX, battleMapDebugY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.battleMapDebugButton);
+
         int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.back"),
@@ -128,6 +222,9 @@ public class NetworkConfigScreen extends Screen {
         updateUploadSharedWaypointsButton();
         updatePreferLocalDataForRenderButton();
         updateUseSystemProxyButton();
+        updateBattleMapSyncButton();
+        updateBattleMapScoreboardDetectionButton();
+        updateBattleMapDebugButton();
     }
 
     @Override
@@ -158,6 +255,27 @@ public class NetworkConfigScreen extends Screen {
                     PlayerProcesses.getConfig().setUpdateInterval(updateInterval);
                 }
             }
+            String battleMapUpdateIntervalStr = this.battleMapUpdateIntervalField.getText().trim();
+            if (!battleMapUpdateIntervalStr.isEmpty()) {
+                int battleMapUpdateInterval = Integer.parseInt(battleMapUpdateIntervalStr);
+                if (battleMapUpdateInterval > 0) {
+                    PlayerProcesses.getConfig().setBattleMapUpdateIntervalTicks(battleMapUpdateInterval);
+                }
+            }
+            String battleMapKeepaliveStr = this.battleMapKeepaliveField.getText().trim();
+            if (!battleMapKeepaliveStr.isEmpty()) {
+                int battleMapKeepalive = Integer.parseInt(battleMapKeepaliveStr);
+                if (battleMapKeepalive > 0) {
+                    PlayerProcesses.getConfig().setBattleMapKeepaliveIntervalSeconds(battleMapKeepalive);
+                }
+            }
+            String battleMapCacheRetentionStr = this.battleMapCacheRetentionField.getText().trim();
+            if (!battleMapCacheRetentionStr.isEmpty()) {
+                int battleMapCacheRetention = Integer.parseInt(battleMapCacheRetentionStr);
+                if (battleMapCacheRetention > 0) {
+                    PlayerProcesses.getConfig().setBattleMapCacheRetentionSeconds(battleMapCacheRetention);
+                }
+            }
         } catch (NumberFormatException e) {
             // 如果输入格式不正确，忽略错误并使用原始值
         }
@@ -185,6 +303,24 @@ public class NetworkConfigScreen extends Screen {
         boolean currentStatus = PlayerProcesses.getConfig().isPreferLocalDataForRender();
         PlayerProcesses.getConfig().setPreferLocalDataForRender(!currentStatus);
         updatePreferLocalDataForRenderButton();
+    }
+
+    private void toggleBattleMapSync() {
+        boolean currentStatus = PlayerProcesses.getConfig().isBattleMapSyncEnabled();
+        PlayerProcesses.getConfig().setBattleMapSyncEnabled(!currentStatus);
+        updateBattleMapSyncButton();
+    }
+
+    private void toggleBattleMapScoreboardDetection() {
+        boolean currentStatus = PlayerProcesses.getConfig().isBattleMapScoreboardDetectionEnabled();
+        PlayerProcesses.getConfig().setBattleMapScoreboardDetectionEnabled(!currentStatus);
+        updateBattleMapScoreboardDetectionButton();
+    }
+
+    private void toggleBattleMapDebug() {
+        boolean currentStatus = PlayerProcesses.getConfig().isBattleMapDebugEnabled();
+        PlayerProcesses.getConfig().setBattleMapDebugEnabled(!currentStatus);
+        updateBattleMapDebugButton();
     }
 
     private void updateUploadEntitiesButton() {
@@ -223,6 +359,33 @@ public class NetworkConfigScreen extends Screen {
         }
     }
 
+    private void updateBattleMapSyncButton() {
+        if (this.battleMapSyncButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isBattleMapSyncEnabled();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.battle_map_sync").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.battleMapSyncButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void updateBattleMapScoreboardDetectionButton() {
+        if (this.battleMapScoreboardDetectionButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isBattleMapScoreboardDetectionEnabled();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.battle_map_scoreboard_detection").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.battleMapScoreboardDetectionButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void updateBattleMapDebugButton() {
+        if (this.battleMapDebugButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isBattleMapDebugEnabled();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.battle_map_debug").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.battleMapDebugButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -230,5 +393,8 @@ public class NetworkConfigScreen extends Screen {
         updateUploadSharedWaypointsButton();
         updatePreferLocalDataForRenderButton();
         updateUseSystemProxyButton();
+        updateBattleMapSyncButton();
+        updateBattleMapScoreboardDetectionButton();
+        updateBattleMapDebugButton();
     }
 }

@@ -25,12 +25,14 @@ public final class ProtocolPackets {
 		public Integer reportIntervalTicks;
 		public Integer playerTimeoutSec;
 		public Integer entityTimeoutSec;
+		public Integer battleChunkTimeoutSec;
 	}
 
 	public static class SnapshotFullInboundPacket extends BaseInboundPacket {
 		public Map<String, Object> players;
 		public Map<String, Object> entities;
 		public Map<String, Object> waypoints;
+		public Map<String, Object> battleChunks;
 		public Map<String, Object> playerMarks;
 	}
 
@@ -38,6 +40,7 @@ public final class ProtocolPackets {
 		public Map<String, Object> players;
 		public Map<String, Object> entities;
 		public Map<String, Object> waypoints;
+		public Map<String, Object> battleChunks;
 		public Map<String, Object> playerMarks;
 		public Map<String, Object> meta;
 	}
@@ -99,6 +102,12 @@ public final class ProtocolPackets {
 		public List<String> entities;
 	}
 
+	public static class BattleChunksKeepalivePacket {
+		public final String type = "battle_chunks_keepalive";
+		public byte[] submitPlayerId;
+		public List<String> chunkIds;
+	}
+
 	public static class SourceStateClearPacket {
 		public final String type = "source_state_clear";
 		public byte[] submitPlayerId;
@@ -134,6 +143,13 @@ public final class ProtocolPackets {
 		public final String type = "waypoints_entity_death_cancel";
 		public byte[] submitPlayerId;
 		public List<String> targetEntityIds;
+	}
+
+	public static class BattleChunksPatchPacket {
+		public final String type = "battle_chunks_patch";
+		public byte[] submitPlayerId;
+		public Map<String, Map<String, Object>> upsert;
+		public List<String> delete;
 	}
 
 	public static class ResyncReqPacket {

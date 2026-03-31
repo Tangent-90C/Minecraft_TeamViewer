@@ -29,8 +29,11 @@ import net.minecraft.world.RaycastContext;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.fabricmc.loader.api.FabricLoader;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.config.FabricConfigLoader;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCacheStore;
+import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardBattleMapParser;
 import fun.prof_chen.teamviewer.main_code.mapbridge.registry.MapBridgeRegistry;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
@@ -57,6 +60,7 @@ import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePl
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -93,8 +97,9 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static boolean ModEnable = false;
 	private static final boolean useServerPositions = false;
 
-    // 用于控制位置更新频率
+	// 用于控制位置更新频率
 	private static int tickCounter = 0;
+	private static int battleMapTickCounter = 0;
 
 	// 鼠标中键双击报点
 	private static final long MARK_DOUBLE_CLICK_MS = 300L;
@@ -110,6 +115,12 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static String lastLocalMarkedActionBarFingerprint = "";
 	private static boolean localPlayerMarkedActive = false;
 	private static String localPlayerMarkedIndicatorText = "TV!";
+	private static final Path BATTLE_MAP_CACHE_PATH = FabricLoader.getInstance()
+			.getConfigDir()
+			.resolve("MC-Teamviewer-battle-map-cache.json");
+	private static final ScoreboardBattleMapParser SCOREBOARD_BATTLE_MAP_PARSER = new ScoreboardBattleMapParser();
+	private static BattleMapCacheStore battleMapCacheStore;
+	private static final Set<String> lastObservedBattleChunkIds = new HashSet<>();
 	
 	@Override
 	public void onInitializeClient() {
@@ -118,6 +129,8 @@ public class PlayerProcesses implements ClientModInitializer {
 		
 		// 加载配置
 		config = FabricConfigLoader.load();
+		battleMapCacheStore = new BattleMapCacheStore(BATTLE_MAP_CACHE_PATH);
+		battleMapCacheStore.load();
 		
 		// 初始化网络管理器
 		networkManager = new NetworkManager(
@@ -197,6 +210,7 @@ public class PlayerProcesses implements ClientModInitializer {
 			// 发送玩家位置到服务器
 			if (ModEnable && networkManager != null) {
 				handleRegistrationAndPositionUpdates();
+				handleBattleMapSync(client);
 			}
 		});
 		
@@ -239,6 +253,7 @@ public class PlayerProcesses implements ClientModInitializer {
 		
 		// 重置计数器
 		tickCounter = 0;
+		battleMapTickCounter = 0;
 	}
 
 	private void handleJoinedMultiplayer(MinecraftClient client) {
@@ -251,6 +266,8 @@ public class PlayerProcesses implements ClientModInitializer {
 			networkManager.connectWithReconnectLimit(AUTO_CONNECT_MAX_RETRIES, AUTO_CONNECT_RETRY_DELAY_MS);
 		}
 		tickCounter = 0;
+		battleMapTickCounter = 0;
+		lastObservedBattleChunkIds.clear();
 		LOGGER.info("Auto-connect enabled; started connection for multiplayer session");
 	}
 
@@ -277,6 +294,8 @@ public class PlayerProcesses implements ClientModInitializer {
 		localPlayerMarkedActive = false;
 		localPlayerMarkedIndicatorText = "TV!";
 		tickCounter = 0;
+		battleMapTickCounter = 0;
+		lastObservedBattleChunkIds.clear();
 	}
 	
 	private void openConfigScreen() {
@@ -393,6 +412,154 @@ public class PlayerProcesses implements ClientModInitializer {
 				networkManager.sendEntitiesUpdate(submitPlayerId, entities);
 			}
 		}
+	}
+
+	private void handleBattleMapSync(MinecraftClient client) {
+		if (client == null || client.player == null || networkManager == null || !networkManager.isConnected()) {
+			return;
+		}
+		if (config == null || !config.isBattleMapSyncEnabled() || !config.isBattleMapScoreboardDetectionEnabled()) {
+			return;
+		}
+
+		battleMapTickCounter++;
+		if (battleMapTickCounter < Math.max(1, config.getBattleMapUpdateIntervalTicks())) {
+			return;
+		}
+		battleMapTickCounter = 0;
+
+		Optional<ScoreboardBattleMapParser.ParsedBattleMapSnapshot> parsed = SCOREBOARD_BATTLE_MAP_PARSER.parse(
+				client,
+				NetworkManager.getRoomCode(),
+				client.player.getUuid(),
+				config.isBattleMapDebugEnabled()
+		);
+		if (parsed.isEmpty() || parsed.get().chunks().isEmpty()) {
+			clearMissingBattleMapSnapshot(client.player.getUuid());
+			return;
+		}
+
+		Map<String, Map<String, Object>> currentSnapshot = parsed.get().toProtocolMap();
+		UUID submitPlayerId = client.player.getUuid();
+		long now = System.currentTimeMillis();
+		boolean cacheDirty = false;
+		boolean forceFullUpsert = lastObservedBattleChunkIds.isEmpty();
+
+		Map<String, Map<String, Object>> upsert = new HashMap<>();
+		for (Map.Entry<String, Map<String, Object>> entry : currentSnapshot.entrySet()) {
+			String chunkId = entry.getKey();
+			Map<String, Object> payload = entry.getValue();
+			String stateHash = buildBattleChunkStateHash(payload);
+			BattleMapCacheStore.CacheEntry cacheEntry = battleMapCacheStore == null ? null : battleMapCacheStore.get(chunkId);
+			if (forceFullUpsert || cacheEntry == null || !Objects.equals(cacheEntry.getStateHash(), stateHash)) {
+				upsert.put(chunkId, payload);
+			}
+		}
+
+		List<String> delete = new ArrayList<>();
+		for (String previousChunkId : new HashSet<>(lastObservedBattleChunkIds)) {
+			if (!currentSnapshot.containsKey(previousChunkId)) {
+				delete.add(previousChunkId);
+			}
+		}
+
+		if (!upsert.isEmpty() || !delete.isEmpty()) {
+			networkManager.sendBattleChunksPatch(submitPlayerId, upsert, delete);
+			if (battleMapCacheStore != null) {
+				for (Map.Entry<String, Map<String, Object>> entry : upsert.entrySet()) {
+					String stateHash = buildBattleChunkStateHash(entry.getValue());
+					battleMapCacheStore.put(
+							entry.getKey(),
+							new BattleMapCacheStore.CacheEntry(stateHash, now, now)
+					);
+					cacheDirty = true;
+				}
+				for (String deleteId : delete) {
+					battleMapCacheStore.remove(deleteId);
+					cacheDirty = true;
+				}
+			}
+		}
+
+		List<String> keepaliveIds = new ArrayList<>();
+		long configuredKeepaliveMs = Math.max(5L, config.getBattleMapKeepaliveIntervalSeconds()) * 1000L;
+		long negotiatedKeepaliveMs = networkManager.getBattleChunkKeepaliveIntervalMs();
+		long effectiveKeepaliveMs = negotiatedKeepaliveMs > 0
+				? Math.min(configuredKeepaliveMs, negotiatedKeepaliveMs)
+				: configuredKeepaliveMs;
+		for (String chunkId : currentSnapshot.keySet()) {
+			if (upsert.containsKey(chunkId) || battleMapCacheStore == null) {
+				continue;
+			}
+			BattleMapCacheStore.CacheEntry cacheEntry = battleMapCacheStore.get(chunkId);
+			if (cacheEntry == null) {
+				String stateHash = buildBattleChunkStateHash(currentSnapshot.get(chunkId));
+				battleMapCacheStore.put(chunkId, new BattleMapCacheStore.CacheEntry(stateHash, now, 0L));
+				cacheDirty = true;
+				continue;
+			}
+			if (now - cacheEntry.getLastHeartbeatAt() < effectiveKeepaliveMs) {
+				continue;
+			}
+			keepaliveIds.add(chunkId);
+		}
+
+		if (!keepaliveIds.isEmpty()) {
+			networkManager.sendBattleChunksKeepalive(submitPlayerId, keepaliveIds);
+			if (battleMapCacheStore != null) {
+				for (String chunkId : keepaliveIds) {
+					BattleMapCacheStore.CacheEntry cacheEntry = battleMapCacheStore.get(chunkId);
+					String stateHash = cacheEntry == null
+							? buildBattleChunkStateHash(currentSnapshot.get(chunkId))
+							: cacheEntry.getStateHash();
+					battleMapCacheStore.put(chunkId, new BattleMapCacheStore.CacheEntry(stateHash, now, now));
+					cacheDirty = true;
+				}
+			}
+		}
+
+		if (battleMapCacheStore != null) {
+			long cutoff = now - Math.max(60L, config.getBattleMapCacheRetentionSeconds()) * 1000L;
+			cacheDirty = battleMapCacheStore.pruneOlderThan(cutoff) || cacheDirty;
+			if (cacheDirty) {
+				battleMapCacheStore.save();
+			}
+		}
+
+		lastObservedBattleChunkIds.clear();
+		lastObservedBattleChunkIds.addAll(currentSnapshot.keySet());
+	}
+
+	private String buildBattleChunkStateHash(Map<String, Object> payload) {
+		if (payload == null || payload.isEmpty()) {
+			return "";
+		}
+		String symbol = normalizeBattleChunkStateField(payload.get("symbol"));
+		String colorRaw = normalizeBattleChunkStateField(payload.get("colorRaw"));
+		String colorNote = normalizeBattleChunkStateField(payload.get("colorNote"));
+		String dimension = normalizeBattleChunkStateField(payload.get("dimension"));
+		return dimension + "|" + symbol + "|" + colorRaw + "|" + colorNote;
+	}
+
+	private String normalizeBattleChunkStateField(Object value) {
+		return value == null ? "" : String.valueOf(value);
+	}
+
+	private void clearMissingBattleMapSnapshot(UUID submitPlayerId) {
+		if (submitPlayerId == null || lastObservedBattleChunkIds.isEmpty()) {
+			lastObservedBattleChunkIds.clear();
+			return;
+		}
+
+		List<String> delete = new ArrayList<>(lastObservedBattleChunkIds);
+		networkManager.sendBattleChunksPatch(submitPlayerId, Map.of(), delete);
+		if (battleMapCacheStore != null) {
+			for (String chunkId : delete) {
+				battleMapCacheStore.remove(chunkId);
+			}
+			battleMapCacheStore.save();
+		}
+		lastObservedBattleChunkIds.clear();
 	}
 
 	private List<Map<String, Object>> collectTabPlayers(MinecraftClient client) {
