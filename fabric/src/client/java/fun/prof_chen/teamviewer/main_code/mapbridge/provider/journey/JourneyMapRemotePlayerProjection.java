@@ -20,7 +20,9 @@ public final class JourneyMapRemotePlayerProjection implements RemotePlayerProje
 
 	@Override
 	public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
-		boolean journeyMapRemotePlayersEnabled = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerWaypoints();
-		JourneyMapRemotePlayerBridge.tick(players, enabled && journeyMapRemotePlayersEnabled);
+		boolean showBeacons = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerBeacons();
+		boolean showMapMarkers = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerMapMarkers();
+		JourneyMapRemotePlayerBridge.tick(players, enabled && showBeacons);
+		JourneyMapRemotePlayerMarkerBridge.tick(players, enabled && showMapMarkers);
 	}
 }

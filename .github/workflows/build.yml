@@ -45,7 +45,7 @@ jobs:
 
       - name: Build versioned artifacts with Task
         shell: bash
-        run: task build-mod
+        run: task build
 
       - name: Read artifact versions
         id: versions

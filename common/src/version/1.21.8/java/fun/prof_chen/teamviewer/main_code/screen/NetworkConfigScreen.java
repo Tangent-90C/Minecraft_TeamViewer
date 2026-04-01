@@ -23,11 +23,14 @@ public class NetworkConfigScreen extends Screen {
     private ButtonWidget battleMapScoreboardDetectionButton;
     private ButtonWidget battleMapDebugButton;
 
-    private static final int COMPONENT_WIDTH = 200;
+    private static final int MAX_COMPONENT_WIDTH = 200;
+    private static final int MIN_COMPONENT_WIDTH = 150;
     private static final int COMPONENT_HEIGHT = 20;
     private static final int COMPONENT_SPACING = 30;
     private static final int LABEL_SPACING = 12;
     private static final int BUTTON_SPACING = 25;
+    private static final int COLUMN_GAP = 8;
+    private static final int SCREEN_HORIZONTAL_MARGIN = 40;
     private int startY;
     private int currentY;
 
@@ -38,13 +41,6 @@ public class NetworkConfigScreen extends Screen {
 
     private void calculateLayout() {
         int totalHeight = 0;
-        totalHeight += COMPONENT_SPACING;
-        totalHeight += COMPONENT_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
-        totalHeight += BUTTON_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
@@ -69,8 +65,24 @@ public class NetworkConfigScreen extends Screen {
         return result;
     }
 
-    private int getComponentX() {
-        return (this.width - COMPONENT_WIDTH) / 2;
+    private int getColumnWidth() {
+        int availableWidth = Math.max(
+            MIN_COMPONENT_WIDTH * 2 + COLUMN_GAP,
+            this.width - SCREEN_HORIZONTAL_MARGIN
+        );
+        return Math.max(
+            MIN_COMPONENT_WIDTH,
+            Math.min(MAX_COMPONENT_WIDTH, (availableWidth - COLUMN_GAP) / 2)
+        );
+    }
+
+    private int getLeftColumnX() {
+        int totalWidth = getColumnWidth() * 2 + COLUMN_GAP;
+        return (this.width - totalWidth) / 2;
+    }
+
+    private int getRightColumnX() {
+        return getLeftColumnX() + getColumnWidth() + COLUMN_GAP;
     }
 
     @Override
@@ -80,14 +92,16 @@ public class NetworkConfigScreen extends Screen {
         calculateLayout();
         currentY += COMPONENT_SPACING;
 
-        int componentX = getComponentX();
+        int leftX = getLeftColumnX();
+        int rightX = getRightColumnX();
+        int componentWidth = getColumnWidth();
 
-        int updateIntervalY = getNextY();
+        int intervalFieldsY = getNextY();
         this.updateIntervalField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            updateIntervalY,
-            COMPONENT_WIDTH,
+            leftX,
+            intervalFieldsY,
+            componentWidth,
             COMPONENT_HEIGHT,
             Text.translatable("screen.mc_teamviewer.config.update_interval")
         );
@@ -97,46 +111,17 @@ public class NetworkConfigScreen extends Screen {
         this.addDrawableChild(this.updateIntervalField);
 
         this.addDrawableChild(
-            new TextWidget(componentX, updateIntervalY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(leftX, intervalFieldsY - LABEL_SPACING, componentWidth, 12,
                 Text.translatable("screen.mc_teamviewer.config.update_interval"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
-        int uploadEntitiesY = getNextButtonY();
-        this.uploadEntitiesButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.upload_entities"),
-            button -> toggleUploadEntities()
-        ).dimensions(componentX, uploadEntitiesY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.uploadEntitiesButton);
-
-        int uploadSharedWaypointsY = getNextButtonY();
-        this.uploadSharedWaypointsButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.upload_shared_waypoints"),
-            button -> toggleUploadSharedWaypoints()
-        ).dimensions(componentX, uploadSharedWaypointsY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.uploadSharedWaypointsButton);
-
-        int preferLocalDataY = getNextButtonY();
-        this.preferLocalDataForRenderButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.prefer_local_data_for_rendering"),
-            button -> togglePreferLocalDataForRender()
-        ).dimensions(componentX, preferLocalDataY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.preferLocalDataForRenderButton);
-
-        int useSystemProxyY = getNextButtonY();
-        this.useSystemProxyButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.use_system_proxy"),
-            button -> toggleUseSystemProxy()
-        ).dimensions(componentX, useSystemProxyY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.useSystemProxyButton);
-
-        int battleMapUpdateIntervalY = getNextY();
         this.battleMapUpdateIntervalField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            battleMapUpdateIntervalY,
-            COMPONENT_WIDTH,
+            rightX,
+            intervalFieldsY,
+            componentWidth,
             COMPONENT_HEIGHT,
             Text.translatable("screen.mc_teamviewer.config.battle_map_update_interval")
         );
@@ -145,18 +130,18 @@ public class NetworkConfigScreen extends Screen {
         this.battleMapUpdateIntervalField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.battle_map_update_interval_hint"));
         this.addDrawableChild(this.battleMapUpdateIntervalField);
         this.addDrawableChild(
-            new TextWidget(componentX, battleMapUpdateIntervalY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(rightX, intervalFieldsY - LABEL_SPACING, componentWidth, 12,
                 Text.translatable("screen.mc_teamviewer.config.battle_map_update_interval"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
-        int battleMapKeepaliveY = getNextY();
+        int battleMapFieldsY = getNextY();
         this.battleMapKeepaliveField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            battleMapKeepaliveY,
-            COMPONENT_WIDTH,
+            leftX,
+            battleMapFieldsY,
+            componentWidth,
             COMPONENT_HEIGHT,
             Text.translatable("screen.mc_teamviewer.config.battle_map_keepalive_interval")
         );
@@ -165,18 +150,17 @@ public class NetworkConfigScreen extends Screen {
         this.battleMapKeepaliveField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.battle_map_keepalive_interval_hint"));
         this.addDrawableChild(this.battleMapKeepaliveField);
         this.addDrawableChild(
-            new TextWidget(componentX, battleMapKeepaliveY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(leftX, battleMapFieldsY - LABEL_SPACING, componentWidth, 12,
                 Text.translatable("screen.mc_teamviewer.config.battle_map_keepalive_interval"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
-        int battleMapCacheRetentionY = getNextY();
         this.battleMapCacheRetentionField = new TextFieldWidget(
             this.textRenderer,
-            componentX,
-            battleMapCacheRetentionY,
-            COMPONENT_WIDTH,
+            rightX,
+            battleMapFieldsY,
+            componentWidth,
             COMPONENT_HEIGHT,
             Text.translatable("screen.mc_teamviewer.config.battle_map_cache_retention")
         );
@@ -185,38 +169,62 @@ public class NetworkConfigScreen extends Screen {
         this.battleMapCacheRetentionField.setPlaceholder(Text.translatable("screen.mc_teamviewer.config.battle_map_cache_retention_hint"));
         this.addDrawableChild(this.battleMapCacheRetentionField);
         this.addDrawableChild(
-            new TextWidget(componentX, battleMapCacheRetentionY - LABEL_SPACING, COMPONENT_WIDTH, 12,
+            new TextWidget(rightX, battleMapFieldsY - LABEL_SPACING, componentWidth, 12,
                 Text.translatable("screen.mc_teamviewer.config.battle_map_cache_retention"), this.textRenderer)
                 .alignLeft()
                 .setTextColor(0xFFFFFF)
         );
 
-        int battleMapSyncY = getNextButtonY();
+        int uploadToggleY = getNextButtonY();
+        this.uploadEntitiesButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.upload_entities"),
+            button -> toggleUploadEntities()
+        ).dimensions(leftX, uploadToggleY, componentWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.uploadEntitiesButton);
+
+        this.uploadSharedWaypointsButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.upload_shared_waypoints"),
+            button -> toggleUploadSharedWaypoints()
+        ).dimensions(rightX, uploadToggleY, componentWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.uploadSharedWaypointsButton);
+
+        int renderToggleY = getNextButtonY();
+        this.preferLocalDataForRenderButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.prefer_local_data_for_rendering"),
+            button -> togglePreferLocalDataForRender()
+        ).dimensions(leftX, renderToggleY, componentWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.preferLocalDataForRenderButton);
+
+        this.useSystemProxyButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.use_system_proxy"),
+            button -> toggleUseSystemProxy()
+        ).dimensions(rightX, renderToggleY, componentWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.useSystemProxyButton);
+
+        int battleMapToggleY = getNextButtonY();
         this.battleMapSyncButton = ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.battle_map_sync"),
             button -> toggleBattleMapSync()
-        ).dimensions(componentX, battleMapSyncY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(leftX, battleMapToggleY, componentWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.battleMapSyncButton);
 
-        int battleMapScoreboardDetectionY = getNextButtonY();
         this.battleMapScoreboardDetectionButton = ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.battle_map_scoreboard_detection"),
             button -> toggleBattleMapScoreboardDetection()
-        ).dimensions(componentX, battleMapScoreboardDetectionY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(rightX, battleMapToggleY, componentWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.battleMapScoreboardDetectionButton);
 
-        int battleMapDebugY = getNextButtonY();
+        int footerY = getNextButtonY();
         this.battleMapDebugButton = ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.battle_map_debug"),
             button -> toggleBattleMapDebug()
-        ).dimensions(componentX, battleMapDebugY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(leftX, footerY, componentWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.battleMapDebugButton);
 
-        int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.back"),
             button -> close()
-        ).dimensions(componentX, backButtonY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+        ).dimensions(rightX, footerY, componentWidth, COMPONENT_HEIGHT).build());
 
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();

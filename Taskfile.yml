@@ -1,12 +1,6 @@
 version: '3'
 
 tasks:
-  build:
-    desc: Build Fabric mod (module-aware)
-    cmds:
-      - chmod +x ./gradlew
-      - ./gradlew :fabric:build
-
   compile:
     desc: Fast compile check for Fabric client sources
     cmds:
@@ -19,7 +13,7 @@ tasks:
       - chmod +x ./gradlew
       - ./gradlew clean
 
-  build-mod:
+  build:
     desc: Build Fabric mod and collect distributable jars
     cmds:
       - chmod +x ./gradlew

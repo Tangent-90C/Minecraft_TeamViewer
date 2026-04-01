@@ -20,7 +20,8 @@ public class DisplayConfigScreen extends Screen {
     private ButtonWidget tracerStartModeButton;
     private ButtonWidget showBoxesButton;
     private ButtonWidget showLinesButton;
-    private ButtonWidget journeyMapRemotePlayersButton;
+    private ButtonWidget journeyMapRemotePlayerBeaconsButton;
+    private ButtonWidget journeyMapRemotePlayerMapMarkersButton;
     private ButtonWidget xrayMarkersAndBoxesButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget waypointSettingsButton;
@@ -44,6 +45,7 @@ public class DisplayConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
+        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -165,21 +167,28 @@ public class DisplayConfigScreen extends Screen {
         this.addDrawableChild(this.waypointSettingsButton);
 
         int journeyMapToggleY = getNextButtonY();
-        this.journeyMapRemotePlayersButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.show_journeymap_remote_player_waypoints"),
-            button -> toggleJourneyMapRemotePlayerWaypoints()
+        this.journeyMapRemotePlayerBeaconsButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.show_journeymap_remote_player_beacons"),
+            button -> toggleJourneyMapRemotePlayerBeacons()
         ).dimensions(leftX, journeyMapToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.journeyMapRemotePlayersButton);
+        this.addDrawableChild(this.journeyMapRemotePlayerBeaconsButton);
+
+        this.journeyMapRemotePlayerMapMarkersButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.show_journeymap_remote_player_map_markers"),
+            button -> toggleJourneyMapRemotePlayerMapMarkers()
+        ).dimensions(rightX, journeyMapToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.journeyMapRemotePlayerMapMarkersButton);
 
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.back"),
             button -> close()
-        ).dimensions(rightX, journeyMapToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build());
+        ).dimensions(leftX, getNextButtonY(), COMPONENT_WIDTH * 2 + COLUMN_GAP, COMPONENT_HEIGHT).build());
 
         updateTracerStartModeButton();
         updateShowBoxesButton();
         updateShowLinesButton();
-        updateJourneyMapRemotePlayerWaypointsButton();
+        updateJourneyMapRemotePlayerBeaconsButton();
+        updateJourneyMapRemotePlayerMapMarkersButton();
         updateXrayMarkersAndBoxesButton();
     }
 
@@ -215,8 +224,12 @@ public class DisplayConfigScreen extends Screen {
             drawTooltip(context, "screen.mc_teamviewer.config.xray_markers_and_boxes.tooltip", mouseX, mouseY);
             return;
         }
-        if (this.journeyMapRemotePlayersButton != null && this.journeyMapRemotePlayersButton.isMouseOver(mouseX, mouseY)) {
-            drawTooltip(context, "screen.mc_teamviewer.config.show_journeymap_remote_player_waypoints.tooltip", mouseX, mouseY);
+        if (this.journeyMapRemotePlayerBeaconsButton != null && this.journeyMapRemotePlayerBeaconsButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.mc_teamviewer.config.show_journeymap_remote_player_beacons.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.journeyMapRemotePlayerMapMarkersButton != null && this.journeyMapRemotePlayerMapMarkersButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.mc_teamviewer.config.show_journeymap_remote_player_map_markers.tooltip", mouseX, mouseY);
             return;
         }
         if (this.tracerStartModeButton != null && this.tracerStartModeButton.isMouseOver(mouseX, mouseY)) {
@@ -334,18 +347,33 @@ public class DisplayConfigScreen extends Screen {
         }
     }
 
-    private void toggleJourneyMapRemotePlayerWaypoints() {
-        boolean currentStatus = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerWaypoints();
-        PlayerProcesses.getConfig().setShowJourneyMapRemotePlayerWaypoints(!currentStatus);
-        updateJourneyMapRemotePlayerWaypointsButton();
+    private void toggleJourneyMapRemotePlayerBeacons() {
+        boolean currentStatus = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerBeacons();
+        PlayerProcesses.getConfig().setShowJourneyMapRemotePlayerBeacons(!currentStatus);
+        updateJourneyMapRemotePlayerBeaconsButton();
     }
 
-    private void updateJourneyMapRemotePlayerWaypointsButton() {
-        if (this.journeyMapRemotePlayersButton != null) {
-            boolean isEnabled = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerWaypoints();
-            String buttonText = Text.translatable("screen.mc_teamviewer.config.show_journeymap_remote_player_waypoints").getString();
+    private void updateJourneyMapRemotePlayerBeaconsButton() {
+        if (this.journeyMapRemotePlayerBeaconsButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerBeacons();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.show_journeymap_remote_player_beacons").getString();
             buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.journeyMapRemotePlayersButton.setMessage(Text.of(buttonText));
+            this.journeyMapRemotePlayerBeaconsButton.setMessage(Text.of(buttonText));
+        }
+    }
+
+    private void toggleJourneyMapRemotePlayerMapMarkers() {
+        boolean currentStatus = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerMapMarkers();
+        PlayerProcesses.getConfig().setShowJourneyMapRemotePlayerMapMarkers(!currentStatus);
+        updateJourneyMapRemotePlayerMapMarkersButton();
+    }
+
+    private void updateJourneyMapRemotePlayerMapMarkersButton() {
+        if (this.journeyMapRemotePlayerMapMarkersButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerMapMarkers();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.show_journeymap_remote_player_map_markers").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.journeyMapRemotePlayerMapMarkersButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -389,7 +417,8 @@ public class DisplayConfigScreen extends Screen {
         updateTracerStartModeButton();
         updateShowBoxesButton();
         updateShowLinesButton();
-        updateJourneyMapRemotePlayerWaypointsButton();
+        updateJourneyMapRemotePlayerBeaconsButton();
+        updateJourneyMapRemotePlayerMapMarkersButton();
         updateXrayMarkersAndBoxesButton();
     }
 }

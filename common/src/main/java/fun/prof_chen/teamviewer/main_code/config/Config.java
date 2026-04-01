@@ -41,7 +41,8 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean uploadSharedWaypoints = false;
     private boolean showSharedWaypoints = true;
     private boolean showOwnSharedWaypointsOnMinimap = true;
-    private boolean showJourneyMapRemotePlayerWaypoints = true;
+    private boolean showJourneyMapRemotePlayerBeacons = true;
+    private boolean showJourneyMapRemotePlayerMapMarkers = true;
     private boolean xrayMarkersAndBoxes = true;
     private boolean enableMiddleDoubleClickMark = true;
     private boolean enableMiddleClickCancelWaypoint = true;
@@ -317,12 +318,20 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
         this.showOwnSharedWaypointsOnMinimap = showOwnSharedWaypointsOnMinimap;
     }
 
-    public boolean isShowJourneyMapRemotePlayerWaypoints() {
-        return showJourneyMapRemotePlayerWaypoints;
+    public boolean isShowJourneyMapRemotePlayerBeacons() {
+        return showJourneyMapRemotePlayerBeacons;
     }
 
-    public void setShowJourneyMapRemotePlayerWaypoints(boolean showJourneyMapRemotePlayerWaypoints) {
-        this.showJourneyMapRemotePlayerWaypoints = showJourneyMapRemotePlayerWaypoints;
+    public void setShowJourneyMapRemotePlayerBeacons(boolean showJourneyMapRemotePlayerBeacons) {
+        this.showJourneyMapRemotePlayerBeacons = showJourneyMapRemotePlayerBeacons;
+    }
+
+    public boolean isShowJourneyMapRemotePlayerMapMarkers() {
+        return showJourneyMapRemotePlayerMapMarkers;
+    }
+
+    public void setShowJourneyMapRemotePlayerMapMarkers(boolean showJourneyMapRemotePlayerMapMarkers) {
+        this.showJourneyMapRemotePlayerMapMarkers = showJourneyMapRemotePlayerMapMarkers;
     }
 
     public boolean isXrayMarkersAndBoxes() {
