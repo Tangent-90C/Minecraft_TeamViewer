@@ -22,6 +22,7 @@ public class NetworkConfigScreen extends Screen {
     private ButtonWidget battleMapSyncButton;
     private ButtonWidget battleMapScoreboardDetectionButton;
     private ButtonWidget battleMapDebugButton;
+    private ButtonWidget packetCapturePageButton;
 
     private static final int MAX_COMPONENT_WIDTH = 200;
     private static final int MIN_COMPONENT_WIDTH = 150;
@@ -44,6 +45,7 @@ public class NetworkConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
+        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -221,10 +223,17 @@ public class NetworkConfigScreen extends Screen {
         ).dimensions(leftX, footerY, componentWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.battleMapDebugButton);
 
+        this.packetCapturePageButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.packet_capture_page"),
+            button -> openPacketCapturePage()
+        ).dimensions(rightX, footerY, componentWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.packetCapturePageButton);
+
+        int backButtonY = getNextButtonY();
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.back"),
             button -> close()
-        ).dimensions(rightX, footerY, componentWidth, COMPONENT_HEIGHT).build());
+        ).dimensions(leftX, backButtonY, componentWidth * 2 + COLUMN_GAP, COMPONENT_HEIGHT).build());
 
         updateUploadEntitiesButton();
         updateUploadSharedWaypointsButton();
@@ -233,6 +242,7 @@ public class NetworkConfigScreen extends Screen {
         updateBattleMapSyncButton();
         updateBattleMapScoreboardDetectionButton();
         updateBattleMapDebugButton();
+        updatePacketCapturePageButton();
     }
 
     @Override
@@ -331,6 +341,10 @@ public class NetworkConfigScreen extends Screen {
         updateBattleMapDebugButton();
     }
 
+    private void openPacketCapturePage() {
+        MinecraftClient.getInstance().setScreen(new PacketCaptureScreen(this));
+    }
+
     private void updateUploadEntitiesButton() {
         if (this.uploadEntitiesButton != null) {
             boolean isEnabled = PlayerProcesses.getConfig().isUploadEntities();
@@ -394,6 +408,15 @@ public class NetworkConfigScreen extends Screen {
         }
     }
 
+    private void updatePacketCapturePageButton() {
+        if (this.packetCapturePageButton != null) {
+            boolean isCapturing = PlayerProcesses.getNetworkManager().isPacketDumpCaptureActive();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.packet_capture_page").getString();
+            buttonText += isCapturing ? " [RUN]" : " [IDLE]";
+            this.packetCapturePageButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -404,5 +427,6 @@ public class NetworkConfigScreen extends Screen {
         updateBattleMapSyncButton();
         updateBattleMapScoreboardDetectionButton();
         updateBattleMapDebugButton();
+        updatePacketCapturePageButton();
     }
 }

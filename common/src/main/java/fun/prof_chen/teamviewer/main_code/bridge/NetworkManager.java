@@ -15,6 +15,7 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.SocketProcess;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportListener;
+import fun.prof_chen.teamviewer.main_code.network.capture.WebSocketCaptureWriter;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolPackets;
@@ -168,6 +169,12 @@ public class NetworkManager {
 	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
 	private final MessageCodec messageCodec = new MsgpackMessageCodec();
+	private final Object packetDumpLock = new Object();
+	private volatile boolean packetDumpActive = false;
+	private volatile WebSocketCaptureWriter packetDumpWriter;
+	private volatile String packetDumpLastSavedPath = "";
+	private volatile String packetDumpCurrentPath = "";
+	private volatile String currentNegotiatedExtensions = "";
 	
 	// 连接状态监听器列表 - 线程安全的监听器注册表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
@@ -430,6 +437,7 @@ public class NetworkManager {
 		clearLocalOutboundSnapshots();
 		isConnected = false;
 		lastConnectionError = "";
+		closePacketDumpWriterQuietly();
 		notifyConnectionStatusChanged(false);
 	}
 
@@ -871,6 +879,7 @@ public class NetworkManager {
 			return;
 		}
 		byte[] payload = messageCodec.encode(packet);
+		captureOutgoingBinaryPayload(payload);
 		socket.send(payload);
 	}
 
@@ -893,16 +902,19 @@ public class NetworkManager {
 			reconnectAttemptsRemaining = maxReconnectAttempts;
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
+			currentNegotiatedExtensions = negotiatedExtensions == null ? "" : negotiatedExtensions.trim();
 			LOGGER.info("WebSocket connection opened to TeamViewRelay server");
 			if (negotiatedExtensions != null && !negotiatedExtensions.isBlank()) {
 				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
 			}
+			ensurePacketDumpWriter();
 			notifyConnectionStatusChanged(true);
 			sendHandshake();
 		});
 	}
 
 	private void handleTransportTextMessage(String text) {
+		captureIncomingTextPayload(text);
 		LOGGER.warn("Ignoring text websocket frame, expected MessagePack binary frame");
 	}
 
@@ -910,6 +922,7 @@ public class NetworkManager {
 		if (payload == null || payload.length == 0) {
 			return;
 		}
+		captureIncomingBinaryPayload(payload);
 		enqueueMainThreadTask(() -> processCompleteMessage(payload));
 	}
 
@@ -1487,6 +1500,8 @@ public class NetworkManager {
 			} else {
 				lastConnectionError = "";
 			}
+			closePacketDumpWriterQuietly();
+			currentNegotiatedExtensions = "";
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			notifyConnectionStatusChanged(false);
@@ -1528,6 +1543,8 @@ public class NetworkManager {
 			isConnected = false;
 			socket = null;
 			lastConnectionError = formatThrowableReason(error);
+			closePacketDumpWriterQuietly();
+			currentNegotiatedExtensions = "";
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			notifyConnectionStatusChanged(false);
@@ -1573,6 +1590,124 @@ public class NetworkManager {
 
 	public String getLastConnectionError() {
 		return lastConnectionError;
+	}
+
+	public void startPacketDumpCapture() {
+		packetDumpActive = true;
+		ensurePacketDumpWriter();
+	}
+
+	public void stopPacketDumpCapture() {
+		packetDumpActive = false;
+		closePacketDumpWriterQuietly();
+	}
+
+	public boolean isPacketDumpCaptureActive() {
+		return packetDumpActive;
+	}
+
+	public String getPacketDumpCurrentPath() {
+		return packetDumpCurrentPath;
+	}
+
+	public String getPacketDumpLastSavedPath() {
+		return packetDumpLastSavedPath;
+	}
+
+	private void captureOutgoingBinaryPayload(byte[] payload) {
+		if (payload == null || payload.length == 0) {
+			return;
+		}
+		WebSocketCaptureWriter writer = getPacketDumpWriterIfEnabled();
+		if (writer == null) {
+			return;
+		}
+		try {
+			writer.writeClientBinaryMessage(payload);
+		} catch (Exception e) {
+			LOGGER.warn("Failed to dump outgoing websocket payload: {}", e.getMessage());
+			closePacketDumpWriterQuietly();
+		}
+	}
+
+	private void captureIncomingBinaryPayload(byte[] payload) {
+		if (payload == null || payload.length == 0) {
+			return;
+		}
+		WebSocketCaptureWriter writer = getPacketDumpWriterIfEnabled();
+		if (writer == null) {
+			return;
+		}
+		try {
+			writer.writeServerBinaryMessage(payload);
+		} catch (Exception e) {
+			LOGGER.warn("Failed to dump incoming websocket payload: {}", e.getMessage());
+			closePacketDumpWriterQuietly();
+		}
+	}
+
+	private void captureIncomingTextPayload(String text) {
+		WebSocketCaptureWriter writer = getPacketDumpWriterIfEnabled();
+		if (writer == null) {
+			return;
+		}
+		try {
+			writer.writeServerTextMessage(text);
+		} catch (Exception e) {
+			LOGGER.warn("Failed to dump incoming websocket text payload: {}", e.getMessage());
+			closePacketDumpWriterQuietly();
+		}
+	}
+
+	private WebSocketCaptureWriter getPacketDumpWriterIfEnabled() {
+		if (!packetDumpActive) {
+			closePacketDumpWriterQuietly();
+			return null;
+		}
+		return ensurePacketDumpWriter();
+	}
+
+	private WebSocketCaptureWriter ensurePacketDumpWriter() {
+		if (runtimeGateway == null || configGateway == null || !packetDumpActive || !isConnected) {
+			return null;
+		}
+		synchronized (packetDumpLock) {
+			if (packetDumpWriter != null) {
+				return packetDumpWriter;
+			}
+			try {
+				packetDumpWriter = WebSocketCaptureWriter.open(
+						runtimeGateway.getLogsDirectory(),
+						configGateway.getServerURL(),
+						configGateway.getRoomCode(),
+						currentNegotiatedExtensions);
+				packetDumpCurrentPath = String.valueOf(packetDumpWriter.getOutputPath());
+				LOGGER.info("WebSocket packet dump started: {}", packetDumpWriter.getOutputPath());
+				return packetDumpWriter;
+			} catch (Exception e) {
+				LOGGER.warn("Failed to open WebSocket packet dump writer: {}", e.getMessage());
+				packetDumpWriter = null;
+				return null;
+			}
+		}
+	}
+
+	private void closePacketDumpWriterQuietly() {
+		synchronized (packetDumpLock) {
+			if (packetDumpWriter == null) {
+				return;
+			}
+			try {
+				packetDumpWriter.close();
+				packetDumpLastSavedPath = String.valueOf(packetDumpWriter.getOutputPath());
+				LOGGER.info("WebSocket packet dump saved: {}", packetDumpWriter.getOutputPath());
+			} catch (Exception e) {
+				LOGGER.warn("Failed to close WebSocket packet dump writer: {}", e.getMessage());
+			} finally {
+				packetDumpCurrentPath = "";
+				packetDumpWriter = null;
+			}
+		}
 	}
 
 	private int normalizeReconnectAttempts(int attempts) {

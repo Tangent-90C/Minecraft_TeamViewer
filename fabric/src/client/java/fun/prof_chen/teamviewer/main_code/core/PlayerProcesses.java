@@ -222,6 +222,9 @@ public class PlayerProcesses implements ClientModInitializer {
 		});
 
 		HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
+			if (networkManager != null && networkManager.isPacketDumpCaptureActive()) {
+				renderPacketCaptureIndicator(drawContext);
+			}
 			if (ModEnable && localPlayerMarkedActive) {
 				renderLocalMarkedIndicator(drawContext);
 			}
@@ -1208,6 +1211,23 @@ public class PlayerProcesses implements ClientModInitializer {
 
 		context.fill(x, y, x + textWidth + paddingX * 2, y + 12 + paddingY * 2, 0x66000000);
 		context.drawTextWithShadow(client.textRenderer, text, x + paddingX, y + paddingY + 1, 0xFFFF6B6B);
+	}
+
+	private void renderPacketCaptureIndicator(DrawContext context) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client == null || client.textRenderer == null || context == null) {
+			return;
+		}
+
+		String text = "抓包中 REC";
+		int textWidth = client.textRenderer.getWidth(text);
+		int paddingX = 5;
+		int paddingY = 3;
+		int x = 6;
+		int y = 6;
+
+		context.fill(x, y, x + textWidth + paddingX * 2, y + 12 + paddingY * 2, 0x88AA0000);
+		context.drawTextWithShadow(client.textRenderer, text, x + paddingX, y + paddingY + 1, 0xFFFFE082);
 	}
 
 	private List<SharedWaypointInfo> collectLocalPlayerTargetedWaypoints(MinecraftClient client, String currentDimension) {

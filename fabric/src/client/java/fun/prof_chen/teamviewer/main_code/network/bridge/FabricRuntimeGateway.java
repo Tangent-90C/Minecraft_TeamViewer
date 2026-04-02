@@ -4,9 +4,11 @@ import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.main_code.config.FabricModVersionProvider;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.world.World;
 
+import java.nio.file.Path;
 import java.util.UUID;
 
 public final class FabricRuntimeGateway implements RuntimeGateway {
@@ -48,5 +50,10 @@ public final class FabricRuntimeGateway implements RuntimeGateway {
     @Override
     public String getProgramVersionUnknown() {
         return TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
+    }
+
+    @Override
+    public Path getLogsDirectory() {
+        return FabricLoader.getInstance().getGameDir().resolve("logs");
     }
 }
