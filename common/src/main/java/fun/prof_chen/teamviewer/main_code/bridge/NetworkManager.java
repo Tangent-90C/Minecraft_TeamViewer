@@ -17,8 +17,8 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportListener;
 import fun.prof_chen.teamviewer.main_code.network.capture.WebSocketCaptureWriter;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MessageCodec;
-import fun.prof_chen.teamviewer.main_code.network.protocol.MsgpackMessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolPackets;
+import fun.prof_chen.teamviewer.main_code.network.protocol.ProtobufMessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.UuidBinaryCodec;
 
 import java.math.BigDecimal;
@@ -168,7 +168,7 @@ public class NetworkManager {
 	
 	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
-	private final MessageCodec messageCodec = new MsgpackMessageCodec();
+	private final MessageCodec messageCodec = new ProtobufMessageCodec();
 	private final Object packetDumpLock = new Object();
 	private volatile boolean packetDumpActive = false;
 	private volatile WebSocketCaptureWriter packetDumpWriter;
@@ -915,7 +915,7 @@ public class NetworkManager {
 
 	private void handleTransportTextMessage(String text) {
 		captureIncomingTextPayload(text);
-		LOGGER.warn("Ignoring text websocket frame, expected MessagePack binary frame");
+		LOGGER.warn("Ignoring text websocket frame, expected ProtoBuf binary frame");
 	}
 
 	private void handleTransportBinaryMessage(byte[] payload) {

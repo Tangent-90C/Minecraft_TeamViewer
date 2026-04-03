@@ -494,6 +494,17 @@ public class PlayerProcesses implements ClientModInitializer {
 				candidatePayloads,
 				cellPayloads
 		);
+		if (config.isBattleMapDebugEnabled()) {
+			LOGGER.info(
+					"Sending battle_map_observation revision={} observedAt={} parsedAt={} candidates={} cells={} dimension={}",
+					currentSidebarRevision,
+					snapshotObservedAt,
+					parsedAt,
+					candidatePayloads.size(),
+					cellPayloads.size(),
+					parsed.get().dimension()
+			);
+		}
 		networkManager.sendBattleMapObservation(client.player.getUuid(), payload.toMap());
 		lastUploadedBattleMapSidebarRevision = currentSidebarRevision;
 		battleMapObservationPending = false;

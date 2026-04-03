@@ -53,11 +53,13 @@ public final class BattleMapPositionHistory {
         trim(System.currentTimeMillis());
         PositionSample before = null;
         PositionSample after = null;
+        PositionSample latest = null;
 
         for (PositionSample sample : samples) {
             if (!dimension.equals(sample.dimension())) {
                 continue;
             }
+            latest = sample;
             if (sample.capturedAtMs() <= snapshotObservedAt) {
                 before = sample;
                 continue;
@@ -66,11 +68,28 @@ public final class BattleMapPositionHistory {
             break;
         }
 
+        if (before == null && latest != null) {
+            before = latest;
+        }
         if (before == null) {
             return List.of();
         }
         if (snapshotObservedAt - before.capturedAtMs() > MAX_ALIGNMENT_AGE_MS) {
-            return List.of();
+            if (latest == null || !dimension.equals(latest.dimension())) {
+                return List.of();
+            }
+
+            long latestAgeMs = Math.abs(latest.capturedAtMs() - snapshotObservedAt);
+            if (latestAgeMs > MAX_SAMPLE_AGE_MS) {
+                return List.of();
+            }
+
+            return List.of(new ObservationCandidate(
+                    latest.chunkX(),
+                    latest.chunkZ(),
+                    latest.capturedAtMs(),
+                    "history_primary"
+            ));
         }
 
         List<ObservationCandidate> result = new ArrayList<>();
