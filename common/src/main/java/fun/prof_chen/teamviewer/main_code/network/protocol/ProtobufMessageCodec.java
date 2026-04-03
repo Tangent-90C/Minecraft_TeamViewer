@@ -29,90 +29,32 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		try {
 			Map<String, Object> body = objectMapper.convertValue(packet, new TypeReference<Map<String, Object>>() {
 			});
-			Object rawType = body.get("type");
-			String type = rawType == null ? "" : String.valueOf(rawType).trim();
-			if (type.isEmpty()) {
-				throw new IllegalArgumentException("packet type is required");
-			}
-
-			WireEnvelope.Builder envelope = WireEnvelope.newBuilder();
-			envelope.setChannel(WireChannel.WIRE_CHANNEL_PLAYER);
+			String type = readPacketType(body);
+			WireEnvelope.Builder envelope = WireEnvelope.newBuilder().setChannel(WireChannel.WIRE_CHANNEL_PLAYER);
 
 			switch (type) {
-				case "handshake": {
-					HandshakeRequest.Builder builder = HandshakeRequest.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setHandshakeRequest(builder.build());
-					break;
-				}
-				case "players_patch": {
-					PlayersPatch.Builder builder = PlayersPatch.newBuilder();
-					mergeJson(builder, normalizePlayerPatchBody(body));
-					envelope.setPlayersPatch(builder.build());
-					break;
-				}
-				case "entities_patch": {
-					EntitiesPatch.Builder builder = EntitiesPatch.newBuilder();
-					mergeJson(builder, normalizeEntityPatchBody(body));
-					envelope.setEntitiesPatch(builder.build());
-					break;
-				}
-				case "state_keepalive": {
-					StateKeepalive.Builder builder = StateKeepalive.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setStateKeepalive(builder.build());
-					break;
-				}
-				case "source_state_clear": {
-					SourceStateClear.Builder builder = SourceStateClear.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setSourceStateClear(builder.build());
-					break;
-				}
-				case "waypoints_update": {
-					WaypointsUpdate.Builder builder = WaypointsUpdate.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setWaypointsUpdate(builder.build());
-					break;
-				}
-				case "tab_players_update": {
-					TabPlayersUpdate.Builder builder = TabPlayersUpdate.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setTabPlayersUpdate(builder.build());
-					break;
-				}
-				case "tab_players_patch": {
-					TabPlayersPatch.Builder builder = TabPlayersPatch.newBuilder();
-					mergeJson(builder, normalizeTabPlayersPatchBody(body));
-					envelope.setTabPlayersPatch(builder.build());
-					break;
-				}
-				case "waypoints_delete": {
-					WaypointsDelete.Builder builder = WaypointsDelete.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setWaypointsDelete(builder.build());
-					break;
-				}
-				case "waypoints_entity_death_cancel": {
-					WaypointsEntityDeathCancel.Builder builder = WaypointsEntityDeathCancel.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setWaypointsEntityDeathCancel(builder.build());
-					break;
-				}
-				case "battle_map_observation": {
-					BattleMapObservation.Builder builder = BattleMapObservation.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setBattleMapObservation(builder.build());
-					break;
-				}
-				case "resync_req": {
-					ResyncRequest.Builder builder = ResyncRequest.newBuilder();
-					mergeJson(builder, normalizeOutboundBody(body));
-					envelope.setResyncRequest(builder.build());
-					break;
-				}
-				default:
-					throw new IllegalArgumentException("Unsupported protobuf packet type: " + type);
+				case "handshake" -> envelope.setPlayerHandshakeRequest(buildMessage(
+						PlayerHandshakeRequest.newBuilder(),
+						normalizeOutboundBody(body)
+				).build());
+				case "players_update" -> envelope.setPlayerReportBundle(buildBundle(body, "playersReplace", normalizeReplaceBody(body, "players")));
+				case "players_patch" -> envelope.setPlayerReportBundle(buildBundle(body, "playersPatch", normalizePatchScopeBody(body)));
+				case "entities_update" -> envelope.setPlayerReportBundle(buildBundle(body, "entitiesReplace", normalizeReplaceBody(body, "entities")));
+				case "entities_patch" -> envelope.setPlayerReportBundle(buildBundle(body, "entitiesPatch", normalizePatchScopeBody(body)));
+				case "waypoints_update" -> envelope.setPlayerReportBundle(buildBundle(body, "waypointsReplace", normalizeReplaceBody(body, "waypoints")));
+				case "waypoints_patch" -> envelope.setPlayerReportBundle(buildBundle(body, "waypointsPatch", normalizePatchScopeBody(body)));
+				case "tab_players_update" -> envelope.setPlayerReportBundle(buildBundle(body, "tabPlayersReplace", normalizeReplaceBody(body, "tabPlayers")));
+				case "tab_players_patch" -> envelope.setPlayerReportBundle(buildBundle(body, "tabPlayersPatch", normalizePatchScopeBody(body)));
+				case "state_keepalive" -> envelope.setPlayerReportBundle(buildBundle(body, "stateKeepalive", normalizeNestedBundleBody(body)));
+				case "source_state_clear" -> envelope.setPlayerReportBundle(buildBundle(body, "sourceStateClear", normalizeNestedBundleBody(body)));
+				case "waypoints_delete" -> envelope.setPlayerReportBundle(buildBundle(body, "waypointsDelete", normalizeNestedBundleBody(body)));
+				case "waypoints_entity_death_cancel" -> envelope.setPlayerReportBundle(buildBundle(body, "waypointsEntityDeathCancel", normalizeNestedBundleBody(body)));
+				case "battle_map_observation" -> envelope.setPlayerReportBundle(buildBundle(body, "battleMapObservation", normalizeNestedBundleBody(body)));
+				case "resync_req" -> envelope.setResyncRequest(buildMessage(
+						ResyncRequest.newBuilder(),
+						normalizeOutboundBody(body)
+				).build());
+				default -> throw new IllegalArgumentException("Unsupported protobuf packet type: " + type);
 			}
 
 			return envelope.build().toByteArray();
@@ -139,8 +81,6 @@ public final class ProtobufMessageCodec implements MessageCodec {
 				case DIGEST -> normalizeDigestInbound(envelope.getDigest(), packetTypeName);
 				case REFRESH_REQUEST -> withType(packetTypeName, messageToMap(envelope.getRefreshRequest()));
 				case REPORT_RATE_HINT -> withType(packetTypeName, messageToMap(envelope.getReportRateHint()));
-				case WAYPOINTS_UPDATE -> withType(packetTypeName, messageToMap(envelope.getWaypointsUpdate()));
-				case WAYPOINTS_DELETE -> withType(packetTypeName, messageToMap(envelope.getWaypointsDelete()));
 				default -> throw new IllegalArgumentException("Unsupported protobuf payload case: " + envelope.getPayloadCase());
 			};
 
@@ -148,6 +88,21 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		} catch (Exception e) {
 			throw new IllegalArgumentException("Failed to decode protobuf payload", e);
 		}
+	}
+
+	private <B extends Message.Builder> B buildMessage(B builder, Map<String, Object> payload) throws Exception {
+		mergeJson(builder, payload);
+		return builder;
+	}
+
+	private PlayerReportBundle buildBundle(
+			Map<String, Object> body,
+			String bundleField,
+			Map<String, Object> nestedPayload
+	) throws Exception {
+		PlayerReportBundle.Builder builder = PlayerReportBundle.newBuilder();
+		mergeJson(builder, wrapBundleBody(body, bundleField, nestedPayload));
+		return builder.build();
 	}
 
 	private void mergeJson(Message.Builder builder, Map<String, Object> payload) throws Exception {
@@ -175,8 +130,6 @@ public final class ProtobufMessageCodec implements MessageCodec {
 			case DIGEST -> "digest";
 			case REFRESH_REQUEST -> "refresh_req";
 			case REPORT_RATE_HINT -> "report_rate_hint";
-			case WAYPOINTS_UPDATE -> "waypoints_update";
-			case WAYPOINTS_DELETE -> "waypoints_delete";
 			default -> payloadCase.name().toLowerCase();
 		};
 	}
@@ -238,6 +191,15 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		payload.put(scopeKey, nextScope);
 	}
 
+	private String readPacketType(Map<String, Object> body) {
+		Object rawType = body.get("type");
+		String type = rawType == null ? "" : String.valueOf(rawType).trim();
+		if (type.isEmpty()) {
+			throw new IllegalArgumentException("packet type is required");
+		}
+		return type;
+	}
+
 	private Map<String, Object> normalizeOutboundBody(Map<String, Object> body) {
 		Map<String, Object> normalized = new LinkedHashMap<>();
 		for (Map.Entry<String, Object> entry : body.entrySet()) {
@@ -250,33 +212,25 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		return normalized;
 	}
 
-	@SuppressWarnings("unchecked")
-	private Object normalizeOutboundValue(Object value) {
-		if (value instanceof byte[] bytes) {
-			String canonical = UuidBinaryCodec.toCanonicalString(bytes);
-			return canonical != null ? canonical : bytes;
+	private Map<String, Object> normalizeNestedBundleBody(Map<String, Object> body) {
+		Map<String, Object> normalized = normalizeOutboundBody(body);
+		normalized.remove("submitPlayerId");
+		return normalized;
+	}
+
+	private Map<String, Object> normalizeReplaceBody(Map<String, Object> body, String scopeKey) {
+		Map<String, Object> normalized = new LinkedHashMap<>();
+		Map<String, Object> outbound = normalizeNestedBundleBody(body);
+		Object scopeValue = outbound.get(scopeKey);
+		if (scopeValue != null) {
+			normalized.put(scopeKey, scopeValue);
 		}
-		if (value instanceof Map<?, ?> map) {
-			Map<String, Object> normalized = new LinkedHashMap<>();
-			for (Map.Entry<?, ?> entry : map.entrySet()) {
-				String key = String.valueOf(entry.getKey());
-				normalized.put(key, normalizeOutboundValue(entry.getValue()));
-			}
-			return normalized;
-		}
-		if (value instanceof List<?> list) {
-			List<Object> normalized = new ArrayList<>(list.size());
-			for (Object item : list) {
-				normalized.add(normalizeOutboundValue(item));
-			}
-			return normalized;
-		}
-		return value;
+		return normalized;
 	}
 
 	@SuppressWarnings("unchecked")
-	private Map<String, Object> normalizePlayerPatchBody(Map<String, Object> body) {
-		Map<String, Object> normalized = normalizeOutboundBody(body);
+	private Map<String, Object> normalizePatchScopeBody(Map<String, Object> body) {
+		Map<String, Object> normalized = normalizeNestedBundleBody(body);
 		Object rawUpsert = normalized.get("upsert");
 		if (rawUpsert instanceof Map<?, ?> upsertMap) {
 			List<Map<String, Object>> upsertList = new ArrayList<>();
@@ -293,11 +247,40 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		return normalized;
 	}
 
-	private Map<String, Object> normalizeEntityPatchBody(Map<String, Object> body) {
-		return normalizePlayerPatchBody(body);
+	private Map<String, Object> wrapBundleBody(
+			Map<String, Object> body,
+			String bundleField,
+			Map<String, Object> nestedPayload
+	) {
+		Map<String, Object> wrapped = new LinkedHashMap<>();
+		Object submitPlayerId = normalizeOutboundValue(body.get("submitPlayerId"));
+		if (submitPlayerId != null) {
+			wrapped.put("submitPlayerId", submitPlayerId);
+		}
+		wrapped.put(bundleField, nestedPayload);
+		return wrapped;
 	}
 
-	private Map<String, Object> normalizeTabPlayersPatchBody(Map<String, Object> body) {
-		return normalizePlayerPatchBody(body);
+	@SuppressWarnings("unchecked")
+	private Object normalizeOutboundValue(Object value) {
+		if (value instanceof byte[] bytes) {
+			String canonical = UuidBinaryCodec.toCanonicalString(bytes);
+			return canonical != null ? canonical : bytes;
+		}
+		if (value instanceof Map<?, ?> map) {
+			Map<String, Object> normalized = new LinkedHashMap<>();
+			for (Map.Entry<?, ?> entry : map.entrySet()) {
+				normalized.put(String.valueOf(entry.getKey()), normalizeOutboundValue(entry.getValue()));
+			}
+			return normalized;
+		}
+		if (value instanceof List<?> list) {
+			List<Object> normalized = new ArrayList<>(list.size());
+			for (Object item : list) {
+				normalized.add(normalizeOutboundValue(item));
+			}
+			return normalized;
+		}
+		return value;
 	}
 }
