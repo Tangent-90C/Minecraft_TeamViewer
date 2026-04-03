@@ -17,6 +17,7 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportListener;
 import fun.prof_chen.teamviewer.main_code.network.capture.WebSocketCaptureWriter;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MessageCodec;
+import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolVersionUtil;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolPackets;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtobufMessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.UuidBinaryCodec;
@@ -1045,17 +1046,6 @@ public class NetworkManager {
 				return;
 			}
 
-			if ("battle_chunks_patch".equals(envelope.type)) {
-				ProtocolPackets.PatchInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.PatchInboundPacket.class);
-				if (packet != null && packet.battleChunks != null) {
-					JsonObject payload = new JsonObject();
-					payload.add("battleChunks", createObjectNode(packet.battleChunks));
-					applyBattleChunkPatch(payload.getAsJsonObject("battleChunks"));
-				}
-				return;
-			}
-
 		} catch (Exception e) {
 			LOGGER.error(
 				"TeamViewRelay Network - Error processing complete message: {}, bytes={}",
@@ -2041,53 +2031,7 @@ public class NetworkManager {
 	}
 
 	private boolean protocolAtLeast(String current, String minimum) {
-		return parseProtocolVersion(current) >= parseProtocolVersion(minimum);
-	}
-
-	private long parseProtocolVersion(String version) {
-		if (version == null || version.isBlank()) {
-			return 0L;
-		}
-
-		String normalized = version.trim();
-		int suffixIndex = normalized.indexOf('-');
-		if (suffixIndex >= 0) {
-			normalized = normalized.substring(0, suffixIndex);
-		}
-
-		String[] parts = normalized.split("\\.");
-		long major = parseProtocolVersionPart(parts, 0);
-		long minor = parseProtocolVersionPart(parts, 1);
-		long patch = parseProtocolVersionPart(parts, 2);
-		return major * 1_000_000L + minor * 1_000L + patch;
-	}
-
-	private long parseProtocolVersionPart(String[] parts, int index) {
-		if (parts == null || index < 0 || index >= parts.length) {
-			return 0L;
-		}
-		String text = parts[index] == null ? "" : parts[index].trim();
-		if (text.isEmpty()) {
-			return 0L;
-		}
-
-		StringBuilder digits = new StringBuilder();
-		for (int i = 0; i < text.length(); i++) {
-			char ch = text.charAt(i);
-			if (Character.isDigit(ch)) {
-				digits.append(ch);
-			} else {
-				break;
-			}
-		}
-		if (digits.length() == 0) {
-			return 0L;
-		}
-		try {
-			return Long.parseLong(digits.toString());
-		} catch (NumberFormatException ignored) {
-			return 0L;
-		}
+		return ProtocolVersionUtil.atLeast(current, minimum);
 	}
 
 	private String readProtocolVersionFromHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {

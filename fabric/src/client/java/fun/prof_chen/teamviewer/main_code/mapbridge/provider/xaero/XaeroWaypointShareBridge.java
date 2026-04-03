@@ -1100,12 +1100,13 @@ public final class XaeroWaypointShareBridge {
 		}
 
 		String sourceType = sharedWaypoint.sourceType();
-		if (sourceType != null && sourceType.equalsIgnoreCase("admin_tactical")) {
+		if (sourceType != null && (sourceType.equalsIgnoreCase("web_map_tactical") || sourceType.equalsIgnoreCase("admin_tactical"))) {
 			return true;
 		}
 
 		String waypointKind = sharedWaypoint.waypointKind();
-		return waypointKind != null && waypointKind.equalsIgnoreCase("admin_tactical");
+		return waypointKind != null
+			&& (waypointKind.equalsIgnoreCase("web_map_tactical") || waypointKind.equalsIgnoreCase("admin_tactical"));
 	}
 
 	private static String compactSharedWaypointName(SharedWaypointInfo sharedWaypoint) {

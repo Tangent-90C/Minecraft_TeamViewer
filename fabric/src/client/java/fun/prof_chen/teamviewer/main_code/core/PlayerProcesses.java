@@ -1286,12 +1286,13 @@ public class PlayerProcesses implements ClientModInitializer {
 		}
 
 		String sourceType = waypoint.sourceType();
-		if (sourceType != null && sourceType.equalsIgnoreCase("admin_tactical")) {
+		if (sourceType != null && (sourceType.equalsIgnoreCase("web_map_tactical") || sourceType.equalsIgnoreCase("admin_tactical"))) {
 			return true;
 		}
 
 		String waypointKind = waypoint.waypointKind();
-		return waypointKind != null && waypointKind.equalsIgnoreCase("admin_tactical");
+		return waypointKind != null
+			&& (waypointKind.equalsIgnoreCase("web_map_tactical") || waypointKind.equalsIgnoreCase("admin_tactical"));
 	}
 
 	private void renderTampermonkeyWaypointStyle(
