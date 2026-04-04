@@ -79,27 +79,26 @@ public interface RefreshRequestOrBuilder extends
       getEntitiesBytes(int index);
 
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @return A list containing the battleChunks.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
-  java.util.List<java.lang.String>
+  java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> 
       getBattleChunksList();
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @return The count of battleChunks.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+   */
+  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef getBattleChunks(int index);
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
   int getBattleChunksCount();
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @param index The index of the element to return.
-   * @return The battleChunks at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
-  java.lang.String getBattleChunks(int index);
+  java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+      getBattleChunksOrBuilderList();
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @param index The index of the value to return.
-   * @return The bytes of the battleChunks at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
-  com.google.protobuf.ByteString
-      getBattleChunksBytes(int index);
+  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder getBattleChunksOrBuilder(
+      int index);
 }

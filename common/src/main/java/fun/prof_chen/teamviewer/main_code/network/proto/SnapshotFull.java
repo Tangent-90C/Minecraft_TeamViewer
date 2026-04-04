@@ -28,6 +28,7 @@ private static final long serialVersionUID = 0L;
     super(builder);
   }
   private SnapshotFull() {
+    battleChunks_ = java.util.Collections.emptyList();
     roomCode_ = "";
     connections8_ =
         com.google.protobuf.LazyStringArrayList.emptyList();
@@ -54,8 +55,6 @@ private static final long serialVersionUID = 0L;
         return internalGetEntities();
       case 3:
         return internalGetWaypoints();
-      case 4:
-        return internalGetBattleChunks();
       case 5:
         return internalGetPlayerMarks();
       default:
@@ -310,82 +309,44 @@ fun.prof_chen.teamviewer.main_code.network.proto.WaypointData defaultValue) {
   }
 
   public static final int BATTLE_CHUNKS_FIELD_NUMBER = 4;
-  private static final class BattleChunksDefaultEntryHolder {
-    static final com.google.protobuf.MapEntry<
-        java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> defaultEntry =
-            com.google.protobuf.MapEntry
-            .<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>newDefaultInstance(
-                fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_SnapshotFull_BattleChunksEntry_descriptor, 
-                com.google.protobuf.WireFormat.FieldType.STRING,
-                "",
-                com.google.protobuf.WireFormat.FieldType.MESSAGE,
-                fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.getDefaultInstance());
-  }
   @SuppressWarnings("serial")
-  private com.google.protobuf.MapField<
-      java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> battleChunks_;
-  private com.google.protobuf.MapField<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>
-  internalGetBattleChunks() {
-    if (battleChunks_ == null) {
-      return com.google.protobuf.MapField.emptyMapField(
-          BattleChunksDefaultEntryHolder.defaultEntry);
-    }
+  private java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry> battleChunks_;
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+   */
+  @java.lang.Override
+  public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry> getBattleChunksList() {
     return battleChunks_;
   }
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+   */
+  @java.lang.Override
+  public java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder> 
+      getBattleChunksOrBuilderList() {
+    return battleChunks_;
+  }
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+   */
+  @java.lang.Override
   public int getBattleChunksCount() {
-    return internalGetBattleChunks().getMap().size();
+    return battleChunks_.size();
   }
   /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
    */
   @java.lang.Override
-  public boolean containsBattleChunks(
-      java.lang.String key) {
-    if (key == null) { throw new NullPointerException("map key"); }
-    return internalGetBattleChunks().getMap().containsKey(key);
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry getBattleChunks(int index) {
+    return battleChunks_.get(index);
   }
   /**
-   * Use {@link #getBattleChunksMap()} instead.
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
    */
   @java.lang.Override
-  @java.lang.Deprecated
-  public java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> getBattleChunks() {
-    return getBattleChunksMap();
-  }
-  /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-   */
-  @java.lang.Override
-  public java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> getBattleChunksMap() {
-    return internalGetBattleChunks().getMap();
-  }
-  /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-   */
-  @java.lang.Override
-  public /* nullable */
-fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getBattleChunksOrDefault(
-      java.lang.String key,
-      /* nullable */
-fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData defaultValue) {
-    if (key == null) { throw new NullPointerException("map key"); }
-    java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> map =
-        internalGetBattleChunks().getMap();
-    return map.containsKey(key) ? map.get(key) : defaultValue;
-  }
-  /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-   */
-  @java.lang.Override
-  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getBattleChunksOrThrow(
-      java.lang.String key) {
-    if (key == null) { throw new NullPointerException("map key"); }
-    java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> map =
-        internalGetBattleChunks().getMap();
-    if (!map.containsKey(key)) {
-      throw new java.lang.IllegalArgumentException();
-    }
-    return map.get(key);
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder getBattleChunksOrBuilder(
+      int index) {
+    return battleChunks_.get(index);
   }
 
   public static final int PLAYER_MARKS_FIELD_NUMBER = 5;
@@ -651,12 +612,9 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
         internalGetWaypoints(),
         WaypointsDefaultEntryHolder.defaultEntry,
         3);
-    com.google.protobuf.GeneratedMessage
-      .serializeStringMapTo(
-        output,
-        internalGetBattleChunks(),
-        BattleChunksDefaultEntryHolder.defaultEntry,
-        4);
+    for (int i = 0; i < battleChunks_.size(); i++) {
+      output.writeMessage(4, battleChunks_.get(i));
+    }
     com.google.protobuf.GeneratedMessage
       .serializeStringMapTo(
         output,
@@ -717,16 +675,15 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
       size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(3, waypoints__);
     }
-    for (java.util.Map.Entry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> entry
-         : internalGetBattleChunks().getMap().entrySet()) {
-      com.google.protobuf.MapEntry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>
-      battleChunks__ = BattleChunksDefaultEntryHolder.defaultEntry.newBuilderForType()
-          .setKey(entry.getKey())
-          .setValue(entry.getValue())
-          .buildPartial();
-      size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(4, battleChunks__);
-    }
+
+        {
+          final int count = battleChunks_.size();
+          for (int i = 0; i < count; i++) {
+            size += com.google.protobuf.CodedOutputStream
+              .computeMessageSizeNoTag(battleChunks_.get(i));
+          }
+          size += 1 * count;
+        }
     for (java.util.Map.Entry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark> entry
          : internalGetPlayerMarks().getMap().entrySet()) {
       com.google.protobuf.MapEntry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark>
@@ -781,8 +738,8 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
         other.internalGetEntities())) return false;
     if (!internalGetWaypoints().equals(
         other.internalGetWaypoints())) return false;
-    if (!internalGetBattleChunks().equals(
-        other.internalGetBattleChunks())) return false;
+    if (!getBattleChunksList()
+        .equals(other.getBattleChunksList())) return false;
     if (!internalGetPlayerMarks().equals(
         other.internalGetPlayerMarks())) return false;
     if (hasTabState() != other.hasTabState()) return false;
@@ -831,9 +788,9 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
       hash = (37 * hash) + WAYPOINTS_FIELD_NUMBER;
       hash = (53 * hash) + internalGetWaypoints().hashCode();
     }
-    if (!internalGetBattleChunks().getMap().isEmpty()) {
+    if (getBattleChunksCount() > 0) {
       hash = (37 * hash) + BATTLE_CHUNKS_FIELD_NUMBER;
-      hash = (53 * hash) + internalGetBattleChunks().hashCode();
+      hash = (53 * hash) + getBattleChunksList().hashCode();
     }
     if (!internalGetPlayerMarks().getMap().isEmpty()) {
       hash = (37 * hash) + PLAYER_MARKS_FIELD_NUMBER;
@@ -979,8 +936,6 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
           return internalGetEntities();
         case 3:
           return internalGetWaypoints();
-        case 4:
-          return internalGetBattleChunks();
         case 5:
           return internalGetPlayerMarks();
         default:
@@ -998,8 +953,6 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
           return internalGetMutableEntities();
         case 3:
           return internalGetMutableWaypoints();
-        case 4:
-          return internalGetMutableBattleChunks();
         case 5:
           return internalGetMutablePlayerMarks();
         default:
@@ -1028,6 +981,7 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
     private void maybeForceBuilderInitialization() {
       if (com.google.protobuf.GeneratedMessage
               .alwaysUseFieldBuilders) {
+        internalGetBattleChunksFieldBuilder();
         internalGetTabStateFieldBuilder();
       }
     }
@@ -1038,7 +992,13 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
       internalGetMutablePlayers().clear();
       internalGetMutableEntities().clear();
       internalGetMutableWaypoints().clear();
-      internalGetMutableBattleChunks().clear();
+      if (battleChunksBuilder_ == null) {
+        battleChunks_ = java.util.Collections.emptyList();
+      } else {
+        battleChunks_ = null;
+        battleChunksBuilder_.clear();
+      }
+      bitField0_ = (bitField0_ & ~0x00000008);
       internalGetMutablePlayerMarks().clear();
       tabState_ = null;
       if (tabStateBuilder_ != null) {
@@ -1076,9 +1036,22 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull buildPartial() {
       fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull result = new fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull(this);
+      buildPartialRepeatedFields(result);
       if (bitField0_ != 0) { buildPartial0(result); }
       onBuilt();
       return result;
+    }
+
+    private void buildPartialRepeatedFields(fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull result) {
+      if (battleChunksBuilder_ == null) {
+        if (((bitField0_ & 0x00000008) != 0)) {
+          battleChunks_ = java.util.Collections.unmodifiableList(battleChunks_);
+          bitField0_ = (bitField0_ & ~0x00000008);
+        }
+        result.battleChunks_ = battleChunks_;
+      } else {
+        result.battleChunks_ = battleChunksBuilder_.build();
+      }
     }
 
     private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull result) {
@@ -1091,9 +1064,6 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
       }
       if (((from_bitField0_ & 0x00000004) != 0)) {
         result.waypoints_ = internalGetWaypoints().build(WaypointsDefaultEntryHolder.defaultEntry);
-      }
-      if (((from_bitField0_ & 0x00000008) != 0)) {
-        result.battleChunks_ = internalGetBattleChunks().build(BattleChunksDefaultEntryHolder.defaultEntry);
       }
       if (((from_bitField0_ & 0x00000010) != 0)) {
         result.playerMarks_ = internalGetPlayerMarks().build(PlayerMarksDefaultEntryHolder.defaultEntry);
@@ -1145,9 +1115,32 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
       internalGetMutableWaypoints().mergeFrom(
           other.internalGetWaypoints());
       bitField0_ |= 0x00000004;
-      internalGetMutableBattleChunks().mergeFrom(
-          other.internalGetBattleChunks());
-      bitField0_ |= 0x00000008;
+      if (battleChunksBuilder_ == null) {
+        if (!other.battleChunks_.isEmpty()) {
+          if (battleChunks_.isEmpty()) {
+            battleChunks_ = other.battleChunks_;
+            bitField0_ = (bitField0_ & ~0x00000008);
+          } else {
+            ensureBattleChunksIsMutable();
+            battleChunks_.addAll(other.battleChunks_);
+          }
+          onChanged();
+        }
+      } else {
+        if (!other.battleChunks_.isEmpty()) {
+          if (battleChunksBuilder_.isEmpty()) {
+            battleChunksBuilder_.dispose();
+            battleChunksBuilder_ = null;
+            battleChunks_ = other.battleChunks_;
+            bitField0_ = (bitField0_ & ~0x00000008);
+            battleChunksBuilder_ = 
+              com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                 internalGetBattleChunksFieldBuilder() : null;
+          } else {
+            battleChunksBuilder_.addAllMessages(other.battleChunks_);
+          }
+        }
+      }
       internalGetMutablePlayerMarks().mergeFrom(
           other.internalGetPlayerMarks());
       bitField0_ |= 0x00000010;
@@ -1229,12 +1222,16 @@ fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark defaultValue) {
               break;
             } // case 26
             case 34: {
-              com.google.protobuf.MapEntry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>
-              battleChunks__ = input.readMessage(
-                  BattleChunksDefaultEntryHolder.defaultEntry.getParserForType(), extensionRegistry);
-              internalGetMutableBattleChunks().ensureBuilderMap().put(
-                  battleChunks__.getKey(), battleChunks__.getValue());
-              bitField0_ |= 0x00000008;
+              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry m =
+                  input.readMessage(
+                      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.parser(),
+                      extensionRegistry);
+              if (battleChunksBuilder_ == null) {
+                ensureBattleChunksIsMutable();
+                battleChunks_.add(m);
+              } else {
+                battleChunksBuilder_.addMessage(m);
+              }
               break;
             } // case 34
             case 42: {
@@ -1755,159 +1752,244 @@ fun.prof_chen.teamviewer.main_code.network.proto.WaypointData defaultValue) {
       return (fun.prof_chen.teamviewer.main_code.network.proto.WaypointData.Builder) entry;
     }
 
-    private static final class BattleChunksConverter implements com.google.protobuf.MapFieldBuilder.Converter<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> {
-      @java.lang.Override
-      public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData build(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder val) {
-        if (val instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData) { return (fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData) val; }
-        return ((fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder) val).build();
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.MapEntry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> defaultEntry() {
-        return BattleChunksDefaultEntryHolder.defaultEntry;
-      }
-    };
-    private static final BattleChunksConverter battleChunksConverter = new BattleChunksConverter();
-
-    private com.google.protobuf.MapFieldBuilder<
-        java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder> battleChunks_;
-    private com.google.protobuf.MapFieldBuilder<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder>
-        internalGetBattleChunks() {
-      if (battleChunks_ == null) {
-        return new com.google.protobuf.MapFieldBuilder<>(battleChunksConverter);
-      }
-      return battleChunks_;
+    private java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry> battleChunks_ =
+      java.util.Collections.emptyList();
+    private void ensureBattleChunksIsMutable() {
+      if (!((bitField0_ & 0x00000008) != 0)) {
+        battleChunks_ = new java.util.ArrayList<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry>(battleChunks_);
+        bitField0_ |= 0x00000008;
+       }
     }
-    private com.google.protobuf.MapFieldBuilder<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder>
-        internalGetMutableBattleChunks() {
-      if (battleChunks_ == null) {
-        battleChunks_ = new com.google.protobuf.MapFieldBuilder<>(battleChunksConverter);
+
+    private com.google.protobuf.RepeatedFieldBuilder<
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder> battleChunksBuilder_;
+
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry> getBattleChunksList() {
+      if (battleChunksBuilder_ == null) {
+        return java.util.Collections.unmodifiableList(battleChunks_);
+      } else {
+        return battleChunksBuilder_.getMessageList();
       }
-      bitField0_ |= 0x00000008;
-      onChanged();
-      return battleChunks_;
     }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
     public int getBattleChunksCount() {
-      return internalGetBattleChunks().ensureBuilderMap().size();
-    }
-    /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-     */
-    @java.lang.Override
-    public boolean containsBattleChunks(
-        java.lang.String key) {
-      if (key == null) { throw new NullPointerException("map key"); }
-      return internalGetBattleChunks().ensureBuilderMap().containsKey(key);
-    }
-    /**
-     * Use {@link #getBattleChunksMap()} instead.
-     */
-    @java.lang.Override
-    @java.lang.Deprecated
-    public java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> getBattleChunks() {
-      return getBattleChunksMap();
-    }
-    /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-     */
-    @java.lang.Override
-    public java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> getBattleChunksMap() {
-      return internalGetBattleChunks().getImmutableMap();
-    }
-    /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-     */
-    @java.lang.Override
-    public /* nullable */
-fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getBattleChunksOrDefault(
-        java.lang.String key,
-        /* nullable */
-fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData defaultValue) {
-      if (key == null) { throw new NullPointerException("map key"); }
-      java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder> map = internalGetMutableBattleChunks().ensureBuilderMap();
-      return map.containsKey(key) ? battleChunksConverter.build(map.get(key)) : defaultValue;
-    }
-    /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-     */
-    @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getBattleChunksOrThrow(
-        java.lang.String key) {
-      if (key == null) { throw new NullPointerException("map key"); }
-      java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder> map = internalGetMutableBattleChunks().ensureBuilderMap();
-      if (!map.containsKey(key)) {
-        throw new java.lang.IllegalArgumentException();
+      if (battleChunksBuilder_ == null) {
+        return battleChunks_.size();
+      } else {
+        return battleChunksBuilder_.getCount();
       }
-      return battleChunksConverter.build(map.get(key));
-    }
-    public Builder clearBattleChunks() {
-      bitField0_ = (bitField0_ & ~0x00000008);
-      internalGetMutableBattleChunks().clear();
-      return this;
     }
     /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
      */
-    public Builder removeBattleChunks(
-        java.lang.String key) {
-      if (key == null) { throw new NullPointerException("map key"); }
-      internalGetMutableBattleChunks().ensureBuilderMap()
-          .remove(key);
-      return this;
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry getBattleChunks(int index) {
+      if (battleChunksBuilder_ == null) {
+        return battleChunks_.get(index);
+      } else {
+        return battleChunksBuilder_.getMessage(index);
+      }
     }
     /**
-     * Use alternate mutation accessors instead.
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
      */
-    @java.lang.Deprecated
-    public java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>
-        getMutableBattleChunks() {
-      bitField0_ |= 0x00000008;
-      return internalGetMutableBattleChunks().ensureMessageMap();
-    }
-    /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-     */
-    public Builder putBattleChunks(
-        java.lang.String key,
-        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData value) {
-      if (key == null) { throw new NullPointerException("map key"); }
-      if (value == null) { throw new NullPointerException("map value"); }
-      internalGetMutableBattleChunks().ensureBuilderMap()
-          .put(key, value);
-      bitField0_ |= 0x00000008;
-      return this;
-    }
-    /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-     */
-    public Builder putAllBattleChunks(
-        java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> values) {
-      for (java.util.Map.Entry<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData> e : values.entrySet()) {
-        if (e.getKey() == null || e.getValue() == null) {
+    public Builder setBattleChunks(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry value) {
+      if (battleChunksBuilder_ == null) {
+        if (value == null) {
           throw new NullPointerException();
         }
+        ensureBattleChunksIsMutable();
+        battleChunks_.set(index, value);
+        onChanged();
+      } else {
+        battleChunksBuilder_.setMessage(index, value);
       }
-      internalGetMutableBattleChunks().ensureBuilderMap()
-          .putAll(values);
-      bitField0_ |= 0x00000008;
       return this;
     }
     /**
-     * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
      */
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder putBattleChunksBuilderIfAbsent(
-        java.lang.String key) {
-      java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder> builderMap = internalGetMutableBattleChunks().ensureBuilderMap();
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder entry = builderMap.get(key);
-      if (entry == null) {
-        entry = fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.newBuilder();
-        builderMap.put(key, entry);
+    public Builder setBattleChunks(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder builderForValue) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.set(index, builderForValue.build());
+        onChanged();
+      } else {
+        battleChunksBuilder_.setMessage(index, builderForValue.build());
       }
-      if (entry instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData) {
-        entry = ((fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData) entry).toBuilder();
-        builderMap.put(key, entry);
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry value) {
+      if (battleChunksBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(value);
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(value);
       }
-      return (fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder) entry;
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry value) {
+      if (battleChunksBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(index, value);
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(index, value);
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder builderForValue) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(builderForValue.build());
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder builderForValue) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(index, builderForValue.build());
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder addAllBattleChunks(
+        java.lang.Iterable<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry> values) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        com.google.protobuf.AbstractMessageLite.Builder.addAll(
+            values, battleChunks_);
+        onChanged();
+      } else {
+        battleChunksBuilder_.addAllMessages(values);
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder clearBattleChunks() {
+      if (battleChunksBuilder_ == null) {
+        battleChunks_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000008);
+        onChanged();
+      } else {
+        battleChunksBuilder_.clear();
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public Builder removeBattleChunks(int index) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.remove(index);
+        onChanged();
+      } else {
+        battleChunksBuilder_.remove(index);
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder getBattleChunksBuilder(
+        int index) {
+      return internalGetBattleChunksFieldBuilder().getBuilder(index);
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder getBattleChunksOrBuilder(
+        int index) {
+      if (battleChunksBuilder_ == null) {
+        return battleChunks_.get(index);  } else {
+        return battleChunksBuilder_.getMessageOrBuilder(index);
+      }
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder> 
+         getBattleChunksOrBuilderList() {
+      if (battleChunksBuilder_ != null) {
+        return battleChunksBuilder_.getMessageOrBuilderList();
+      } else {
+        return java.util.Collections.unmodifiableList(battleChunks_);
+      }
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder addBattleChunksBuilder() {
+      return internalGetBattleChunksFieldBuilder().addBuilder(
+          fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.getDefaultInstance());
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder addBattleChunksBuilder(
+        int index) {
+      return internalGetBattleChunksFieldBuilder().addBuilder(
+          index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.getDefaultInstance());
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+     */
+    public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder> 
+         getBattleChunksBuilderList() {
+      return internalGetBattleChunksFieldBuilder().getBuilderList();
+    }
+    private com.google.protobuf.RepeatedFieldBuilder<
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder> 
+        internalGetBattleChunksFieldBuilder() {
+      if (battleChunksBuilder_ == null) {
+        battleChunksBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder>(
+                battleChunks_,
+                ((bitField0_ & 0x00000008) != 0),
+                getParentForChildren(),
+                isClean());
+        battleChunks_ = null;
+      }
+      return battleChunksBuilder_;
     }
 
     private static final class PlayerMarksConverter implements com.google.protobuf.MapFieldBuilder.Converter<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.PlayerMarkOrBuilder, fun.prof_chen.teamviewer.main_code.network.proto.PlayerMark> {

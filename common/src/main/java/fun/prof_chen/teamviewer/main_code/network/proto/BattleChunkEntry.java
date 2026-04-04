@@ -6,13 +6,13 @@
 package fun.prof_chen.teamviewer.main_code.network.proto;
 
 /**
- * Protobuf type {@code teamviewer.v1.BattleChunkUpsert}
+ * Protobuf type {@code teamviewer.v1.BattleChunkEntry}
  */
 @com.google.protobuf.Generated
-public final class BattleChunkUpsert extends
+public final class BattleChunkEntry extends
     com.google.protobuf.GeneratedMessage implements
-    // @@protoc_insertion_point(message_implements:teamviewer.v1.BattleChunkUpsert)
-    BattleChunkUpsertOrBuilder {
+    // @@protoc_insertion_point(message_implements:teamviewer.v1.BattleChunkEntry)
+    BattleChunkEntryOrBuilder {
 private static final long serialVersionUID = 0L;
   static {
     com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
@@ -21,31 +21,31 @@ private static final long serialVersionUID = 0L;
       /* minor= */ 34,
       /* patch= */ 1,
       /* suffix= */ "",
-      "BattleChunkUpsert");
+      "BattleChunkEntry");
   }
-  // Use BattleChunkUpsert.newBuilder() to construct.
-  private BattleChunkUpsert(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+  // Use BattleChunkEntry.newBuilder() to construct.
+  private BattleChunkEntry(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
     super(builder);
   }
-  private BattleChunkUpsert() {
+  private BattleChunkEntry() {
   }
 
   public static final com.google.protobuf.Descriptors.Descriptor
       getDescriptor() {
-    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkUpsert_descriptor;
+    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkEntry_descriptor;
   }
 
   @java.lang.Override
   public com.google.protobuf.Descriptors.Descriptor getDescriptorForType() {
-    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkUpsert_descriptor;
+    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkEntry_descriptor;
   }
 
   @java.lang.Override
   protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internalGetFieldAccessorTable() {
-    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkUpsert_fieldAccessorTable
+    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkEntry_fieldAccessorTable
         .ensureFieldAccessorsInitialized(
-            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.Builder.class);
+            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder.class);
   }
 
   private int bitField0_;
@@ -148,10 +148,10 @@ private static final long serialVersionUID = 0L;
     if (obj == this) {
      return true;
     }
-    if (!(obj instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert)) {
+    if (!(obj instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry)) {
       return super.equals(obj);
     }
-    fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert other = (fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert) obj;
+    fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry other = (fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry) obj;
 
     if (hasRef() != other.hasRef()) return false;
     if (hasRef()) {
@@ -187,44 +187,44 @@ private static final long serialVersionUID = 0L;
     return hash;
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       java.nio.ByteBuffer data,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       com.google.protobuf.ByteString data)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       com.google.protobuf.ByteString data,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(byte[] data)
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(byte[] data)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       byte[] data,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(java.io.InputStream input)
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(java.io.InputStream input)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseWithIOException(PARSER, input);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       java.io.InputStream input,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
@@ -232,26 +232,26 @@ private static final long serialVersionUID = 0L;
         .parseWithIOException(PARSER, input, extensionRegistry);
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseDelimitedFrom(java.io.InputStream input)
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseDelimitedFrom(java.io.InputStream input)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseDelimitedWithIOException(PARSER, input);
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseDelimitedFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseDelimitedFrom(
       java.io.InputStream input,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       com.google.protobuf.CodedInputStream input)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseWithIOException(PARSER, input);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry parseFrom(
       com.google.protobuf.CodedInputStream input,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
@@ -264,7 +264,7 @@ private static final long serialVersionUID = 0L;
   public static Builder newBuilder() {
     return DEFAULT_INSTANCE.toBuilder();
   }
-  public static Builder newBuilder(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert prototype) {
+  public static Builder newBuilder(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry prototype) {
     return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
   }
   @java.lang.Override
@@ -280,26 +280,26 @@ private static final long serialVersionUID = 0L;
     return builder;
   }
   /**
-   * Protobuf type {@code teamviewer.v1.BattleChunkUpsert}
+   * Protobuf type {@code teamviewer.v1.BattleChunkEntry}
    */
   public static final class Builder extends
       com.google.protobuf.GeneratedMessage.Builder<Builder> implements
-      // @@protoc_insertion_point(builder_implements:teamviewer.v1.BattleChunkUpsert)
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsertOrBuilder {
+      // @@protoc_insertion_point(builder_implements:teamviewer.v1.BattleChunkEntry)
+      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder {
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkUpsert_descriptor;
+      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkEntry_descriptor;
     }
 
     @java.lang.Override
     protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkUpsert_fieldAccessorTable
+      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkEntry_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
-              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.Builder.class);
+              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.Builder.class);
     }
 
-    // Construct using fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.newBuilder()
+    // Construct using fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.newBuilder()
     private Builder() {
       maybeForceBuilderInitialization();
     }
@@ -336,17 +336,17 @@ private static final long serialVersionUID = 0L;
     @java.lang.Override
     public com.google.protobuf.Descriptors.Descriptor
         getDescriptorForType() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkUpsert_descriptor;
+      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkEntry_descriptor;
     }
 
     @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert getDefaultInstanceForType() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.getDefaultInstance();
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry getDefaultInstanceForType() {
+      return fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.getDefaultInstance();
     }
 
     @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert build() {
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert result = buildPartial();
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry build() {
+      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry result = buildPartial();
       if (!result.isInitialized()) {
         throw newUninitializedMessageException(result);
       }
@@ -354,14 +354,14 @@ private static final long serialVersionUID = 0L;
     }
 
     @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert buildPartial() {
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert result = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert(this);
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry buildPartial() {
+      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry result = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry(this);
       if (bitField0_ != 0) { buildPartial0(result); }
       onBuilt();
       return result;
     }
 
-    private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert result) {
+    private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry result) {
       int from_bitField0_ = bitField0_;
       int to_bitField0_ = 0;
       if (((from_bitField0_ & 0x00000001) != 0)) {
@@ -381,16 +381,16 @@ private static final long serialVersionUID = 0L;
 
     @java.lang.Override
     public Builder mergeFrom(com.google.protobuf.Message other) {
-      if (other instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert) {
-        return mergeFrom((fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert)other);
+      if (other instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry) {
+        return mergeFrom((fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry)other);
       } else {
         super.mergeFrom(other);
         return this;
       }
     }
 
-    public Builder mergeFrom(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert other) {
-      if (other == fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert.getDefaultInstance()) return this;
+    public Builder mergeFrom(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry other) {
+      if (other == fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry.getDefaultInstance()) return this;
       if (other.hasRef()) {
         mergeRef(other.getRef());
       }
@@ -696,23 +696,23 @@ private static final long serialVersionUID = 0L;
       return dataBuilder_;
     }
 
-    // @@protoc_insertion_point(builder_scope:teamviewer.v1.BattleChunkUpsert)
+    // @@protoc_insertion_point(builder_scope:teamviewer.v1.BattleChunkEntry)
   }
 
-  // @@protoc_insertion_point(class_scope:teamviewer.v1.BattleChunkUpsert)
-  private static final fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert DEFAULT_INSTANCE;
+  // @@protoc_insertion_point(class_scope:teamviewer.v1.BattleChunkEntry)
+  private static final fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry DEFAULT_INSTANCE;
   static {
-    DEFAULT_INSTANCE = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert();
+    DEFAULT_INSTANCE = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry();
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert getDefaultInstance() {
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry getDefaultInstance() {
     return DEFAULT_INSTANCE;
   }
 
-  private static final com.google.protobuf.Parser<BattleChunkUpsert>
-      PARSER = new com.google.protobuf.AbstractParser<BattleChunkUpsert>() {
+  private static final com.google.protobuf.Parser<BattleChunkEntry>
+      PARSER = new com.google.protobuf.AbstractParser<BattleChunkEntry>() {
     @java.lang.Override
-    public BattleChunkUpsert parsePartialFrom(
+    public BattleChunkEntry parsePartialFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
@@ -731,17 +731,17 @@ private static final long serialVersionUID = 0L;
     }
   };
 
-  public static com.google.protobuf.Parser<BattleChunkUpsert> parser() {
+  public static com.google.protobuf.Parser<BattleChunkEntry> parser() {
     return PARSER;
   }
 
   @java.lang.Override
-  public com.google.protobuf.Parser<BattleChunkUpsert> getParserForType() {
+  public com.google.protobuf.Parser<BattleChunkEntry> getParserForType() {
     return PARSER;
   }
 
   @java.lang.Override
-  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert getDefaultInstanceForType() {
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry getDefaultInstanceForType() {
     return DEFAULT_INSTANCE;
   }
 

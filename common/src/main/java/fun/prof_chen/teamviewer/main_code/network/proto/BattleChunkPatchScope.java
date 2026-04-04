@@ -29,8 +29,7 @@ private static final long serialVersionUID = 0L;
   }
   private BattleChunkPatchScope() {
     upsert_ = java.util.Collections.emptyList();
-    delete_ =
-        com.google.protobuf.LazyStringArrayList.emptyList();
+    delete_ = java.util.Collections.emptyList();
   }
 
   public static final com.google.protobuf.Descriptors.Descriptor
@@ -94,39 +93,43 @@ private static final long serialVersionUID = 0L;
 
   public static final int DELETE_FIELD_NUMBER = 2;
   @SuppressWarnings("serial")
-  private com.google.protobuf.LazyStringArrayList delete_ =
-      com.google.protobuf.LazyStringArrayList.emptyList();
+  private java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> delete_;
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @return A list containing the delete.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
-  public com.google.protobuf.ProtocolStringList
-      getDeleteList() {
+  @java.lang.Override
+  public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> getDeleteList() {
     return delete_;
   }
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @return The count of delete.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
+  @java.lang.Override
+  public java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+      getDeleteOrBuilderList() {
+    return delete_;
+  }
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+   */
+  @java.lang.Override
   public int getDeleteCount() {
     return delete_.size();
   }
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @param index The index of the element to return.
-   * @return The delete at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
-  public java.lang.String getDelete(int index) {
+  @java.lang.Override
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef getDelete(int index) {
     return delete_.get(index);
   }
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @param index The index of the value to return.
-   * @return The bytes of the delete at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
-  public com.google.protobuf.ByteString
-      getDeleteBytes(int index) {
-    return delete_.getByteString(index);
+  @java.lang.Override
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder getDeleteOrBuilder(
+      int index) {
+    return delete_.get(index);
   }
 
   private byte memoizedIsInitialized = -1;
@@ -147,7 +150,7 @@ private static final long serialVersionUID = 0L;
       output.writeMessage(1, upsert_.get(i));
     }
     for (int i = 0; i < delete_.size(); i++) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 2, delete_.getRaw(i));
+      output.writeMessage(2, delete_.get(i));
     }
     getUnknownFields().writeTo(output);
   }
@@ -167,14 +170,15 @@ private static final long serialVersionUID = 0L;
           }
           size += 1 * count;
         }
-    {
-      int dataSize = 0;
-      for (int i = 0; i < delete_.size(); i++) {
-        dataSize += computeStringSizeNoTag(delete_.getRaw(i));
-      }
-      size += dataSize;
-      size += 1 * getDeleteList().size();
-    }
+
+        {
+          final int count = delete_.size();
+          for (int i = 0; i < count; i++) {
+            size += com.google.protobuf.CodedOutputStream
+              .computeMessageSizeNoTag(delete_.get(i));
+          }
+          size += 1 * count;
+        }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
     return size;
@@ -351,8 +355,13 @@ private static final long serialVersionUID = 0L;
         upsertBuilder_.clear();
       }
       bitField0_ = (bitField0_ & ~0x00000001);
-      delete_ =
-          com.google.protobuf.LazyStringArrayList.emptyList();
+      if (deleteBuilder_ == null) {
+        delete_ = java.util.Collections.emptyList();
+      } else {
+        delete_ = null;
+        deleteBuilder_.clear();
+      }
+      bitField0_ = (bitField0_ & ~0x00000002);
       return this;
     }
 
@@ -395,14 +404,19 @@ private static final long serialVersionUID = 0L;
       } else {
         result.upsert_ = upsertBuilder_.build();
       }
+      if (deleteBuilder_ == null) {
+        if (((bitField0_ & 0x00000002) != 0)) {
+          delete_ = java.util.Collections.unmodifiableList(delete_);
+          bitField0_ = (bitField0_ & ~0x00000002);
+        }
+        result.delete_ = delete_;
+      } else {
+        result.delete_ = deleteBuilder_.build();
+      }
     }
 
     private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkPatchScope result) {
       int from_bitField0_ = bitField0_;
-      if (((from_bitField0_ & 0x00000002) != 0)) {
-        delete_.makeImmutable();
-        result.delete_ = delete_;
-      }
     }
 
     @java.lang.Override
@@ -443,15 +457,31 @@ private static final long serialVersionUID = 0L;
           }
         }
       }
-      if (!other.delete_.isEmpty()) {
-        if (delete_.isEmpty()) {
-          delete_ = other.delete_;
-          bitField0_ |= 0x00000002;
-        } else {
-          ensureDeleteIsMutable();
-          delete_.addAll(other.delete_);
+      if (deleteBuilder_ == null) {
+        if (!other.delete_.isEmpty()) {
+          if (delete_.isEmpty()) {
+            delete_ = other.delete_;
+            bitField0_ = (bitField0_ & ~0x00000002);
+          } else {
+            ensureDeleteIsMutable();
+            delete_.addAll(other.delete_);
+          }
+          onChanged();
         }
-        onChanged();
+      } else {
+        if (!other.delete_.isEmpty()) {
+          if (deleteBuilder_.isEmpty()) {
+            deleteBuilder_.dispose();
+            deleteBuilder_ = null;
+            delete_ = other.delete_;
+            bitField0_ = (bitField0_ & ~0x00000002);
+            deleteBuilder_ = 
+              com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                 internalGetDeleteFieldBuilder() : null;
+          } else {
+            deleteBuilder_.addAllMessages(other.delete_);
+          }
+        }
       }
       this.mergeUnknownFields(other.getUnknownFields());
       onChanged();
@@ -493,8 +523,16 @@ private static final long serialVersionUID = 0L;
               break;
             } // case 10
             case 18: {
-              ensureDeleteIsMutable();
-              delete_.add(input.readStringRequireUtf8());
+              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef m =
+                  input.readMessage(
+                      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.parser(),
+                      extensionRegistry);
+              if (deleteBuilder_ == null) {
+                ensureDeleteIsMutable();
+                delete_.add(m);
+              } else {
+                deleteBuilder_.addMessage(m);
+              }
               break;
             } // case 18
             default: {
@@ -754,115 +792,244 @@ private static final long serialVersionUID = 0L;
       return upsertBuilder_;
     }
 
-    private com.google.protobuf.LazyStringArrayList delete_ =
-        com.google.protobuf.LazyStringArrayList.emptyList();
+    private java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> delete_ =
+      java.util.Collections.emptyList();
     private void ensureDeleteIsMutable() {
-      if (!delete_.isModifiable()) {
-        delete_ = new com.google.protobuf.LazyStringArrayList(delete_);
-      }
-      bitField0_ |= 0x00000002;
+      if (!((bitField0_ & 0x00000002) != 0)) {
+        delete_ = new java.util.ArrayList<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef>(delete_);
+        bitField0_ |= 0x00000002;
+       }
     }
+
+    private com.google.protobuf.RepeatedFieldBuilder<
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> deleteBuilder_;
+
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @return A list containing the delete.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
-    public com.google.protobuf.ProtocolStringList
-        getDeleteList() {
-      delete_.makeImmutable();
-      return delete_;
+    public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> getDeleteList() {
+      if (deleteBuilder_ == null) {
+        return java.util.Collections.unmodifiableList(delete_);
+      } else {
+        return deleteBuilder_.getMessageList();
+      }
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @return The count of delete.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
     public int getDeleteCount() {
-      return delete_.size();
+      if (deleteBuilder_ == null) {
+        return delete_.size();
+      } else {
+        return deleteBuilder_.getCount();
+      }
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @param index The index of the element to return.
-     * @return The delete at the given index.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
-    public java.lang.String getDelete(int index) {
-      return delete_.get(index);
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef getDelete(int index) {
+      if (deleteBuilder_ == null) {
+        return delete_.get(index);
+      } else {
+        return deleteBuilder_.getMessage(index);
+      }
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @param index The index of the value to return.
-     * @return The bytes of the delete at the given index.
-     */
-    public com.google.protobuf.ByteString
-        getDeleteBytes(int index) {
-      return delete_.getByteString(index);
-    }
-    /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @param index The index to set the value at.
-     * @param value The delete to set.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
     public Builder setDelete(
-        int index, java.lang.String value) {
-      if (value == null) { throw new NullPointerException(); }
-      ensureDeleteIsMutable();
-      delete_.set(index, value);
-      bitField0_ |= 0x00000002;
-      onChanged();
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef value) {
+      if (deleteBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureDeleteIsMutable();
+        delete_.set(index, value);
+        onChanged();
+      } else {
+        deleteBuilder_.setMessage(index, value);
+      }
       return this;
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @param value The delete to add.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public Builder setDelete(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder builderForValue) {
+      if (deleteBuilder_ == null) {
+        ensureDeleteIsMutable();
+        delete_.set(index, builderForValue.build());
+        onChanged();
+      } else {
+        deleteBuilder_.setMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public Builder addDelete(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef value) {
+      if (deleteBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureDeleteIsMutable();
+        delete_.add(value);
+        onChanged();
+      } else {
+        deleteBuilder_.addMessage(value);
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
     public Builder addDelete(
-        java.lang.String value) {
-      if (value == null) { throw new NullPointerException(); }
-      ensureDeleteIsMutable();
-      delete_.add(value);
-      bitField0_ |= 0x00000002;
-      onChanged();
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef value) {
+      if (deleteBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureDeleteIsMutable();
+        delete_.add(index, value);
+        onChanged();
+      } else {
+        deleteBuilder_.addMessage(index, value);
+      }
       return this;
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @param values The delete to add.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public Builder addDelete(
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder builderForValue) {
+      if (deleteBuilder_ == null) {
+        ensureDeleteIsMutable();
+        delete_.add(builderForValue.build());
+        onChanged();
+      } else {
+        deleteBuilder_.addMessage(builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public Builder addDelete(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder builderForValue) {
+      if (deleteBuilder_ == null) {
+        ensureDeleteIsMutable();
+        delete_.add(index, builderForValue.build());
+        onChanged();
+      } else {
+        deleteBuilder_.addMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
     public Builder addAllDelete(
-        java.lang.Iterable<java.lang.String> values) {
-      ensureDeleteIsMutable();
-      com.google.protobuf.AbstractMessageLite.Builder.addAll(
-          values, delete_);
-      bitField0_ |= 0x00000002;
-      onChanged();
+        java.lang.Iterable<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> values) {
+      if (deleteBuilder_ == null) {
+        ensureDeleteIsMutable();
+        com.google.protobuf.AbstractMessageLite.Builder.addAll(
+            values, delete_);
+        onChanged();
+      } else {
+        deleteBuilder_.addAllMessages(values);
+      }
       return this;
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
     public Builder clearDelete() {
-      delete_ =
-        com.google.protobuf.LazyStringArrayList.emptyList();
-      bitField0_ = (bitField0_ & ~0x00000002);;
-      onChanged();
+      if (deleteBuilder_ == null) {
+        delete_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000002);
+        onChanged();
+      } else {
+        deleteBuilder_.clear();
+      }
       return this;
     }
     /**
-     * <code>repeated string delete = 2 [json_name = "delete"];</code>
-     * @param value The bytes of the delete to add.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
      */
-    public Builder addDeleteBytes(
-        com.google.protobuf.ByteString value) {
-      if (value == null) { throw new NullPointerException(); }
-      checkByteStringIsUtf8(value);
-      ensureDeleteIsMutable();
-      delete_.add(value);
-      bitField0_ |= 0x00000002;
-      onChanged();
+    public Builder removeDelete(int index) {
+      if (deleteBuilder_ == null) {
+        ensureDeleteIsMutable();
+        delete_.remove(index);
+        onChanged();
+      } else {
+        deleteBuilder_.remove(index);
+      }
       return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder getDeleteBuilder(
+        int index) {
+      return internalGetDeleteFieldBuilder().getBuilder(index);
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder getDeleteOrBuilder(
+        int index) {
+      if (deleteBuilder_ == null) {
+        return delete_.get(index);  } else {
+        return deleteBuilder_.getMessageOrBuilder(index);
+      }
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+         getDeleteOrBuilderList() {
+      if (deleteBuilder_ != null) {
+        return deleteBuilder_.getMessageOrBuilderList();
+      } else {
+        return java.util.Collections.unmodifiableList(delete_);
+      }
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder addDeleteBuilder() {
+      return internalGetDeleteFieldBuilder().addBuilder(
+          fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.getDefaultInstance());
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder addDeleteBuilder(
+        int index) {
+      return internalGetDeleteFieldBuilder().addBuilder(
+          index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.getDefaultInstance());
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+     */
+    public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder> 
+         getDeleteBuilderList() {
+      return internalGetDeleteFieldBuilder().getBuilderList();
+    }
+    private com.google.protobuf.RepeatedFieldBuilder<
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+        internalGetDeleteFieldBuilder() {
+      if (deleteBuilder_ == null) {
+        deleteBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder>(
+                delete_,
+                ((bitField0_ & 0x00000002) != 0),
+                getParentForChildren(),
+                isClean());
+        delete_ = null;
+      }
+      return deleteBuilder_;
     }
 
     // @@protoc_insertion_point(builder_scope:teamviewer.v1.BattleChunkPatchScope)

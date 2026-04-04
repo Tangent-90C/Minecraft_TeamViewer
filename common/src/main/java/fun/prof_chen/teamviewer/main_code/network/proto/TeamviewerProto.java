@@ -107,15 +107,25 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_teamviewer_v1_WaypointDelta_fieldAccessorTable;
   static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_teamviewer_v1_BattleChunkData_descriptor;
+    internal_static_teamviewer_v1_BattleChunkCoord_descriptor;
   static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
-      internal_static_teamviewer_v1_BattleChunkData_fieldAccessorTable;
+      internal_static_teamviewer_v1_BattleChunkCoord_fieldAccessorTable;
   static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_teamviewer_v1_BattleChunkDelta_descriptor;
+    internal_static_teamviewer_v1_BattleChunkRef_descriptor;
   static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
-      internal_static_teamviewer_v1_BattleChunkDelta_fieldAccessorTable;
+      internal_static_teamviewer_v1_BattleChunkRef_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_teamviewer_v1_BattleChunkValue_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_teamviewer_v1_BattleChunkValue_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_teamviewer_v1_BattleChunkEntry_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_teamviewer_v1_BattleChunkEntry_fieldAccessorTable;
   static final com.google.protobuf.Descriptors.Descriptor
     internal_static_teamviewer_v1_BattleMapObservationCandidate_descriptor;
   static final 
@@ -342,11 +352,6 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_teamviewer_v1_SnapshotFull_WaypointsEntry_fieldAccessorTable;
   static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_teamviewer_v1_SnapshotFull_BattleChunksEntry_descriptor;
-  static final 
-    com.google.protobuf.GeneratedMessage.FieldAccessorTable
-      internal_static_teamviewer_v1_SnapshotFull_BattleChunksEntry_fieldAccessorTable;
-  static final com.google.protobuf.Descriptors.Descriptor
     internal_static_teamviewer_v1_SnapshotFull_PlayerMarksEntry_descriptor;
   static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -550,349 +555,337 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
       "idB\025\n\023_target_entity_typeB\025\n\023_target_ent" +
       "ity_nameB\014\n\n_room_codeB\014\n\n_permanentB\020\n\016" +
       "_tactical_typeB\016\n\014_source_typeB\017\n\r_delet" +
-      "able_by\"\275\004\n\017BattleChunkData\022\027\n\007chunk_x\030\001" +
-      " \001(\005R\006chunkX\022\027\n\007chunk_z\030\002 \001(\005R\006chunkZ\022\034\n" +
-      "\tdimension\030\003 \001(\tR\tdimension\022\033\n\006symbol\030\004 " +
-      "\001(\tH\000R\006symbol\210\001\001\022$\n\013marker_type\030\005 \001(\tH\001R" +
-      "\nmarkerType\210\001\001\022\033\n\tcolor_raw\030\006 \001(\tR\010color" +
-      "Raw\022\"\n\ncolor_note\030\007 \001(\tH\002R\tcolorNote\210\001\001\022" +
-      "$\n\013observed_at\030\010 \001(\003H\003R\nobservedAt\210\001\001\0223\n" +
-      "\023position_sampled_at\030\t \001(\003H\004R\021positionSa" +
-      "mpledAt\210\001\001\022.\n\020alignment_source\030\n \001(\tH\005R\017" +
-      "alignmentSource\210\001\001\022$\n\013reporter_id\030\013 \001(\tH" +
-      "\006R\nreporterId\210\001\001\022 \n\troom_code\030\014 \001(\tH\007R\010r" +
-      "oomCode\210\001\001B\t\n\007_symbolB\016\n\014_marker_typeB\r\n" +
-      "\013_color_noteB\016\n\014_observed_atB\026\n\024_positio" +
-      "n_sampled_atB\023\n\021_alignment_sourceB\016\n\014_re" +
-      "porter_idB\014\n\n_room_code\"\206\005\n\020BattleChunkD" +
-      "elta\022\034\n\007chunk_x\030\001 \001(\005H\000R\006chunkX\210\001\001\022\034\n\007ch" +
-      "unk_z\030\002 \001(\005H\001R\006chunkZ\210\001\001\022!\n\tdimension\030\003 " +
-      "\001(\tH\002R\tdimension\210\001\001\022\033\n\006symbol\030\004 \001(\tH\003R\006s" +
-      "ymbol\210\001\001\022$\n\013marker_type\030\005 \001(\tH\004R\nmarkerT" +
-      "ype\210\001\001\022 \n\tcolor_raw\030\006 \001(\tH\005R\010colorRaw\210\001\001" +
-      "\022\"\n\ncolor_note\030\007 \001(\tH\006R\tcolorNote\210\001\001\022$\n\013" +
-      "observed_at\030\010 \001(\003H\007R\nobservedAt\210\001\001\0223\n\023po" +
-      "sition_sampled_at\030\t \001(\003H\010R\021positionSampl" +
-      "edAt\210\001\001\022.\n\020alignment_source\030\n \001(\tH\tR\017ali" +
-      "gnmentSource\210\001\001\022$\n\013reporter_id\030\013 \001(\tH\nR\n" +
-      "reporterId\210\001\001\022 \n\troom_code\030\014 \001(\tH\013R\010room" +
-      "Code\210\001\001B\n\n\010_chunk_xB\n\n\010_chunk_zB\014\n\n_dime" +
-      "nsionB\t\n\007_symbolB\016\n\014_marker_typeB\014\n\n_col" +
-      "or_rawB\r\n\013_color_noteB\016\n\014_observed_atB\026\n" +
-      "\024_position_sampled_atB\023\n\021_alignment_sour" +
-      "ceB\016\n\014_reporter_idB\014\n\n_room_code\"\253\001\n\035Bat" +
-      "tleMapObservationCandidate\022 \n\014base_chunk" +
-      "_x\030\001 \001(\005R\nbaseChunkX\022 \n\014base_chunk_z\030\002 \001" +
-      "(\005R\nbaseChunkZ\022.\n\023position_sampled_at\030\003 " +
-      "\001(\003R\021positionSampledAt\022\026\n\006source\030\004 \001(\tR\006" +
-      "source\"\237\001\n\030BattleMapObservationCell\022\036\n\013r" +
-      "el_chunk_x\030\001 \001(\005R\trelChunkX\022\036\n\013rel_chunk" +
-      "_z\030\002 \001(\005R\trelChunkZ\022\033\n\006symbol\030\003 \001(\tH\000R\006s" +
-      "ymbol\210\001\001\022\033\n\tcolor_raw\030\004 \001(\tR\010colorRawB\t\n" +
-      "\007_symbol\"\352\004\n\026PlayerHandshakeRequest\0228\n\030n" +
-      "etwork_protocol_version\030\001 \001(\tR\026networkPr" +
-      "otocolVersion\022\\\n+minimum_compatible_netw" +
-      "ork_protocol_version\030\002 \001(\tR\'minimumCompa" +
-      "tibleNetworkProtocolVersion\0222\n\025local_pro" +
-      "gram_version\030\003 \001(\tR\023localProgramVersion\022" +
-      "(\n\020submit_player_id\030\004 \001(\tR\016submitPlayerI" +
-      "d\022 \n\troom_code\030\005 \001(\tH\000R\010roomCode\210\001\001\022J\n\037p" +
-      "referred_report_interval_ticks\030\006 \001(\005H\001R\034" +
-      "preferredReportIntervalTicks\210\001\001\022>\n\031min_r" +
-      "eport_interval_ticks\030\007 \001(\005H\002R\026minReportI" +
-      "ntervalTicks\210\001\001\022>\n\031max_report_interval_t" +
-      "icks\030\010 \001(\005H\003R\026maxReportIntervalTicks\210\001\001B" +
-      "\014\n\n_room_codeB\"\n _preferred_report_inter" +
-      "val_ticksB\034\n\032_min_report_interval_ticksB" +
-      "\034\n\032_max_report_interval_ticks\"\224\002\n\026WebMap" +
-      "HandshakeRequest\0228\n\030network_protocol_ver" +
-      "sion\030\001 \001(\tR\026networkProtocolVersion\022\\\n+mi" +
-      "nimum_compatible_network_protocol_versio" +
-      "n\030\002 \001(\tR\'minimumCompatibleNetworkProtoco" +
-      "lVersion\0222\n\025local_program_version\030\003 \001(\tR" +
-      "\023localProgramVersion\022 \n\troom_code\030\004 \001(\tH" +
-      "\000R\010roomCode\210\001\001B\014\n\n_room_code\"\223\002\n\025AdminHa" +
-      "ndshakeRequest\0228\n\030network_protocol_versi" +
-      "on\030\001 \001(\tR\026networkProtocolVersion\022\\\n+mini" +
-      "mum_compatible_network_protocol_version\030" +
-      "\002 \001(\tR\'minimumCompatibleNetworkProtocolV" +
-      "ersion\0222\n\025local_program_version\030\003 \001(\tR\023l" +
-      "ocalProgramVersion\022 \n\troom_code\030\004 \001(\tH\000R" +
-      "\010roomCode\210\001\001B\014\n\n_room_code\"\006\n\004Ping\"7\n\rRe" +
-      "syncRequest\022\033\n\006reason\030\001 \001(\tH\000R\006reason\210\001\001" +
-      "B\t\n\007_reason\"\271\001\n\024CommandPlayerMarkSet\022\033\n\t" +
-      "player_id\030\001 \001(\tR\010playerId\022\022\n\004team\030\002 \001(\tR" +
-      "\004team\022\031\n\005color\030\003 \001(\tH\000R\005color\210\001\001\022\031\n\005labe" +
-      "l\030\004 \001(\tH\001R\005label\210\001\001\022\033\n\006source\030\005 \001(\tH\002R\006s" +
-      "ource\210\001\001B\010\n\006_colorB\010\n\006_labelB\t\n\007_source\"" +
-      "5\n\026CommandPlayerMarkClear\022\033\n\tplayer_id\030\001" +
-      " \001(\tR\010playerId\"\033\n\031CommandPlayerMarkClear" +
-      "All\"6\n\032CommandSameServerFilterSet\022\030\n\007ena" +
-      "bled\030\001 \001(\010R\007enabled\"\322\003\n\032CommandTacticalW" +
-      "aypointSet\022$\n\013waypoint_id\030\001 \001(\tH\000R\nwaypo" +
-      "intId\210\001\001\022\021\n\001x\030\002 \001(\001H\001R\001x\210\001\001\022\021\n\001z\030\003 \001(\001H\002" +
-      "R\001z\210\001\001\022\031\n\005label\030\004 \001(\tH\003R\005label\210\001\001\022!\n\tdim" +
-      "ension\030\005 \001(\tH\004R\tdimension\210\001\001\022(\n\rtactical" +
-      "_type\030\006 \001(\tH\005R\014tacticalType\210\001\001\022!\n\tperman" +
-      "ent\030\007 \001(\010H\006R\tpermanent\210\001\001\022$\n\013ttl_seconds" +
-      "\030\010 \001(\005H\007R\nttlSeconds\210\001\001\022\031\n\005color\030\t \001(\tH\010" +
-      "R\005color\210\001\001\022 \n\troom_code\030\n \001(\tH\tR\010roomCod" +
-      "e\210\001\001B\016\n\014_waypoint_idB\004\n\002_xB\004\n\002_zB\010\n\006_lab" +
-      "elB\014\n\n_dimensionB\020\n\016_tactical_typeB\014\n\n_p" +
-      "ermanentB\016\n\014_ttl_secondsB\010\n\006_colorB\014\n\n_r" +
-      "oom_code\"\255\001\n\016PlayersReplace\022D\n\007players\030\001" +
-      " \003(\0132*.teamviewer.v1.PlayersReplace.Play" +
-      "ersEntryR\007players\032U\n\014PlayersEntry\022\020\n\003key" +
-      "\030\001 \001(\tR\003key\022/\n\005value\030\002 \001(\0132\031.teamviewer." +
-      "v1.PlayerDataR\005value:\0028\001\"N\n\014PlayerUpsert" +
-      "\022\016\n\002id\030\001 \001(\tR\002id\022.\n\004data\030\002 \001(\0132\032.teamvie" +
-      "wer.v1.PlayerDeltaR\004data\"_\n\020PlayerPatchS" +
-      "cope\0223\n\006upsert\030\001 \003(\0132\033.teamviewer.v1.Pla" +
-      "yerUpsertR\006upsert\022\026\n\006delete\030\002 \003(\tR\006delet" +
-      "e\"\263\001\n\017EntitiesReplace\022H\n\010entities\030\001 \003(\0132" +
-      ",.teamviewer.v1.EntitiesReplace.Entities" +
-      "EntryR\010entities\032V\n\rEntitiesEntry\022\020\n\003key\030" +
+      "able_by\"D\n\020BattleChunkCoord\022\027\n\007chunk_x\030\001" +
+      " \001(\005R\006chunkX\022\027\n\007chunk_z\030\002 \001(\005R\006chunkZ\"e\n" +
+      "\016BattleChunkRef\022\034\n\tdimension\030\001 \001(\tR\tdime" +
+      "nsion\0225\n\005coord\030\002 \001(\0132\037.teamviewer.v1.Bat" +
+      "tleChunkCoordR\005coord\"\276\003\n\020BattleChunkValu" +
+      "e\022\033\n\006symbol\030\001 \001(\tH\000R\006symbol\210\001\001\022$\n\013marker" +
+      "_type\030\002 \001(\tH\001R\nmarkerType\210\001\001\022\033\n\tcolor_ra" +
+      "w\030\003 \001(\tR\010colorRaw\022\"\n\ncolor_note\030\004 \001(\tH\002R" +
+      "\tcolorNote\210\001\001\022$\n\013observed_at\030\005 \001(\003H\003R\nob" +
+      "servedAt\210\001\001\0223\n\023position_sampled_at\030\006 \001(\003" +
+      "H\004R\021positionSampledAt\210\001\001\022.\n\020alignment_so" +
+      "urce\030\007 \001(\tH\005R\017alignmentSource\210\001\001\022$\n\013repo" +
+      "rter_id\030\010 \001(\tH\006R\nreporterId\210\001\001B\t\n\007_symbo" +
+      "lB\016\n\014_marker_typeB\r\n\013_color_noteB\016\n\014_obs" +
+      "erved_atB\026\n\024_position_sampled_atB\023\n\021_ali" +
+      "gnment_sourceB\016\n\014_reporter_id\"x\n\020BattleC" +
+      "hunkEntry\022/\n\003ref\030\001 \001(\0132\035.teamviewer.v1.B" +
+      "attleChunkRefR\003ref\0223\n\004data\030\002 \001(\0132\037.teamv" +
+      "iewer.v1.BattleChunkValueR\004data\"\253\001\n\035Batt" +
+      "leMapObservationCandidate\022 \n\014base_chunk_" +
+      "x\030\001 \001(\005R\nbaseChunkX\022 \n\014base_chunk_z\030\002 \001(" +
+      "\005R\nbaseChunkZ\022.\n\023position_sampled_at\030\003 \001" +
+      "(\003R\021positionSampledAt\022\026\n\006source\030\004 \001(\tR\006s" +
+      "ource\"\237\001\n\030BattleMapObservationCell\022\036\n\013re" +
+      "l_chunk_x\030\001 \001(\005R\trelChunkX\022\036\n\013rel_chunk_" +
+      "z\030\002 \001(\005R\trelChunkZ\022\033\n\006symbol\030\003 \001(\tH\000R\006sy" +
+      "mbol\210\001\001\022\033\n\tcolor_raw\030\004 \001(\tR\010colorRawB\t\n\007" +
+      "_symbol\"\352\004\n\026PlayerHandshakeRequest\0228\n\030ne" +
+      "twork_protocol_version\030\001 \001(\tR\026networkPro" +
+      "tocolVersion\022\\\n+minimum_compatible_netwo" +
+      "rk_protocol_version\030\002 \001(\tR\'minimumCompat" +
+      "ibleNetworkProtocolVersion\0222\n\025local_prog" +
+      "ram_version\030\003 \001(\tR\023localProgramVersion\022(" +
+      "\n\020submit_player_id\030\004 \001(\tR\016submitPlayerId" +
+      "\022 \n\troom_code\030\005 \001(\tH\000R\010roomCode\210\001\001\022J\n\037pr" +
+      "eferred_report_interval_ticks\030\006 \001(\005H\001R\034p" +
+      "referredReportIntervalTicks\210\001\001\022>\n\031min_re" +
+      "port_interval_ticks\030\007 \001(\005H\002R\026minReportIn" +
+      "tervalTicks\210\001\001\022>\n\031max_report_interval_ti" +
+      "cks\030\010 \001(\005H\003R\026maxReportIntervalTicks\210\001\001B\014" +
+      "\n\n_room_codeB\"\n _preferred_report_interv" +
+      "al_ticksB\034\n\032_min_report_interval_ticksB\034" +
+      "\n\032_max_report_interval_ticks\"\224\002\n\026WebMapH" +
+      "andshakeRequest\0228\n\030network_protocol_vers" +
+      "ion\030\001 \001(\tR\026networkProtocolVersion\022\\\n+min" +
+      "imum_compatible_network_protocol_version" +
+      "\030\002 \001(\tR\'minimumCompatibleNetworkProtocol" +
+      "Version\0222\n\025local_program_version\030\003 \001(\tR\023" +
+      "localProgramVersion\022 \n\troom_code\030\004 \001(\tH\000" +
+      "R\010roomCode\210\001\001B\014\n\n_room_code\"\223\002\n\025AdminHan" +
+      "dshakeRequest\0228\n\030network_protocol_versio" +
+      "n\030\001 \001(\tR\026networkProtocolVersion\022\\\n+minim" +
+      "um_compatible_network_protocol_version\030\002" +
+      " \001(\tR\'minimumCompatibleNetworkProtocolVe" +
+      "rsion\0222\n\025local_program_version\030\003 \001(\tR\023lo" +
+      "calProgramVersion\022 \n\troom_code\030\004 \001(\tH\000R\010" +
+      "roomCode\210\001\001B\014\n\n_room_code\"\006\n\004Ping\"7\n\rRes" +
+      "yncRequest\022\033\n\006reason\030\001 \001(\tH\000R\006reason\210\001\001B" +
+      "\t\n\007_reason\"\271\001\n\024CommandPlayerMarkSet\022\033\n\tp" +
+      "layer_id\030\001 \001(\tR\010playerId\022\022\n\004team\030\002 \001(\tR\004" +
+      "team\022\031\n\005color\030\003 \001(\tH\000R\005color\210\001\001\022\031\n\005label" +
+      "\030\004 \001(\tH\001R\005label\210\001\001\022\033\n\006source\030\005 \001(\tH\002R\006so" +
+      "urce\210\001\001B\010\n\006_colorB\010\n\006_labelB\t\n\007_source\"5" +
+      "\n\026CommandPlayerMarkClear\022\033\n\tplayer_id\030\001 " +
+      "\001(\tR\010playerId\"\033\n\031CommandPlayerMarkClearA" +
+      "ll\"6\n\032CommandSameServerFilterSet\022\030\n\007enab" +
+      "led\030\001 \001(\010R\007enabled\"\322\003\n\032CommandTacticalWa" +
+      "ypointSet\022$\n\013waypoint_id\030\001 \001(\tH\000R\nwaypoi" +
+      "ntId\210\001\001\022\021\n\001x\030\002 \001(\001H\001R\001x\210\001\001\022\021\n\001z\030\003 \001(\001H\002R" +
+      "\001z\210\001\001\022\031\n\005label\030\004 \001(\tH\003R\005label\210\001\001\022!\n\tdime" +
+      "nsion\030\005 \001(\tH\004R\tdimension\210\001\001\022(\n\rtactical_" +
+      "type\030\006 \001(\tH\005R\014tacticalType\210\001\001\022!\n\tpermane" +
+      "nt\030\007 \001(\010H\006R\tpermanent\210\001\001\022$\n\013ttl_seconds\030" +
+      "\010 \001(\005H\007R\nttlSeconds\210\001\001\022\031\n\005color\030\t \001(\tH\010R" +
+      "\005color\210\001\001\022 \n\troom_code\030\n \001(\tH\tR\010roomCode" +
+      "\210\001\001B\016\n\014_waypoint_idB\004\n\002_xB\004\n\002_zB\010\n\006_labe" +
+      "lB\014\n\n_dimensionB\020\n\016_tactical_typeB\014\n\n_pe" +
+      "rmanentB\016\n\014_ttl_secondsB\010\n\006_colorB\014\n\n_ro" +
+      "om_code\"\255\001\n\016PlayersReplace\022D\n\007players\030\001 " +
+      "\003(\0132*.teamviewer.v1.PlayersReplace.Playe" +
+      "rsEntryR\007players\032U\n\014PlayersEntry\022\020\n\003key\030" +
       "\001 \001(\tR\003key\022/\n\005value\030\002 \001(\0132\031.teamviewer.v" +
-      "1.EntityDataR\005value:\0028\001\"N\n\014EntityUpsert\022" +
+      "1.PlayerDataR\005value:\0028\001\"N\n\014PlayerUpsert\022" +
       "\016\n\002id\030\001 \001(\tR\002id\022.\n\004data\030\002 \001(\0132\032.teamview" +
-      "er.v1.EntityDeltaR\004data\"_\n\020EntityPatchSc" +
-      "ope\0223\n\006upsert\030\001 \003(\0132\033.teamviewer.v1.Enti" +
-      "tyUpsertR\006upsert\022\026\n\006delete\030\002 \003(\tR\006delete" +
-      "\"\273\001\n\020WaypointsReplace\022L\n\twaypoints\030\001 \003(\013" +
-      "2..teamviewer.v1.WaypointsReplace.Waypoi" +
-      "ntsEntryR\twaypoints\032Y\n\016WaypointsEntry\022\020\n" +
-      "\003key\030\001 \001(\tR\003key\0221\n\005value\030\002 \001(\0132\033.teamvie" +
-      "wer.v1.WaypointDataR\005value:\0028\001\"R\n\016Waypoi" +
-      "ntUpsert\022\016\n\002id\030\001 \001(\tR\002id\0220\n\004data\030\002 \001(\0132\034" +
-      ".teamviewer.v1.WaypointDeltaR\004data\"c\n\022Wa" +
-      "ypointPatchScope\0225\n\006upsert\030\001 \003(\0132\035.teamv" +
-      "iewer.v1.WaypointUpsertR\006upsert\022\026\n\006delet" +
-      "e\030\002 \003(\tR\006delete\"S\n\021TabPlayersReplace\022>\n\013" +
-      "tab_players\030\001 \003(\0132\035.teamviewer.v1.TabPla" +
-      "yerEntryR\ntabPlayers\"V\n\017TabPlayerUpsert\022" +
-      "\020\n\003key\030\001 \001(\tR\003key\0221\n\004data\030\002 \001(\0132\035.teamvi" +
-      "ewer.v1.TabPlayerEntryR\004data\"f\n\024TabPlaye" +
-      "rsPatchScope\0226\n\006upsert\030\001 \003(\0132\036.teamviewe" +
-      "r.v1.TabPlayerUpsertR\006upsert\022\026\n\006delete\030\002" +
-      " \003(\tR\006delete\"F\n\016StateKeepalive\022\030\n\007player" +
-      "s\030\001 \003(\tR\007players\022\032\n\010entities\030\002 \003(\tR\010enti" +
-      "ties\"*\n\020SourceStateClear\022\026\n\006scopes\030\001 \003(\t" +
-      "R\006scopes\"4\n\017WaypointsDelete\022!\n\014waypoint_" +
-      "ids\030\001 \003(\tR\013waypointIds\"H\n\032WaypointsEntit" +
-      "yDeathCancel\022*\n\021target_entity_ids\030\001 \003(\tR" +
-      "\017targetEntityIds\"\351\002\n\024BattleMapObservatio" +
-      "n\022\034\n\tdimension\030\001 \001(\tR\tdimension\022\031\n\010map_s" +
-      "ize\030\002 \001(\005R\007mapSize\022\035\n\nanchor_row\030\003 \001(\005R\t" +
-      "anchorRow\022\035\n\nanchor_col\030\004 \001(\005R\tanchorCol" +
-      "\0220\n\024snapshot_observed_at\030\005 \001(\003R\022snapshot" +
-      "ObservedAt\022\033\n\tparsed_at\030\006 \001(\003R\010parsedAt\022" +
-      "L\n\ncandidates\030\007 \003(\0132,.teamviewer.v1.Batt" +
-      "leMapObservationCandidateR\ncandidates\022=\n" +
-      "\005cells\030\010 \003(\0132\'.teamviewer.v1.BattleMapOb" +
-      "servationCellR\005cells\"\253\013\n\022PlayerReportBun" +
-      "dle\022(\n\020submit_player_id\030\001 \001(\tR\016submitPla" +
-      "yerId\022K\n\017players_replace\030\n \001(\0132\035.teamvie" +
-      "wer.v1.PlayersReplaceH\000R\016playersReplace\210" +
-      "\001\001\022I\n\rplayers_patch\030\013 \001(\0132\037.teamviewer.v" +
-      "1.PlayerPatchScopeH\001R\014playersPatch\210\001\001\022N\n" +
-      "\020entities_replace\030\014 \001(\0132\036.teamviewer.v1." +
-      "EntitiesReplaceH\002R\017entitiesReplace\210\001\001\022K\n" +
-      "\016entities_patch\030\r \001(\0132\037.teamviewer.v1.En" +
-      "tityPatchScopeH\003R\rentitiesPatch\210\001\001\022Q\n\021wa" +
-      "ypoints_replace\030\016 \001(\0132\037.teamviewer.v1.Wa" +
-      "ypointsReplaceH\004R\020waypointsReplace\210\001\001\022O\n" +
-      "\017waypoints_patch\030\017 \001(\0132!.teamviewer.v1.W" +
-      "aypointPatchScopeH\005R\016waypointsPatch\210\001\001\022U" +
-      "\n\023tab_players_replace\030\020 \001(\0132 .teamviewer" +
-      ".v1.TabPlayersReplaceH\006R\021tabPlayersRepla" +
-      "ce\210\001\001\022T\n\021tab_players_patch\030\021 \001(\0132#.teamv" +
-      "iewer.v1.TabPlayersPatchScopeH\007R\017tabPlay" +
-      "ersPatch\210\001\001\022^\n\026battle_map_observation\030\022 " +
-      "\001(\0132#.teamviewer.v1.BattleMapObservation" +
-      "H\010R\024battleMapObservation\210\001\001\022K\n\017state_kee" +
-      "palive\030\023 \001(\0132\035.teamviewer.v1.StateKeepal" +
-      "iveH\tR\016stateKeepalive\210\001\001\022R\n\022source_state" +
-      "_clear\030\024 \001(\0132\037.teamviewer.v1.SourceState" +
-      "ClearH\nR\020sourceStateClear\210\001\001\022N\n\020waypoint" +
-      "s_delete\030\025 \001(\0132\036.teamviewer.v1.Waypoints" +
-      "DeleteH\013R\017waypointsDelete\210\001\001\022q\n\035waypoint" +
-      "s_entity_death_cancel\030\026 \001(\0132).teamviewer" +
-      ".v1.WaypointsEntityDeathCancelH\014R\032waypoi" +
-      "ntsEntityDeathCancel\210\001\001B\022\n\020_players_repl" +
-      "aceB\020\n\016_players_patchB\023\n\021_entities_repla" +
-      "ceB\021\n\017_entities_patchB\024\n\022_waypoints_repl" +
-      "aceB\022\n\020_waypoints_patchB\026\n\024_tab_players_" +
-      "replaceB\024\n\022_tab_players_patchB\031\n\027_battle" +
-      "_map_observationB\022\n\020_state_keepaliveB\025\n\023" +
-      "_source_state_clearB\023\n\021_waypoints_delete" +
-      "B \n\036_waypoints_entity_death_cancel\"\333\006\n\014H" +
-      "andshakeAck\022\024\n\005ready\030\001 \001(\010R\005ready\0228\n\030net" +
-      "work_protocol_version\030\002 \001(\tR\026networkProt" +
-      "ocolVersion\022\\\n+minimum_compatible_networ" +
-      "k_protocol_version\030\003 \001(\tR\'minimumCompati" +
-      "bleNetworkProtocolVersion\0222\n\025local_progr" +
-      "am_version\030\004 \001(\tR\023localProgramVersion\022\033\n" +
-      "\troom_code\030\005 \001(\tR\010roomCode\022#\n\rdelta_enab" +
-      "led\030\006 \001(\010R\014deltaEnabled\022\031\n\005error\030\007 \001(\tH\000" +
-      "R\005error\210\001\001\022(\n\rreject_reason\030\010 \001(\tH\001R\014rej" +
-      "ectReason\210\001\001\0223\n\023digest_interval_sec\030\t \001(" +
-      "\005H\002R\021digestIntervalSec\210\001\001\022&\n\014broadcast_h" +
-      "z\030\n \001(\001H\003R\013broadcastHz\210\001\001\0227\n\025report_inte" +
-      "rval_ticks\030\013 \001(\005H\004R\023reportIntervalTicks\210" +
-      "\001\001\0221\n\022player_timeout_sec\030\014 \001(\005H\005R\020player" +
-      "TimeoutSec\210\001\001\0221\n\022entity_timeout_sec\030\r \001(" +
-      "\005H\006R\020entityTimeoutSec\210\001\001\022<\n\030battle_chunk" +
-      "_timeout_sec\030\016 \001(\005H\007R\025battleChunkTimeout" +
-      "Sec\210\001\001B\010\n\006_errorB\020\n\016_reject_reasonB\026\n\024_d" +
-      "igest_interval_secB\017\n\r_broadcast_hzB\030\n\026_" +
-      "report_interval_ticksB\025\n\023_player_timeout" +
-      "_secB\025\n\023_entity_timeout_secB\033\n\031_battle_c" +
-      "hunk_timeout_sec\"u\n\031WebMapPlayerMarkAckD" +
-      "etail\022\033\n\tplayer_id\030\001 \001(\tR\010playerId\0222\n\004ma" +
-      "rk\030\002 \001(\0132\031.teamviewer.v1.PlayerMarkH\000R\004m" +
-      "ark\210\001\001B\007\n\005_mark\"I\n\"WebMapClearAllPlayerM" +
-      "arksAckDetail\022#\n\rremoved_count\030\001 \001(\005R\014re" +
-      "movedCount\";\n\037WebMapSameServerFilterAckD" +
-      "etail\022\030\n\007enabled\030\001 \001(\010R\007enabled\"{\n\037WebMa" +
-      "pTacticalWaypointAckDetail\022\037\n\013waypoint_i" +
-      "d\030\001 \001(\tR\nwaypointId\0227\n\010waypoint\030\002 \001(\0132\033." +
-      "teamviewer.v1.WaypointDataR\010waypoint\"C\n\036" +
-      "WebMapWaypointsDeleteAckDetail\022!\n\014waypoi" +
-      "nt_ids\030\001 \003(\tR\013waypointIds\"\357\004\n\tWebMapAck\022" +
-      "\016\n\002ok\030\001 \001(\010R\002ok\022\033\n\006action\030\002 \001(\tH\001R\006actio" +
-      "n\210\001\001\022\031\n\005error\030\003 \001(\tH\002R\005error\210\001\001\022\035\n\007comma" +
-      "nd\030\004 \001(\tH\003R\007command\210\001\001\022K\n\013player_mark\030\n " +
-      "\001(\0132(.teamviewer.v1.WebMapPlayerMarkAckD" +
-      "etailH\000R\nplayerMark\022h\n\026clear_all_player_" +
-      "marks\030\013 \001(\01321.teamviewer.v1.WebMapClearA" +
-      "llPlayerMarksAckDetailH\000R\023clearAllPlayer" +
-      "Marks\022^\n\022same_server_filter\030\014 \001(\0132..team" +
-      "viewer.v1.WebMapSameServerFilterAckDetai" +
-      "lH\000R\020sameServerFilter\022]\n\021tactical_waypoi" +
-      "nt\030\r \001(\0132..teamviewer.v1.WebMapTacticalW" +
-      "aypointAckDetailH\000R\020tacticalWaypoint\022Z\n\020" +
-      "waypoints_delete\030\016 \001(\0132-.teamviewer.v1.W" +
-      "ebMapWaypointsDeleteAckDetailH\000R\017waypoin" +
-      "tsDeleteB\010\n\006detailB\t\n\007_actionB\010\n\006_errorB" +
-      "\n\n\010_command\"\'\n\004Pong\022\037\n\013server_time\030\001 \001(\001" +
-      "R\nserverTime\"\355\010\n\014SnapshotFull\022B\n\007players" +
-      "\030\001 \003(\0132(.teamviewer.v1.SnapshotFull.Play" +
-      "ersEntryR\007players\022E\n\010entities\030\002 \003(\0132).te" +
-      "amviewer.v1.SnapshotFull.EntitiesEntryR\010" +
-      "entities\022H\n\twaypoints\030\003 \003(\0132*.teamviewer" +
-      ".v1.SnapshotFull.WaypointsEntryR\twaypoin" +
-      "ts\022R\n\rbattle_chunks\030\004 \003(\0132-.teamviewer.v" +
-      "1.SnapshotFull.BattleChunksEntryR\014battle" +
-      "Chunks\022O\n\014player_marks\030\005 \003(\0132,.teamviewe" +
-      "r.v1.SnapshotFull.PlayerMarksEntryR\013play" +
-      "erMarks\022?\n\ttab_state\030\006 \001(\0132\035.teamviewer." +
-      "v1.WebMapTabStateH\000R\010tabState\210\001\001\022 \n\troom" +
-      "_code\030\007 \001(\tH\001R\010roomCode\210\001\001\022 \n\013connection" +
-      "s\030\010 \003(\tR\013connections\0220\n\021connections_coun" +
-      "t\030\t \001(\005H\002R\020connectionsCount\210\001\001\022$\n\013server" +
-      "_time\030\n \001(\001H\003R\nserverTime\210\001\001\032U\n\014PlayersE" +
-      "ntry\022\020\n\003key\030\001 \001(\tR\003key\022/\n\005value\030\002 \001(\0132\031." +
-      "teamviewer.v1.PlayerDataR\005value:\0028\001\032V\n\rE" +
-      "ntitiesEntry\022\020\n\003key\030\001 \001(\tR\003key\022/\n\005value\030" +
-      "\002 \001(\0132\031.teamviewer.v1.EntityDataR\005value:" +
-      "\0028\001\032Y\n\016WaypointsEntry\022\020\n\003key\030\001 \001(\tR\003key\022" +
-      "1\n\005value\030\002 \001(\0132\033.teamviewer.v1.WaypointD" +
-      "ataR\005value:\0028\001\032_\n\021BattleChunksEntry\022\020\n\003k" +
-      "ey\030\001 \001(\tR\003key\0224\n\005value\030\002 \001(\0132\036.teamviewe" +
-      "r.v1.BattleChunkDataR\005value:\0028\001\032Y\n\020Playe" +
-      "rMarksEntry\022\020\n\003key\030\001 \001(\tR\003key\022/\n\005value\030\002" +
-      " \001(\0132\031.teamviewer.v1.PlayerMarkR\005value:\002" +
-      "8\001B\014\n\n_tab_stateB\014\n\n_room_codeB\024\n\022_conne" +
-      "ctions_countB\016\n\014_server_time\"X\n\021BattleCh" +
-      "unkUpsert\022\016\n\002id\030\001 \001(\tR\002id\0223\n\004data\030\002 \001(\0132" +
-      "\037.teamviewer.v1.BattleChunkDeltaR\004data\"i" +
-      "\n\025BattleChunkPatchScope\0228\n\006upsert\030\001 \003(\0132" +
-      " .teamviewer.v1.BattleChunkUpsertR\006upser" +
-      "t\022\026\n\006delete\030\002 \003(\tR\006delete\"Q\n\020PlayerMarkU" +
-      "psert\022\016\n\002id\030\001 \001(\tR\002id\022-\n\004data\030\002 \001(\0132\031.te",
-      "amviewer.v1.PlayerMarkR\004data\"g\n\024PlayerMa" +
-      "rkPatchScope\0227\n\006upsert\030\001 \003(\0132\037.teamviewe" +
-      "r.v1.PlayerMarkUpsertR\006upsert\022\026\n\006delete\030" +
-      "\002 \003(\tR\006delete\"\345\005\n\005Patch\022>\n\007players\030\001 \001(\013" +
-      "2\037.teamviewer.v1.PlayerPatchScopeH\000R\007pla" +
-      "yers\210\001\001\022@\n\010entities\030\002 \001(\0132\037.teamviewer.v" +
-      "1.EntityPatchScopeH\001R\010entities\210\001\001\022D\n\tway" +
-      "points\030\003 \001(\0132!.teamviewer.v1.WaypointPat" +
-      "chScopeH\002R\twaypoints\210\001\001\022N\n\rbattle_chunks" +
-      "\030\004 \001(\0132$.teamviewer.v1.BattleChunkPatchS" +
-      "copeH\003R\014battleChunks\210\001\001\022K\n\014player_marks\030" +
-      "\005 \001(\0132#.teamviewer.v1.PlayerMarkPatchSco" +
-      "peH\004R\013playerMarks\210\001\001\022I\n\017tab_state_patch\030" +
-      "\006 \001(\0132\034.teamviewer.v1.TabStatePatchH\005R\rt" +
-      "abStatePatch\210\001\001\022@\n\013connections\030\007 \001(\0132\031.t" +
-      "eamviewer.v1.StringListH\006R\013connections\210\001" +
-      "\001\0220\n\021connections_count\030\010 \001(\005H\007R\020connecti" +
-      "onsCount\210\001\001\022$\n\013server_time\030\t \001(\001H\010R\nserv" +
-      "erTime\210\001\001B\n\n\010_playersB\013\n\t_entitiesB\014\n\n_w" +
-      "aypointsB\020\n\016_battle_chunksB\017\n\r_player_ma" +
-      "rksB\022\n\020_tab_state_patchB\016\n\014_connectionsB" +
-      "\024\n\022_connections_countB\016\n\014_server_time\"\230\001" +
-      "\n\006Digest\022\030\n\007players\030\001 \001(\tR\007players\022\032\n\010en" +
-      "tities\030\002 \001(\tR\010entities\022\034\n\twaypoints\030\003 \001(" +
-      "\tR\twaypoints\022(\n\rbattle_chunks\030\004 \001(\tH\000R\014b" +
-      "attleChunks\210\001\001B\020\n\016_battle_chunks\"\244\001\n\016Ref" +
-      "reshRequest\022\026\n\006reason\030\001 \001(\tR\006reason\022\037\n\013s" +
-      "erver_time\030\002 \001(\001R\nserverTime\022\030\n\007players\030" +
-      "\003 \003(\tR\007players\022\032\n\010entities\030\004 \003(\tR\010entiti" +
-      "es\022#\n\rbattle_chunks\030\005 \003(\tR\014battleChunks\"" +
-      "\217\001\n\016ReportRateHint\0222\n\025report_interval_ti" +
-      "cks\030\001 \001(\005R\023reportIntervalTicks\022!\n\014broadc" +
-      "ast_hz\030\002 \001(\001R\013broadcastHz\022\033\n\006reason\030\003 \001(" +
-      "\tH\000R\006reason\210\001\001B\t\n\007_reason\"\366\004\n\rWebMapComm" +
-      "and\022E\n\016resync_request\030\001 \001(\0132\034.teamviewer" +
-      ".v1.ResyncRequestH\000R\rresyncRequest\022M\n\017se" +
-      "t_player_mark\030\002 \001(\0132#.teamviewer.v1.Comm" +
-      "andPlayerMarkSetH\000R\rsetPlayerMark\022S\n\021cle" +
-      "ar_player_mark\030\003 \001(\0132%.teamviewer.v1.Com" +
-      "mandPlayerMarkClearH\000R\017clearPlayerMark\022_" +
-      "\n\026clear_all_player_marks\030\004 \001(\0132(.teamvie" +
-      "wer.v1.CommandPlayerMarkClearAllH\000R\023clea" +
-      "rAllPlayerMarks\022`\n\026set_same_server_filte" +
-      "r\030\005 \001(\0132).teamviewer.v1.CommandSameServe" +
-      "rFilterSetH\000R\023setSameServerFilter\022_\n\025set" +
-      "_tactical_waypoint\030\006 \001(\0132).teamviewer.v1" +
-      ".CommandTacticalWaypointSetH\000R\023setTactic" +
-      "alWaypoint\022K\n\020delete_waypoints\030\007 \001(\0132\036.t" +
-      "eamviewer.v1.WaypointsDeleteH\000R\017deleteWa" +
-      "ypointsB\t\n\007command\"\352\010\n\014WireEnvelope\0224\n\007c" +
-      "hannel\030\001 \001(\0162\032.teamviewer.v1.WireChannel" +
-      "R\007channel\022a\n\030player_handshake_request\030\n " +
-      "\001(\0132%.teamviewer.v1.PlayerHandshakeReque" +
-      "stH\000R\026playerHandshakeRequest\022b\n\031web_map_" +
-      "handshake_request\030\013 \001(\0132%.teamviewer.v1." +
-      "WebMapHandshakeRequestH\000R\026webMapHandshak" +
-      "eRequest\022^\n\027admin_handshake_request\030\014 \001(" +
-      "\0132$.teamviewer.v1.AdminHandshakeRequestH" +
-      "\000R\025adminHandshakeRequest\022)\n\004ping\030\r \001(\0132\023" +
-      ".teamviewer.v1.PingH\000R\004ping\022E\n\016resync_re" +
-      "quest\030\016 \001(\0132\034.teamviewer.v1.ResyncReques" +
-      "tH\000R\rresyncRequest\022F\n\017web_map_command\030\017 " +
-      "\001(\0132\034.teamviewer.v1.WebMapCommandH\000R\rweb" +
-      "MapCommand\022U\n\024player_report_bundle\030\020 \001(\013" +
-      "2!.teamviewer.v1.PlayerReportBundleH\000R\022p" +
-      "layerReportBundle\022B\n\rhandshake_ack\030\036 \001(\013" +
-      "2\033.teamviewer.v1.HandshakeAckH\000R\014handsha" +
-      "keAck\022:\n\013web_map_ack\030\037 \001(\0132\030.teamviewer." +
-      "v1.WebMapAckH\000R\twebMapAck\022)\n\004pong\030  \001(\0132" +
-      "\023.teamviewer.v1.PongH\000R\004pong\022B\n\rsnapshot" +
-      "_full\030! \001(\0132\033.teamviewer.v1.SnapshotFull" +
-      "H\000R\014snapshotFull\022,\n\005patch\030\" \001(\0132\024.teamvi" +
-      "ewer.v1.PatchH\000R\005patch\022/\n\006digest\030# \001(\0132\025" +
-      ".teamviewer.v1.DigestH\000R\006digest\022H\n\017refre" +
-      "sh_request\030$ \001(\0132\035.teamviewer.v1.Refresh" +
-      "RequestH\000R\016refreshRequest\022I\n\020report_rate" +
-      "_hint\030% \001(\0132\035.teamviewer.v1.ReportRateHi" +
-      "ntH\000R\016reportRateHintB\t\n\007payload*v\n\013WireC" +
-      "hannel\022\034\n\030WIRE_CHANNEL_UNSPECIFIED\020\000\022\027\n\023" +
-      "WIRE_CHANNEL_PLAYER\020\001\022\030\n\024WIRE_CHANNEL_WE" +
-      "B_MAP\020\002\022\026\n\022WIRE_CHANNEL_ADMIN\020\003BE\n0fun.p" +
-      "rof_chen.teamviewer.main_code.network.pr" +
-      "otoB\017TeamviewerProtoP\001b\006proto3"
+      "er.v1.PlayerDeltaR\004data\"_\n\020PlayerPatchSc" +
+      "ope\0223\n\006upsert\030\001 \003(\0132\033.teamviewer.v1.Play" +
+      "erUpsertR\006upsert\022\026\n\006delete\030\002 \003(\tR\006delete" +
+      "\"\263\001\n\017EntitiesReplace\022H\n\010entities\030\001 \003(\0132," +
+      ".teamviewer.v1.EntitiesReplace.EntitiesE" +
+      "ntryR\010entities\032V\n\rEntitiesEntry\022\020\n\003key\030\001" +
+      " \001(\tR\003key\022/\n\005value\030\002 \001(\0132\031.teamviewer.v1" +
+      ".EntityDataR\005value:\0028\001\"N\n\014EntityUpsert\022\016" +
+      "\n\002id\030\001 \001(\tR\002id\022.\n\004data\030\002 \001(\0132\032.teamviewe" +
+      "r.v1.EntityDeltaR\004data\"_\n\020EntityPatchSco" +
+      "pe\0223\n\006upsert\030\001 \003(\0132\033.teamviewer.v1.Entit" +
+      "yUpsertR\006upsert\022\026\n\006delete\030\002 \003(\tR\006delete\"" +
+      "\273\001\n\020WaypointsReplace\022L\n\twaypoints\030\001 \003(\0132" +
+      "..teamviewer.v1.WaypointsReplace.Waypoin" +
+      "tsEntryR\twaypoints\032Y\n\016WaypointsEntry\022\020\n\003" +
+      "key\030\001 \001(\tR\003key\0221\n\005value\030\002 \001(\0132\033.teamview" +
+      "er.v1.WaypointDataR\005value:\0028\001\"R\n\016Waypoin" +
+      "tUpsert\022\016\n\002id\030\001 \001(\tR\002id\0220\n\004data\030\002 \001(\0132\034." +
+      "teamviewer.v1.WaypointDeltaR\004data\"c\n\022Way" +
+      "pointPatchScope\0225\n\006upsert\030\001 \003(\0132\035.teamvi" +
+      "ewer.v1.WaypointUpsertR\006upsert\022\026\n\006delete" +
+      "\030\002 \003(\tR\006delete\"S\n\021TabPlayersReplace\022>\n\013t" +
+      "ab_players\030\001 \003(\0132\035.teamviewer.v1.TabPlay" +
+      "erEntryR\ntabPlayers\"V\n\017TabPlayerUpsert\022\020" +
+      "\n\003key\030\001 \001(\tR\003key\0221\n\004data\030\002 \001(\0132\035.teamvie" +
+      "wer.v1.TabPlayerEntryR\004data\"f\n\024TabPlayer" +
+      "sPatchScope\0226\n\006upsert\030\001 \003(\0132\036.teamviewer" +
+      ".v1.TabPlayerUpsertR\006upsert\022\026\n\006delete\030\002 " +
+      "\003(\tR\006delete\"F\n\016StateKeepalive\022\030\n\007players" +
+      "\030\001 \003(\tR\007players\022\032\n\010entities\030\002 \003(\tR\010entit" +
+      "ies\"*\n\020SourceStateClear\022\026\n\006scopes\030\001 \003(\tR" +
+      "\006scopes\"4\n\017WaypointsDelete\022!\n\014waypoint_i" +
+      "ds\030\001 \003(\tR\013waypointIds\"H\n\032WaypointsEntity" +
+      "DeathCancel\022*\n\021target_entity_ids\030\001 \003(\tR\017" +
+      "targetEntityIds\"\351\002\n\024BattleMapObservation" +
+      "\022\034\n\tdimension\030\001 \001(\tR\tdimension\022\031\n\010map_si" +
+      "ze\030\002 \001(\005R\007mapSize\022\035\n\nanchor_row\030\003 \001(\005R\ta" +
+      "nchorRow\022\035\n\nanchor_col\030\004 \001(\005R\tanchorCol\022" +
+      "0\n\024snapshot_observed_at\030\005 \001(\003R\022snapshotO" +
+      "bservedAt\022\033\n\tparsed_at\030\006 \001(\003R\010parsedAt\022L" +
+      "\n\ncandidates\030\007 \003(\0132,.teamviewer.v1.Battl" +
+      "eMapObservationCandidateR\ncandidates\022=\n\005" +
+      "cells\030\010 \003(\0132\'.teamviewer.v1.BattleMapObs" +
+      "ervationCellR\005cells\"\253\013\n\022PlayerReportBund" +
+      "le\022(\n\020submit_player_id\030\001 \001(\tR\016submitPlay" +
+      "erId\022K\n\017players_replace\030\n \001(\0132\035.teamview" +
+      "er.v1.PlayersReplaceH\000R\016playersReplace\210\001" +
+      "\001\022I\n\rplayers_patch\030\013 \001(\0132\037.teamviewer.v1" +
+      ".PlayerPatchScopeH\001R\014playersPatch\210\001\001\022N\n\020" +
+      "entities_replace\030\014 \001(\0132\036.teamviewer.v1.E" +
+      "ntitiesReplaceH\002R\017entitiesReplace\210\001\001\022K\n\016" +
+      "entities_patch\030\r \001(\0132\037.teamviewer.v1.Ent" +
+      "ityPatchScopeH\003R\rentitiesPatch\210\001\001\022Q\n\021way" +
+      "points_replace\030\016 \001(\0132\037.teamviewer.v1.Way" +
+      "pointsReplaceH\004R\020waypointsReplace\210\001\001\022O\n\017" +
+      "waypoints_patch\030\017 \001(\0132!.teamviewer.v1.Wa" +
+      "ypointPatchScopeH\005R\016waypointsPatch\210\001\001\022U\n" +
+      "\023tab_players_replace\030\020 \001(\0132 .teamviewer." +
+      "v1.TabPlayersReplaceH\006R\021tabPlayersReplac" +
+      "e\210\001\001\022T\n\021tab_players_patch\030\021 \001(\0132#.teamvi" +
+      "ewer.v1.TabPlayersPatchScopeH\007R\017tabPlaye" +
+      "rsPatch\210\001\001\022^\n\026battle_map_observation\030\022 \001" +
+      "(\0132#.teamviewer.v1.BattleMapObservationH" +
+      "\010R\024battleMapObservation\210\001\001\022K\n\017state_keep" +
+      "alive\030\023 \001(\0132\035.teamviewer.v1.StateKeepali" +
+      "veH\tR\016stateKeepalive\210\001\001\022R\n\022source_state_" +
+      "clear\030\024 \001(\0132\037.teamviewer.v1.SourceStateC" +
+      "learH\nR\020sourceStateClear\210\001\001\022N\n\020waypoints" +
+      "_delete\030\025 \001(\0132\036.teamviewer.v1.WaypointsD" +
+      "eleteH\013R\017waypointsDelete\210\001\001\022q\n\035waypoints" +
+      "_entity_death_cancel\030\026 \001(\0132).teamviewer." +
+      "v1.WaypointsEntityDeathCancelH\014R\032waypoin" +
+      "tsEntityDeathCancel\210\001\001B\022\n\020_players_repla" +
+      "ceB\020\n\016_players_patchB\023\n\021_entities_replac" +
+      "eB\021\n\017_entities_patchB\024\n\022_waypoints_repla" +
+      "ceB\022\n\020_waypoints_patchB\026\n\024_tab_players_r" +
+      "eplaceB\024\n\022_tab_players_patchB\031\n\027_battle_" +
+      "map_observationB\022\n\020_state_keepaliveB\025\n\023_" +
+      "source_state_clearB\023\n\021_waypoints_deleteB" +
+      " \n\036_waypoints_entity_death_cancel\"\333\006\n\014Ha" +
+      "ndshakeAck\022\024\n\005ready\030\001 \001(\010R\005ready\0228\n\030netw" +
+      "ork_protocol_version\030\002 \001(\tR\026networkProto" +
+      "colVersion\022\\\n+minimum_compatible_network" +
+      "_protocol_version\030\003 \001(\tR\'minimumCompatib" +
+      "leNetworkProtocolVersion\0222\n\025local_progra" +
+      "m_version\030\004 \001(\tR\023localProgramVersion\022\033\n\t" +
+      "room_code\030\005 \001(\tR\010roomCode\022#\n\rdelta_enabl" +
+      "ed\030\006 \001(\010R\014deltaEnabled\022\031\n\005error\030\007 \001(\tH\000R" +
+      "\005error\210\001\001\022(\n\rreject_reason\030\010 \001(\tH\001R\014reje" +
+      "ctReason\210\001\001\0223\n\023digest_interval_sec\030\t \001(\005" +
+      "H\002R\021digestIntervalSec\210\001\001\022&\n\014broadcast_hz" +
+      "\030\n \001(\001H\003R\013broadcastHz\210\001\001\0227\n\025report_inter" +
+      "val_ticks\030\013 \001(\005H\004R\023reportIntervalTicks\210\001" +
+      "\001\0221\n\022player_timeout_sec\030\014 \001(\005H\005R\020playerT" +
+      "imeoutSec\210\001\001\0221\n\022entity_timeout_sec\030\r \001(\005" +
+      "H\006R\020entityTimeoutSec\210\001\001\022<\n\030battle_chunk_" +
+      "timeout_sec\030\016 \001(\005H\007R\025battleChunkTimeoutS" +
+      "ec\210\001\001B\010\n\006_errorB\020\n\016_reject_reasonB\026\n\024_di" +
+      "gest_interval_secB\017\n\r_broadcast_hzB\030\n\026_r" +
+      "eport_interval_ticksB\025\n\023_player_timeout_" +
+      "secB\025\n\023_entity_timeout_secB\033\n\031_battle_ch" +
+      "unk_timeout_sec\"u\n\031WebMapPlayerMarkAckDe" +
+      "tail\022\033\n\tplayer_id\030\001 \001(\tR\010playerId\0222\n\004mar" +
+      "k\030\002 \001(\0132\031.teamviewer.v1.PlayerMarkH\000R\004ma" +
+      "rk\210\001\001B\007\n\005_mark\"I\n\"WebMapClearAllPlayerMa" +
+      "rksAckDetail\022#\n\rremoved_count\030\001 \001(\005R\014rem" +
+      "ovedCount\";\n\037WebMapSameServerFilterAckDe" +
+      "tail\022\030\n\007enabled\030\001 \001(\010R\007enabled\"{\n\037WebMap" +
+      "TacticalWaypointAckDetail\022\037\n\013waypoint_id" +
+      "\030\001 \001(\tR\nwaypointId\0227\n\010waypoint\030\002 \001(\0132\033.t" +
+      "eamviewer.v1.WaypointDataR\010waypoint\"C\n\036W" +
+      "ebMapWaypointsDeleteAckDetail\022!\n\014waypoin" +
+      "t_ids\030\001 \003(\tR\013waypointIds\"\357\004\n\tWebMapAck\022\016" +
+      "\n\002ok\030\001 \001(\010R\002ok\022\033\n\006action\030\002 \001(\tH\001R\006action" +
+      "\210\001\001\022\031\n\005error\030\003 \001(\tH\002R\005error\210\001\001\022\035\n\007comman" +
+      "d\030\004 \001(\tH\003R\007command\210\001\001\022K\n\013player_mark\030\n \001" +
+      "(\0132(.teamviewer.v1.WebMapPlayerMarkAckDe" +
+      "tailH\000R\nplayerMark\022h\n\026clear_all_player_m" +
+      "arks\030\013 \001(\01321.teamviewer.v1.WebMapClearAl" +
+      "lPlayerMarksAckDetailH\000R\023clearAllPlayerM" +
+      "arks\022^\n\022same_server_filter\030\014 \001(\0132..teamv" +
+      "iewer.v1.WebMapSameServerFilterAckDetail" +
+      "H\000R\020sameServerFilter\022]\n\021tactical_waypoin" +
+      "t\030\r \001(\0132..teamviewer.v1.WebMapTacticalWa" +
+      "ypointAckDetailH\000R\020tacticalWaypoint\022Z\n\020w" +
+      "aypoints_delete\030\016 \001(\0132-.teamviewer.v1.We" +
+      "bMapWaypointsDeleteAckDetailH\000R\017waypoint" +
+      "sDeleteB\010\n\006detailB\t\n\007_actionB\010\n\006_errorB\n" +
+      "\n\010_command\"\'\n\004Pong\022\037\n\013server_time\030\001 \001(\001R" +
+      "\nserverTime\"\376\007\n\014SnapshotFull\022B\n\007players\030" +
+      "\001 \003(\0132(.teamviewer.v1.SnapshotFull.Playe" +
+      "rsEntryR\007players\022E\n\010entities\030\002 \003(\0132).tea" +
+      "mviewer.v1.SnapshotFull.EntitiesEntryR\010e" +
+      "ntities\022H\n\twaypoints\030\003 \003(\0132*.teamviewer." +
+      "v1.SnapshotFull.WaypointsEntryR\twaypoint" +
+      "s\022D\n\rbattle_chunks\030\004 \003(\0132\037.teamviewer.v1" +
+      ".BattleChunkEntryR\014battleChunks\022O\n\014playe" +
+      "r_marks\030\005 \003(\0132,.teamviewer.v1.SnapshotFu" +
+      "ll.PlayerMarksEntryR\013playerMarks\022?\n\ttab_" +
+      "state\030\006 \001(\0132\035.teamviewer.v1.WebMapTabSta" +
+      "teH\000R\010tabState\210\001\001\022 \n\troom_code\030\007 \001(\tH\001R\010" +
+      "roomCode\210\001\001\022 \n\013connections\030\010 \003(\tR\013connec" +
+      "tions\0220\n\021connections_count\030\t \001(\005H\002R\020conn" +
+      "ectionsCount\210\001\001\022$\n\013server_time\030\n \001(\001H\003R\n" +
+      "serverTime\210\001\001\032U\n\014PlayersEntry\022\020\n\003key\030\001 \001" +
+      "(\tR\003key\022/\n\005value\030\002 \001(\0132\031.teamviewer.v1.P" +
+      "layerDataR\005value:\0028\001\032V\n\rEntitiesEntry\022\020\n" +
+      "\003key\030\001 \001(\tR\003key\022/\n\005value\030\002 \001(\0132\031.teamvie" +
+      "wer.v1.EntityDataR\005value:\0028\001\032Y\n\016Waypoint" +
+      "sEntry\022\020\n\003key\030\001 \001(\tR\003key\0221\n\005value\030\002 \001(\0132" +
+      "\033.teamviewer.v1.WaypointDataR\005value:\0028\001\032" +
+      "Y\n\020PlayerMarksEntry\022\020\n\003key\030\001 \001(\tR\003key\022/\n" +
+      "\005value\030\002 \001(\0132\031.teamviewer.v1.PlayerMarkR" +
+      "\005value:\0028\001B\014\n\n_tab_stateB\014\n\n_room_codeB\024" +
+      "\n\022_connections_countB\016\n\014_server_time\"y\n\021" +
+      "BattleChunkUpsert\022/\n\003ref\030\001 \001(\0132\035.teamvie" +
+      "wer.v1.BattleChunkRefR\003ref\0223\n\004data\030\002 \001(\013" +
+      "2\037.teamviewer.v1.BattleChunkValueR\004data\"" +
+      "\210\001\n\025BattleChunkPatchScope\0228\n\006upsert\030\001 \003(" +
+      "\0132 .teamviewer.v1.BattleChunkUpsertR\006ups" +
+      "ert\0225\n\006delete\030\002 \003(\0132\035.teamviewer.v1.Batt" +
+      "leChunkRefR\006delete\"Q\n\020PlayerMarkUpsert\022\016" +
+      "\n\002id\030\001 \001(\tR\002id\022-\n\004data\030\002 \001(\0132\031.teamviewe" +
+      "r.v1.PlayerMarkR\004data\"g\n\024PlayerMarkPatch" +
+      "Scope\0227\n\006upsert\030\001 \003(\0132\037.teamviewer.v1.Pl" +
+      "ayerMarkUpsertR\006upsert\022\026\n\006delete\030\002 \003(\tR\006" +
+      "delete\"\345\005\n\005Patch\022>\n\007players\030\001 \001(\0132\037.team" +
+      "viewer.v1.PlayerPatchScopeH\000R\007players\210\001\001" +
+      "\022@\n\010entities\030\002 \001(\0132\037.teamviewer.v1.Entit" +
+      "yPatchScopeH\001R\010entities\210\001\001\022D\n\twaypoints\030" +
+      "\003 \001(\0132!.teamviewer.v1.WaypointPatchScope" +
+      "H\002R\twaypoints\210\001\001\022N\n\rbattle_chunks\030\004 \001(\0132" +
+      "$.teamviewer.v1.BattleChunkPatchScopeH\003R" +
+      "\014battleChunks\210\001\001\022K\n\014player_marks\030\005 \001(\0132#" +
+      ".teamviewer.v1.PlayerMarkPatchScopeH\004R\013p" +
+      "layerMarks\210\001\001\022I\n\017tab_state_patch\030\006 \001(\0132\034",
+      ".teamviewer.v1.TabStatePatchH\005R\rtabState" +
+      "Patch\210\001\001\022@\n\013connections\030\007 \001(\0132\031.teamview" +
+      "er.v1.StringListH\006R\013connections\210\001\001\0220\n\021co" +
+      "nnections_count\030\010 \001(\005H\007R\020connectionsCoun" +
+      "t\210\001\001\022$\n\013server_time\030\t \001(\001H\010R\nserverTime\210" +
+      "\001\001B\n\n\010_playersB\013\n\t_entitiesB\014\n\n_waypoint" +
+      "sB\020\n\016_battle_chunksB\017\n\r_player_marksB\022\n\020" +
+      "_tab_state_patchB\016\n\014_connectionsB\024\n\022_con" +
+      "nections_countB\016\n\014_server_time\"\230\001\n\006Diges" +
+      "t\022\030\n\007players\030\001 \001(\tR\007players\022\032\n\010entities\030" +
+      "\002 \001(\tR\010entities\022\034\n\twaypoints\030\003 \001(\tR\twayp" +
+      "oints\022(\n\rbattle_chunks\030\004 \001(\tH\000R\014battleCh" +
+      "unks\210\001\001B\020\n\016_battle_chunks\"\303\001\n\016RefreshReq" +
+      "uest\022\026\n\006reason\030\001 \001(\tR\006reason\022\037\n\013server_t" +
+      "ime\030\002 \001(\001R\nserverTime\022\030\n\007players\030\003 \003(\tR\007" +
+      "players\022\032\n\010entities\030\004 \003(\tR\010entities\022B\n\rb" +
+      "attle_chunks\030\005 \003(\0132\035.teamviewer.v1.Battl" +
+      "eChunkRefR\014battleChunks\"\217\001\n\016ReportRateHi" +
+      "nt\0222\n\025report_interval_ticks\030\001 \001(\005R\023repor" +
+      "tIntervalTicks\022!\n\014broadcast_hz\030\002 \001(\001R\013br" +
+      "oadcastHz\022\033\n\006reason\030\003 \001(\tH\000R\006reason\210\001\001B\t" +
+      "\n\007_reason\"\366\004\n\rWebMapCommand\022E\n\016resync_re" +
+      "quest\030\001 \001(\0132\034.teamviewer.v1.ResyncReques" +
+      "tH\000R\rresyncRequest\022M\n\017set_player_mark\030\002 " +
+      "\001(\0132#.teamviewer.v1.CommandPlayerMarkSet" +
+      "H\000R\rsetPlayerMark\022S\n\021clear_player_mark\030\003" +
+      " \001(\0132%.teamviewer.v1.CommandPlayerMarkCl" +
+      "earH\000R\017clearPlayerMark\022_\n\026clear_all_play" +
+      "er_marks\030\004 \001(\0132(.teamviewer.v1.CommandPl" +
+      "ayerMarkClearAllH\000R\023clearAllPlayerMarks\022" +
+      "`\n\026set_same_server_filter\030\005 \001(\0132).teamvi" +
+      "ewer.v1.CommandSameServerFilterSetH\000R\023se" +
+      "tSameServerFilter\022_\n\025set_tactical_waypoi" +
+      "nt\030\006 \001(\0132).teamviewer.v1.CommandTactical" +
+      "WaypointSetH\000R\023setTacticalWaypoint\022K\n\020de" +
+      "lete_waypoints\030\007 \001(\0132\036.teamviewer.v1.Way" +
+      "pointsDeleteH\000R\017deleteWaypointsB\t\n\007comma" +
+      "nd\"\352\010\n\014WireEnvelope\0224\n\007channel\030\001 \001(\0162\032.t" +
+      "eamviewer.v1.WireChannelR\007channel\022a\n\030pla" +
+      "yer_handshake_request\030\n \001(\0132%.teamviewer" +
+      ".v1.PlayerHandshakeRequestH\000R\026playerHand" +
+      "shakeRequest\022b\n\031web_map_handshake_reques" +
+      "t\030\013 \001(\0132%.teamviewer.v1.WebMapHandshakeR" +
+      "equestH\000R\026webMapHandshakeRequest\022^\n\027admi" +
+      "n_handshake_request\030\014 \001(\0132$.teamviewer.v" +
+      "1.AdminHandshakeRequestH\000R\025adminHandshak" +
+      "eRequest\022)\n\004ping\030\r \001(\0132\023.teamviewer.v1.P" +
+      "ingH\000R\004ping\022E\n\016resync_request\030\016 \001(\0132\034.te" +
+      "amviewer.v1.ResyncRequestH\000R\rresyncReque" +
+      "st\022F\n\017web_map_command\030\017 \001(\0132\034.teamviewer" +
+      ".v1.WebMapCommandH\000R\rwebMapCommand\022U\n\024pl" +
+      "ayer_report_bundle\030\020 \001(\0132!.teamviewer.v1" +
+      ".PlayerReportBundleH\000R\022playerReportBundl" +
+      "e\022B\n\rhandshake_ack\030\036 \001(\0132\033.teamviewer.v1" +
+      ".HandshakeAckH\000R\014handshakeAck\022:\n\013web_map" +
+      "_ack\030\037 \001(\0132\030.teamviewer.v1.WebMapAckH\000R\t" +
+      "webMapAck\022)\n\004pong\030  \001(\0132\023.teamviewer.v1." +
+      "PongH\000R\004pong\022B\n\rsnapshot_full\030! \001(\0132\033.te" +
+      "amviewer.v1.SnapshotFullH\000R\014snapshotFull" +
+      "\022,\n\005patch\030\" \001(\0132\024.teamviewer.v1.PatchH\000R" +
+      "\005patch\022/\n\006digest\030# \001(\0132\025.teamviewer.v1.D" +
+      "igestH\000R\006digest\022H\n\017refresh_request\030$ \001(\013" +
+      "2\035.teamviewer.v1.RefreshRequestH\000R\016refre" +
+      "shRequest\022I\n\020report_rate_hint\030% \001(\0132\035.te" +
+      "amviewer.v1.ReportRateHintH\000R\016reportRate" +
+      "HintB\t\n\007payload*v\n\013WireChannel\022\034\n\030WIRE_C" +
+      "HANNEL_UNSPECIFIED\020\000\022\027\n\023WIRE_CHANNEL_PLA" +
+      "YER\020\001\022\030\n\024WIRE_CHANNEL_WEB_MAP\020\002\022\026\n\022WIRE_" +
+      "CHANNEL_ADMIN\020\003BE\n0fun.prof_chen.teamvie" +
+      "wer.main_code.network.protoB\017TeamviewerP" +
+      "rotoP\001b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -994,92 +987,104 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WaypointDelta_descriptor,
         new java.lang.String[] { "X", "Y", "Z", "Dimension", "Name", "Symbol", "Color", "OwnerId", "OwnerName", "CreatedAt", "TtlSeconds", "WaypointKind", "ReplaceOldQuick", "MaxQuickMarks", "TargetType", "TargetEntityId", "TargetEntityType", "TargetEntityName", "RoomCode", "Permanent", "TacticalType", "SourceType", "DeletableBy", });
-    internal_static_teamviewer_v1_BattleChunkData_descriptor =
+    internal_static_teamviewer_v1_BattleChunkCoord_descriptor =
       getDescriptor().getMessageType(14);
-    internal_static_teamviewer_v1_BattleChunkData_fieldAccessorTable = new
+    internal_static_teamviewer_v1_BattleChunkCoord_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
-        internal_static_teamviewer_v1_BattleChunkData_descriptor,
-        new java.lang.String[] { "ChunkX", "ChunkZ", "Dimension", "Symbol", "MarkerType", "ColorRaw", "ColorNote", "ObservedAt", "PositionSampledAt", "AlignmentSource", "ReporterId", "RoomCode", });
-    internal_static_teamviewer_v1_BattleChunkDelta_descriptor =
+        internal_static_teamviewer_v1_BattleChunkCoord_descriptor,
+        new java.lang.String[] { "ChunkX", "ChunkZ", });
+    internal_static_teamviewer_v1_BattleChunkRef_descriptor =
       getDescriptor().getMessageType(15);
-    internal_static_teamviewer_v1_BattleChunkDelta_fieldAccessorTable = new
+    internal_static_teamviewer_v1_BattleChunkRef_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
-        internal_static_teamviewer_v1_BattleChunkDelta_descriptor,
-        new java.lang.String[] { "ChunkX", "ChunkZ", "Dimension", "Symbol", "MarkerType", "ColorRaw", "ColorNote", "ObservedAt", "PositionSampledAt", "AlignmentSource", "ReporterId", "RoomCode", });
-    internal_static_teamviewer_v1_BattleMapObservationCandidate_descriptor =
+        internal_static_teamviewer_v1_BattleChunkRef_descriptor,
+        new java.lang.String[] { "Dimension", "Coord", });
+    internal_static_teamviewer_v1_BattleChunkValue_descriptor =
       getDescriptor().getMessageType(16);
+    internal_static_teamviewer_v1_BattleChunkValue_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_teamviewer_v1_BattleChunkValue_descriptor,
+        new java.lang.String[] { "Symbol", "MarkerType", "ColorRaw", "ColorNote", "ObservedAt", "PositionSampledAt", "AlignmentSource", "ReporterId", });
+    internal_static_teamviewer_v1_BattleChunkEntry_descriptor =
+      getDescriptor().getMessageType(17);
+    internal_static_teamviewer_v1_BattleChunkEntry_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_teamviewer_v1_BattleChunkEntry_descriptor,
+        new java.lang.String[] { "Ref", "Data", });
+    internal_static_teamviewer_v1_BattleMapObservationCandidate_descriptor =
+      getDescriptor().getMessageType(18);
     internal_static_teamviewer_v1_BattleMapObservationCandidate_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_BattleMapObservationCandidate_descriptor,
         new java.lang.String[] { "BaseChunkX", "BaseChunkZ", "PositionSampledAt", "Source", });
     internal_static_teamviewer_v1_BattleMapObservationCell_descriptor =
-      getDescriptor().getMessageType(17);
+      getDescriptor().getMessageType(19);
     internal_static_teamviewer_v1_BattleMapObservationCell_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_BattleMapObservationCell_descriptor,
         new java.lang.String[] { "RelChunkX", "RelChunkZ", "Symbol", "ColorRaw", });
     internal_static_teamviewer_v1_PlayerHandshakeRequest_descriptor =
-      getDescriptor().getMessageType(18);
+      getDescriptor().getMessageType(20);
     internal_static_teamviewer_v1_PlayerHandshakeRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayerHandshakeRequest_descriptor,
         new java.lang.String[] { "NetworkProtocolVersion", "MinimumCompatibleNetworkProtocolVersion", "LocalProgramVersion", "SubmitPlayerId", "RoomCode", "PreferredReportIntervalTicks", "MinReportIntervalTicks", "MaxReportIntervalTicks", });
     internal_static_teamviewer_v1_WebMapHandshakeRequest_descriptor =
-      getDescriptor().getMessageType(19);
+      getDescriptor().getMessageType(21);
     internal_static_teamviewer_v1_WebMapHandshakeRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapHandshakeRequest_descriptor,
         new java.lang.String[] { "NetworkProtocolVersion", "MinimumCompatibleNetworkProtocolVersion", "LocalProgramVersion", "RoomCode", });
     internal_static_teamviewer_v1_AdminHandshakeRequest_descriptor =
-      getDescriptor().getMessageType(20);
+      getDescriptor().getMessageType(22);
     internal_static_teamviewer_v1_AdminHandshakeRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_AdminHandshakeRequest_descriptor,
         new java.lang.String[] { "NetworkProtocolVersion", "MinimumCompatibleNetworkProtocolVersion", "LocalProgramVersion", "RoomCode", });
     internal_static_teamviewer_v1_Ping_descriptor =
-      getDescriptor().getMessageType(21);
+      getDescriptor().getMessageType(23);
     internal_static_teamviewer_v1_Ping_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_Ping_descriptor,
         new java.lang.String[] { });
     internal_static_teamviewer_v1_ResyncRequest_descriptor =
-      getDescriptor().getMessageType(22);
+      getDescriptor().getMessageType(24);
     internal_static_teamviewer_v1_ResyncRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_ResyncRequest_descriptor,
         new java.lang.String[] { "Reason", });
     internal_static_teamviewer_v1_CommandPlayerMarkSet_descriptor =
-      getDescriptor().getMessageType(23);
+      getDescriptor().getMessageType(25);
     internal_static_teamviewer_v1_CommandPlayerMarkSet_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_CommandPlayerMarkSet_descriptor,
         new java.lang.String[] { "PlayerId", "Team", "Color", "Label", "Source", });
     internal_static_teamviewer_v1_CommandPlayerMarkClear_descriptor =
-      getDescriptor().getMessageType(24);
+      getDescriptor().getMessageType(26);
     internal_static_teamviewer_v1_CommandPlayerMarkClear_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_CommandPlayerMarkClear_descriptor,
         new java.lang.String[] { "PlayerId", });
     internal_static_teamviewer_v1_CommandPlayerMarkClearAll_descriptor =
-      getDescriptor().getMessageType(25);
+      getDescriptor().getMessageType(27);
     internal_static_teamviewer_v1_CommandPlayerMarkClearAll_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_CommandPlayerMarkClearAll_descriptor,
         new java.lang.String[] { });
     internal_static_teamviewer_v1_CommandSameServerFilterSet_descriptor =
-      getDescriptor().getMessageType(26);
+      getDescriptor().getMessageType(28);
     internal_static_teamviewer_v1_CommandSameServerFilterSet_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_CommandSameServerFilterSet_descriptor,
         new java.lang.String[] { "Enabled", });
     internal_static_teamviewer_v1_CommandTacticalWaypointSet_descriptor =
-      getDescriptor().getMessageType(27);
+      getDescriptor().getMessageType(29);
     internal_static_teamviewer_v1_CommandTacticalWaypointSet_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_CommandTacticalWaypointSet_descriptor,
         new java.lang.String[] { "WaypointId", "X", "Z", "Label", "Dimension", "TacticalType", "Permanent", "TtlSeconds", "Color", "RoomCode", });
     internal_static_teamviewer_v1_PlayersReplace_descriptor =
-      getDescriptor().getMessageType(28);
+      getDescriptor().getMessageType(30);
     internal_static_teamviewer_v1_PlayersReplace_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayersReplace_descriptor,
@@ -1091,19 +1096,19 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
         internal_static_teamviewer_v1_PlayersReplace_PlayersEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
     internal_static_teamviewer_v1_PlayerUpsert_descriptor =
-      getDescriptor().getMessageType(29);
+      getDescriptor().getMessageType(31);
     internal_static_teamviewer_v1_PlayerUpsert_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayerUpsert_descriptor,
         new java.lang.String[] { "Id", "Data", });
     internal_static_teamviewer_v1_PlayerPatchScope_descriptor =
-      getDescriptor().getMessageType(30);
+      getDescriptor().getMessageType(32);
     internal_static_teamviewer_v1_PlayerPatchScope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayerPatchScope_descriptor,
         new java.lang.String[] { "Upsert", "Delete", });
     internal_static_teamviewer_v1_EntitiesReplace_descriptor =
-      getDescriptor().getMessageType(31);
+      getDescriptor().getMessageType(33);
     internal_static_teamviewer_v1_EntitiesReplace_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_EntitiesReplace_descriptor,
@@ -1115,19 +1120,19 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
         internal_static_teamviewer_v1_EntitiesReplace_EntitiesEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
     internal_static_teamviewer_v1_EntityUpsert_descriptor =
-      getDescriptor().getMessageType(32);
+      getDescriptor().getMessageType(34);
     internal_static_teamviewer_v1_EntityUpsert_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_EntityUpsert_descriptor,
         new java.lang.String[] { "Id", "Data", });
     internal_static_teamviewer_v1_EntityPatchScope_descriptor =
-      getDescriptor().getMessageType(33);
+      getDescriptor().getMessageType(35);
     internal_static_teamviewer_v1_EntityPatchScope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_EntityPatchScope_descriptor,
         new java.lang.String[] { "Upsert", "Delete", });
     internal_static_teamviewer_v1_WaypointsReplace_descriptor =
-      getDescriptor().getMessageType(34);
+      getDescriptor().getMessageType(36);
     internal_static_teamviewer_v1_WaypointsReplace_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WaypointsReplace_descriptor,
@@ -1139,121 +1144,121 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
         internal_static_teamviewer_v1_WaypointsReplace_WaypointsEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
     internal_static_teamviewer_v1_WaypointUpsert_descriptor =
-      getDescriptor().getMessageType(35);
+      getDescriptor().getMessageType(37);
     internal_static_teamviewer_v1_WaypointUpsert_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WaypointUpsert_descriptor,
         new java.lang.String[] { "Id", "Data", });
     internal_static_teamviewer_v1_WaypointPatchScope_descriptor =
-      getDescriptor().getMessageType(36);
+      getDescriptor().getMessageType(38);
     internal_static_teamviewer_v1_WaypointPatchScope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WaypointPatchScope_descriptor,
         new java.lang.String[] { "Upsert", "Delete", });
     internal_static_teamviewer_v1_TabPlayersReplace_descriptor =
-      getDescriptor().getMessageType(37);
+      getDescriptor().getMessageType(39);
     internal_static_teamviewer_v1_TabPlayersReplace_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_TabPlayersReplace_descriptor,
         new java.lang.String[] { "TabPlayers", });
     internal_static_teamviewer_v1_TabPlayerUpsert_descriptor =
-      getDescriptor().getMessageType(38);
+      getDescriptor().getMessageType(40);
     internal_static_teamviewer_v1_TabPlayerUpsert_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_TabPlayerUpsert_descriptor,
         new java.lang.String[] { "Key", "Data", });
     internal_static_teamviewer_v1_TabPlayersPatchScope_descriptor =
-      getDescriptor().getMessageType(39);
+      getDescriptor().getMessageType(41);
     internal_static_teamviewer_v1_TabPlayersPatchScope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_TabPlayersPatchScope_descriptor,
         new java.lang.String[] { "Upsert", "Delete", });
     internal_static_teamviewer_v1_StateKeepalive_descriptor =
-      getDescriptor().getMessageType(40);
+      getDescriptor().getMessageType(42);
     internal_static_teamviewer_v1_StateKeepalive_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_StateKeepalive_descriptor,
         new java.lang.String[] { "Players", "Entities", });
     internal_static_teamviewer_v1_SourceStateClear_descriptor =
-      getDescriptor().getMessageType(41);
+      getDescriptor().getMessageType(43);
     internal_static_teamviewer_v1_SourceStateClear_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_SourceStateClear_descriptor,
         new java.lang.String[] { "Scopes", });
     internal_static_teamviewer_v1_WaypointsDelete_descriptor =
-      getDescriptor().getMessageType(42);
+      getDescriptor().getMessageType(44);
     internal_static_teamviewer_v1_WaypointsDelete_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WaypointsDelete_descriptor,
         new java.lang.String[] { "WaypointIds", });
     internal_static_teamviewer_v1_WaypointsEntityDeathCancel_descriptor =
-      getDescriptor().getMessageType(43);
+      getDescriptor().getMessageType(45);
     internal_static_teamviewer_v1_WaypointsEntityDeathCancel_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WaypointsEntityDeathCancel_descriptor,
         new java.lang.String[] { "TargetEntityIds", });
     internal_static_teamviewer_v1_BattleMapObservation_descriptor =
-      getDescriptor().getMessageType(44);
+      getDescriptor().getMessageType(46);
     internal_static_teamviewer_v1_BattleMapObservation_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_BattleMapObservation_descriptor,
         new java.lang.String[] { "Dimension", "MapSize", "AnchorRow", "AnchorCol", "SnapshotObservedAt", "ParsedAt", "Candidates", "Cells", });
     internal_static_teamviewer_v1_PlayerReportBundle_descriptor =
-      getDescriptor().getMessageType(45);
+      getDescriptor().getMessageType(47);
     internal_static_teamviewer_v1_PlayerReportBundle_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayerReportBundle_descriptor,
         new java.lang.String[] { "SubmitPlayerId", "PlayersReplace", "PlayersPatch", "EntitiesReplace", "EntitiesPatch", "WaypointsReplace", "WaypointsPatch", "TabPlayersReplace", "TabPlayersPatch", "BattleMapObservation", "StateKeepalive", "SourceStateClear", "WaypointsDelete", "WaypointsEntityDeathCancel", });
     internal_static_teamviewer_v1_HandshakeAck_descriptor =
-      getDescriptor().getMessageType(46);
+      getDescriptor().getMessageType(48);
     internal_static_teamviewer_v1_HandshakeAck_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_HandshakeAck_descriptor,
         new java.lang.String[] { "Ready", "NetworkProtocolVersion", "MinimumCompatibleNetworkProtocolVersion", "LocalProgramVersion", "RoomCode", "DeltaEnabled", "Error", "RejectReason", "DigestIntervalSec", "BroadcastHz", "ReportIntervalTicks", "PlayerTimeoutSec", "EntityTimeoutSec", "BattleChunkTimeoutSec", });
     internal_static_teamviewer_v1_WebMapPlayerMarkAckDetail_descriptor =
-      getDescriptor().getMessageType(47);
+      getDescriptor().getMessageType(49);
     internal_static_teamviewer_v1_WebMapPlayerMarkAckDetail_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapPlayerMarkAckDetail_descriptor,
         new java.lang.String[] { "PlayerId", "Mark", });
     internal_static_teamviewer_v1_WebMapClearAllPlayerMarksAckDetail_descriptor =
-      getDescriptor().getMessageType(48);
+      getDescriptor().getMessageType(50);
     internal_static_teamviewer_v1_WebMapClearAllPlayerMarksAckDetail_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapClearAllPlayerMarksAckDetail_descriptor,
         new java.lang.String[] { "RemovedCount", });
     internal_static_teamviewer_v1_WebMapSameServerFilterAckDetail_descriptor =
-      getDescriptor().getMessageType(49);
+      getDescriptor().getMessageType(51);
     internal_static_teamviewer_v1_WebMapSameServerFilterAckDetail_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapSameServerFilterAckDetail_descriptor,
         new java.lang.String[] { "Enabled", });
     internal_static_teamviewer_v1_WebMapTacticalWaypointAckDetail_descriptor =
-      getDescriptor().getMessageType(50);
+      getDescriptor().getMessageType(52);
     internal_static_teamviewer_v1_WebMapTacticalWaypointAckDetail_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapTacticalWaypointAckDetail_descriptor,
         new java.lang.String[] { "WaypointId", "Waypoint", });
     internal_static_teamviewer_v1_WebMapWaypointsDeleteAckDetail_descriptor =
-      getDescriptor().getMessageType(51);
+      getDescriptor().getMessageType(53);
     internal_static_teamviewer_v1_WebMapWaypointsDeleteAckDetail_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapWaypointsDeleteAckDetail_descriptor,
         new java.lang.String[] { "WaypointIds", });
     internal_static_teamviewer_v1_WebMapAck_descriptor =
-      getDescriptor().getMessageType(52);
+      getDescriptor().getMessageType(54);
     internal_static_teamviewer_v1_WebMapAck_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapAck_descriptor,
         new java.lang.String[] { "Ok", "Action", "Error", "Command", "PlayerMark", "ClearAllPlayerMarks", "SameServerFilter", "TacticalWaypoint", "WaypointsDelete", "Detail", });
     internal_static_teamviewer_v1_Pong_descriptor =
-      getDescriptor().getMessageType(53);
+      getDescriptor().getMessageType(55);
     internal_static_teamviewer_v1_Pong_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_Pong_descriptor,
         new java.lang.String[] { "ServerTime", });
     internal_static_teamviewer_v1_SnapshotFull_descriptor =
-      getDescriptor().getMessageType(54);
+      getDescriptor().getMessageType(56);
     internal_static_teamviewer_v1_SnapshotFull_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_SnapshotFull_descriptor,
@@ -1276,74 +1281,68 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_SnapshotFull_WaypointsEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
-    internal_static_teamviewer_v1_SnapshotFull_BattleChunksEntry_descriptor =
-      internal_static_teamviewer_v1_SnapshotFull_descriptor.getNestedType(3);
-    internal_static_teamviewer_v1_SnapshotFull_BattleChunksEntry_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
-        internal_static_teamviewer_v1_SnapshotFull_BattleChunksEntry_descriptor,
-        new java.lang.String[] { "Key", "Value", });
     internal_static_teamviewer_v1_SnapshotFull_PlayerMarksEntry_descriptor =
-      internal_static_teamviewer_v1_SnapshotFull_descriptor.getNestedType(4);
+      internal_static_teamviewer_v1_SnapshotFull_descriptor.getNestedType(3);
     internal_static_teamviewer_v1_SnapshotFull_PlayerMarksEntry_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_SnapshotFull_PlayerMarksEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
     internal_static_teamviewer_v1_BattleChunkUpsert_descriptor =
-      getDescriptor().getMessageType(55);
+      getDescriptor().getMessageType(57);
     internal_static_teamviewer_v1_BattleChunkUpsert_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_BattleChunkUpsert_descriptor,
-        new java.lang.String[] { "Id", "Data", });
+        new java.lang.String[] { "Ref", "Data", });
     internal_static_teamviewer_v1_BattleChunkPatchScope_descriptor =
-      getDescriptor().getMessageType(56);
+      getDescriptor().getMessageType(58);
     internal_static_teamviewer_v1_BattleChunkPatchScope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_BattleChunkPatchScope_descriptor,
         new java.lang.String[] { "Upsert", "Delete", });
     internal_static_teamviewer_v1_PlayerMarkUpsert_descriptor =
-      getDescriptor().getMessageType(57);
+      getDescriptor().getMessageType(59);
     internal_static_teamviewer_v1_PlayerMarkUpsert_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayerMarkUpsert_descriptor,
         new java.lang.String[] { "Id", "Data", });
     internal_static_teamviewer_v1_PlayerMarkPatchScope_descriptor =
-      getDescriptor().getMessageType(58);
+      getDescriptor().getMessageType(60);
     internal_static_teamviewer_v1_PlayerMarkPatchScope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_PlayerMarkPatchScope_descriptor,
         new java.lang.String[] { "Upsert", "Delete", });
     internal_static_teamviewer_v1_Patch_descriptor =
-      getDescriptor().getMessageType(59);
+      getDescriptor().getMessageType(61);
     internal_static_teamviewer_v1_Patch_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_Patch_descriptor,
         new java.lang.String[] { "Players", "Entities", "Waypoints", "BattleChunks", "PlayerMarks", "TabStatePatch", "Connections", "ConnectionsCount", "ServerTime", });
     internal_static_teamviewer_v1_Digest_descriptor =
-      getDescriptor().getMessageType(60);
+      getDescriptor().getMessageType(62);
     internal_static_teamviewer_v1_Digest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_Digest_descriptor,
         new java.lang.String[] { "Players", "Entities", "Waypoints", "BattleChunks", });
     internal_static_teamviewer_v1_RefreshRequest_descriptor =
-      getDescriptor().getMessageType(61);
+      getDescriptor().getMessageType(63);
     internal_static_teamviewer_v1_RefreshRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_RefreshRequest_descriptor,
         new java.lang.String[] { "Reason", "ServerTime", "Players", "Entities", "BattleChunks", });
     internal_static_teamviewer_v1_ReportRateHint_descriptor =
-      getDescriptor().getMessageType(62);
+      getDescriptor().getMessageType(64);
     internal_static_teamviewer_v1_ReportRateHint_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_ReportRateHint_descriptor,
         new java.lang.String[] { "ReportIntervalTicks", "BroadcastHz", "Reason", });
     internal_static_teamviewer_v1_WebMapCommand_descriptor =
-      getDescriptor().getMessageType(63);
+      getDescriptor().getMessageType(65);
     internal_static_teamviewer_v1_WebMapCommand_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WebMapCommand_descriptor,
         new java.lang.String[] { "ResyncRequest", "SetPlayerMark", "ClearPlayerMark", "ClearAllPlayerMarks", "SetSameServerFilter", "SetTacticalWaypoint", "DeleteWaypoints", "Command", });
     internal_static_teamviewer_v1_WireEnvelope_descriptor =
-      getDescriptor().getMessageType(64);
+      getDescriptor().getMessageType(66);
     internal_static_teamviewer_v1_WireEnvelope_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_teamviewer_v1_WireEnvelope_descriptor,

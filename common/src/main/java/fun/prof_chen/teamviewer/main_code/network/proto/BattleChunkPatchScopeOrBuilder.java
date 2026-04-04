@@ -35,27 +35,26 @@ public interface BattleChunkPatchScopeOrBuilder extends
       int index);
 
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @return A list containing the delete.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
-  java.util.List<java.lang.String>
+  java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> 
       getDeleteList();
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @return The count of delete.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
+   */
+  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef getDelete(int index);
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
   int getDeleteCount();
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @param index The index of the element to return.
-   * @return The delete at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
-  java.lang.String getDelete(int index);
+  java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+      getDeleteOrBuilderList();
   /**
-   * <code>repeated string delete = 2 [json_name = "delete"];</code>
-   * @param index The index of the value to return.
-   * @return The bytes of the delete at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef delete = 2 [json_name = "delete"];</code>
    */
-  com.google.protobuf.ByteString
-      getDeleteBytes(int index);
+  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder getDeleteOrBuilder(
+      int index);
 }

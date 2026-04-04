@@ -6,8 +6,8 @@
 package fun.prof_chen.teamviewer.main_code.network.proto;
 
 @com.google.protobuf.Generated
-public interface BattleChunkUpsertOrBuilder extends
-    // @@protoc_insertion_point(interface_extends:teamviewer.v1.BattleChunkUpsert)
+public interface BattleChunkEntryOrBuilder extends
+    // @@protoc_insertion_point(interface_extends:teamviewer.v1.BattleChunkEntry)
     com.google.protobuf.MessageOrBuilder {
 
   /**

@@ -6,13 +6,13 @@
 package fun.prof_chen.teamviewer.main_code.network.proto;
 
 /**
- * Protobuf type {@code teamviewer.v1.BattleChunkData}
+ * Protobuf type {@code teamviewer.v1.BattleChunkValue}
  */
 @com.google.protobuf.Generated
-public final class BattleChunkData extends
+public final class BattleChunkValue extends
     com.google.protobuf.GeneratedMessage implements
-    // @@protoc_insertion_point(message_implements:teamviewer.v1.BattleChunkData)
-    BattleChunkDataOrBuilder {
+    // @@protoc_insertion_point(message_implements:teamviewer.v1.BattleChunkValue)
+    BattleChunkValueOrBuilder {
 private static final long serialVersionUID = 0L;
   static {
     com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
@@ -21,108 +21,45 @@ private static final long serialVersionUID = 0L;
       /* minor= */ 34,
       /* patch= */ 1,
       /* suffix= */ "",
-      "BattleChunkData");
+      "BattleChunkValue");
   }
-  // Use BattleChunkData.newBuilder() to construct.
-  private BattleChunkData(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+  // Use BattleChunkValue.newBuilder() to construct.
+  private BattleChunkValue(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
     super(builder);
   }
-  private BattleChunkData() {
-    dimension_ = "";
+  private BattleChunkValue() {
     symbol_ = "";
     markerType_ = "";
     colorRaw_ = "";
     colorNote_ = "";
     alignmentSource_ = "";
     reporterId_ = "";
-    roomCode_ = "";
   }
 
   public static final com.google.protobuf.Descriptors.Descriptor
       getDescriptor() {
-    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkData_descriptor;
+    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkValue_descriptor;
   }
 
   @java.lang.Override
   public com.google.protobuf.Descriptors.Descriptor getDescriptorForType() {
-    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkData_descriptor;
+    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkValue_descriptor;
   }
 
   @java.lang.Override
   protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internalGetFieldAccessorTable() {
-    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkData_fieldAccessorTable
+    return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkValue_fieldAccessorTable
         .ensureFieldAccessorsInitialized(
-            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder.class);
+            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.Builder.class);
   }
 
   private int bitField0_;
-  public static final int CHUNK_X_FIELD_NUMBER = 1;
-  private int chunkX_ = 0;
-  /**
-   * <code>int32 chunk_x = 1 [json_name = "chunkX"];</code>
-   * @return The chunkX.
-   */
-  @java.lang.Override
-  public int getChunkX() {
-    return chunkX_;
-  }
-
-  public static final int CHUNK_Z_FIELD_NUMBER = 2;
-  private int chunkZ_ = 0;
-  /**
-   * <code>int32 chunk_z = 2 [json_name = "chunkZ"];</code>
-   * @return The chunkZ.
-   */
-  @java.lang.Override
-  public int getChunkZ() {
-    return chunkZ_;
-  }
-
-  public static final int DIMENSION_FIELD_NUMBER = 3;
-  @SuppressWarnings("serial")
-  private volatile java.lang.Object dimension_ = "";
-  /**
-   * <code>string dimension = 3 [json_name = "dimension"];</code>
-   * @return The dimension.
-   */
-  @java.lang.Override
-  public java.lang.String getDimension() {
-    java.lang.Object ref = dimension_;
-    if (ref instanceof java.lang.String) {
-      return (java.lang.String) ref;
-    } else {
-      com.google.protobuf.ByteString bs = 
-          (com.google.protobuf.ByteString) ref;
-      java.lang.String s = bs.toStringUtf8();
-      dimension_ = s;
-      return s;
-    }
-  }
-  /**
-   * <code>string dimension = 3 [json_name = "dimension"];</code>
-   * @return The bytes for dimension.
-   */
-  @java.lang.Override
-  public com.google.protobuf.ByteString
-      getDimensionBytes() {
-    java.lang.Object ref = dimension_;
-    if (ref instanceof java.lang.String) {
-      com.google.protobuf.ByteString b = 
-          com.google.protobuf.ByteString.copyFromUtf8(
-              (java.lang.String) ref);
-      dimension_ = b;
-      return b;
-    } else {
-      return (com.google.protobuf.ByteString) ref;
-    }
-  }
-
-  public static final int SYMBOL_FIELD_NUMBER = 4;
+  public static final int SYMBOL_FIELD_NUMBER = 1;
   @SuppressWarnings("serial")
   private volatile java.lang.Object symbol_ = "";
   /**
-   * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+   * <code>optional string symbol = 1 [json_name = "symbol"];</code>
    * @return Whether the symbol field is set.
    */
   @java.lang.Override
@@ -130,7 +67,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000001) != 0);
   }
   /**
-   * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+   * <code>optional string symbol = 1 [json_name = "symbol"];</code>
    * @return The symbol.
    */
   @java.lang.Override
@@ -147,7 +84,7 @@ private static final long serialVersionUID = 0L;
     }
   }
   /**
-   * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+   * <code>optional string symbol = 1 [json_name = "symbol"];</code>
    * @return The bytes for symbol.
    */
   @java.lang.Override
@@ -165,11 +102,11 @@ private static final long serialVersionUID = 0L;
     }
   }
 
-  public static final int MARKER_TYPE_FIELD_NUMBER = 5;
+  public static final int MARKER_TYPE_FIELD_NUMBER = 2;
   @SuppressWarnings("serial")
   private volatile java.lang.Object markerType_ = "";
   /**
-   * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+   * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
    * @return Whether the markerType field is set.
    */
   @java.lang.Override
@@ -177,7 +114,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000002) != 0);
   }
   /**
-   * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+   * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
    * @return The markerType.
    */
   @java.lang.Override
@@ -194,7 +131,7 @@ private static final long serialVersionUID = 0L;
     }
   }
   /**
-   * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+   * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
    * @return The bytes for markerType.
    */
   @java.lang.Override
@@ -212,11 +149,11 @@ private static final long serialVersionUID = 0L;
     }
   }
 
-  public static final int COLOR_RAW_FIELD_NUMBER = 6;
+  public static final int COLOR_RAW_FIELD_NUMBER = 3;
   @SuppressWarnings("serial")
   private volatile java.lang.Object colorRaw_ = "";
   /**
-   * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+   * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
    * @return The colorRaw.
    */
   @java.lang.Override
@@ -233,7 +170,7 @@ private static final long serialVersionUID = 0L;
     }
   }
   /**
-   * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+   * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
    * @return The bytes for colorRaw.
    */
   @java.lang.Override
@@ -251,11 +188,11 @@ private static final long serialVersionUID = 0L;
     }
   }
 
-  public static final int COLOR_NOTE_FIELD_NUMBER = 7;
+  public static final int COLOR_NOTE_FIELD_NUMBER = 4;
   @SuppressWarnings("serial")
   private volatile java.lang.Object colorNote_ = "";
   /**
-   * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+   * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
    * @return Whether the colorNote field is set.
    */
   @java.lang.Override
@@ -263,7 +200,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000004) != 0);
   }
   /**
-   * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+   * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
    * @return The colorNote.
    */
   @java.lang.Override
@@ -280,7 +217,7 @@ private static final long serialVersionUID = 0L;
     }
   }
   /**
-   * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+   * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
    * @return The bytes for colorNote.
    */
   @java.lang.Override
@@ -298,10 +235,10 @@ private static final long serialVersionUID = 0L;
     }
   }
 
-  public static final int OBSERVED_AT_FIELD_NUMBER = 8;
+  public static final int OBSERVED_AT_FIELD_NUMBER = 5;
   private long observedAt_ = 0L;
   /**
-   * <code>optional int64 observed_at = 8 [json_name = "observedAt"];</code>
+   * <code>optional int64 observed_at = 5 [json_name = "observedAt"];</code>
    * @return Whether the observedAt field is set.
    */
   @java.lang.Override
@@ -309,7 +246,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000008) != 0);
   }
   /**
-   * <code>optional int64 observed_at = 8 [json_name = "observedAt"];</code>
+   * <code>optional int64 observed_at = 5 [json_name = "observedAt"];</code>
    * @return The observedAt.
    */
   @java.lang.Override
@@ -317,10 +254,10 @@ private static final long serialVersionUID = 0L;
     return observedAt_;
   }
 
-  public static final int POSITION_SAMPLED_AT_FIELD_NUMBER = 9;
+  public static final int POSITION_SAMPLED_AT_FIELD_NUMBER = 6;
   private long positionSampledAt_ = 0L;
   /**
-   * <code>optional int64 position_sampled_at = 9 [json_name = "positionSampledAt"];</code>
+   * <code>optional int64 position_sampled_at = 6 [json_name = "positionSampledAt"];</code>
    * @return Whether the positionSampledAt field is set.
    */
   @java.lang.Override
@@ -328,7 +265,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000010) != 0);
   }
   /**
-   * <code>optional int64 position_sampled_at = 9 [json_name = "positionSampledAt"];</code>
+   * <code>optional int64 position_sampled_at = 6 [json_name = "positionSampledAt"];</code>
    * @return The positionSampledAt.
    */
   @java.lang.Override
@@ -336,11 +273,11 @@ private static final long serialVersionUID = 0L;
     return positionSampledAt_;
   }
 
-  public static final int ALIGNMENT_SOURCE_FIELD_NUMBER = 10;
+  public static final int ALIGNMENT_SOURCE_FIELD_NUMBER = 7;
   @SuppressWarnings("serial")
   private volatile java.lang.Object alignmentSource_ = "";
   /**
-   * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+   * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
    * @return Whether the alignmentSource field is set.
    */
   @java.lang.Override
@@ -348,7 +285,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000020) != 0);
   }
   /**
-   * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+   * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
    * @return The alignmentSource.
    */
   @java.lang.Override
@@ -365,7 +302,7 @@ private static final long serialVersionUID = 0L;
     }
   }
   /**
-   * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+   * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
    * @return The bytes for alignmentSource.
    */
   @java.lang.Override
@@ -383,11 +320,11 @@ private static final long serialVersionUID = 0L;
     }
   }
 
-  public static final int REPORTER_ID_FIELD_NUMBER = 11;
+  public static final int REPORTER_ID_FIELD_NUMBER = 8;
   @SuppressWarnings("serial")
   private volatile java.lang.Object reporterId_ = "";
   /**
-   * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+   * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
    * @return Whether the reporterId field is set.
    */
   @java.lang.Override
@@ -395,7 +332,7 @@ private static final long serialVersionUID = 0L;
     return ((bitField0_ & 0x00000040) != 0);
   }
   /**
-   * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+   * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
    * @return The reporterId.
    */
   @java.lang.Override
@@ -412,7 +349,7 @@ private static final long serialVersionUID = 0L;
     }
   }
   /**
-   * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+   * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
    * @return The bytes for reporterId.
    */
   @java.lang.Override
@@ -424,53 +361,6 @@ private static final long serialVersionUID = 0L;
           com.google.protobuf.ByteString.copyFromUtf8(
               (java.lang.String) ref);
       reporterId_ = b;
-      return b;
-    } else {
-      return (com.google.protobuf.ByteString) ref;
-    }
-  }
-
-  public static final int ROOM_CODE_FIELD_NUMBER = 12;
-  @SuppressWarnings("serial")
-  private volatile java.lang.Object roomCode_ = "";
-  /**
-   * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-   * @return Whether the roomCode field is set.
-   */
-  @java.lang.Override
-  public boolean hasRoomCode() {
-    return ((bitField0_ & 0x00000080) != 0);
-  }
-  /**
-   * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-   * @return The roomCode.
-   */
-  @java.lang.Override
-  public java.lang.String getRoomCode() {
-    java.lang.Object ref = roomCode_;
-    if (ref instanceof java.lang.String) {
-      return (java.lang.String) ref;
-    } else {
-      com.google.protobuf.ByteString bs = 
-          (com.google.protobuf.ByteString) ref;
-      java.lang.String s = bs.toStringUtf8();
-      roomCode_ = s;
-      return s;
-    }
-  }
-  /**
-   * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-   * @return The bytes for roomCode.
-   */
-  @java.lang.Override
-  public com.google.protobuf.ByteString
-      getRoomCodeBytes() {
-    java.lang.Object ref = roomCode_;
-    if (ref instanceof java.lang.String) {
-      com.google.protobuf.ByteString b = 
-          com.google.protobuf.ByteString.copyFromUtf8(
-              (java.lang.String) ref);
-      roomCode_ = b;
       return b;
     } else {
       return (com.google.protobuf.ByteString) ref;
@@ -491,41 +381,29 @@ private static final long serialVersionUID = 0L;
   @java.lang.Override
   public void writeTo(com.google.protobuf.CodedOutputStream output)
                       throws java.io.IOException {
-    if (chunkX_ != 0) {
-      output.writeInt32(1, chunkX_);
-    }
-    if (chunkZ_ != 0) {
-      output.writeInt32(2, chunkZ_);
-    }
-    if (!com.google.protobuf.GeneratedMessage.isStringEmpty(dimension_)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 3, dimension_);
-    }
     if (((bitField0_ & 0x00000001) != 0)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 4, symbol_);
+      com.google.protobuf.GeneratedMessage.writeString(output, 1, symbol_);
     }
     if (((bitField0_ & 0x00000002) != 0)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 5, markerType_);
+      com.google.protobuf.GeneratedMessage.writeString(output, 2, markerType_);
     }
     if (!com.google.protobuf.GeneratedMessage.isStringEmpty(colorRaw_)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 6, colorRaw_);
+      com.google.protobuf.GeneratedMessage.writeString(output, 3, colorRaw_);
     }
     if (((bitField0_ & 0x00000004) != 0)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 7, colorNote_);
+      com.google.protobuf.GeneratedMessage.writeString(output, 4, colorNote_);
     }
     if (((bitField0_ & 0x00000008) != 0)) {
-      output.writeInt64(8, observedAt_);
+      output.writeInt64(5, observedAt_);
     }
     if (((bitField0_ & 0x00000010) != 0)) {
-      output.writeInt64(9, positionSampledAt_);
+      output.writeInt64(6, positionSampledAt_);
     }
     if (((bitField0_ & 0x00000020) != 0)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 10, alignmentSource_);
+      com.google.protobuf.GeneratedMessage.writeString(output, 7, alignmentSource_);
     }
     if (((bitField0_ & 0x00000040) != 0)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 11, reporterId_);
-    }
-    if (((bitField0_ & 0x00000080) != 0)) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 12, roomCode_);
+      com.google.protobuf.GeneratedMessage.writeString(output, 8, reporterId_);
     }
     getUnknownFields().writeTo(output);
   }
@@ -536,45 +414,31 @@ private static final long serialVersionUID = 0L;
     if (size != -1) return size;
 
     size = 0;
-    if (chunkX_ != 0) {
-      size += com.google.protobuf.CodedOutputStream
-        .computeInt32Size(1, chunkX_);
-    }
-    if (chunkZ_ != 0) {
-      size += com.google.protobuf.CodedOutputStream
-        .computeInt32Size(2, chunkZ_);
-    }
-    if (!com.google.protobuf.GeneratedMessage.isStringEmpty(dimension_)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(3, dimension_);
-    }
     if (((bitField0_ & 0x00000001) != 0)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(4, symbol_);
+      size += com.google.protobuf.GeneratedMessage.computeStringSize(1, symbol_);
     }
     if (((bitField0_ & 0x00000002) != 0)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(5, markerType_);
+      size += com.google.protobuf.GeneratedMessage.computeStringSize(2, markerType_);
     }
     if (!com.google.protobuf.GeneratedMessage.isStringEmpty(colorRaw_)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(6, colorRaw_);
+      size += com.google.protobuf.GeneratedMessage.computeStringSize(3, colorRaw_);
     }
     if (((bitField0_ & 0x00000004) != 0)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(7, colorNote_);
+      size += com.google.protobuf.GeneratedMessage.computeStringSize(4, colorNote_);
     }
     if (((bitField0_ & 0x00000008) != 0)) {
       size += com.google.protobuf.CodedOutputStream
-        .computeInt64Size(8, observedAt_);
+        .computeInt64Size(5, observedAt_);
     }
     if (((bitField0_ & 0x00000010) != 0)) {
       size += com.google.protobuf.CodedOutputStream
-        .computeInt64Size(9, positionSampledAt_);
+        .computeInt64Size(6, positionSampledAt_);
     }
     if (((bitField0_ & 0x00000020) != 0)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(10, alignmentSource_);
+      size += com.google.protobuf.GeneratedMessage.computeStringSize(7, alignmentSource_);
     }
     if (((bitField0_ & 0x00000040) != 0)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(11, reporterId_);
-    }
-    if (((bitField0_ & 0x00000080) != 0)) {
-      size += com.google.protobuf.GeneratedMessage.computeStringSize(12, roomCode_);
+      size += com.google.protobuf.GeneratedMessage.computeStringSize(8, reporterId_);
     }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
@@ -586,17 +450,11 @@ private static final long serialVersionUID = 0L;
     if (obj == this) {
      return true;
     }
-    if (!(obj instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData)) {
+    if (!(obj instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue)) {
       return super.equals(obj);
     }
-    fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData other = (fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData) obj;
+    fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue other = (fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue) obj;
 
-    if (getChunkX()
-        != other.getChunkX()) return false;
-    if (getChunkZ()
-        != other.getChunkZ()) return false;
-    if (!getDimension()
-        .equals(other.getDimension())) return false;
     if (hasSymbol() != other.hasSymbol()) return false;
     if (hasSymbol()) {
       if (!getSymbol()
@@ -634,11 +492,6 @@ private static final long serialVersionUID = 0L;
       if (!getReporterId()
           .equals(other.getReporterId())) return false;
     }
-    if (hasRoomCode() != other.hasRoomCode()) return false;
-    if (hasRoomCode()) {
-      if (!getRoomCode()
-          .equals(other.getRoomCode())) return false;
-    }
     if (!getUnknownFields().equals(other.getUnknownFields())) return false;
     return true;
   }
@@ -650,12 +503,6 @@ private static final long serialVersionUID = 0L;
     }
     int hash = 41;
     hash = (19 * hash) + getDescriptor().hashCode();
-    hash = (37 * hash) + CHUNK_X_FIELD_NUMBER;
-    hash = (53 * hash) + getChunkX();
-    hash = (37 * hash) + CHUNK_Z_FIELD_NUMBER;
-    hash = (53 * hash) + getChunkZ();
-    hash = (37 * hash) + DIMENSION_FIELD_NUMBER;
-    hash = (53 * hash) + getDimension().hashCode();
     if (hasSymbol()) {
       hash = (37 * hash) + SYMBOL_FIELD_NUMBER;
       hash = (53 * hash) + getSymbol().hashCode();
@@ -688,53 +535,49 @@ private static final long serialVersionUID = 0L;
       hash = (37 * hash) + REPORTER_ID_FIELD_NUMBER;
       hash = (53 * hash) + getReporterId().hashCode();
     }
-    if (hasRoomCode()) {
-      hash = (37 * hash) + ROOM_CODE_FIELD_NUMBER;
-      hash = (53 * hash) + getRoomCode().hashCode();
-    }
     hash = (29 * hash) + getUnknownFields().hashCode();
     memoizedHashCode = hash;
     return hash;
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       java.nio.ByteBuffer data,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       com.google.protobuf.ByteString data)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       com.google.protobuf.ByteString data,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(byte[] data)
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(byte[] data)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       byte[] data,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws com.google.protobuf.InvalidProtocolBufferException {
     return PARSER.parseFrom(data, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(java.io.InputStream input)
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(java.io.InputStream input)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseWithIOException(PARSER, input);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       java.io.InputStream input,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
@@ -742,26 +585,26 @@ private static final long serialVersionUID = 0L;
         .parseWithIOException(PARSER, input, extensionRegistry);
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseDelimitedFrom(java.io.InputStream input)
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseDelimitedFrom(java.io.InputStream input)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseDelimitedWithIOException(PARSER, input);
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseDelimitedFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseDelimitedFrom(
       java.io.InputStream input,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       com.google.protobuf.CodedInputStream input)
       throws java.io.IOException {
     return com.google.protobuf.GeneratedMessage
         .parseWithIOException(PARSER, input);
   }
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData parseFrom(
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue parseFrom(
       com.google.protobuf.CodedInputStream input,
       com.google.protobuf.ExtensionRegistryLite extensionRegistry)
       throws java.io.IOException {
@@ -774,7 +617,7 @@ private static final long serialVersionUID = 0L;
   public static Builder newBuilder() {
     return DEFAULT_INSTANCE.toBuilder();
   }
-  public static Builder newBuilder(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData prototype) {
+  public static Builder newBuilder(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue prototype) {
     return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
   }
   @java.lang.Override
@@ -790,26 +633,26 @@ private static final long serialVersionUID = 0L;
     return builder;
   }
   /**
-   * Protobuf type {@code teamviewer.v1.BattleChunkData}
+   * Protobuf type {@code teamviewer.v1.BattleChunkValue}
    */
   public static final class Builder extends
       com.google.protobuf.GeneratedMessage.Builder<Builder> implements
-      // @@protoc_insertion_point(builder_implements:teamviewer.v1.BattleChunkData)
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkDataOrBuilder {
+      // @@protoc_insertion_point(builder_implements:teamviewer.v1.BattleChunkValue)
+      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValueOrBuilder {
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkData_descriptor;
+      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkValue_descriptor;
     }
 
     @java.lang.Override
     protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkData_fieldAccessorTable
+      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkValue_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
-              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.Builder.class);
+              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.class, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.Builder.class);
     }
 
-    // Construct using fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.newBuilder()
+    // Construct using fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.newBuilder()
     private Builder() {
 
     }
@@ -823,9 +666,6 @@ private static final long serialVersionUID = 0L;
     public Builder clear() {
       super.clear();
       bitField0_ = 0;
-      chunkX_ = 0;
-      chunkZ_ = 0;
-      dimension_ = "";
       symbol_ = "";
       markerType_ = "";
       colorRaw_ = "";
@@ -834,24 +674,23 @@ private static final long serialVersionUID = 0L;
       positionSampledAt_ = 0L;
       alignmentSource_ = "";
       reporterId_ = "";
-      roomCode_ = "";
       return this;
     }
 
     @java.lang.Override
     public com.google.protobuf.Descriptors.Descriptor
         getDescriptorForType() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkData_descriptor;
+      return fun.prof_chen.teamviewer.main_code.network.proto.TeamviewerProto.internal_static_teamviewer_v1_BattleChunkValue_descriptor;
     }
 
     @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getDefaultInstanceForType() {
-      return fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.getDefaultInstance();
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue getDefaultInstanceForType() {
+      return fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.getDefaultInstance();
     }
 
     @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData build() {
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData result = buildPartial();
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue build() {
+      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue result = buildPartial();
       if (!result.isInitialized()) {
         throw newUninitializedMessageException(result);
       }
@@ -859,104 +698,80 @@ private static final long serialVersionUID = 0L;
     }
 
     @java.lang.Override
-    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData buildPartial() {
-      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData result = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData(this);
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue buildPartial() {
+      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue result = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue(this);
       if (bitField0_ != 0) { buildPartial0(result); }
       onBuilt();
       return result;
     }
 
-    private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData result) {
+    private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue result) {
       int from_bitField0_ = bitField0_;
-      if (((from_bitField0_ & 0x00000001) != 0)) {
-        result.chunkX_ = chunkX_;
-      }
-      if (((from_bitField0_ & 0x00000002) != 0)) {
-        result.chunkZ_ = chunkZ_;
-      }
-      if (((from_bitField0_ & 0x00000004) != 0)) {
-        result.dimension_ = dimension_;
-      }
       int to_bitField0_ = 0;
-      if (((from_bitField0_ & 0x00000008) != 0)) {
+      if (((from_bitField0_ & 0x00000001) != 0)) {
         result.symbol_ = symbol_;
         to_bitField0_ |= 0x00000001;
       }
-      if (((from_bitField0_ & 0x00000010) != 0)) {
+      if (((from_bitField0_ & 0x00000002) != 0)) {
         result.markerType_ = markerType_;
         to_bitField0_ |= 0x00000002;
       }
-      if (((from_bitField0_ & 0x00000020) != 0)) {
+      if (((from_bitField0_ & 0x00000004) != 0)) {
         result.colorRaw_ = colorRaw_;
       }
-      if (((from_bitField0_ & 0x00000040) != 0)) {
+      if (((from_bitField0_ & 0x00000008) != 0)) {
         result.colorNote_ = colorNote_;
         to_bitField0_ |= 0x00000004;
       }
-      if (((from_bitField0_ & 0x00000080) != 0)) {
+      if (((from_bitField0_ & 0x00000010) != 0)) {
         result.observedAt_ = observedAt_;
         to_bitField0_ |= 0x00000008;
       }
-      if (((from_bitField0_ & 0x00000100) != 0)) {
+      if (((from_bitField0_ & 0x00000020) != 0)) {
         result.positionSampledAt_ = positionSampledAt_;
         to_bitField0_ |= 0x00000010;
       }
-      if (((from_bitField0_ & 0x00000200) != 0)) {
+      if (((from_bitField0_ & 0x00000040) != 0)) {
         result.alignmentSource_ = alignmentSource_;
         to_bitField0_ |= 0x00000020;
       }
-      if (((from_bitField0_ & 0x00000400) != 0)) {
+      if (((from_bitField0_ & 0x00000080) != 0)) {
         result.reporterId_ = reporterId_;
         to_bitField0_ |= 0x00000040;
-      }
-      if (((from_bitField0_ & 0x00000800) != 0)) {
-        result.roomCode_ = roomCode_;
-        to_bitField0_ |= 0x00000080;
       }
       result.bitField0_ |= to_bitField0_;
     }
 
     @java.lang.Override
     public Builder mergeFrom(com.google.protobuf.Message other) {
-      if (other instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData) {
-        return mergeFrom((fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData)other);
+      if (other instanceof fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue) {
+        return mergeFrom((fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue)other);
       } else {
         super.mergeFrom(other);
         return this;
       }
     }
 
-    public Builder mergeFrom(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData other) {
-      if (other == fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData.getDefaultInstance()) return this;
-      if (other.getChunkX() != 0) {
-        setChunkX(other.getChunkX());
-      }
-      if (other.getChunkZ() != 0) {
-        setChunkZ(other.getChunkZ());
-      }
-      if (!other.getDimension().isEmpty()) {
-        dimension_ = other.dimension_;
-        bitField0_ |= 0x00000004;
-        onChanged();
-      }
+    public Builder mergeFrom(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue other) {
+      if (other == fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue.getDefaultInstance()) return this;
       if (other.hasSymbol()) {
         symbol_ = other.symbol_;
-        bitField0_ |= 0x00000008;
+        bitField0_ |= 0x00000001;
         onChanged();
       }
       if (other.hasMarkerType()) {
         markerType_ = other.markerType_;
-        bitField0_ |= 0x00000010;
+        bitField0_ |= 0x00000002;
         onChanged();
       }
       if (!other.getColorRaw().isEmpty()) {
         colorRaw_ = other.colorRaw_;
-        bitField0_ |= 0x00000020;
+        bitField0_ |= 0x00000004;
         onChanged();
       }
       if (other.hasColorNote()) {
         colorNote_ = other.colorNote_;
-        bitField0_ |= 0x00000040;
+        bitField0_ |= 0x00000008;
         onChanged();
       }
       if (other.hasObservedAt()) {
@@ -967,17 +782,12 @@ private static final long serialVersionUID = 0L;
       }
       if (other.hasAlignmentSource()) {
         alignmentSource_ = other.alignmentSource_;
-        bitField0_ |= 0x00000200;
+        bitField0_ |= 0x00000040;
         onChanged();
       }
       if (other.hasReporterId()) {
         reporterId_ = other.reporterId_;
-        bitField0_ |= 0x00000400;
-        onChanged();
-      }
-      if (other.hasRoomCode()) {
-        roomCode_ = other.roomCode_;
-        bitField0_ |= 0x00000800;
+        bitField0_ |= 0x00000080;
         onChanged();
       }
       this.mergeUnknownFields(other.getUnknownFields());
@@ -1006,66 +816,46 @@ private static final long serialVersionUID = 0L;
             case 0:
               done = true;
               break;
-            case 8: {
-              chunkX_ = input.readInt32();
+            case 10: {
+              symbol_ = input.readStringRequireUtf8();
               bitField0_ |= 0x00000001;
               break;
-            } // case 8
-            case 16: {
-              chunkZ_ = input.readInt32();
+            } // case 10
+            case 18: {
+              markerType_ = input.readStringRequireUtf8();
               bitField0_ |= 0x00000002;
               break;
-            } // case 16
+            } // case 18
             case 26: {
-              dimension_ = input.readStringRequireUtf8();
+              colorRaw_ = input.readStringRequireUtf8();
               bitField0_ |= 0x00000004;
               break;
             } // case 26
             case 34: {
-              symbol_ = input.readStringRequireUtf8();
+              colorNote_ = input.readStringRequireUtf8();
               bitField0_ |= 0x00000008;
               break;
             } // case 34
-            case 42: {
-              markerType_ = input.readStringRequireUtf8();
+            case 40: {
+              observedAt_ = input.readInt64();
               bitField0_ |= 0x00000010;
               break;
-            } // case 42
-            case 50: {
-              colorRaw_ = input.readStringRequireUtf8();
+            } // case 40
+            case 48: {
+              positionSampledAt_ = input.readInt64();
               bitField0_ |= 0x00000020;
               break;
-            } // case 50
+            } // case 48
             case 58: {
-              colorNote_ = input.readStringRequireUtf8();
+              alignmentSource_ = input.readStringRequireUtf8();
               bitField0_ |= 0x00000040;
               break;
             } // case 58
-            case 64: {
-              observedAt_ = input.readInt64();
+            case 66: {
+              reporterId_ = input.readStringRequireUtf8();
               bitField0_ |= 0x00000080;
               break;
-            } // case 64
-            case 72: {
-              positionSampledAt_ = input.readInt64();
-              bitField0_ |= 0x00000100;
-              break;
-            } // case 72
-            case 82: {
-              alignmentSource_ = input.readStringRequireUtf8();
-              bitField0_ |= 0x00000200;
-              break;
-            } // case 82
-            case 90: {
-              reporterId_ = input.readStringRequireUtf8();
-              bitField0_ |= 0x00000400;
-              break;
-            } // case 90
-            case 98: {
-              roomCode_ = input.readStringRequireUtf8();
-              bitField0_ |= 0x00000800;
-              break;
-            } // case 98
+            } // case 66
             default: {
               if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                 done = true; // was an endgroup tag
@@ -1083,152 +873,16 @@ private static final long serialVersionUID = 0L;
     }
     private int bitField0_;
 
-    private int chunkX_ ;
-    /**
-     * <code>int32 chunk_x = 1 [json_name = "chunkX"];</code>
-     * @return The chunkX.
-     */
-    @java.lang.Override
-    public int getChunkX() {
-      return chunkX_;
-    }
-    /**
-     * <code>int32 chunk_x = 1 [json_name = "chunkX"];</code>
-     * @param value The chunkX to set.
-     * @return This builder for chaining.
-     */
-    public Builder setChunkX(int value) {
-
-      chunkX_ = value;
-      bitField0_ |= 0x00000001;
-      onChanged();
-      return this;
-    }
-    /**
-     * <code>int32 chunk_x = 1 [json_name = "chunkX"];</code>
-     * @return This builder for chaining.
-     */
-    public Builder clearChunkX() {
-      bitField0_ = (bitField0_ & ~0x00000001);
-      chunkX_ = 0;
-      onChanged();
-      return this;
-    }
-
-    private int chunkZ_ ;
-    /**
-     * <code>int32 chunk_z = 2 [json_name = "chunkZ"];</code>
-     * @return The chunkZ.
-     */
-    @java.lang.Override
-    public int getChunkZ() {
-      return chunkZ_;
-    }
-    /**
-     * <code>int32 chunk_z = 2 [json_name = "chunkZ"];</code>
-     * @param value The chunkZ to set.
-     * @return This builder for chaining.
-     */
-    public Builder setChunkZ(int value) {
-
-      chunkZ_ = value;
-      bitField0_ |= 0x00000002;
-      onChanged();
-      return this;
-    }
-    /**
-     * <code>int32 chunk_z = 2 [json_name = "chunkZ"];</code>
-     * @return This builder for chaining.
-     */
-    public Builder clearChunkZ() {
-      bitField0_ = (bitField0_ & ~0x00000002);
-      chunkZ_ = 0;
-      onChanged();
-      return this;
-    }
-
-    private java.lang.Object dimension_ = "";
-    /**
-     * <code>string dimension = 3 [json_name = "dimension"];</code>
-     * @return The dimension.
-     */
-    public java.lang.String getDimension() {
-      java.lang.Object ref = dimension_;
-      if (!(ref instanceof java.lang.String)) {
-        com.google.protobuf.ByteString bs =
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        dimension_ = s;
-        return s;
-      } else {
-        return (java.lang.String) ref;
-      }
-    }
-    /**
-     * <code>string dimension = 3 [json_name = "dimension"];</code>
-     * @return The bytes for dimension.
-     */
-    public com.google.protobuf.ByteString
-        getDimensionBytes() {
-      java.lang.Object ref = dimension_;
-      if (ref instanceof String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        dimension_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-    /**
-     * <code>string dimension = 3 [json_name = "dimension"];</code>
-     * @param value The dimension to set.
-     * @return This builder for chaining.
-     */
-    public Builder setDimension(
-        java.lang.String value) {
-      if (value == null) { throw new NullPointerException(); }
-      dimension_ = value;
-      bitField0_ |= 0x00000004;
-      onChanged();
-      return this;
-    }
-    /**
-     * <code>string dimension = 3 [json_name = "dimension"];</code>
-     * @return This builder for chaining.
-     */
-    public Builder clearDimension() {
-      dimension_ = getDefaultInstance().getDimension();
-      bitField0_ = (bitField0_ & ~0x00000004);
-      onChanged();
-      return this;
-    }
-    /**
-     * <code>string dimension = 3 [json_name = "dimension"];</code>
-     * @param value The bytes for dimension to set.
-     * @return This builder for chaining.
-     */
-    public Builder setDimensionBytes(
-        com.google.protobuf.ByteString value) {
-      if (value == null) { throw new NullPointerException(); }
-      checkByteStringIsUtf8(value);
-      dimension_ = value;
-      bitField0_ |= 0x00000004;
-      onChanged();
-      return this;
-    }
-
     private java.lang.Object symbol_ = "";
     /**
-     * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+     * <code>optional string symbol = 1 [json_name = "symbol"];</code>
      * @return Whether the symbol field is set.
      */
     public boolean hasSymbol() {
-      return ((bitField0_ & 0x00000008) != 0);
+      return ((bitField0_ & 0x00000001) != 0);
     }
     /**
-     * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+     * <code>optional string symbol = 1 [json_name = "symbol"];</code>
      * @return The symbol.
      */
     public java.lang.String getSymbol() {
@@ -1244,7 +898,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+     * <code>optional string symbol = 1 [json_name = "symbol"];</code>
      * @return The bytes for symbol.
      */
     public com.google.protobuf.ByteString
@@ -1261,7 +915,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+     * <code>optional string symbol = 1 [json_name = "symbol"];</code>
      * @param value The symbol to set.
      * @return This builder for chaining.
      */
@@ -1269,22 +923,22 @@ private static final long serialVersionUID = 0L;
         java.lang.String value) {
       if (value == null) { throw new NullPointerException(); }
       symbol_ = value;
-      bitField0_ |= 0x00000008;
+      bitField0_ |= 0x00000001;
       onChanged();
       return this;
     }
     /**
-     * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+     * <code>optional string symbol = 1 [json_name = "symbol"];</code>
      * @return This builder for chaining.
      */
     public Builder clearSymbol() {
       symbol_ = getDefaultInstance().getSymbol();
-      bitField0_ = (bitField0_ & ~0x00000008);
+      bitField0_ = (bitField0_ & ~0x00000001);
       onChanged();
       return this;
     }
     /**
-     * <code>optional string symbol = 4 [json_name = "symbol"];</code>
+     * <code>optional string symbol = 1 [json_name = "symbol"];</code>
      * @param value The bytes for symbol to set.
      * @return This builder for chaining.
      */
@@ -1293,21 +947,21 @@ private static final long serialVersionUID = 0L;
       if (value == null) { throw new NullPointerException(); }
       checkByteStringIsUtf8(value);
       symbol_ = value;
-      bitField0_ |= 0x00000008;
+      bitField0_ |= 0x00000001;
       onChanged();
       return this;
     }
 
     private java.lang.Object markerType_ = "";
     /**
-     * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+     * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
      * @return Whether the markerType field is set.
      */
     public boolean hasMarkerType() {
-      return ((bitField0_ & 0x00000010) != 0);
+      return ((bitField0_ & 0x00000002) != 0);
     }
     /**
-     * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+     * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
      * @return The markerType.
      */
     public java.lang.String getMarkerType() {
@@ -1323,7 +977,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+     * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
      * @return The bytes for markerType.
      */
     public com.google.protobuf.ByteString
@@ -1340,7 +994,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+     * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
      * @param value The markerType to set.
      * @return This builder for chaining.
      */
@@ -1348,22 +1002,22 @@ private static final long serialVersionUID = 0L;
         java.lang.String value) {
       if (value == null) { throw new NullPointerException(); }
       markerType_ = value;
-      bitField0_ |= 0x00000010;
+      bitField0_ |= 0x00000002;
       onChanged();
       return this;
     }
     /**
-     * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+     * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
      * @return This builder for chaining.
      */
     public Builder clearMarkerType() {
       markerType_ = getDefaultInstance().getMarkerType();
-      bitField0_ = (bitField0_ & ~0x00000010);
+      bitField0_ = (bitField0_ & ~0x00000002);
       onChanged();
       return this;
     }
     /**
-     * <code>optional string marker_type = 5 [json_name = "markerType"];</code>
+     * <code>optional string marker_type = 2 [json_name = "markerType"];</code>
      * @param value The bytes for markerType to set.
      * @return This builder for chaining.
      */
@@ -1372,14 +1026,14 @@ private static final long serialVersionUID = 0L;
       if (value == null) { throw new NullPointerException(); }
       checkByteStringIsUtf8(value);
       markerType_ = value;
-      bitField0_ |= 0x00000010;
+      bitField0_ |= 0x00000002;
       onChanged();
       return this;
     }
 
     private java.lang.Object colorRaw_ = "";
     /**
-     * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+     * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
      * @return The colorRaw.
      */
     public java.lang.String getColorRaw() {
@@ -1395,7 +1049,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+     * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
      * @return The bytes for colorRaw.
      */
     public com.google.protobuf.ByteString
@@ -1412,7 +1066,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+     * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
      * @param value The colorRaw to set.
      * @return This builder for chaining.
      */
@@ -1420,22 +1074,22 @@ private static final long serialVersionUID = 0L;
         java.lang.String value) {
       if (value == null) { throw new NullPointerException(); }
       colorRaw_ = value;
-      bitField0_ |= 0x00000020;
+      bitField0_ |= 0x00000004;
       onChanged();
       return this;
     }
     /**
-     * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+     * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
      * @return This builder for chaining.
      */
     public Builder clearColorRaw() {
       colorRaw_ = getDefaultInstance().getColorRaw();
-      bitField0_ = (bitField0_ & ~0x00000020);
+      bitField0_ = (bitField0_ & ~0x00000004);
       onChanged();
       return this;
     }
     /**
-     * <code>string color_raw = 6 [json_name = "colorRaw"];</code>
+     * <code>string color_raw = 3 [json_name = "colorRaw"];</code>
      * @param value The bytes for colorRaw to set.
      * @return This builder for chaining.
      */
@@ -1444,21 +1098,21 @@ private static final long serialVersionUID = 0L;
       if (value == null) { throw new NullPointerException(); }
       checkByteStringIsUtf8(value);
       colorRaw_ = value;
-      bitField0_ |= 0x00000020;
+      bitField0_ |= 0x00000004;
       onChanged();
       return this;
     }
 
     private java.lang.Object colorNote_ = "";
     /**
-     * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+     * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
      * @return Whether the colorNote field is set.
      */
     public boolean hasColorNote() {
-      return ((bitField0_ & 0x00000040) != 0);
+      return ((bitField0_ & 0x00000008) != 0);
     }
     /**
-     * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+     * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
      * @return The colorNote.
      */
     public java.lang.String getColorNote() {
@@ -1474,7 +1128,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+     * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
      * @return The bytes for colorNote.
      */
     public com.google.protobuf.ByteString
@@ -1491,7 +1145,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+     * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
      * @param value The colorNote to set.
      * @return This builder for chaining.
      */
@@ -1499,22 +1153,22 @@ private static final long serialVersionUID = 0L;
         java.lang.String value) {
       if (value == null) { throw new NullPointerException(); }
       colorNote_ = value;
-      bitField0_ |= 0x00000040;
+      bitField0_ |= 0x00000008;
       onChanged();
       return this;
     }
     /**
-     * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+     * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
      * @return This builder for chaining.
      */
     public Builder clearColorNote() {
       colorNote_ = getDefaultInstance().getColorNote();
-      bitField0_ = (bitField0_ & ~0x00000040);
+      bitField0_ = (bitField0_ & ~0x00000008);
       onChanged();
       return this;
     }
     /**
-     * <code>optional string color_note = 7 [json_name = "colorNote"];</code>
+     * <code>optional string color_note = 4 [json_name = "colorNote"];</code>
      * @param value The bytes for colorNote to set.
      * @return This builder for chaining.
      */
@@ -1523,22 +1177,22 @@ private static final long serialVersionUID = 0L;
       if (value == null) { throw new NullPointerException(); }
       checkByteStringIsUtf8(value);
       colorNote_ = value;
-      bitField0_ |= 0x00000040;
+      bitField0_ |= 0x00000008;
       onChanged();
       return this;
     }
 
     private long observedAt_ ;
     /**
-     * <code>optional int64 observed_at = 8 [json_name = "observedAt"];</code>
+     * <code>optional int64 observed_at = 5 [json_name = "observedAt"];</code>
      * @return Whether the observedAt field is set.
      */
     @java.lang.Override
     public boolean hasObservedAt() {
-      return ((bitField0_ & 0x00000080) != 0);
+      return ((bitField0_ & 0x00000010) != 0);
     }
     /**
-     * <code>optional int64 observed_at = 8 [json_name = "observedAt"];</code>
+     * <code>optional int64 observed_at = 5 [json_name = "observedAt"];</code>
      * @return The observedAt.
      */
     @java.lang.Override
@@ -1546,23 +1200,23 @@ private static final long serialVersionUID = 0L;
       return observedAt_;
     }
     /**
-     * <code>optional int64 observed_at = 8 [json_name = "observedAt"];</code>
+     * <code>optional int64 observed_at = 5 [json_name = "observedAt"];</code>
      * @param value The observedAt to set.
      * @return This builder for chaining.
      */
     public Builder setObservedAt(long value) {
 
       observedAt_ = value;
-      bitField0_ |= 0x00000080;
+      bitField0_ |= 0x00000010;
       onChanged();
       return this;
     }
     /**
-     * <code>optional int64 observed_at = 8 [json_name = "observedAt"];</code>
+     * <code>optional int64 observed_at = 5 [json_name = "observedAt"];</code>
      * @return This builder for chaining.
      */
     public Builder clearObservedAt() {
-      bitField0_ = (bitField0_ & ~0x00000080);
+      bitField0_ = (bitField0_ & ~0x00000010);
       observedAt_ = 0L;
       onChanged();
       return this;
@@ -1570,15 +1224,15 @@ private static final long serialVersionUID = 0L;
 
     private long positionSampledAt_ ;
     /**
-     * <code>optional int64 position_sampled_at = 9 [json_name = "positionSampledAt"];</code>
+     * <code>optional int64 position_sampled_at = 6 [json_name = "positionSampledAt"];</code>
      * @return Whether the positionSampledAt field is set.
      */
     @java.lang.Override
     public boolean hasPositionSampledAt() {
-      return ((bitField0_ & 0x00000100) != 0);
+      return ((bitField0_ & 0x00000020) != 0);
     }
     /**
-     * <code>optional int64 position_sampled_at = 9 [json_name = "positionSampledAt"];</code>
+     * <code>optional int64 position_sampled_at = 6 [json_name = "positionSampledAt"];</code>
      * @return The positionSampledAt.
      */
     @java.lang.Override
@@ -1586,23 +1240,23 @@ private static final long serialVersionUID = 0L;
       return positionSampledAt_;
     }
     /**
-     * <code>optional int64 position_sampled_at = 9 [json_name = "positionSampledAt"];</code>
+     * <code>optional int64 position_sampled_at = 6 [json_name = "positionSampledAt"];</code>
      * @param value The positionSampledAt to set.
      * @return This builder for chaining.
      */
     public Builder setPositionSampledAt(long value) {
 
       positionSampledAt_ = value;
-      bitField0_ |= 0x00000100;
+      bitField0_ |= 0x00000020;
       onChanged();
       return this;
     }
     /**
-     * <code>optional int64 position_sampled_at = 9 [json_name = "positionSampledAt"];</code>
+     * <code>optional int64 position_sampled_at = 6 [json_name = "positionSampledAt"];</code>
      * @return This builder for chaining.
      */
     public Builder clearPositionSampledAt() {
-      bitField0_ = (bitField0_ & ~0x00000100);
+      bitField0_ = (bitField0_ & ~0x00000020);
       positionSampledAt_ = 0L;
       onChanged();
       return this;
@@ -1610,14 +1264,14 @@ private static final long serialVersionUID = 0L;
 
     private java.lang.Object alignmentSource_ = "";
     /**
-     * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+     * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
      * @return Whether the alignmentSource field is set.
      */
     public boolean hasAlignmentSource() {
-      return ((bitField0_ & 0x00000200) != 0);
+      return ((bitField0_ & 0x00000040) != 0);
     }
     /**
-     * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+     * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
      * @return The alignmentSource.
      */
     public java.lang.String getAlignmentSource() {
@@ -1633,7 +1287,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+     * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
      * @return The bytes for alignmentSource.
      */
     public com.google.protobuf.ByteString
@@ -1650,7 +1304,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+     * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
      * @param value The alignmentSource to set.
      * @return This builder for chaining.
      */
@@ -1658,22 +1312,22 @@ private static final long serialVersionUID = 0L;
         java.lang.String value) {
       if (value == null) { throw new NullPointerException(); }
       alignmentSource_ = value;
-      bitField0_ |= 0x00000200;
+      bitField0_ |= 0x00000040;
       onChanged();
       return this;
     }
     /**
-     * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+     * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
      * @return This builder for chaining.
      */
     public Builder clearAlignmentSource() {
       alignmentSource_ = getDefaultInstance().getAlignmentSource();
-      bitField0_ = (bitField0_ & ~0x00000200);
+      bitField0_ = (bitField0_ & ~0x00000040);
       onChanged();
       return this;
     }
     /**
-     * <code>optional string alignment_source = 10 [json_name = "alignmentSource"];</code>
+     * <code>optional string alignment_source = 7 [json_name = "alignmentSource"];</code>
      * @param value The bytes for alignmentSource to set.
      * @return This builder for chaining.
      */
@@ -1682,21 +1336,21 @@ private static final long serialVersionUID = 0L;
       if (value == null) { throw new NullPointerException(); }
       checkByteStringIsUtf8(value);
       alignmentSource_ = value;
-      bitField0_ |= 0x00000200;
+      bitField0_ |= 0x00000040;
       onChanged();
       return this;
     }
 
     private java.lang.Object reporterId_ = "";
     /**
-     * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+     * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
      * @return Whether the reporterId field is set.
      */
     public boolean hasReporterId() {
-      return ((bitField0_ & 0x00000400) != 0);
+      return ((bitField0_ & 0x00000080) != 0);
     }
     /**
-     * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+     * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
      * @return The reporterId.
      */
     public java.lang.String getReporterId() {
@@ -1712,7 +1366,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+     * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
      * @return The bytes for reporterId.
      */
     public com.google.protobuf.ByteString
@@ -1729,7 +1383,7 @@ private static final long serialVersionUID = 0L;
       }
     }
     /**
-     * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+     * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
      * @param value The reporterId to set.
      * @return This builder for chaining.
      */
@@ -1737,22 +1391,22 @@ private static final long serialVersionUID = 0L;
         java.lang.String value) {
       if (value == null) { throw new NullPointerException(); }
       reporterId_ = value;
-      bitField0_ |= 0x00000400;
+      bitField0_ |= 0x00000080;
       onChanged();
       return this;
     }
     /**
-     * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+     * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
      * @return This builder for chaining.
      */
     public Builder clearReporterId() {
       reporterId_ = getDefaultInstance().getReporterId();
-      bitField0_ = (bitField0_ & ~0x00000400);
+      bitField0_ = (bitField0_ & ~0x00000080);
       onChanged();
       return this;
     }
     /**
-     * <code>optional string reporter_id = 11 [json_name = "reporterId"];</code>
+     * <code>optional string reporter_id = 8 [json_name = "reporterId"];</code>
      * @param value The bytes for reporterId to set.
      * @return This builder for chaining.
      */
@@ -1761,107 +1415,28 @@ private static final long serialVersionUID = 0L;
       if (value == null) { throw new NullPointerException(); }
       checkByteStringIsUtf8(value);
       reporterId_ = value;
-      bitField0_ |= 0x00000400;
+      bitField0_ |= 0x00000080;
       onChanged();
       return this;
     }
 
-    private java.lang.Object roomCode_ = "";
-    /**
-     * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-     * @return Whether the roomCode field is set.
-     */
-    public boolean hasRoomCode() {
-      return ((bitField0_ & 0x00000800) != 0);
-    }
-    /**
-     * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-     * @return The roomCode.
-     */
-    public java.lang.String getRoomCode() {
-      java.lang.Object ref = roomCode_;
-      if (!(ref instanceof java.lang.String)) {
-        com.google.protobuf.ByteString bs =
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        roomCode_ = s;
-        return s;
-      } else {
-        return (java.lang.String) ref;
-      }
-    }
-    /**
-     * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-     * @return The bytes for roomCode.
-     */
-    public com.google.protobuf.ByteString
-        getRoomCodeBytes() {
-      java.lang.Object ref = roomCode_;
-      if (ref instanceof String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        roomCode_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-    /**
-     * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-     * @param value The roomCode to set.
-     * @return This builder for chaining.
-     */
-    public Builder setRoomCode(
-        java.lang.String value) {
-      if (value == null) { throw new NullPointerException(); }
-      roomCode_ = value;
-      bitField0_ |= 0x00000800;
-      onChanged();
-      return this;
-    }
-    /**
-     * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-     * @return This builder for chaining.
-     */
-    public Builder clearRoomCode() {
-      roomCode_ = getDefaultInstance().getRoomCode();
-      bitField0_ = (bitField0_ & ~0x00000800);
-      onChanged();
-      return this;
-    }
-    /**
-     * <code>optional string room_code = 12 [json_name = "roomCode"];</code>
-     * @param value The bytes for roomCode to set.
-     * @return This builder for chaining.
-     */
-    public Builder setRoomCodeBytes(
-        com.google.protobuf.ByteString value) {
-      if (value == null) { throw new NullPointerException(); }
-      checkByteStringIsUtf8(value);
-      roomCode_ = value;
-      bitField0_ |= 0x00000800;
-      onChanged();
-      return this;
-    }
-
-    // @@protoc_insertion_point(builder_scope:teamviewer.v1.BattleChunkData)
+    // @@protoc_insertion_point(builder_scope:teamviewer.v1.BattleChunkValue)
   }
 
-  // @@protoc_insertion_point(class_scope:teamviewer.v1.BattleChunkData)
-  private static final fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData DEFAULT_INSTANCE;
+  // @@protoc_insertion_point(class_scope:teamviewer.v1.BattleChunkValue)
+  private static final fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue DEFAULT_INSTANCE;
   static {
-    DEFAULT_INSTANCE = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData();
+    DEFAULT_INSTANCE = new fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue();
   }
 
-  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getDefaultInstance() {
+  public static fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue getDefaultInstance() {
     return DEFAULT_INSTANCE;
   }
 
-  private static final com.google.protobuf.Parser<BattleChunkData>
-      PARSER = new com.google.protobuf.AbstractParser<BattleChunkData>() {
+  private static final com.google.protobuf.Parser<BattleChunkValue>
+      PARSER = new com.google.protobuf.AbstractParser<BattleChunkValue>() {
     @java.lang.Override
-    public BattleChunkData parsePartialFrom(
+    public BattleChunkValue parsePartialFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
@@ -1880,17 +1455,17 @@ private static final long serialVersionUID = 0L;
     }
   };
 
-  public static com.google.protobuf.Parser<BattleChunkData> parser() {
+  public static com.google.protobuf.Parser<BattleChunkValue> parser() {
     return PARSER;
   }
 
   @java.lang.Override
-  public com.google.protobuf.Parser<BattleChunkData> getParserForType() {
+  public com.google.protobuf.Parser<BattleChunkValue> getParserForType() {
     return PARSER;
   }
 
   @java.lang.Override
-  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getDefaultInstanceForType() {
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue getDefaultInstanceForType() {
     return DEFAULT_INSTANCE;
   }
 

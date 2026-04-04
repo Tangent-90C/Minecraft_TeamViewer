@@ -113,38 +113,28 @@ fun.prof_chen.teamviewer.main_code.network.proto.WaypointData defaultValue);
       java.lang.String key);
 
   /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+   */
+  java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry> 
+      getBattleChunksList();
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
+   */
+  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry getBattleChunks(int index);
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
    */
   int getBattleChunksCount();
   /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
    */
-  boolean containsBattleChunks(
-      java.lang.String key);
+  java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder> 
+      getBattleChunksOrBuilderList();
   /**
-   * Use {@link #getBattleChunksMap()} instead.
+   * <code>repeated .teamviewer.v1.BattleChunkEntry battle_chunks = 4 [json_name = "battleChunks"];</code>
    */
-  @java.lang.Deprecated
-  java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>
-  getBattleChunks();
-  /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-   */
-  java.util.Map<java.lang.String, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData>
-  getBattleChunksMap();
-  /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-   */
-  /* nullable */
-fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getBattleChunksOrDefault(
-      java.lang.String key,
-      /* nullable */
-fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData defaultValue);
-  /**
-   * <code>map&lt;string, .teamviewer.v1.BattleChunkData&gt; battle_chunks = 4 [json_name = "battleChunks"];</code>
-   */
-  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkData getBattleChunksOrThrow(
-      java.lang.String key);
+  fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntryOrBuilder getBattleChunksOrBuilder(
+      int index);
 
   /**
    * <code>map&lt;string, .teamviewer.v1.PlayerMark&gt; player_marks = 5 [json_name = "playerMarks"];</code>

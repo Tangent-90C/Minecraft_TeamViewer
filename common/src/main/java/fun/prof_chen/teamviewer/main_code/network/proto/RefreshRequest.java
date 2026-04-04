@@ -33,8 +33,7 @@ private static final long serialVersionUID = 0L;
         com.google.protobuf.LazyStringArrayList.emptyList();
     entities_ =
         com.google.protobuf.LazyStringArrayList.emptyList();
-    battleChunks_ =
-        com.google.protobuf.LazyStringArrayList.emptyList();
+    battleChunks_ = java.util.Collections.emptyList();
   }
 
   public static final com.google.protobuf.Descriptors.Descriptor
@@ -181,39 +180,43 @@ private static final long serialVersionUID = 0L;
 
   public static final int BATTLE_CHUNKS_FIELD_NUMBER = 5;
   @SuppressWarnings("serial")
-  private com.google.protobuf.LazyStringArrayList battleChunks_ =
-      com.google.protobuf.LazyStringArrayList.emptyList();
+  private java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> battleChunks_;
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @return A list containing the battleChunks.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
-  public com.google.protobuf.ProtocolStringList
-      getBattleChunksList() {
+  @java.lang.Override
+  public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> getBattleChunksList() {
     return battleChunks_;
   }
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @return The count of battleChunks.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
+  @java.lang.Override
+  public java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+      getBattleChunksOrBuilderList() {
+    return battleChunks_;
+  }
+  /**
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+   */
+  @java.lang.Override
   public int getBattleChunksCount() {
     return battleChunks_.size();
   }
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @param index The index of the element to return.
-   * @return The battleChunks at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
-  public java.lang.String getBattleChunks(int index) {
+  @java.lang.Override
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef getBattleChunks(int index) {
     return battleChunks_.get(index);
   }
   /**
-   * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-   * @param index The index of the value to return.
-   * @return The bytes of the battleChunks at the given index.
+   * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
    */
-  public com.google.protobuf.ByteString
-      getBattleChunksBytes(int index) {
-    return battleChunks_.getByteString(index);
+  @java.lang.Override
+  public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder getBattleChunksOrBuilder(
+      int index) {
+    return battleChunks_.get(index);
   }
 
   private byte memoizedIsInitialized = -1;
@@ -243,7 +246,7 @@ private static final long serialVersionUID = 0L;
       com.google.protobuf.GeneratedMessage.writeString(output, 4, entities_.getRaw(i));
     }
     for (int i = 0; i < battleChunks_.size(); i++) {
-      com.google.protobuf.GeneratedMessage.writeString(output, 5, battleChunks_.getRaw(i));
+      output.writeMessage(5, battleChunks_.get(i));
     }
     getUnknownFields().writeTo(output);
   }
@@ -277,14 +280,15 @@ private static final long serialVersionUID = 0L;
       size += dataSize;
       size += 1 * getEntitiesList().size();
     }
-    {
-      int dataSize = 0;
-      for (int i = 0; i < battleChunks_.size(); i++) {
-        dataSize += computeStringSizeNoTag(battleChunks_.getRaw(i));
-      }
-      size += dataSize;
-      size += 1 * getBattleChunksList().size();
-    }
+
+        {
+          final int count = battleChunks_.size();
+          for (int i = 0; i < count; i++) {
+            size += com.google.protobuf.CodedOutputStream
+              .computeMessageSizeNoTag(battleChunks_.get(i));
+          }
+          size += 1 * count;
+        }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
     return size;
@@ -476,8 +480,13 @@ private static final long serialVersionUID = 0L;
           com.google.protobuf.LazyStringArrayList.emptyList();
       entities_ =
           com.google.protobuf.LazyStringArrayList.emptyList();
-      battleChunks_ =
-          com.google.protobuf.LazyStringArrayList.emptyList();
+      if (battleChunksBuilder_ == null) {
+        battleChunks_ = java.util.Collections.emptyList();
+      } else {
+        battleChunks_ = null;
+        battleChunksBuilder_.clear();
+      }
+      bitField0_ = (bitField0_ & ~0x00000010);
       return this;
     }
 
@@ -504,9 +513,22 @@ private static final long serialVersionUID = 0L;
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest buildPartial() {
       fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest result = new fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest(this);
+      buildPartialRepeatedFields(result);
       if (bitField0_ != 0) { buildPartial0(result); }
       onBuilt();
       return result;
+    }
+
+    private void buildPartialRepeatedFields(fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest result) {
+      if (battleChunksBuilder_ == null) {
+        if (((bitField0_ & 0x00000010) != 0)) {
+          battleChunks_ = java.util.Collections.unmodifiableList(battleChunks_);
+          bitField0_ = (bitField0_ & ~0x00000010);
+        }
+        result.battleChunks_ = battleChunks_;
+      } else {
+        result.battleChunks_ = battleChunksBuilder_.build();
+      }
     }
 
     private void buildPartial0(fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest result) {
@@ -524,10 +546,6 @@ private static final long serialVersionUID = 0L;
       if (((from_bitField0_ & 0x00000008) != 0)) {
         entities_.makeImmutable();
         result.entities_ = entities_;
-      }
-      if (((from_bitField0_ & 0x00000010) != 0)) {
-        battleChunks_.makeImmutable();
-        result.battleChunks_ = battleChunks_;
       }
     }
 
@@ -571,15 +589,31 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       }
-      if (!other.battleChunks_.isEmpty()) {
-        if (battleChunks_.isEmpty()) {
-          battleChunks_ = other.battleChunks_;
-          bitField0_ |= 0x00000010;
-        } else {
-          ensureBattleChunksIsMutable();
-          battleChunks_.addAll(other.battleChunks_);
+      if (battleChunksBuilder_ == null) {
+        if (!other.battleChunks_.isEmpty()) {
+          if (battleChunks_.isEmpty()) {
+            battleChunks_ = other.battleChunks_;
+            bitField0_ = (bitField0_ & ~0x00000010);
+          } else {
+            ensureBattleChunksIsMutable();
+            battleChunks_.addAll(other.battleChunks_);
+          }
+          onChanged();
         }
-        onChanged();
+      } else {
+        if (!other.battleChunks_.isEmpty()) {
+          if (battleChunksBuilder_.isEmpty()) {
+            battleChunksBuilder_.dispose();
+            battleChunksBuilder_ = null;
+            battleChunks_ = other.battleChunks_;
+            bitField0_ = (bitField0_ & ~0x00000010);
+            battleChunksBuilder_ = 
+              com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                 internalGetBattleChunksFieldBuilder() : null;
+          } else {
+            battleChunksBuilder_.addAllMessages(other.battleChunks_);
+          }
+        }
       }
       this.mergeUnknownFields(other.getUnknownFields());
       onChanged();
@@ -628,8 +662,16 @@ private static final long serialVersionUID = 0L;
               break;
             } // case 34
             case 42: {
-              ensureBattleChunksIsMutable();
-              battleChunks_.add(input.readStringRequireUtf8());
+              fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef m =
+                  input.readMessage(
+                      fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.parser(),
+                      extensionRegistry);
+              if (battleChunksBuilder_ == null) {
+                ensureBattleChunksIsMutable();
+                battleChunks_.add(m);
+              } else {
+                battleChunksBuilder_.addMessage(m);
+              }
               break;
             } // case 42
             default: {
@@ -975,115 +1017,244 @@ private static final long serialVersionUID = 0L;
       return this;
     }
 
-    private com.google.protobuf.LazyStringArrayList battleChunks_ =
-        com.google.protobuf.LazyStringArrayList.emptyList();
+    private java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> battleChunks_ =
+      java.util.Collections.emptyList();
     private void ensureBattleChunksIsMutable() {
-      if (!battleChunks_.isModifiable()) {
-        battleChunks_ = new com.google.protobuf.LazyStringArrayList(battleChunks_);
-      }
-      bitField0_ |= 0x00000010;
+      if (!((bitField0_ & 0x00000010) != 0)) {
+        battleChunks_ = new java.util.ArrayList<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef>(battleChunks_);
+        bitField0_ |= 0x00000010;
+       }
     }
+
+    private com.google.protobuf.RepeatedFieldBuilder<
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> battleChunksBuilder_;
+
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @return A list containing the battleChunks.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
-    public com.google.protobuf.ProtocolStringList
-        getBattleChunksList() {
-      battleChunks_.makeImmutable();
-      return battleChunks_;
+    public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> getBattleChunksList() {
+      if (battleChunksBuilder_ == null) {
+        return java.util.Collections.unmodifiableList(battleChunks_);
+      } else {
+        return battleChunksBuilder_.getMessageList();
+      }
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @return The count of battleChunks.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
     public int getBattleChunksCount() {
-      return battleChunks_.size();
+      if (battleChunksBuilder_ == null) {
+        return battleChunks_.size();
+      } else {
+        return battleChunksBuilder_.getCount();
+      }
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @param index The index of the element to return.
-     * @return The battleChunks at the given index.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
-    public java.lang.String getBattleChunks(int index) {
-      return battleChunks_.get(index);
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef getBattleChunks(int index) {
+      if (battleChunksBuilder_ == null) {
+        return battleChunks_.get(index);
+      } else {
+        return battleChunksBuilder_.getMessage(index);
+      }
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @param index The index of the value to return.
-     * @return The bytes of the battleChunks at the given index.
-     */
-    public com.google.protobuf.ByteString
-        getBattleChunksBytes(int index) {
-      return battleChunks_.getByteString(index);
-    }
-    /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @param index The index to set the value at.
-     * @param value The battleChunks to set.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
     public Builder setBattleChunks(
-        int index, java.lang.String value) {
-      if (value == null) { throw new NullPointerException(); }
-      ensureBattleChunksIsMutable();
-      battleChunks_.set(index, value);
-      bitField0_ |= 0x00000010;
-      onChanged();
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef value) {
+      if (battleChunksBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureBattleChunksIsMutable();
+        battleChunks_.set(index, value);
+        onChanged();
+      } else {
+        battleChunksBuilder_.setMessage(index, value);
+      }
       return this;
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @param value The battleChunks to add.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public Builder setBattleChunks(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder builderForValue) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.set(index, builderForValue.build());
+        onChanged();
+      } else {
+        battleChunksBuilder_.setMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef value) {
+      if (battleChunksBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(value);
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(value);
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
     public Builder addBattleChunks(
-        java.lang.String value) {
-      if (value == null) { throw new NullPointerException(); }
-      ensureBattleChunksIsMutable();
-      battleChunks_.add(value);
-      bitField0_ |= 0x00000010;
-      onChanged();
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef value) {
+      if (battleChunksBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(index, value);
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(index, value);
+      }
       return this;
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @param values The battleChunks to add.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder builderForValue) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(builderForValue.build());
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public Builder addBattleChunks(
+        int index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder builderForValue) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.add(index, builderForValue.build());
+        onChanged();
+      } else {
+        battleChunksBuilder_.addMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
     public Builder addAllBattleChunks(
-        java.lang.Iterable<java.lang.String> values) {
-      ensureBattleChunksIsMutable();
-      com.google.protobuf.AbstractMessageLite.Builder.addAll(
-          values, battleChunks_);
-      bitField0_ |= 0x00000010;
-      onChanged();
+        java.lang.Iterable<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef> values) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        com.google.protobuf.AbstractMessageLite.Builder.addAll(
+            values, battleChunks_);
+        onChanged();
+      } else {
+        battleChunksBuilder_.addAllMessages(values);
+      }
       return this;
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
     public Builder clearBattleChunks() {
-      battleChunks_ =
-        com.google.protobuf.LazyStringArrayList.emptyList();
-      bitField0_ = (bitField0_ & ~0x00000010);;
-      onChanged();
+      if (battleChunksBuilder_ == null) {
+        battleChunks_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000010);
+        onChanged();
+      } else {
+        battleChunksBuilder_.clear();
+      }
       return this;
     }
     /**
-     * <code>repeated string battle_chunks = 5 [json_name = "battleChunks"];</code>
-     * @param value The bytes of the battleChunks to add.
-     * @return This builder for chaining.
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
      */
-    public Builder addBattleChunksBytes(
-        com.google.protobuf.ByteString value) {
-      if (value == null) { throw new NullPointerException(); }
-      checkByteStringIsUtf8(value);
-      ensureBattleChunksIsMutable();
-      battleChunks_.add(value);
-      bitField0_ |= 0x00000010;
-      onChanged();
+    public Builder removeBattleChunks(int index) {
+      if (battleChunksBuilder_ == null) {
+        ensureBattleChunksIsMutable();
+        battleChunks_.remove(index);
+        onChanged();
+      } else {
+        battleChunksBuilder_.remove(index);
+      }
       return this;
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder getBattleChunksBuilder(
+        int index) {
+      return internalGetBattleChunksFieldBuilder().getBuilder(index);
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder getBattleChunksOrBuilder(
+        int index) {
+      if (battleChunksBuilder_ == null) {
+        return battleChunks_.get(index);  } else {
+        return battleChunksBuilder_.getMessageOrBuilder(index);
+      }
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public java.util.List<? extends fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+         getBattleChunksOrBuilderList() {
+      if (battleChunksBuilder_ != null) {
+        return battleChunksBuilder_.getMessageOrBuilderList();
+      } else {
+        return java.util.Collections.unmodifiableList(battleChunks_);
+      }
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder addBattleChunksBuilder() {
+      return internalGetBattleChunksFieldBuilder().addBuilder(
+          fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.getDefaultInstance());
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder addBattleChunksBuilder(
+        int index) {
+      return internalGetBattleChunksFieldBuilder().addBuilder(
+          index, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.getDefaultInstance());
+    }
+    /**
+     * <code>repeated .teamviewer.v1.BattleChunkRef battle_chunks = 5 [json_name = "battleChunks"];</code>
+     */
+    public java.util.List<fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder> 
+         getBattleChunksBuilderList() {
+      return internalGetBattleChunksFieldBuilder().getBuilderList();
+    }
+    private com.google.protobuf.RepeatedFieldBuilder<
+        fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder> 
+        internalGetBattleChunksFieldBuilder() {
+      if (battleChunksBuilder_ == null) {
+        battleChunksBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+            fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef.Builder, fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRefOrBuilder>(
+                battleChunks_,
+                ((bitField0_ & 0x00000010) != 0),
+                getParentForChildren(),
+                isClean());
+        battleChunks_ = null;
+      }
+      return battleChunksBuilder_;
     }
 
     // @@protoc_insertion_point(builder_scope:teamviewer.v1.RefreshRequest)
