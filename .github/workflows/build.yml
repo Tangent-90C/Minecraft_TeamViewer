@@ -62,12 +62,15 @@ jobs:
         shell: bash
         run: |
           mod_version=$(python3 -c "import re;print(re.search(r'^\s*mod_version\s*=\s*(.+?)\s*$', open('gradle.properties', encoding='utf-8').read(), re.M).group(1))")
+          archives_base_name=$(python3 -c "import re;print(re.search(r'^\s*archives_base_name\s*=\s*(.+?)\s*$', open('gradle.properties', encoding='utf-8').read(), re.M).group(1))")
           echo "mod_version=${mod_version}" >> "$GITHUB_OUTPUT"
+          echo "archives_base_name=${archives_base_name}" >> "$GITHUB_OUTPUT"
       
       # 上传编译产物
       - name: Upload built mod JAR
         uses: actions/upload-artifact@v4
         with:
           name: team-view-relay-mod-${{ steps.versions.outputs.mod_version }}
-          path: build-artifacts/MCTeamViewer-${{ steps.versions.outputs.mod_version }}.jar
+          path: build-artifacts/${{ steps.versions.outputs.archives_base_name }}-${{ steps.versions.outputs.mod_version }}.jar
+          if-no-files-found: error
                   
