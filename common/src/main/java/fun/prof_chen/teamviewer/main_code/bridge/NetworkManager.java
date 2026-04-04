@@ -157,6 +157,9 @@ public class NetworkManager {
 	
 	// 连接状态标志 - 表示当前是否与服务器保持连接
 	private volatile boolean isConnected = false;
+
+	// 底层 WebSocket 打开状态 - 区分“传输已建立”和“握手已完成”
+	private volatile boolean transportOpen = false;
 	
 	// 重连意愿标志 - 控制是否应该尝试重连
 	private volatile boolean shouldReconnect = false;
@@ -373,6 +376,7 @@ public class NetworkManager {
 				}
 			});
 		} catch (Exception e) {
+			this.transportOpen = false;
 			this.isConnected = false;
 			this.lastConnectionError = formatThrowableReason(e);
 			LOGGER.error("Failed to connect to TeamViewRelay server at {}: {}", configGateway.getServerURL(), e.getMessage());
@@ -434,6 +438,7 @@ public class NetworkManager {
 			socket.close(1000, "Client disconnect");
 			socket = null;
 		}
+		transportOpen = false;
 		resetNegotiationState();
 		clearLocalOutboundSnapshots();
 		isConnected = false;
@@ -898,7 +903,8 @@ public class NetworkManager {
 	private void handleTransportOpen(String negotiatedExtensions) {
 		// 连接建立事件来自传输线程，这里只投递任务，避免直接跨线程改共享状态。
 		enqueueMainThreadTask(() -> {
-			isConnected = true;
+			transportOpen = true;
+			isConnected = false;
 			lastConnectionError = "";
 			reconnectAttemptsRemaining = maxReconnectAttempts;
 			resetNegotiationState();
@@ -909,7 +915,6 @@ public class NetworkManager {
 				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
 			}
 			ensurePacketDumpWriter();
-			notifyConnectionStatusChanged(true);
 			sendHandshake();
 		});
 	}
@@ -1451,6 +1456,7 @@ public class NetworkManager {
 		// 关闭事件也切回主线程，统一处理状态重置与重连调度。
 		enqueueMainThreadTask(() -> {
 			isConnected = false;
+			transportOpen = false;
 			socket = null;
 			if (statusCode == 1008) {
 				shouldReconnect = false;
@@ -1503,6 +1509,7 @@ public class NetworkManager {
 		enqueueMainThreadTask(() -> {
 			LOGGER.error("TeamViewRelay network error: {}", error == null ? "unknown" : error.getMessage());
 			isConnected = false;
+			transportOpen = false;
 			socket = null;
 			lastConnectionError = formatThrowableReason(error);
 			closePacketDumpWriterQuietly();
@@ -1824,7 +1831,7 @@ public class NetworkManager {
 	 * 服务端响应：handshake_ack消息确认协商结果
 	 */
 	private void sendHandshake() {
-		if (socket == null || !isConnected)
+		if (socket == null || !transportOpen)
 			return;
 
 		try {
@@ -1889,6 +1896,9 @@ public class NetworkManager {
 							+ " 低于客户端最低要求 " + runtimeGateway.getClientMinCompatibleProtocolVersion());
 			return;
 		}
+
+		isConnected = true;
+		notifyConnectionStatusChanged(true);
 
 		digestIntervalSec = packet.digestIntervalSec != null ? packet.digestIntervalSec : 10;
 		serverBroadcastHz = packet.broadcastHz != null ? packet.broadcastHz : 20.0;
@@ -1976,6 +1986,7 @@ public class NetworkManager {
 				: reason.trim();
 
 		lastConnectionError = finalReason;
+		transportOpen = false;
 		isConnected = false;
 		shouldReconnect = false;
 		reconnectSuppressedForVersionMismatch = true;
