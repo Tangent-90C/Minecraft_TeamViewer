@@ -1,29 +1,169 @@
-# TeamViewRelay
+# TeamViewRelay Mod
 
-用于 Minecraft 团队协同作战的“视野与报点共享”系统，当前以 **1.21.8 Fabric** 为主版本进行开发和验证。
+TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。当前主要以 **Minecraft 1.21.8 + Fabric** 版本开发和验证。
 
+整套系统通常由以下组件配合使用：
 
-## 1. 核心功能
+- [Minecraft-TeamViewer-Backend](https://github.com/MC-TeamViewer/Minecraft-TeamViewer-Backend)：负责房间广播、状态聚合和网页地图通道
+- [Minecraft-TeamViewer-Web-Script](https://github.com/MC-TeamViewer/Minecraft-TeamViewer-Web-Script)：把后端状态投影到 squaremap 网页地图
+- [map-nodemc-plugin-blocker](https://github.com/MC-TeamViewer/map-nodemc-plugin-blocker)：可选的 NodeMC 页面屏蔽脚本，与本 Mod 无依赖关系
 
-- 团队玩家信息共享：同步玩家位置、实体信息、共享路标
-- 快速报点：按键/中键双击一键报点，支持中键取消、超时清理、数量上限
-- Xaero 联动（可选）：
-	- 与 Xaero Minimap 双向同步共享路标
-	- 与 Xaero World Map 同步远程玩家追踪
- - journeymap 联动（可选）：
- 	- 可共享路标，和远程玩家地图显示 
-- 房间隔离：通过 `roomCode` 分房，互不干扰
+## 项目简介
 
-## 2. 版本与环境
+这个 Mod 面向“团队协同作战”场景，核心能力包括：
+
+- 共享队友位置、实体信息、战局区块和共享路标
+- 快速报点，支持按键触发、中键双击、取消、超时清理、数量上限
+- 房间号（`roomCode`）隔离，不同房间互不干扰
+- 可选联动 Xaero Minimap、Xaero World Map、JourneyMap
+
+## 适用场景 / 与其他项目关系
+
+- 只安装本 Mod + 后端，即可在游戏内共享团队信息。
+- 再配合网页地图脚本，可以把同一房间的状态同步到 squaremap 页面。
+- Xaero / JourneyMap 是可选增强，不是运行前置。
+
+推荐搭配关系：
+
+- 后端：负责 `roomCode` 分房、广播和状态快照
+- 网页地图脚本：负责网页端地图投影
+- Xaero / JourneyMap：负责客户端内的小地图或大地图联动
+
+## 快速开始
+
+1. 安装 Fabric Loader、Fabric API 和本 Mod。
+2. 启动后按 `O` 打开配置页。
+3. 把 `Server URL` 改成你的后端地址，例如 `ws://127.0.0.1:8765/mc-client`。
+4. 设置同一房间号（`roomCode`），点击保存并连接。
+5. 进入同房间后，验证是否能看到队友、报点或共享路标。
+
+## 安装 / 运行
+
+至少需要：
+
+- Minecraft `1.21.8`
+- Fabric Loader `0.17.2`
+- Fabric API `0.131.0+1.21.8`
+- 本项目 Mod Jar
+
+推荐安装：
+
+- Mod Menu：方便直接打开配置页
+- Xaero Minimap：共享路标联动
+- Xaero World Map：远程玩家追踪联动
+- JourneyMap：共享路标和远程玩家地图显示联动
+
+从源码构建：
+
+```bash
+./gradlew build
+```
+
+开发调试客户端：
+
+```bash
+./gradlew runClient
+```
+
+## 配置或使用说明
+
+### 首次配置
+
+配置文件路径：
+
+- `config/team-view-relay.json`
+
+游戏内首次建议配置：
+
+1. 按 `O` 打开配置界面。
+2. 填写后端 `Server URL`。
+3. 设置房间号（`roomCode`），默认是 `default`。
+4. 点击保存服务器设置，再点击连接。
+
+连接地址说明：
+
+- 代码默认值是 `ws://localhost:8080/mc-client`
+- 当前后端默认监听端口是 `8765`
+- 所以本地常见实际配置应改为 `ws://127.0.0.1:8765/mc-client`
+
+### 常用操作
+
+- `O`：打开配置面板
+- 连接开关快捷键：默认未绑定，需要在控制设置中手动绑定
+- 快速报点快捷键：默认未绑定，需要在控制设置中手动绑定
+
+只有在“渲染已启用且网络已连接”时，报点与同步才会生效。
+
+### 显示与联动能力
+
+- 远程玩家方框（Box）
+- 追踪线（Tracer）
+- 敌我中立颜色映射
+- 报点渲染样式切换：`beacon` / `ring` / `pin`
+- 可选穿墙显示报点和方框（xray）
+- Xaero / JourneyMap 路标与玩家显示联动
+
+### 报点机制
+
+- 支持按键快速报点和中键双击报点
+- 可启用中键单击取消准星附近本人报点
+- 实体死亡后可自动撤销相关报点
+- 每位玩家的快捷报点支持数量上限和超时清理
+
+## 常见问题
+
+### 连接失败
+
+- 优先检查 `Server URL` 是否与后端实际监听端口一致。
+- 常见错误是 Mod 仍指向默认的 `8080`，而后端实际跑在 `8765`。
+
+### 看不到队友
+
+- 确认双方 `roomCode` 完全一致。
+- 确认双方都已经连接成功，而不是只打开了渲染。
+
+### 报点没有效果
+
+- 先确认当前处于“已连接 + 已启用渲染”状态。
+- 如果使用按键报点，先在游戏控制设置里绑定快捷键。
+
+### Xaero 或 JourneyMap 联动不生效
+
+- 确认已经安装对应模组。
+- 如果只安装本 Mod，本体共享功能仍可使用，只是不会联动外部地图模组。
+
+## 开发与构建
+
+常用命令：
+
+```bash
+./gradlew build
+./gradlew runClient
+```
+
+主要代码目录：
+
+- `common/src/main/java`：共享逻辑
+- `common/src/version/1.21.8`：版本相关代码
+- `fabric/src/client`：Fabric 客户端代码
+- `fabric/src/main/resources`：Fabric 资源与语言文件
+
+## 协议 / 版本兼容
+
+当前版本基线：
 
 - Minecraft：`1.21.8`
+- Mod：`v0.4.11-proto0.6.0`
+- 协议版本：`0.6.0`
+- 最低兼容协议版本：`0.6.0`
 
-## 2.1 子模块与协议版本
+子模块与协议仓库：
 
-- clone 推荐使用：`git clone --recursive`
-- 已有仓库补拉子模块：`git submodule update --init --recursive`
-- 当前仓库依赖的是被锁定的协议 submodule commit，不会自动跟随协议仓库远端更新
-- 升级协议版本的标准流程：
+- 推荐使用 `git clone --recursive`
+- 已有仓库可执行 `git submodule update --init --recursive`
+- 当前依赖锁定在 `third_party/TeamViewRelay-Protocol` 的指定 commit，不会自动跟随远端更新
+
+升级协议版本的常规流程：
 
 ```bash
 git -C third_party/TeamViewRelay-Protocol fetch --tags
@@ -32,78 +172,9 @@ git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-- GitHub “Download ZIP” 不包含 submodule 内容，不是推荐的开发方式
+版本号采用“双版本号”约定，例如 `v0.4.11-proto0.6.0`：
 
-## 3. 快速开始
+- 前半段是程序版本号，用于表示 Mod 自身功能迭代
+- 后半段是网络协议版本号，用于表示可与哪些配套组件互通
 
-### 3.1 安装 Mod（客户端）
-
-至少安装：
-
-- Fabric Loader
-- Fabric API
-- 本项目 Mod jar
-
-推荐安装（可选）：
-
-- Mod Menu（用于在 Mod 列表中直接打开配置页）
-- Xaero Minimap（共享路标联动）
-- Xaero World Map（远程玩家追踪联动）
-- journeymap （远程玩家追踪联动）
-
-### 3.4 游戏内首次配置
-
-1. 进入游戏后按 `O` 打开配置页（默认快捷键）。
-2. 服务器默认地址为：`ws://127.0.0.1:8765/mc-client`（改为自己的）
-3. 选择房间号（默认 `default`，同房间互相可见）。
-4. 点击“保存服务器设置”，再点击“连接”。
-
-
-## 4. Mod 介绍与使用
-
-### 4.1 基本操作
-
-- `O`：打开配置面板（默认已绑定）
-- 连接开关快捷键：默认未绑定，请在控制设置中手动绑定
-- 快速报点快捷键：默认未绑定，请在控制设置中手动绑定
-
-只有在“渲染已启用且网络已连接”时，报点与同步会生效。
-
-### 4.2 显示能力
-
-- 远程玩家方框（Box）
-- 追踪线（Tracer）
-- 敌我中立颜色映射（friendly / neutral / enemy）
-- 报点渲染样式可切换：`beacon` / `ring` / `pin`
-- 可选“穿墙显示报点和方框”（xray）
-
-### 4.3 报点机制
-
-- 快捷报点：按“快速报点”按键，或启用“中键双击报点”
-- 取消报点：启用后可“中键单击取消准星附近本人报点”
-- 自动取消：实体报点在本地确认目标死亡后可自动撤销
-- 数量限制：每位玩家快捷报点超过上限时，会自动清理较旧报点
-- 超时清理：普通报点与长期报点分别支持独立 TTL
-
-### 4.4 配置入口说明
-
-- 主配置页：服务端 URL、房间号、连接/断开
-- 显示设置页：渲染距离、方框/线条开关、追踪线起点、颜色/报点子页
-- 网络设置页：上报频率、实体上报开关、共享路标上报、系统代理
-- 报点设置页：报点显示、中键交互、长期报点、样式、形状参数
-
-配置文件为 `config/team-view-relay.json`（Fabric 标准配置目录）。
-
-## 6. 常见问题
-
-- 连接失败：优先检查 Mod 配置的 `Server URL` 是否与后端端口一致（常见是 8080/8765 不一致）
-- 看不到队友：确认双方 `roomCode` 相同，且都已连接成功
-- 报点无效：需先启用 渲染 + 建立连接；若使用按键报点，请先手动绑定快捷键
-- Xaero 功能不生效：确认已安装对应 Xaero 模组（`xaerominimap` / `xaeroworldmap`）
-
-版本号说明
-该程序采用双版本号体系，例如 v0.2.1-proto0.3.0 ，具体含义如下：
-
-程序版本号为 0.2.1，此版本号主要标识程序自身的功能迭代与更新情况。
-网络协议版本号为 0.3.0，该版本号用于界定与其他配套程序进行网络通信时所采用的网络协议版本。
-只有各个程序间使用相似甚至完全相同的网络协议版本号，才能实现相互连接并正常协同使用。
+只有协议版本兼容的 Mod、后端和网页地图脚本，才能稳定协同工作。
