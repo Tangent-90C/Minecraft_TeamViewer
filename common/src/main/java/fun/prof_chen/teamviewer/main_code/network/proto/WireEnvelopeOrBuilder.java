@@ -127,122 +127,122 @@ public interface WireEnvelopeOrBuilder extends
   fun.prof_chen.teamviewer.main_code.network.proto.PlayerReportBundleOrBuilder getPlayerReportBundleOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
    * @return Whether the handshakeAck field is set.
    */
   boolean hasHandshakeAck();
   /**
-   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
    * @return The handshakeAck.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck getHandshakeAck();
   /**
-   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAckOrBuilder getHandshakeAckOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+   * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
    * @return Whether the webMapAck field is set.
    */
   boolean hasWebMapAck();
   /**
-   * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+   * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
    * @return The webMapAck.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck getWebMapAck();
   /**
-   * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+   * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.WebMapAckOrBuilder getWebMapAckOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+   * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
    * @return Whether the pong field is set.
    */
   boolean hasPong();
   /**
-   * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+   * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
    * @return The pong.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.Pong getPong();
   /**
-   * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+   * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.PongOrBuilder getPongOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
    * @return Whether the snapshotFull field is set.
    */
   boolean hasSnapshotFull();
   /**
-   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
    * @return The snapshotFull.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull getSnapshotFull();
   /**
-   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFullOrBuilder getSnapshotFullOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+   * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
    * @return Whether the patch field is set.
    */
   boolean hasPatch();
   /**
-   * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+   * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
    * @return The patch.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.Patch getPatch();
   /**
-   * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+   * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.PatchOrBuilder getPatchOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+   * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
    * @return Whether the digest field is set.
    */
   boolean hasDigest();
   /**
-   * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+   * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
    * @return The digest.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.Digest getDigest();
   /**
-   * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+   * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.DigestOrBuilder getDigestOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+   * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
    * @return Whether the refreshRequest field is set.
    */
   boolean hasRefreshRequest();
   /**
-   * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+   * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
    * @return The refreshRequest.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest getRefreshRequest();
   /**
-   * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+   * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequestOrBuilder getRefreshRequestOrBuilder();
 
   /**
-   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
    * @return Whether the reportRateHint field is set.
    */
   boolean hasReportRateHint();
   /**
-   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
    * @return The reportRateHint.
    */
   fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint getReportRateHint();
   /**
-   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
    */
   fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHintOrBuilder getReportRateHintOrBuilder();
 

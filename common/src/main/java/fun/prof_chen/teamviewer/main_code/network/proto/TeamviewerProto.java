@@ -868,17 +868,17 @@ public final class TeamviewerProto extends com.google.protobuf.GeneratedFile {
       ".v1.WebMapCommandH\000R\rwebMapCommand\022U\n\024pl" +
       "ayer_report_bundle\030\020 \001(\0132!.teamviewer.v1" +
       ".PlayerReportBundleH\000R\022playerReportBundl" +
-      "e\022B\n\rhandshake_ack\030\036 \001(\0132\033.teamviewer.v1" +
+      "e\022B\n\rhandshake_ack\030\021 \001(\0132\033.teamviewer.v1" +
       ".HandshakeAckH\000R\014handshakeAck\022:\n\013web_map" +
-      "_ack\030\037 \001(\0132\030.teamviewer.v1.WebMapAckH\000R\t" +
-      "webMapAck\022)\n\004pong\030  \001(\0132\023.teamviewer.v1." +
-      "PongH\000R\004pong\022B\n\rsnapshot_full\030! \001(\0132\033.te" +
+      "_ack\030\022 \001(\0132\030.teamviewer.v1.WebMapAckH\000R\t" +
+      "webMapAck\022)\n\004pong\030\023 \001(\0132\023.teamviewer.v1." +
+      "PongH\000R\004pong\022B\n\rsnapshot_full\030\024 \001(\0132\033.te" +
       "amviewer.v1.SnapshotFullH\000R\014snapshotFull" +
-      "\022,\n\005patch\030\" \001(\0132\024.teamviewer.v1.PatchH\000R" +
-      "\005patch\022/\n\006digest\030# \001(\0132\025.teamviewer.v1.D" +
-      "igestH\000R\006digest\022H\n\017refresh_request\030$ \001(\013" +
+      "\022,\n\005patch\030\025 \001(\0132\024.teamviewer.v1.PatchH\000R" +
+      "\005patch\022/\n\006digest\030\026 \001(\0132\025.teamviewer.v1.D" +
+      "igestH\000R\006digest\022H\n\017refresh_request\030\027 \001(\013" +
       "2\035.teamviewer.v1.RefreshRequestH\000R\016refre" +
-      "shRequest\022I\n\020report_rate_hint\030% \001(\0132\035.te" +
+      "shRequest\022I\n\020report_rate_hint\030\030 \001(\0132\035.te" +
       "amviewer.v1.ReportRateHintH\000R\016reportRate" +
       "HintB\t\n\007payload*v\n\013WireChannel\022\034\n\030WIRE_C" +
       "HANNEL_UNSPECIFIED\020\000\022\027\n\023WIRE_CHANNEL_PLA" +

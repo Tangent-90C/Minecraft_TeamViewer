@@ -970,79 +970,51 @@ public class NetworkManager {
 				return;
 			}
 
-			ProtocolPackets.BaseInboundPacket envelope = messageCodec.decode(message, ProtocolPackets.BaseInboundPacket.class);
-			if (envelope == null || envelope.type == null || envelope.type.isBlank()) {
+			ProtocolPackets.DecodedInboundMessage decoded = messageCodec.decode(message);
+			if (decoded == null || decoded.type == null || decoded.type.isBlank()) {
 				LOGGER.warn("Received invalid message envelope");
 				return;
 			}
 
-			if ("handshake_ack".equals(envelope.type)) {
-				ProtocolPackets.HandshakeAckInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.HandshakeAckInboundPacket.class);
+			if ("handshake_ack".equals(decoded.type)) {
+				ProtocolPackets.HandshakeAckInboundPacket packet =
+						(ProtocolPackets.HandshakeAckInboundPacket) decoded.packet;
 				handleHandshakeAck(packet);
 				return;
 			}
 
-			if ("snapshot_full".equals(envelope.type)) {
-				ProtocolPackets.SnapshotFullInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.SnapshotFullInboundPacket.class);
+			if ("snapshot_full".equals(decoded.type)) {
+				ProtocolPackets.SnapshotFullInboundPacket packet =
+						(ProtocolPackets.SnapshotFullInboundPacket) decoded.packet;
 				applySnapshot(packet);
 				return;
 			}
 
-			if ("patch".equals(envelope.type)) {
-				ProtocolPackets.PatchInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.PatchInboundPacket.class);
+			if ("patch".equals(decoded.type)) {
+				ProtocolPackets.PatchInboundPacket packet =
+						(ProtocolPackets.PatchInboundPacket) decoded.packet;
 				applyPatch(packet);
 				return;
 			}
 
-			if ("digest".equals(envelope.type)) {
-				ProtocolPackets.DigestInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.DigestInboundPacket.class);
+			if ("digest".equals(decoded.type)) {
+				ProtocolPackets.DigestInboundPacket packet =
+						(ProtocolPackets.DigestInboundPacket) decoded.packet;
 				handleDigest(packet);
 				return;
 			}
 
-			if ("refresh_req".equals(envelope.type)) {
-				ProtocolPackets.RefreshReqInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.RefreshReqInboundPacket.class);
+			if ("refresh_req".equals(decoded.type)) {
+				ProtocolPackets.RefreshReqInboundPacket packet =
+						(ProtocolPackets.RefreshReqInboundPacket) decoded.packet;
 				handleRefreshRequest(packet);
 				return;
 			}
 
-			if ("report_rate_hint".equals(envelope.type)) {
-				ProtocolPackets.ReportRateHintInboundPacket packet = messageCodec.decode(
-						message,
-						ProtocolPackets.ReportRateHintInboundPacket.class
-				);
+			if ("report_rate_hint".equals(decoded.type)) {
+				ProtocolPackets.ReportRateHintInboundPacket packet =
+						(ProtocolPackets.ReportRateHintInboundPacket) decoded.packet;
 				handleReportRateHint(packet);
-				return;
-			}
-
-			if ("waypoints_update".equals(envelope.type)) {
-				ProtocolPackets.WaypointsUpdateInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.WaypointsUpdateInboundPacket.class);
-				JsonObject payload = new JsonObject();
-				payload.add("waypoints", createObjectNode(packet == null ? null : packet.waypoints));
-				Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(payload, "waypoints");
-				if (!receivedWaypoints.isEmpty()) {
-					remoteWaypointCache.putAll(receivedWaypoints);
-					notifyWaypointsReceived(receivedWaypoints);
-				}
-				return;
-			}
-
-			if ("waypoints_delete".equals(envelope.type)) {
-				ProtocolPackets.WaypointsDeleteInboundPacket packet = messageCodec.decode(message,
-						ProtocolPackets.WaypointsDeleteInboundPacket.class);
-				List<String> waypointIds = packet != null && packet.waypointIds != null ? packet.waypointIds : List.of();
-				if (!waypointIds.isEmpty()) {
-					for (String id : waypointIds) {
-						remoteWaypointCache.remove(id);
-					}
-					notifyWaypointsDeleted(waypointIds);
-				}
 				return;
 			}
 

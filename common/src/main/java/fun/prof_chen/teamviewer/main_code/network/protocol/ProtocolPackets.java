@@ -7,6 +7,16 @@ public final class ProtocolPackets {
 	private ProtocolPackets() {
 	}
 
+	public static class DecodedInboundMessage {
+		public final String type;
+		public final BaseInboundPacket packet;
+
+		public DecodedInboundMessage(String type, BaseInboundPacket packet) {
+			this.type = type;
+			this.packet = packet;
+		}
+	}
+
 	public static class BaseInboundPacket {
 		public String type;
 	}

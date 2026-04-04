@@ -62,14 +62,14 @@ private static final long serialVersionUID = 0L;
     RESYNC_REQUEST(14),
     WEB_MAP_COMMAND(15),
     PLAYER_REPORT_BUNDLE(16),
-    HANDSHAKE_ACK(30),
-    WEB_MAP_ACK(31),
-    PONG(32),
-    SNAPSHOT_FULL(33),
-    PATCH(34),
-    DIGEST(35),
-    REFRESH_REQUEST(36),
-    REPORT_RATE_HINT(37),
+    HANDSHAKE_ACK(17),
+    WEB_MAP_ACK(18),
+    PONG(19),
+    SNAPSHOT_FULL(20),
+    PATCH(21),
+    DIGEST(22),
+    REFRESH_REQUEST(23),
+    REPORT_RATE_HINT(24),
     PAYLOAD_NOT_SET(0);
     private final int value;
     private PayloadCase(int value) {
@@ -94,14 +94,14 @@ private static final long serialVersionUID = 0L;
         case 14: return RESYNC_REQUEST;
         case 15: return WEB_MAP_COMMAND;
         case 16: return PLAYER_REPORT_BUNDLE;
-        case 30: return HANDSHAKE_ACK;
-        case 31: return WEB_MAP_ACK;
-        case 32: return PONG;
-        case 33: return SNAPSHOT_FULL;
-        case 34: return PATCH;
-        case 35: return DIGEST;
-        case 36: return REFRESH_REQUEST;
-        case 37: return REPORT_RATE_HINT;
+        case 17: return HANDSHAKE_ACK;
+        case 18: return WEB_MAP_ACK;
+        case 19: return PONG;
+        case 20: return SNAPSHOT_FULL;
+        case 21: return PATCH;
+        case 22: return DIGEST;
+        case 23: return REFRESH_REQUEST;
+        case 24: return REPORT_RATE_HINT;
         case 0: return PAYLOAD_NOT_SET;
         default: return null;
       }
@@ -352,249 +352,249 @@ private static final long serialVersionUID = 0L;
     return fun.prof_chen.teamviewer.main_code.network.proto.PlayerReportBundle.getDefaultInstance();
   }
 
-  public static final int HANDSHAKE_ACK_FIELD_NUMBER = 30;
+  public static final int HANDSHAKE_ACK_FIELD_NUMBER = 17;
   /**
-   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
    * @return Whether the handshakeAck field is set.
    */
   @java.lang.Override
   public boolean hasHandshakeAck() {
-    return payloadCase_ == 30;
+    return payloadCase_ == 17;
   }
   /**
-   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
    * @return The handshakeAck.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck getHandshakeAck() {
-    if (payloadCase_ == 30) {
+    if (payloadCase_ == 17) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+   * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAckOrBuilder getHandshakeAckOrBuilder() {
-    if (payloadCase_ == 30) {
+    if (payloadCase_ == 17) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance();
   }
 
-  public static final int WEB_MAP_ACK_FIELD_NUMBER = 31;
+  public static final int WEB_MAP_ACK_FIELD_NUMBER = 18;
   /**
-   * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+   * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
    * @return Whether the webMapAck field is set.
    */
   @java.lang.Override
   public boolean hasWebMapAck() {
-    return payloadCase_ == 31;
+    return payloadCase_ == 18;
   }
   /**
-   * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+   * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
    * @return The webMapAck.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck getWebMapAck() {
-    if (payloadCase_ == 31) {
+    if (payloadCase_ == 18) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+   * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.WebMapAckOrBuilder getWebMapAckOrBuilder() {
-    if (payloadCase_ == 31) {
+    if (payloadCase_ == 18) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance();
   }
 
-  public static final int PONG_FIELD_NUMBER = 32;
+  public static final int PONG_FIELD_NUMBER = 19;
   /**
-   * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+   * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
    * @return Whether the pong field is set.
    */
   @java.lang.Override
   public boolean hasPong() {
-    return payloadCase_ == 32;
+    return payloadCase_ == 19;
   }
   /**
-   * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+   * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
    * @return The pong.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.Pong getPong() {
-    if (payloadCase_ == 32) {
+    if (payloadCase_ == 19) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+   * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.PongOrBuilder getPongOrBuilder() {
-    if (payloadCase_ == 32) {
+    if (payloadCase_ == 19) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance();
   }
 
-  public static final int SNAPSHOT_FULL_FIELD_NUMBER = 33;
+  public static final int SNAPSHOT_FULL_FIELD_NUMBER = 20;
   /**
-   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
    * @return Whether the snapshotFull field is set.
    */
   @java.lang.Override
   public boolean hasSnapshotFull() {
-    return payloadCase_ == 33;
+    return payloadCase_ == 20;
   }
   /**
-   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
    * @return The snapshotFull.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull getSnapshotFull() {
-    if (payloadCase_ == 33) {
+    if (payloadCase_ == 20) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+   * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFullOrBuilder getSnapshotFullOrBuilder() {
-    if (payloadCase_ == 33) {
+    if (payloadCase_ == 20) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance();
   }
 
-  public static final int PATCH_FIELD_NUMBER = 34;
+  public static final int PATCH_FIELD_NUMBER = 21;
   /**
-   * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+   * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
    * @return Whether the patch field is set.
    */
   @java.lang.Override
   public boolean hasPatch() {
-    return payloadCase_ == 34;
+    return payloadCase_ == 21;
   }
   /**
-   * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+   * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
    * @return The patch.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.Patch getPatch() {
-    if (payloadCase_ == 34) {
+    if (payloadCase_ == 21) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+   * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.PatchOrBuilder getPatchOrBuilder() {
-    if (payloadCase_ == 34) {
+    if (payloadCase_ == 21) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance();
   }
 
-  public static final int DIGEST_FIELD_NUMBER = 35;
+  public static final int DIGEST_FIELD_NUMBER = 22;
   /**
-   * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+   * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
    * @return Whether the digest field is set.
    */
   @java.lang.Override
   public boolean hasDigest() {
-    return payloadCase_ == 35;
+    return payloadCase_ == 22;
   }
   /**
-   * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+   * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
    * @return The digest.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.Digest getDigest() {
-    if (payloadCase_ == 35) {
+    if (payloadCase_ == 22) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+   * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.DigestOrBuilder getDigestOrBuilder() {
-    if (payloadCase_ == 35) {
+    if (payloadCase_ == 22) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance();
   }
 
-  public static final int REFRESH_REQUEST_FIELD_NUMBER = 36;
+  public static final int REFRESH_REQUEST_FIELD_NUMBER = 23;
   /**
-   * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+   * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
    * @return Whether the refreshRequest field is set.
    */
   @java.lang.Override
   public boolean hasRefreshRequest() {
-    return payloadCase_ == 36;
+    return payloadCase_ == 23;
   }
   /**
-   * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+   * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
    * @return The refreshRequest.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest getRefreshRequest() {
-    if (payloadCase_ == 36) {
+    if (payloadCase_ == 23) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+   * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequestOrBuilder getRefreshRequestOrBuilder() {
-    if (payloadCase_ == 36) {
+    if (payloadCase_ == 23) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance();
   }
 
-  public static final int REPORT_RATE_HINT_FIELD_NUMBER = 37;
+  public static final int REPORT_RATE_HINT_FIELD_NUMBER = 24;
   /**
-   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
    * @return Whether the reportRateHint field is set.
    */
   @java.lang.Override
   public boolean hasReportRateHint() {
-    return payloadCase_ == 37;
+    return payloadCase_ == 24;
   }
   /**
-   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
    * @return The reportRateHint.
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint getReportRateHint() {
-    if (payloadCase_ == 37) {
+    if (payloadCase_ == 24) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance();
   }
   /**
-   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+   * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
    */
   @java.lang.Override
   public fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHintOrBuilder getReportRateHintOrBuilder() {
-    if (payloadCase_ == 37) {
+    if (payloadCase_ == 24) {
        return (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_;
     }
     return fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance();
@@ -638,29 +638,29 @@ private static final long serialVersionUID = 0L;
     if (payloadCase_ == 16) {
       output.writeMessage(16, (fun.prof_chen.teamviewer.main_code.network.proto.PlayerReportBundle) payload_);
     }
-    if (payloadCase_ == 30) {
-      output.writeMessage(30, (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_);
+    if (payloadCase_ == 17) {
+      output.writeMessage(17, (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_);
     }
-    if (payloadCase_ == 31) {
-      output.writeMessage(31, (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_);
+    if (payloadCase_ == 18) {
+      output.writeMessage(18, (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_);
     }
-    if (payloadCase_ == 32) {
-      output.writeMessage(32, (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_);
+    if (payloadCase_ == 19) {
+      output.writeMessage(19, (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_);
     }
-    if (payloadCase_ == 33) {
-      output.writeMessage(33, (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_);
+    if (payloadCase_ == 20) {
+      output.writeMessage(20, (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_);
     }
-    if (payloadCase_ == 34) {
-      output.writeMessage(34, (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_);
+    if (payloadCase_ == 21) {
+      output.writeMessage(21, (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_);
     }
-    if (payloadCase_ == 35) {
-      output.writeMessage(35, (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_);
+    if (payloadCase_ == 22) {
+      output.writeMessage(22, (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_);
     }
-    if (payloadCase_ == 36) {
-      output.writeMessage(36, (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_);
+    if (payloadCase_ == 23) {
+      output.writeMessage(23, (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_);
     }
-    if (payloadCase_ == 37) {
-      output.writeMessage(37, (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_);
+    if (payloadCase_ == 24) {
+      output.writeMessage(24, (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_);
     }
     getUnknownFields().writeTo(output);
   }
@@ -703,37 +703,37 @@ private static final long serialVersionUID = 0L;
       size += com.google.protobuf.CodedOutputStream
         .computeMessageSize(16, (fun.prof_chen.teamviewer.main_code.network.proto.PlayerReportBundle) payload_);
     }
-    if (payloadCase_ == 30) {
+    if (payloadCase_ == 17) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(30, (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_);
+        .computeMessageSize(17, (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_);
     }
-    if (payloadCase_ == 31) {
+    if (payloadCase_ == 18) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(31, (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_);
+        .computeMessageSize(18, (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_);
     }
-    if (payloadCase_ == 32) {
+    if (payloadCase_ == 19) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(32, (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_);
+        .computeMessageSize(19, (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_);
     }
-    if (payloadCase_ == 33) {
+    if (payloadCase_ == 20) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(33, (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_);
+        .computeMessageSize(20, (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_);
     }
-    if (payloadCase_ == 34) {
+    if (payloadCase_ == 21) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(34, (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_);
+        .computeMessageSize(21, (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_);
     }
-    if (payloadCase_ == 35) {
+    if (payloadCase_ == 22) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(35, (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_);
+        .computeMessageSize(22, (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_);
     }
-    if (payloadCase_ == 36) {
+    if (payloadCase_ == 23) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(36, (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_);
+        .computeMessageSize(23, (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_);
     }
-    if (payloadCase_ == 37) {
+    if (payloadCase_ == 24) {
       size += com.google.protobuf.CodedOutputStream
-        .computeMessageSize(37, (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_);
+        .computeMessageSize(24, (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_);
     }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
@@ -781,35 +781,35 @@ private static final long serialVersionUID = 0L;
         if (!getPlayerReportBundle()
             .equals(other.getPlayerReportBundle())) return false;
         break;
-      case 30:
+      case 17:
         if (!getHandshakeAck()
             .equals(other.getHandshakeAck())) return false;
         break;
-      case 31:
+      case 18:
         if (!getWebMapAck()
             .equals(other.getWebMapAck())) return false;
         break;
-      case 32:
+      case 19:
         if (!getPong()
             .equals(other.getPong())) return false;
         break;
-      case 33:
+      case 20:
         if (!getSnapshotFull()
             .equals(other.getSnapshotFull())) return false;
         break;
-      case 34:
+      case 21:
         if (!getPatch()
             .equals(other.getPatch())) return false;
         break;
-      case 35:
+      case 22:
         if (!getDigest()
             .equals(other.getDigest())) return false;
         break;
-      case 36:
+      case 23:
         if (!getRefreshRequest()
             .equals(other.getRefreshRequest())) return false;
         break;
-      case 37:
+      case 24:
         if (!getReportRateHint()
             .equals(other.getReportRateHint())) return false;
         break;
@@ -858,35 +858,35 @@ private static final long serialVersionUID = 0L;
         hash = (37 * hash) + PLAYER_REPORT_BUNDLE_FIELD_NUMBER;
         hash = (53 * hash) + getPlayerReportBundle().hashCode();
         break;
-      case 30:
+      case 17:
         hash = (37 * hash) + HANDSHAKE_ACK_FIELD_NUMBER;
         hash = (53 * hash) + getHandshakeAck().hashCode();
         break;
-      case 31:
+      case 18:
         hash = (37 * hash) + WEB_MAP_ACK_FIELD_NUMBER;
         hash = (53 * hash) + getWebMapAck().hashCode();
         break;
-      case 32:
+      case 19:
         hash = (37 * hash) + PONG_FIELD_NUMBER;
         hash = (53 * hash) + getPong().hashCode();
         break;
-      case 33:
+      case 20:
         hash = (37 * hash) + SNAPSHOT_FULL_FIELD_NUMBER;
         hash = (53 * hash) + getSnapshotFull().hashCode();
         break;
-      case 34:
+      case 21:
         hash = (37 * hash) + PATCH_FIELD_NUMBER;
         hash = (53 * hash) + getPatch().hashCode();
         break;
-      case 35:
+      case 22:
         hash = (37 * hash) + DIGEST_FIELD_NUMBER;
         hash = (53 * hash) + getDigest().hashCode();
         break;
-      case 36:
+      case 23:
         hash = (37 * hash) + REFRESH_REQUEST_FIELD_NUMBER;
         hash = (53 * hash) + getRefreshRequest().hashCode();
         break;
-      case 37:
+      case 24:
         hash = (37 * hash) + REPORT_RATE_HINT_FIELD_NUMBER;
         hash = (53 * hash) + getReportRateHint().hashCode();
         break;
@@ -1142,35 +1142,35 @@ private static final long serialVersionUID = 0L;
           playerReportBundleBuilder_ != null) {
         result.payload_ = playerReportBundleBuilder_.build();
       }
-      if (payloadCase_ == 30 &&
+      if (payloadCase_ == 17 &&
           handshakeAckBuilder_ != null) {
         result.payload_ = handshakeAckBuilder_.build();
       }
-      if (payloadCase_ == 31 &&
+      if (payloadCase_ == 18 &&
           webMapAckBuilder_ != null) {
         result.payload_ = webMapAckBuilder_.build();
       }
-      if (payloadCase_ == 32 &&
+      if (payloadCase_ == 19 &&
           pongBuilder_ != null) {
         result.payload_ = pongBuilder_.build();
       }
-      if (payloadCase_ == 33 &&
+      if (payloadCase_ == 20 &&
           snapshotFullBuilder_ != null) {
         result.payload_ = snapshotFullBuilder_.build();
       }
-      if (payloadCase_ == 34 &&
+      if (payloadCase_ == 21 &&
           patchBuilder_ != null) {
         result.payload_ = patchBuilder_.build();
       }
-      if (payloadCase_ == 35 &&
+      if (payloadCase_ == 22 &&
           digestBuilder_ != null) {
         result.payload_ = digestBuilder_.build();
       }
-      if (payloadCase_ == 36 &&
+      if (payloadCase_ == 23 &&
           refreshRequestBuilder_ != null) {
         result.payload_ = refreshRequestBuilder_.build();
       }
-      if (payloadCase_ == 37 &&
+      if (payloadCase_ == 24 &&
           reportRateHintBuilder_ != null) {
         result.payload_ = reportRateHintBuilder_.build();
       }
@@ -1336,62 +1336,62 @@ private static final long serialVersionUID = 0L;
               payloadCase_ = 16;
               break;
             } // case 130
-            case 242: {
+            case 138: {
               input.readMessage(
                   internalGetHandshakeAckFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 30;
+              payloadCase_ = 17;
               break;
-            } // case 242
-            case 250: {
+            } // case 138
+            case 146: {
               input.readMessage(
                   internalGetWebMapAckFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 31;
+              payloadCase_ = 18;
               break;
-            } // case 250
-            case 258: {
+            } // case 146
+            case 154: {
               input.readMessage(
                   internalGetPongFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 32;
+              payloadCase_ = 19;
               break;
-            } // case 258
-            case 266: {
+            } // case 154
+            case 162: {
               input.readMessage(
                   internalGetSnapshotFullFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 33;
+              payloadCase_ = 20;
               break;
-            } // case 266
-            case 274: {
+            } // case 162
+            case 170: {
               input.readMessage(
                   internalGetPatchFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 34;
+              payloadCase_ = 21;
               break;
-            } // case 274
-            case 282: {
+            } // case 170
+            case 178: {
               input.readMessage(
                   internalGetDigestFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 35;
+              payloadCase_ = 22;
               break;
-            } // case 282
-            case 290: {
+            } // case 178
+            case 186: {
               input.readMessage(
                   internalGetRefreshRequestFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 36;
+              payloadCase_ = 23;
               break;
-            } // case 290
-            case 298: {
+            } // case 186
+            case 194: {
               input.readMessage(
                   internalGetReportRateHintFieldBuilder().getBuilder(),
                   extensionRegistry);
-              payloadCase_ = 37;
+              payloadCase_ = 24;
               break;
-            } // case 298
+            } // case 194
             default: {
               if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                 done = true; // was an endgroup tag
@@ -2473,33 +2473,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck, fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.Builder, fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAckOrBuilder> handshakeAckBuilder_;
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      * @return Whether the handshakeAck field is set.
      */
     @java.lang.Override
     public boolean hasHandshakeAck() {
-      return payloadCase_ == 30;
+      return payloadCase_ == 17;
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      * @return The handshakeAck.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck getHandshakeAck() {
       if (handshakeAckBuilder_ == null) {
-        if (payloadCase_ == 30) {
+        if (payloadCase_ == 17) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance();
       } else {
-        if (payloadCase_ == 30) {
+        if (payloadCase_ == 17) {
           return handshakeAckBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     public Builder setHandshakeAck(fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck value) {
       if (handshakeAckBuilder_ == null) {
@@ -2511,11 +2511,11 @@ private static final long serialVersionUID = 0L;
       } else {
         handshakeAckBuilder_.setMessage(value);
       }
-      payloadCase_ = 30;
+      payloadCase_ = 17;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     public Builder setHandshakeAck(
         fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.Builder builderForValue) {
@@ -2525,15 +2525,15 @@ private static final long serialVersionUID = 0L;
       } else {
         handshakeAckBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 30;
+      payloadCase_ = 17;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     public Builder mergeHandshakeAck(fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck value) {
       if (handshakeAckBuilder_ == null) {
-        if (payloadCase_ == 30 &&
+        if (payloadCase_ == 17 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_)
               .mergeFrom(value).buildPartial();
@@ -2542,27 +2542,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 30) {
+        if (payloadCase_ == 17) {
           handshakeAckBuilder_.mergeFrom(value);
         } else {
           handshakeAckBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 30;
+      payloadCase_ = 17;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     public Builder clearHandshakeAck() {
       if (handshakeAckBuilder_ == null) {
-        if (payloadCase_ == 30) {
+        if (payloadCase_ == 17) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 30) {
+        if (payloadCase_ == 17) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -2571,33 +2571,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.Builder getHandshakeAckBuilder() {
       return internalGetHandshakeAckFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAckOrBuilder getHandshakeAckOrBuilder() {
-      if ((payloadCase_ == 30) && (handshakeAckBuilder_ != null)) {
+      if ((payloadCase_ == 17) && (handshakeAckBuilder_ != null)) {
         return handshakeAckBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 30) {
+        if (payloadCase_ == 17) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 30 [json_name = "handshakeAck"];</code>
+     * <code>.teamviewer.v1.HandshakeAck handshake_ack = 17 [json_name = "handshakeAck"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck, fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.Builder, fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAckOrBuilder> 
         internalGetHandshakeAckFieldBuilder() {
       if (handshakeAckBuilder_ == null) {
-        if (!(payloadCase_ == 30)) {
+        if (!(payloadCase_ == 17)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.getDefaultInstance();
         }
         handshakeAckBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -2607,7 +2607,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 30;
+      payloadCase_ = 17;
       onChanged();
       return handshakeAckBuilder_;
     }
@@ -2615,33 +2615,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck, fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.Builder, fun.prof_chen.teamviewer.main_code.network.proto.WebMapAckOrBuilder> webMapAckBuilder_;
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      * @return Whether the webMapAck field is set.
      */
     @java.lang.Override
     public boolean hasWebMapAck() {
-      return payloadCase_ == 31;
+      return payloadCase_ == 18;
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      * @return The webMapAck.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck getWebMapAck() {
       if (webMapAckBuilder_ == null) {
-        if (payloadCase_ == 31) {
+        if (payloadCase_ == 18) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance();
       } else {
-        if (payloadCase_ == 31) {
+        if (payloadCase_ == 18) {
           return webMapAckBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     public Builder setWebMapAck(fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck value) {
       if (webMapAckBuilder_ == null) {
@@ -2653,11 +2653,11 @@ private static final long serialVersionUID = 0L;
       } else {
         webMapAckBuilder_.setMessage(value);
       }
-      payloadCase_ = 31;
+      payloadCase_ = 18;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     public Builder setWebMapAck(
         fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.Builder builderForValue) {
@@ -2667,15 +2667,15 @@ private static final long serialVersionUID = 0L;
       } else {
         webMapAckBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 31;
+      payloadCase_ = 18;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     public Builder mergeWebMapAck(fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck value) {
       if (webMapAckBuilder_ == null) {
-        if (payloadCase_ == 31 &&
+        if (payloadCase_ == 18 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_)
               .mergeFrom(value).buildPartial();
@@ -2684,27 +2684,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 31) {
+        if (payloadCase_ == 18) {
           webMapAckBuilder_.mergeFrom(value);
         } else {
           webMapAckBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 31;
+      payloadCase_ = 18;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     public Builder clearWebMapAck() {
       if (webMapAckBuilder_ == null) {
-        if (payloadCase_ == 31) {
+        if (payloadCase_ == 18) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 31) {
+        if (payloadCase_ == 18) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -2713,33 +2713,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.Builder getWebMapAckBuilder() {
       return internalGetWebMapAckFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.WebMapAckOrBuilder getWebMapAckOrBuilder() {
-      if ((payloadCase_ == 31) && (webMapAckBuilder_ != null)) {
+      if ((payloadCase_ == 18) && (webMapAckBuilder_ != null)) {
         return webMapAckBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 31) {
+        if (payloadCase_ == 18) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.WebMapAck web_map_ack = 31 [json_name = "webMapAck"];</code>
+     * <code>.teamviewer.v1.WebMapAck web_map_ack = 18 [json_name = "webMapAck"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck, fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.Builder, fun.prof_chen.teamviewer.main_code.network.proto.WebMapAckOrBuilder> 
         internalGetWebMapAckFieldBuilder() {
       if (webMapAckBuilder_ == null) {
-        if (!(payloadCase_ == 31)) {
+        if (!(payloadCase_ == 18)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.WebMapAck.getDefaultInstance();
         }
         webMapAckBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -2749,7 +2749,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 31;
+      payloadCase_ = 18;
       onChanged();
       return webMapAckBuilder_;
     }
@@ -2757,33 +2757,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.Pong, fun.prof_chen.teamviewer.main_code.network.proto.Pong.Builder, fun.prof_chen.teamviewer.main_code.network.proto.PongOrBuilder> pongBuilder_;
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      * @return Whether the pong field is set.
      */
     @java.lang.Override
     public boolean hasPong() {
-      return payloadCase_ == 32;
+      return payloadCase_ == 19;
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      * @return The pong.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.Pong getPong() {
       if (pongBuilder_ == null) {
-        if (payloadCase_ == 32) {
+        if (payloadCase_ == 19) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance();
       } else {
-        if (payloadCase_ == 32) {
+        if (payloadCase_ == 19) {
           return pongBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     public Builder setPong(fun.prof_chen.teamviewer.main_code.network.proto.Pong value) {
       if (pongBuilder_ == null) {
@@ -2795,11 +2795,11 @@ private static final long serialVersionUID = 0L;
       } else {
         pongBuilder_.setMessage(value);
       }
-      payloadCase_ = 32;
+      payloadCase_ = 19;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     public Builder setPong(
         fun.prof_chen.teamviewer.main_code.network.proto.Pong.Builder builderForValue) {
@@ -2809,15 +2809,15 @@ private static final long serialVersionUID = 0L;
       } else {
         pongBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 32;
+      payloadCase_ = 19;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     public Builder mergePong(fun.prof_chen.teamviewer.main_code.network.proto.Pong value) {
       if (pongBuilder_ == null) {
-        if (payloadCase_ == 32 &&
+        if (payloadCase_ == 19 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.Pong.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_)
               .mergeFrom(value).buildPartial();
@@ -2826,27 +2826,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 32) {
+        if (payloadCase_ == 19) {
           pongBuilder_.mergeFrom(value);
         } else {
           pongBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 32;
+      payloadCase_ = 19;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     public Builder clearPong() {
       if (pongBuilder_ == null) {
-        if (payloadCase_ == 32) {
+        if (payloadCase_ == 19) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 32) {
+        if (payloadCase_ == 19) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -2855,33 +2855,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.Pong.Builder getPongBuilder() {
       return internalGetPongFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.PongOrBuilder getPongOrBuilder() {
-      if ((payloadCase_ == 32) && (pongBuilder_ != null)) {
+      if ((payloadCase_ == 19) && (pongBuilder_ != null)) {
         return pongBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 32) {
+        if (payloadCase_ == 19) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.Pong) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.Pong pong = 32 [json_name = "pong"];</code>
+     * <code>.teamviewer.v1.Pong pong = 19 [json_name = "pong"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.Pong, fun.prof_chen.teamviewer.main_code.network.proto.Pong.Builder, fun.prof_chen.teamviewer.main_code.network.proto.PongOrBuilder> 
         internalGetPongFieldBuilder() {
       if (pongBuilder_ == null) {
-        if (!(payloadCase_ == 32)) {
+        if (!(payloadCase_ == 19)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.Pong.getDefaultInstance();
         }
         pongBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -2891,7 +2891,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 32;
+      payloadCase_ = 19;
       onChanged();
       return pongBuilder_;
     }
@@ -2899,33 +2899,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull, fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.Builder, fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFullOrBuilder> snapshotFullBuilder_;
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      * @return Whether the snapshotFull field is set.
      */
     @java.lang.Override
     public boolean hasSnapshotFull() {
-      return payloadCase_ == 33;
+      return payloadCase_ == 20;
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      * @return The snapshotFull.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull getSnapshotFull() {
       if (snapshotFullBuilder_ == null) {
-        if (payloadCase_ == 33) {
+        if (payloadCase_ == 20) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance();
       } else {
-        if (payloadCase_ == 33) {
+        if (payloadCase_ == 20) {
           return snapshotFullBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     public Builder setSnapshotFull(fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull value) {
       if (snapshotFullBuilder_ == null) {
@@ -2937,11 +2937,11 @@ private static final long serialVersionUID = 0L;
       } else {
         snapshotFullBuilder_.setMessage(value);
       }
-      payloadCase_ = 33;
+      payloadCase_ = 20;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     public Builder setSnapshotFull(
         fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.Builder builderForValue) {
@@ -2951,15 +2951,15 @@ private static final long serialVersionUID = 0L;
       } else {
         snapshotFullBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 33;
+      payloadCase_ = 20;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     public Builder mergeSnapshotFull(fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull value) {
       if (snapshotFullBuilder_ == null) {
-        if (payloadCase_ == 33 &&
+        if (payloadCase_ == 20 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_)
               .mergeFrom(value).buildPartial();
@@ -2968,27 +2968,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 33) {
+        if (payloadCase_ == 20) {
           snapshotFullBuilder_.mergeFrom(value);
         } else {
           snapshotFullBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 33;
+      payloadCase_ = 20;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     public Builder clearSnapshotFull() {
       if (snapshotFullBuilder_ == null) {
-        if (payloadCase_ == 33) {
+        if (payloadCase_ == 20) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 33) {
+        if (payloadCase_ == 20) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -2997,33 +2997,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.Builder getSnapshotFullBuilder() {
       return internalGetSnapshotFullFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFullOrBuilder getSnapshotFullOrBuilder() {
-      if ((payloadCase_ == 33) && (snapshotFullBuilder_ != null)) {
+      if ((payloadCase_ == 20) && (snapshotFullBuilder_ != null)) {
         return snapshotFullBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 33) {
+        if (payloadCase_ == 20) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 33 [json_name = "snapshotFull"];</code>
+     * <code>.teamviewer.v1.SnapshotFull snapshot_full = 20 [json_name = "snapshotFull"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull, fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.Builder, fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFullOrBuilder> 
         internalGetSnapshotFullFieldBuilder() {
       if (snapshotFullBuilder_ == null) {
-        if (!(payloadCase_ == 33)) {
+        if (!(payloadCase_ == 20)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull.getDefaultInstance();
         }
         snapshotFullBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -3033,7 +3033,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 33;
+      payloadCase_ = 20;
       onChanged();
       return snapshotFullBuilder_;
     }
@@ -3041,33 +3041,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.Patch, fun.prof_chen.teamviewer.main_code.network.proto.Patch.Builder, fun.prof_chen.teamviewer.main_code.network.proto.PatchOrBuilder> patchBuilder_;
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      * @return Whether the patch field is set.
      */
     @java.lang.Override
     public boolean hasPatch() {
-      return payloadCase_ == 34;
+      return payloadCase_ == 21;
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      * @return The patch.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.Patch getPatch() {
       if (patchBuilder_ == null) {
-        if (payloadCase_ == 34) {
+        if (payloadCase_ == 21) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance();
       } else {
-        if (payloadCase_ == 34) {
+        if (payloadCase_ == 21) {
           return patchBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     public Builder setPatch(fun.prof_chen.teamviewer.main_code.network.proto.Patch value) {
       if (patchBuilder_ == null) {
@@ -3079,11 +3079,11 @@ private static final long serialVersionUID = 0L;
       } else {
         patchBuilder_.setMessage(value);
       }
-      payloadCase_ = 34;
+      payloadCase_ = 21;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     public Builder setPatch(
         fun.prof_chen.teamviewer.main_code.network.proto.Patch.Builder builderForValue) {
@@ -3093,15 +3093,15 @@ private static final long serialVersionUID = 0L;
       } else {
         patchBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 34;
+      payloadCase_ = 21;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     public Builder mergePatch(fun.prof_chen.teamviewer.main_code.network.proto.Patch value) {
       if (patchBuilder_ == null) {
-        if (payloadCase_ == 34 &&
+        if (payloadCase_ == 21 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.Patch.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_)
               .mergeFrom(value).buildPartial();
@@ -3110,27 +3110,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 34) {
+        if (payloadCase_ == 21) {
           patchBuilder_.mergeFrom(value);
         } else {
           patchBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 34;
+      payloadCase_ = 21;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     public Builder clearPatch() {
       if (patchBuilder_ == null) {
-        if (payloadCase_ == 34) {
+        if (payloadCase_ == 21) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 34) {
+        if (payloadCase_ == 21) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -3139,33 +3139,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.Patch.Builder getPatchBuilder() {
       return internalGetPatchFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.PatchOrBuilder getPatchOrBuilder() {
-      if ((payloadCase_ == 34) && (patchBuilder_ != null)) {
+      if ((payloadCase_ == 21) && (patchBuilder_ != null)) {
         return patchBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 34) {
+        if (payloadCase_ == 21) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.Patch) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.Patch patch = 34 [json_name = "patch"];</code>
+     * <code>.teamviewer.v1.Patch patch = 21 [json_name = "patch"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.Patch, fun.prof_chen.teamviewer.main_code.network.proto.Patch.Builder, fun.prof_chen.teamviewer.main_code.network.proto.PatchOrBuilder> 
         internalGetPatchFieldBuilder() {
       if (patchBuilder_ == null) {
-        if (!(payloadCase_ == 34)) {
+        if (!(payloadCase_ == 21)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.Patch.getDefaultInstance();
         }
         patchBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -3175,7 +3175,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 34;
+      payloadCase_ = 21;
       onChanged();
       return patchBuilder_;
     }
@@ -3183,33 +3183,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.Digest, fun.prof_chen.teamviewer.main_code.network.proto.Digest.Builder, fun.prof_chen.teamviewer.main_code.network.proto.DigestOrBuilder> digestBuilder_;
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      * @return Whether the digest field is set.
      */
     @java.lang.Override
     public boolean hasDigest() {
-      return payloadCase_ == 35;
+      return payloadCase_ == 22;
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      * @return The digest.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.Digest getDigest() {
       if (digestBuilder_ == null) {
-        if (payloadCase_ == 35) {
+        if (payloadCase_ == 22) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance();
       } else {
-        if (payloadCase_ == 35) {
+        if (payloadCase_ == 22) {
           return digestBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     public Builder setDigest(fun.prof_chen.teamviewer.main_code.network.proto.Digest value) {
       if (digestBuilder_ == null) {
@@ -3221,11 +3221,11 @@ private static final long serialVersionUID = 0L;
       } else {
         digestBuilder_.setMessage(value);
       }
-      payloadCase_ = 35;
+      payloadCase_ = 22;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     public Builder setDigest(
         fun.prof_chen.teamviewer.main_code.network.proto.Digest.Builder builderForValue) {
@@ -3235,15 +3235,15 @@ private static final long serialVersionUID = 0L;
       } else {
         digestBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 35;
+      payloadCase_ = 22;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     public Builder mergeDigest(fun.prof_chen.teamviewer.main_code.network.proto.Digest value) {
       if (digestBuilder_ == null) {
-        if (payloadCase_ == 35 &&
+        if (payloadCase_ == 22 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.Digest.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_)
               .mergeFrom(value).buildPartial();
@@ -3252,27 +3252,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 35) {
+        if (payloadCase_ == 22) {
           digestBuilder_.mergeFrom(value);
         } else {
           digestBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 35;
+      payloadCase_ = 22;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     public Builder clearDigest() {
       if (digestBuilder_ == null) {
-        if (payloadCase_ == 35) {
+        if (payloadCase_ == 22) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 35) {
+        if (payloadCase_ == 22) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -3281,33 +3281,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.Digest.Builder getDigestBuilder() {
       return internalGetDigestFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.DigestOrBuilder getDigestOrBuilder() {
-      if ((payloadCase_ == 35) && (digestBuilder_ != null)) {
+      if ((payloadCase_ == 22) && (digestBuilder_ != null)) {
         return digestBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 35) {
+        if (payloadCase_ == 22) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.Digest) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.Digest digest = 35 [json_name = "digest"];</code>
+     * <code>.teamviewer.v1.Digest digest = 22 [json_name = "digest"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.Digest, fun.prof_chen.teamviewer.main_code.network.proto.Digest.Builder, fun.prof_chen.teamviewer.main_code.network.proto.DigestOrBuilder> 
         internalGetDigestFieldBuilder() {
       if (digestBuilder_ == null) {
-        if (!(payloadCase_ == 35)) {
+        if (!(payloadCase_ == 22)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.Digest.getDefaultInstance();
         }
         digestBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -3317,7 +3317,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 35;
+      payloadCase_ = 22;
       onChanged();
       return digestBuilder_;
     }
@@ -3325,33 +3325,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest, fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.Builder, fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequestOrBuilder> refreshRequestBuilder_;
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      * @return Whether the refreshRequest field is set.
      */
     @java.lang.Override
     public boolean hasRefreshRequest() {
-      return payloadCase_ == 36;
+      return payloadCase_ == 23;
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      * @return The refreshRequest.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest getRefreshRequest() {
       if (refreshRequestBuilder_ == null) {
-        if (payloadCase_ == 36) {
+        if (payloadCase_ == 23) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance();
       } else {
-        if (payloadCase_ == 36) {
+        if (payloadCase_ == 23) {
           return refreshRequestBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     public Builder setRefreshRequest(fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest value) {
       if (refreshRequestBuilder_ == null) {
@@ -3363,11 +3363,11 @@ private static final long serialVersionUID = 0L;
       } else {
         refreshRequestBuilder_.setMessage(value);
       }
-      payloadCase_ = 36;
+      payloadCase_ = 23;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     public Builder setRefreshRequest(
         fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.Builder builderForValue) {
@@ -3377,15 +3377,15 @@ private static final long serialVersionUID = 0L;
       } else {
         refreshRequestBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 36;
+      payloadCase_ = 23;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     public Builder mergeRefreshRequest(fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest value) {
       if (refreshRequestBuilder_ == null) {
-        if (payloadCase_ == 36 &&
+        if (payloadCase_ == 23 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_)
               .mergeFrom(value).buildPartial();
@@ -3394,27 +3394,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 36) {
+        if (payloadCase_ == 23) {
           refreshRequestBuilder_.mergeFrom(value);
         } else {
           refreshRequestBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 36;
+      payloadCase_ = 23;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     public Builder clearRefreshRequest() {
       if (refreshRequestBuilder_ == null) {
-        if (payloadCase_ == 36) {
+        if (payloadCase_ == 23) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 36) {
+        if (payloadCase_ == 23) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -3423,33 +3423,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.Builder getRefreshRequestBuilder() {
       return internalGetRefreshRequestFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequestOrBuilder getRefreshRequestOrBuilder() {
-      if ((payloadCase_ == 36) && (refreshRequestBuilder_ != null)) {
+      if ((payloadCase_ == 23) && (refreshRequestBuilder_ != null)) {
         return refreshRequestBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 36) {
+        if (payloadCase_ == 23) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.RefreshRequest refresh_request = 36 [json_name = "refreshRequest"];</code>
+     * <code>.teamviewer.v1.RefreshRequest refresh_request = 23 [json_name = "refreshRequest"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest, fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.Builder, fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequestOrBuilder> 
         internalGetRefreshRequestFieldBuilder() {
       if (refreshRequestBuilder_ == null) {
-        if (!(payloadCase_ == 36)) {
+        if (!(payloadCase_ == 23)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest.getDefaultInstance();
         }
         refreshRequestBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -3459,7 +3459,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 36;
+      payloadCase_ = 23;
       onChanged();
       return refreshRequestBuilder_;
     }
@@ -3467,33 +3467,33 @@ private static final long serialVersionUID = 0L;
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint, fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.Builder, fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHintOrBuilder> reportRateHintBuilder_;
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      * @return Whether the reportRateHint field is set.
      */
     @java.lang.Override
     public boolean hasReportRateHint() {
-      return payloadCase_ == 37;
+      return payloadCase_ == 24;
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      * @return The reportRateHint.
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint getReportRateHint() {
       if (reportRateHintBuilder_ == null) {
-        if (payloadCase_ == 37) {
+        if (payloadCase_ == 24) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance();
       } else {
-        if (payloadCase_ == 37) {
+        if (payloadCase_ == 24) {
           return reportRateHintBuilder_.getMessage();
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     public Builder setReportRateHint(fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint value) {
       if (reportRateHintBuilder_ == null) {
@@ -3505,11 +3505,11 @@ private static final long serialVersionUID = 0L;
       } else {
         reportRateHintBuilder_.setMessage(value);
       }
-      payloadCase_ = 37;
+      payloadCase_ = 24;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     public Builder setReportRateHint(
         fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.Builder builderForValue) {
@@ -3519,15 +3519,15 @@ private static final long serialVersionUID = 0L;
       } else {
         reportRateHintBuilder_.setMessage(builderForValue.build());
       }
-      payloadCase_ = 37;
+      payloadCase_ = 24;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     public Builder mergeReportRateHint(fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint value) {
       if (reportRateHintBuilder_ == null) {
-        if (payloadCase_ == 37 &&
+        if (payloadCase_ == 24 &&
             payload_ != fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance()) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.newBuilder((fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_)
               .mergeFrom(value).buildPartial();
@@ -3536,27 +3536,27 @@ private static final long serialVersionUID = 0L;
         }
         onChanged();
       } else {
-        if (payloadCase_ == 37) {
+        if (payloadCase_ == 24) {
           reportRateHintBuilder_.mergeFrom(value);
         } else {
           reportRateHintBuilder_.setMessage(value);
         }
       }
-      payloadCase_ = 37;
+      payloadCase_ = 24;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     public Builder clearReportRateHint() {
       if (reportRateHintBuilder_ == null) {
-        if (payloadCase_ == 37) {
+        if (payloadCase_ == 24) {
           payloadCase_ = 0;
           payload_ = null;
           onChanged();
         }
       } else {
-        if (payloadCase_ == 37) {
+        if (payloadCase_ == 24) {
           payloadCase_ = 0;
           payload_ = null;
         }
@@ -3565,33 +3565,33 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     public fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.Builder getReportRateHintBuilder() {
       return internalGetReportRateHintFieldBuilder().getBuilder();
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     @java.lang.Override
     public fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHintOrBuilder getReportRateHintOrBuilder() {
-      if ((payloadCase_ == 37) && (reportRateHintBuilder_ != null)) {
+      if ((payloadCase_ == 24) && (reportRateHintBuilder_ != null)) {
         return reportRateHintBuilder_.getMessageOrBuilder();
       } else {
-        if (payloadCase_ == 37) {
+        if (payloadCase_ == 24) {
           return (fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint) payload_;
         }
         return fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance();
       }
     }
     /**
-     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 37 [json_name = "reportRateHint"];</code>
+     * <code>.teamviewer.v1.ReportRateHint report_rate_hint = 24 [json_name = "reportRateHint"];</code>
      */
     private com.google.protobuf.SingleFieldBuilder<
         fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint, fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.Builder, fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHintOrBuilder> 
         internalGetReportRateHintFieldBuilder() {
       if (reportRateHintBuilder_ == null) {
-        if (!(payloadCase_ == 37)) {
+        if (!(payloadCase_ == 24)) {
           payload_ = fun.prof_chen.teamviewer.main_code.network.proto.ReportRateHint.getDefaultInstance();
         }
         reportRateHintBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -3601,7 +3601,7 @@ private static final long serialVersionUID = 0L;
                 isClean());
         payload_ = null;
       }
-      payloadCase_ = 37;
+      payloadCase_ = 24;
       onChanged();
       return reportRateHintBuilder_;
     }
