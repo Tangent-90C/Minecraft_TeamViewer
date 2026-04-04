@@ -19,11 +19,35 @@ dependencies {
     implementation "com.google.protobuf:protobuf-java-util:4.34.1"
 }
 
+def protoModuleDir = rootProject.file("third_party/TeamViewRelay-Protocol")
+def protoInputDir = new File(protoModuleDir, "proto")
+def bufTemplateFile = file("buf.gen.yaml")
+def generatedProtoJavaDir = file("${buildDir}/generated/source/proto/main/java")
+def resolvedBufBinary = System.getenv("BUF_BIN") ?: (file("/tmp/buf/bin/buf").exists() ? "/tmp/buf/bin/buf" : "buf")
+
 sourceSets {
     main {
-        java.srcDirs = ["src/main/java"]
+        java.srcDirs = ["src/main/java", generatedProtoJavaDir]
         resources.srcDirs = ["src/main/resources"]
     }
+}
+
+tasks.register("generateProtoJava", Exec) {
+    group = "build setup"
+    description = "Generate Java protobuf sources from the shared protocol module."
+
+    inputs.dir(protoInputDir)
+    inputs.file(bufTemplateFile)
+    outputs.dir(generatedProtoJavaDir)
+
+    doFirst {
+        if (!protoInputDir.isDirectory()) {
+            throw new GradleException("Shared protocol module not found at ${protoInputDir}")
+        }
+        delete(generatedProtoJavaDir)
+    }
+
+    commandLine resolvedBufBinary, "generate", protoInputDir.absolutePath, "--template", bufTemplateFile.absolutePath
 }
 
 processResources {
@@ -42,6 +66,7 @@ processResources {
 def targetJavaVersion = 21
 
 tasks.withType(JavaCompile).configureEach {
+    dependsOn(tasks.named("generateProtoJava"))
     options.encoding = "UTF-8"
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)
@@ -54,6 +79,10 @@ java {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
     withSourcesJar()
+}
+
+tasks.named("sourcesJar") {
+    dependsOn(tasks.named("generateProtoJava"))
 }
 
 publishing {
