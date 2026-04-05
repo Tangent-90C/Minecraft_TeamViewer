@@ -153,9 +153,9 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 当前版本基线：
 
 - Minecraft：`1.21.8`
-- Mod：`v0.4.11-proto0.6.0`
-- 协议版本：`0.6.0`
-- 最低兼容协议版本：`0.6.0`
+- Mod：`v0.4.12-proto0.6.1`
+- 协议版本：`0.6.1`
+- 最低兼容协议版本：`0.6.1`
 
 子模块与协议仓库：
 
@@ -167,12 +167,12 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 ```bash
 git -C third_party/TeamViewRelay-Protocol fetch --tags
-git -C third_party/TeamViewRelay-Protocol checkout proto/v0.6.0
+git -C third_party/TeamViewRelay-Protocol checkout proto/v0.6.1
 git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-版本号采用“双版本号”约定，例如 `v0.4.11-proto0.6.0`：
+版本号采用“双版本号”约定，例如 `v0.4.12-proto0.6.1`：
 
 - 前半段是程序版本号，用于表示 Mod 自身功能迭代
 - 后半段是网络协议版本号，用于表示可与哪些配套组件互通

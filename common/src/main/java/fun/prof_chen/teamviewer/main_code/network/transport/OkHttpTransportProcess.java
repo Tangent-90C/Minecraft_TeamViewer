@@ -17,6 +17,8 @@ import okhttp3.internal.connection.RealCall;
 import okhttp3.internal.ws.RealWebSocket;
 import okio.BufferedSink;
 import okio.BufferedSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -24,6 +26,7 @@ import java.io.IOException;
 import java.net.ProtocolException;
 import java.net.Proxy;
 import java.net.ProxySelector;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -40,6 +43,7 @@ import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
 public final class OkHttpTransportProcess implements TransportProcess {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OkHttpTransportProcess.class);
     private static final long CLOSE_TIMEOUT_MS = 60_000L;
     private static final long DEFAULT_MINIMUM_DEFLATE_SIZE = 1_024L;
 
@@ -151,6 +155,7 @@ public final class OkHttpTransportProcess implements TransportProcess {
         }
 
         private void initStreams(RealWebSocket.Streams openedStreams, WebSocketExtensionsInfo negotiated) {
+            configureWebSocketStreamTimeouts(openedStreams);
             synchronized (stateLock) {
                 this.streams = openedStreams;
                 this.extensions = negotiated;
@@ -345,13 +350,28 @@ public final class OkHttpTransportProcess implements TransportProcess {
             }
         }
 
+        private void configureWebSocketStreamTimeouts(RealWebSocket.Streams openedStreams) {
+            try {
+                openedStreams.getSource().timeout().clearTimeout().clearDeadline();
+                openedStreams.getSink().timeout().clearTimeout().clearDeadline();
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to disable inherited WebSocket stream timeouts", e);
+            }
+        }
+
         private void fail(Throwable error) {
+            if (isExpectedPostCloseFailure(error)) {
+                LOGGER.debug("Ignoring post-close transport exception for {}: {}", uri, error == null ? "unknown" : error.toString());
+                finishClose(receivedCloseCode == -1 ? 1000 : receivedCloseCode, receivedCloseReason);
+                return;
+            }
+            Throwable normalizedError = normalizeFailure(error);
             if (!terminalNotified.compareAndSet(false, true)) {
                 return;
             }
             failed = true;
             shutdownResources();
-            listener.onFailure(error instanceof Exception ? error : new IOException(error));
+            listener.onFailure(normalizedError instanceof Exception ? (Exception) normalizedError : new IOException(normalizedError));
         }
 
         private void finishClose(int code, String reason) {
@@ -382,6 +402,37 @@ public final class OkHttpTransportProcess implements TransportProcess {
                 closeable.close();
             } catch (Exception ignored) {
             }
+        }
+
+        private Throwable normalizeFailure(Throwable error) {
+            if (error instanceof SocketTimeoutException socketTimeoutException) {
+                return new IOException(
+                        "websocket_read_timeout_after_upgrade: upgraded WebSocket stream unexpectedly timed out",
+                        socketTimeoutException
+                );
+            }
+            return error;
+        }
+
+        private boolean isExpectedPostCloseFailure(Throwable error) {
+            return closeRequested && containsClosedSignal(error);
+        }
+
+        private boolean containsClosedSignal(Throwable error) {
+            Throwable current = error;
+            int depth = 0;
+            while (current != null && depth < 6) {
+                String message = current.getMessage();
+                if (message != null) {
+                    String normalized = message.trim().toLowerCase();
+                    if ("closed".equals(normalized) || "socket closed".equals(normalized)) {
+                        return true;
+                    }
+                }
+                current = current.getCause();
+                depth++;
+            }
+            return false;
         }
     }
 

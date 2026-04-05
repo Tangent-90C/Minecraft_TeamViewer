@@ -1574,14 +1574,36 @@ public class NetworkManager {
 		String localWaypointHash = computeWaypointDigest();
 		String localBattleChunkHash = computeBattleChunkDigest();
 
-		boolean mismatch = !Objects.equals(serverPlayerHash, localPlayerHash)
-				|| !Objects.equals(serverEntityHash, localEntityHash)
-				|| !Objects.equals(serverWaypointHash, localWaypointHash)
-				|| (serverBattleChunkHash != null && !Objects.equals(serverBattleChunkHash, localBattleChunkHash));
+		List<String> mismatchedScopes = new ArrayList<>();
+		if (!Objects.equals(serverPlayerHash, localPlayerHash)) {
+			mismatchedScopes.add("players");
+		}
+		if (!Objects.equals(serverEntityHash, localEntityHash)) {
+			mismatchedScopes.add("entities");
+		}
+		if (!Objects.equals(serverWaypointHash, localWaypointHash)) {
+			mismatchedScopes.add("waypoints");
+		}
+		if (serverBattleChunkHash != null && !Objects.equals(serverBattleChunkHash, localBattleChunkHash)) {
+			mismatchedScopes.add("battleChunks");
+		}
 
-		if (!mismatch) {
+		if (mismatchedScopes.isEmpty()) {
 			return;
 		}
+
+		LOGGER.warn(
+				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}}} battleChunkDigestKey=digest_uses_dimension|chunkX|chunkZ_without_room_prefix",
+				mismatchedScopes,
+				serverPlayerHash,
+				serverEntityHash,
+				serverWaypointHash,
+				serverBattleChunkHash,
+				localPlayerHash,
+				localEntityHash,
+				localWaypointHash,
+				localBattleChunkHash
+		);
 
 		long now = System.currentTimeMillis();
 		if (now - lastResyncRequestMs < RESYNC_COOLDOWN_MS) {
@@ -1659,7 +1681,11 @@ public class NetworkManager {
 			resetNegotiationState();
 			clearLocalOutboundSnapshots();
 			notifyConnectionStatusChanged(false);
-			LOGGER.info("Disconnected from TeamViewRelay server. Status: {}, Reason: {}", statusCode, reason);
+			if (statusCode == 1000) {
+				LOGGER.info("Disconnected from TeamViewRelay server via normal close. Status: {}, Reason: {}", statusCode, reason);
+			} else {
+				LOGGER.warn("Disconnected from TeamViewRelay server via peer/application close. Status: {}, Reason: {}", statusCode, reason);
+			}
 			if (shouldReconnect && !reconnectSuppressedForVersionMismatch) {
 				scheduleReconnect();
 			}
@@ -1697,13 +1723,15 @@ public class NetworkManager {
 				LOGGER.debug("Ignoring stale WebSocket failure callback for attempt {}", attemptId);
 				return;
 			}
-			LOGGER.error("TeamViewRelay network error: {}", error == null ? "unknown" : error.getMessage());
+			String failureReason = formatThrowableReason(error);
+			String failureCategory = classifyTransportFailure(error);
+			LOGGER.error("TeamViewRelay transport failure [{}]: {}", failureCategory, failureReason);
 			isConnected = false;
 			transportOpen = false;
 			connectionStage = ConnectionStage.FAILED;
 			invalidateConnectionAttempt(attemptId);
 			socket = null;
-			lastConnectionError = formatThrowableReason(error);
+			lastConnectionError = failureReason;
 			closePacketDumpWriterQuietly();
 			currentNegotiatedExtensions = "";
 			resetNegotiationState();
@@ -2093,6 +2121,24 @@ public class NetworkManager {
 
 		String actualName = info.name();
 		return actualName != null && actualName.equalsIgnoreCase(expectedPlayerName);
+	}
+
+	private String classifyTransportFailure(Throwable throwable) {
+		if (throwable == null) {
+			return "unknown";
+		}
+
+		Throwable current = throwable;
+		int depth = 0;
+		while (current != null && depth < 6) {
+			String message = current.getMessage();
+			if (message != null && message.contains("websocket_read_timeout_after_upgrade")) {
+				return "read-timeout";
+			}
+			current = current.getCause();
+			depth++;
+		}
+		return "transport-error";
 	}
 
 	private String formatThrowableReason(Throwable throwable) {
