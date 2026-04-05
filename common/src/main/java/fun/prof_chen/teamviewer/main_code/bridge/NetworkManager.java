@@ -15,6 +15,8 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.SocketProcess;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportListener;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportOptions;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportTrafficEvent;
 import fun.prof_chen.teamviewer.main_code.network.capture.WebSocketCaptureWriter;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MessageCodec;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolVersionUtil;
@@ -26,6 +28,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -72,6 +75,14 @@ public class NetworkManager {
 		void onConnectionStatusChanged(boolean connected);
 	}
 
+	public enum ConnectionStage {
+		DISCONNECTED,
+		CONNECTING,
+		WS_CONNECTED_HANDSHAKING,
+		CONNECTED,
+		FAILED
+	}
+
 	/**
 	 * 路标更新监听器接口
 	 * 处理远程路标数据的接收和删除事件
@@ -91,6 +102,87 @@ public class NetworkManager {
 		}
 	}
 
+	public static final class TrafficStatsSnapshot {
+		private final long uploadApplicationBytesTotal;
+		private final long downloadApplicationBytesTotal;
+		private final long uploadWireBytesTotal;
+		private final long downloadWireBytesTotal;
+		private final long uploadApplicationBytesPerSecond;
+		private final long downloadApplicationBytesPerSecond;
+		private final long uploadWireBytesPerSecond;
+		private final long downloadWireBytesPerSecond;
+		private final boolean connected;
+
+		public TrafficStatsSnapshot(
+				long uploadApplicationBytesTotal,
+				long downloadApplicationBytesTotal,
+				long uploadWireBytesTotal,
+				long downloadWireBytesTotal,
+				long uploadApplicationBytesPerSecond,
+				long downloadApplicationBytesPerSecond,
+				long uploadWireBytesPerSecond,
+				long downloadWireBytesPerSecond,
+				boolean connected) {
+			this.uploadApplicationBytesTotal = uploadApplicationBytesTotal;
+			this.downloadApplicationBytesTotal = downloadApplicationBytesTotal;
+			this.uploadWireBytesTotal = uploadWireBytesTotal;
+			this.downloadWireBytesTotal = downloadWireBytesTotal;
+			this.uploadApplicationBytesPerSecond = uploadApplicationBytesPerSecond;
+			this.downloadApplicationBytesPerSecond = downloadApplicationBytesPerSecond;
+			this.uploadWireBytesPerSecond = uploadWireBytesPerSecond;
+			this.downloadWireBytesPerSecond = downloadWireBytesPerSecond;
+			this.connected = connected;
+		}
+
+		public long getUploadApplicationBytesTotal() {
+			return uploadApplicationBytesTotal;
+		}
+
+		public long getDownloadApplicationBytesTotal() {
+			return downloadApplicationBytesTotal;
+		}
+
+		public long getUploadWireBytesTotal() {
+			return uploadWireBytesTotal;
+		}
+
+		public long getDownloadWireBytesTotal() {
+			return downloadWireBytesTotal;
+		}
+
+		public long getUploadApplicationBytesPerSecond() {
+			return uploadApplicationBytesPerSecond;
+		}
+
+		public long getDownloadApplicationBytesPerSecond() {
+			return downloadApplicationBytesPerSecond;
+		}
+
+		public long getUploadWireBytesPerSecond() {
+			return uploadWireBytesPerSecond;
+		}
+
+		public long getDownloadWireBytesPerSecond() {
+			return downloadWireBytesPerSecond;
+		}
+
+		public boolean isConnected() {
+			return connected;
+		}
+	}
+
+	private static final class TrafficSample {
+		private final long timestampMs;
+		private final long applicationBytes;
+		private final long wireBytes;
+
+		private TrafficSample(long timestampMs, long applicationBytes, long wireBytes) {
+			this.timestampMs = timestampMs;
+			this.applicationBytes = applicationBytes;
+			this.wireBytes = wireBytes;
+		}
+	}
+
 	// 日志记录器
 	private static final Logger LOGGER = LoggerFactory.getLogger(NetworkManager.class);
 
@@ -104,6 +196,7 @@ public class NetworkManager {
 	private static final long DEFAULT_OBJECT_KEEPALIVE_INTERVAL_MS = 12_000L;
 	private static final int UNLIMITED_RECONNECT_ATTEMPTS = -1;
 	private static final long DEFAULT_RECONNECT_DELAY_MS = 5_000L;
+	private static final long TRAFFIC_RATE_WINDOW_MS = 3_000L;
 	private static final List<String> SOURCE_STATE_CLEAR_SCOPES = List.of("players", "entities", "tab_players", "waypoints", "battle_chunks");
 
 	// 单次 keepalive 报文最多携带对象数量
@@ -160,6 +253,11 @@ public class NetworkManager {
 
 	// 底层 WebSocket 打开状态 - 区分“传输已建立”和“握手已完成”
 	private volatile boolean transportOpen = false;
+	private volatile ConnectionStage connectionStage = ConnectionStage.DISCONNECTED;
+	private volatile long connectionAttemptSequence = 0L;
+	private volatile long activeConnectionAttemptId = 0L;
+	private volatile boolean handshakeSent = false;
+	private volatile boolean handshakeCompleted = false;
 	
 	// 重连意愿标志 - 控制是否应该尝试重连
 	private volatile boolean shouldReconnect = false;
@@ -174,11 +272,23 @@ public class NetworkManager {
 	private final Gson gson = new Gson();
 	private final MessageCodec messageCodec = new ProtobufMessageCodec();
 	private final Object packetDumpLock = new Object();
+	private final Object trafficStatsLock = new Object();
+	private final ArrayDeque<TrafficSample> uploadTrafficSamples = new ArrayDeque<>();
+	private final ArrayDeque<TrafficSample> downloadTrafficSamples = new ArrayDeque<>();
 	private volatile boolean packetDumpActive = false;
 	private volatile WebSocketCaptureWriter packetDumpWriter;
 	private volatile String packetDumpLastSavedPath = "";
 	private volatile String packetDumpCurrentPath = "";
 	private volatile String currentNegotiatedExtensions = "";
+	private long uploadApplicationBytesTotal = 0L;
+	private long downloadApplicationBytesTotal = 0L;
+	private long uploadWireBytesTotal = 0L;
+	private long downloadWireBytesTotal = 0L;
+	private long uploadApplicationBytesInWindow = 0L;
+	private long downloadApplicationBytesInWindow = 0L;
+	private long uploadWireBytesInWindow = 0L;
+	private long downloadWireBytesInWindow = 0L;
+	private long trafficStatsSessionStartedAtMs = 0L;
 	
 	// 连接状态监听器列表 - 线程安全的监听器注册表
 	private final List<ConnectionStatusListener> statusListeners = new CopyOnWriteArrayList<>();
@@ -345,39 +455,51 @@ public class NetworkManager {
 			return;
 		}
 
+		final long attemptId = beginConnectionAttempt();
 		boolean useSystemProxy = configGateway.isUseSystemProxy();
+		boolean enableCompression = configGateway.isEnableCompression();
 		String uri = configGateway.getServerURL();
 
 		try {
-			this.socket = transport.connect(uri, useSystemProxy, new TransportListener() {
+			this.socket = transport.connect(uri, new TransportOptions(useSystemProxy, enableCompression), new TransportListener() {
 				@Override
 				public void onOpen(String negotiatedExtensions) {
-					handleTransportOpen(negotiatedExtensions);
+					handleTransportOpen(attemptId, negotiatedExtensions);
 				}
 
 				@Override
 				public void onTextMessage(String text) {
-					handleTransportTextMessage(text);
+					handleTransportTextMessage(attemptId, text);
 				}
 
 				@Override
 				public void onBinaryMessage(byte[] payload) {
-					handleTransportBinaryMessage(payload);
+					handleTransportBinaryMessage(attemptId, payload);
+				}
+
+				@Override
+				public void onTrafficEvent(TransportTrafficEvent event) {
+					handleTransportTrafficEvent(attemptId, event);
 				}
 
 				@Override
 				public void onClosed(int statusCode, String reason) {
-					handleTransportClosed(statusCode, reason);
+					handleTransportClosed(attemptId, statusCode, reason);
 				}
 
 				@Override
 				public void onFailure(Throwable error) {
-					handleTransportFailure(error);
+					handleTransportFailure(attemptId, error);
 				}
 			});
 		} catch (Exception e) {
+			if (!isCurrentConnectionAttempt(attemptId)) {
+				return;
+			}
 			this.transportOpen = false;
 			this.isConnected = false;
+			this.connectionStage = ConnectionStage.FAILED;
+			invalidateConnectionAttempt(attemptId);
 			this.lastConnectionError = formatThrowableReason(e);
 			LOGGER.error("Failed to connect to TeamViewRelay server at {}: {}", configGateway.getServerURL(), e.getMessage());
 			notifyConnectionStatusChanged(false);
@@ -430,9 +552,11 @@ public class NetworkManager {
 	 * 注意事项：这是一个干净的关闭过程，不会触发重连机制
 	 */
 	public void disconnect() {
+		long attemptId = activeConnectionAttemptId;
 		UUID localPlayerId = runtimeGateway != null ? runtimeGateway.getLocalPlayerId() : null;
 		shouldReconnect = false;
 		resetReconnectPolicy();
+		invalidateConnectionAttempt(attemptId);
 		sendSourceStateClear(localPlayerId);
 		if (socket != null) {
 			socket.close(1000, "Client disconnect");
@@ -442,6 +566,7 @@ public class NetworkManager {
 		resetNegotiationState();
 		clearLocalOutboundSnapshots();
 		isConnected = false;
+		connectionStage = ConnectionStage.DISCONNECTED;
 		lastConnectionError = "";
 		closePacketDumpWriterQuietly();
 		notifyConnectionStatusChanged(false);
@@ -837,6 +962,33 @@ public class NetworkManager {
 		}
 	}
 
+	public void sendBattleChunkKeepalive(UUID submitPlayerId, Set<String> battleChunkIds) {
+		if (socket == null || !isConnected || submitPlayerId == null || battleChunkIds == null || battleChunkIds.isEmpty()) {
+			return;
+		}
+
+		List<String> normalizedIds = new ArrayList<>();
+		for (String chunkId : battleChunkIds) {
+			String normalized = normalizeNullableText(chunkId);
+			if (normalized != null) {
+				normalizedIds.add(normalized);
+			}
+		}
+		if (normalizedIds.isEmpty()) {
+			return;
+		}
+		Collections.sort(normalizedIds);
+		for (int start = 0; start < normalizedIds.size(); start += KEEPALIVE_MAX_ITEMS_PER_PACKET) {
+			int end = Math.min(start + KEEPALIVE_MAX_ITEMS_PER_PACKET, normalizedIds.size());
+			ProtocolPackets.StateKeepalivePacket packet = new ProtocolPackets.StateKeepalivePacket();
+			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+			packet.players = List.of();
+			packet.entities = List.of();
+			packet.battleChunks = new ArrayList<>(normalizedIds.subList(start, end));
+			sendPacket(packet);
+		}
+	}
+
 	/**
 	 * 发送实体死亡取消请求 - 路标关联实体保护
 	 * 
@@ -900,14 +1052,20 @@ public class NetworkManager {
 		return new JsonObject();
 	}
 
-	private void handleTransportOpen(String negotiatedExtensions) {
+	private void handleTransportOpen(long attemptId, String negotiatedExtensions) {
 		// 连接建立事件来自传输线程，这里只投递任务，避免直接跨线程改共享状态。
 		enqueueMainThreadTask(() -> {
+			if (!isCurrentConnectionAttempt(attemptId)) {
+				LOGGER.debug("Ignoring stale WebSocket open callback for attempt {}", attemptId);
+				return;
+			}
 			transportOpen = true;
 			isConnected = false;
+			connectionStage = ConnectionStage.WS_CONNECTED_HANDSHAKING;
 			lastConnectionError = "";
 			reconnectAttemptsRemaining = maxReconnectAttempts;
 			resetNegotiationState();
+			resetTrafficStats();
 			clearLocalOutboundSnapshots();
 			currentNegotiatedExtensions = negotiatedExtensions == null ? "" : negotiatedExtensions.trim();
 			LOGGER.info("WebSocket connection opened to TeamViewRelay server");
@@ -915,21 +1073,35 @@ public class NetworkManager {
 				LOGGER.info("Negotiated WebSocket extensions: {}", negotiatedExtensions);
 			}
 			ensurePacketDumpWriter();
-			sendHandshake();
+			sendHandshake(attemptId);
 		});
 	}
 
-	private void handleTransportTextMessage(String text) {
+	private void handleTransportTextMessage(long attemptId, String text) {
+		if (!isCurrentConnectionAttempt(attemptId)) {
+			LOGGER.debug("Ignoring stale text frame for attempt {}", attemptId);
+			return;
+		}
 		captureIncomingTextPayload(text);
 		LOGGER.warn("Ignoring text websocket frame, expected ProtoBuf binary frame");
 	}
 
-	private void handleTransportBinaryMessage(byte[] payload) {
+	private void handleTransportBinaryMessage(long attemptId, byte[] payload) {
+		if (!isCurrentConnectionAttempt(attemptId)) {
+			LOGGER.debug("Ignoring stale binary frame for attempt {}", attemptId);
+			return;
+		}
 		if (payload == null || payload.length == 0) {
 			return;
 		}
 		captureIncomingBinaryPayload(payload);
-		enqueueMainThreadTask(() -> processCompleteMessage(payload));
+		enqueueMainThreadTask(() -> {
+			if (!isCurrentConnectionAttempt(attemptId)) {
+				LOGGER.debug("Ignoring stale queued binary frame for attempt {}", attemptId);
+				return;
+			}
+			processCompleteMessage(attemptId, payload);
+		});
 	}
 
 	/**
@@ -968,8 +1140,12 @@ public class NetworkManager {
 	 * 
 	 * 通用处理：统一的错误处理和日志记录。
 	 */
-	private void processCompleteMessage(byte[] message) {
+	private void processCompleteMessage(long attemptId, byte[] message) {
 		try {
+			if (!isCurrentConnectionAttempt(attemptId)) {
+				LOGGER.debug("Ignoring stale inbound message for attempt {}", attemptId);
+				return;
+			}
 			if (message == null || message.length == 0) {
 				LOGGER.warn("Received empty message");
 				return;
@@ -984,7 +1160,7 @@ public class NetworkManager {
 			if ("handshake_ack".equals(decoded.type)) {
 				ProtocolPackets.HandshakeAckInboundPacket packet =
 						(ProtocolPackets.HandshakeAckInboundPacket) decoded.packet;
-				handleHandshakeAck(packet);
+				handleHandshakeAck(attemptId, packet);
 				return;
 			}
 
@@ -1452,19 +1628,29 @@ public class NetworkManager {
 	 * 
 	 * 线程安全：与onOpen保持一致的处理模式
 	 */
-	private void handleTransportClosed(int statusCode, String reason) {
+	private void handleTransportClosed(long attemptId, int statusCode, String reason) {
 		// 关闭事件也切回主线程，统一处理状态重置与重连调度。
 		enqueueMainThreadTask(() -> {
+			if (!isCurrentConnectionAttempt(attemptId)) {
+				LOGGER.debug("Ignoring stale WebSocket close callback for attempt {}", attemptId);
+				return;
+			}
 			isConnected = false;
 			transportOpen = false;
+			connectionStage = ConnectionStage.DISCONNECTED;
+			invalidateConnectionAttempt(attemptId);
 			socket = null;
 			if (statusCode == 1008) {
 				shouldReconnect = false;
 				reconnectSuppressedForVersionMismatch = true;
+				connectionStage = ConnectionStage.FAILED;
 			}
 			if (statusCode != 1000) {
 				lastConnectionError = "WebSocket closed (" + statusCode + "): "
 						+ (reason == null || reason.isBlank() ? "unknown reason" : reason);
+				if (statusCode != 1008) {
+					connectionStage = ConnectionStage.FAILED;
+				}
 			} else {
 				lastConnectionError = "";
 			}
@@ -1504,12 +1690,18 @@ public class NetworkManager {
 	 * - 合并多个异常的原因描述
 	 * - 提供清晰的错误诊断信息
 	 */
-	private void handleTransportFailure(Throwable error) {
+	private void handleTransportFailure(long attemptId, Throwable error) {
 		// 失败事件在网络线程触发，这里只入队，保证状态清理和通知时序一致。
 		enqueueMainThreadTask(() -> {
+			if (!isCurrentConnectionAttempt(attemptId)) {
+				LOGGER.debug("Ignoring stale WebSocket failure callback for attempt {}", attemptId);
+				return;
+			}
 			LOGGER.error("TeamViewRelay network error: {}", error == null ? "unknown" : error.getMessage());
 			isConnected = false;
 			transportOpen = false;
+			connectionStage = ConnectionStage.FAILED;
+			invalidateConnectionAttempt(attemptId);
 			socket = null;
 			lastConnectionError = formatThrowableReason(error);
 			closePacketDumpWriterQuietly();
@@ -1557,8 +1749,30 @@ public class NetworkManager {
 		return isConnected;
 	}
 
+	public ConnectionStage getConnectionStage() {
+		return connectionStage;
+	}
+
 	public String getLastConnectionError() {
 		return lastConnectionError;
+	}
+
+	public TrafficStatsSnapshot getTrafficStatsSnapshot() {
+		synchronized (trafficStatsLock) {
+			long now = System.currentTimeMillis();
+			evictExpiredTrafficSamples(uploadTrafficSamples, now, true);
+			evictExpiredTrafficSamples(downloadTrafficSamples, now, false);
+			return new TrafficStatsSnapshot(
+					uploadApplicationBytesTotal,
+					downloadApplicationBytesTotal,
+					uploadWireBytesTotal,
+					downloadWireBytesTotal,
+					isConnected ? computeWindowAverageBytesPerSecond(uploadApplicationBytesInWindow, now) : 0L,
+					isConnected ? computeWindowAverageBytesPerSecond(downloadApplicationBytesInWindow, now) : 0L,
+					isConnected ? computeWindowAverageBytesPerSecond(uploadWireBytesInWindow, now) : 0L,
+					isConnected ? computeWindowAverageBytesPerSecond(downloadWireBytesInWindow, now) : 0L,
+					isConnected);
+		}
 	}
 
 	public void startPacketDumpCapture() {
@@ -1677,6 +1891,114 @@ public class NetworkManager {
 				packetDumpWriter = null;
 			}
 		}
+	}
+
+	private void handleTransportTrafficEvent(long attemptId, TransportTrafficEvent event) {
+		if (!isCurrentConnectionAttempt(attemptId)) {
+			return;
+		}
+		if (event == null) {
+			return;
+		}
+		recordTrafficEvent(event);
+	}
+
+	private void recordTrafficEvent(TransportTrafficEvent event) {
+		synchronized (trafficStatsLock) {
+			long now = System.currentTimeMillis();
+			ArrayDeque<TrafficSample> targetSamples = event.direction() == TransportTrafficEvent.Direction.OUTBOUND
+					? uploadTrafficSamples
+					: downloadTrafficSamples;
+			targetSamples.addLast(new TrafficSample(
+					now,
+					Math.max(0L, event.applicationPayloadBytes()),
+					Math.max(0L, event.wireBytes())
+			));
+			if (event.direction() == TransportTrafficEvent.Direction.OUTBOUND) {
+				uploadApplicationBytesTotal += Math.max(0L, event.applicationPayloadBytes());
+				uploadWireBytesTotal += Math.max(0L, event.wireBytes());
+				uploadApplicationBytesInWindow += Math.max(0L, event.applicationPayloadBytes());
+				uploadWireBytesInWindow += Math.max(0L, event.wireBytes());
+				evictExpiredTrafficSamples(uploadTrafficSamples, now, true);
+			} else {
+				downloadApplicationBytesTotal += Math.max(0L, event.applicationPayloadBytes());
+				downloadWireBytesTotal += Math.max(0L, event.wireBytes());
+				downloadApplicationBytesInWindow += Math.max(0L, event.applicationPayloadBytes());
+				downloadWireBytesInWindow += Math.max(0L, event.wireBytes());
+				evictExpiredTrafficSamples(downloadTrafficSamples, now, false);
+			}
+		}
+	}
+
+	private void evictExpiredTrafficSamples(ArrayDeque<TrafficSample> samples, long now, boolean upload) {
+		long cutoff = now - TRAFFIC_RATE_WINDOW_MS;
+		while (!samples.isEmpty() && samples.peekFirst().timestampMs <= cutoff) {
+			TrafficSample expired = samples.removeFirst();
+			if (upload) {
+				uploadApplicationBytesInWindow -= expired.applicationBytes;
+				uploadWireBytesInWindow -= expired.wireBytes;
+			} else {
+				downloadApplicationBytesInWindow -= expired.applicationBytes;
+				downloadWireBytesInWindow -= expired.wireBytes;
+			}
+		}
+		if (upload) {
+			uploadApplicationBytesInWindow = Math.max(0L, uploadApplicationBytesInWindow);
+			uploadWireBytesInWindow = Math.max(0L, uploadWireBytesInWindow);
+		} else {
+			downloadApplicationBytesInWindow = Math.max(0L, downloadApplicationBytesInWindow);
+			downloadWireBytesInWindow = Math.max(0L, downloadWireBytesInWindow);
+		}
+	}
+
+	private long computeWindowAverageBytesPerSecond(long bytesInWindow, long now) {
+		if (bytesInWindow <= 0L) {
+			return 0L;
+		}
+		long sessionAgeMs = trafficStatsSessionStartedAtMs > 0L ? now - trafficStatsSessionStartedAtMs : TRAFFIC_RATE_WINDOW_MS;
+		long divisorMs = Math.max(1L, Math.min(TRAFFIC_RATE_WINDOW_MS, sessionAgeMs));
+		return Math.round((double) bytesInWindow * 1_000.0D / (double) divisorMs);
+	}
+
+	private void resetTrafficStats() {
+		synchronized (trafficStatsLock) {
+			uploadApplicationBytesTotal = 0L;
+			downloadApplicationBytesTotal = 0L;
+			uploadWireBytesTotal = 0L;
+			downloadWireBytesTotal = 0L;
+			uploadApplicationBytesInWindow = 0L;
+			downloadApplicationBytesInWindow = 0L;
+			uploadWireBytesInWindow = 0L;
+			downloadWireBytesInWindow = 0L;
+			trafficStatsSessionStartedAtMs = System.currentTimeMillis();
+			uploadTrafficSamples.clear();
+			downloadTrafficSamples.clear();
+		}
+	}
+
+	private synchronized long beginConnectionAttempt() {
+		connectionAttemptSequence++;
+		activeConnectionAttemptId = connectionAttemptSequence;
+		handshakeSent = false;
+		handshakeCompleted = false;
+		connectionStage = ConnectionStage.CONNECTING;
+		transportOpen = false;
+		isConnected = false;
+		lastConnectionError = "";
+		return activeConnectionAttemptId;
+	}
+
+	private boolean isCurrentConnectionAttempt(long attemptId) {
+		return attemptId > 0L && activeConnectionAttemptId == attemptId;
+	}
+
+	private synchronized void invalidateConnectionAttempt(long attemptId) {
+		if (attemptId <= 0L || activeConnectionAttemptId != attemptId) {
+			return;
+		}
+		activeConnectionAttemptId = 0L;
+		handshakeSent = false;
+		handshakeCompleted = false;
 	}
 
 	private int normalizeReconnectAttempts(int attempts) {
@@ -1830,11 +2152,21 @@ public class NetworkManager {
 	 * 
 	 * 服务端响应：handshake_ack消息确认协商结果
 	 */
-	private void sendHandshake() {
-		if (socket == null || !transportOpen)
+	private void sendHandshake(long attemptId) {
+		if (!isCurrentConnectionAttempt(attemptId)) {
+			LOGGER.debug("Ignoring handshake send for stale attempt {}", attemptId);
 			return;
+		}
+		if (socket == null || !transportOpen || connectionStage != ConnectionStage.WS_CONNECTED_HANDSHAKING) {
+			return;
+		}
+		if (handshakeSent) {
+			LOGGER.warn("Ignoring duplicate handshake send for attempt {}", attemptId);
+			return;
+		}
 
 		try {
+			handshakeSent = true;
 			ProtocolPackets.HandshakePacket handshake = new ProtocolPackets.HandshakePacket();
 			handshake.networkProtocolVersion = runtimeGateway.getClientProtocolVersion();
 			handshake.minimumCompatibleNetworkProtocolVersion = runtimeGateway.getClientMinCompatibleProtocolVersion();
@@ -1849,7 +2181,7 @@ public class NetworkManager {
 			}
 
 			sendPacket(handshake);
-			LOGGER.info("Sent handshake message");
+			LOGGER.info("Sent handshake message for attempt {}", attemptId);
 		} catch (Exception e) {
 			LOGGER.error("Failed to send handshake message: {}", e.getMessage());
 		}
@@ -1876,8 +2208,16 @@ public class NetworkManager {
 	 *    - serverProgramVersion: 服务端程序版本
 	 *    - 用于调试和版本对比
 	 */
-	private void handleHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
+	private void handleHandshakeAck(long attemptId, ProtocolPackets.HandshakeAckInboundPacket packet) {
+		if (!isCurrentConnectionAttempt(attemptId)) {
+			LOGGER.debug("Ignoring stale handshake ack for attempt {}", attemptId);
+			return;
+		}
 		if (packet == null) {
+			return;
+		}
+		if (handshakeCompleted) {
+			LOGGER.warn("Ignoring duplicate handshake ack for attempt {}", attemptId);
 			return;
 		}
 
@@ -1886,18 +2226,21 @@ public class NetworkManager {
 
 		if (!Boolean.TRUE.equals(packet.ready)) {
 			String rejectReason = extractHandshakeRejectReason(packet);
-			rejectForVersionIncompatibility("服务端拒绝握手: " + rejectReason);
+			rejectForVersionIncompatibility(attemptId, "服务端拒绝握手: " + rejectReason);
 			return;
 		}
 
 		if (!protocolAtLeast(serverProtocolVersion, runtimeGateway.getClientMinCompatibleProtocolVersion())) {
 			rejectForVersionIncompatibility(
+					attemptId,
 					"版本不兼容: 服务端协议 " + serverProtocolVersion
 							+ " 低于客户端最低要求 " + runtimeGateway.getClientMinCompatibleProtocolVersion());
 			return;
 		}
 
+		handshakeCompleted = true;
 		isConnected = true;
+		connectionStage = ConnectionStage.CONNECTED;
 		notifyConnectionStatusChanged(true);
 
 		digestIntervalSec = packet.digestIntervalSec != null ? packet.digestIntervalSec : 10;
@@ -1980,7 +2323,11 @@ public class NetworkManager {
 		return "unknown";
 	}
 
-	private void rejectForVersionIncompatibility(String reason) {
+	private void rejectForVersionIncompatibility(long attemptId, String reason) {
+		if (!isCurrentConnectionAttempt(attemptId)) {
+			LOGGER.debug("Ignoring stale version rejection for attempt {}", attemptId);
+			return;
+		}
 		String finalReason = reason == null || reason.isBlank()
 				? "版本不兼容，连接已拒绝"
 				: reason.trim();
@@ -1988,8 +2335,10 @@ public class NetworkManager {
 		lastConnectionError = finalReason;
 		transportOpen = false;
 		isConnected = false;
+		connectionStage = ConnectionStage.FAILED;
 		shouldReconnect = false;
 		reconnectSuppressedForVersionMismatch = true;
+		invalidateConnectionAttempt(attemptId);
 		notifyConnectionStatusChanged(false);
 
 		if (socket != null) {
@@ -2274,6 +2623,7 @@ public class NetworkManager {
 		packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 		packet.players = keepalivePlayers;
 		packet.entities = keepaliveEntities;
+		packet.battleChunks = List.of();
 		sendPacket(packet);
 	}
 
@@ -2532,7 +2882,36 @@ public class NetworkManager {
 	}
 
 	private String computeBattleChunkDigest() {
-		return stateDigest(remoteBattleChunkDataCache);
+		Map<String, Map<String, Object>> digestState = new HashMap<>();
+		for (Map.Entry<String, Map<String, Object>> entry : remoteBattleChunkDataCache.entrySet()) {
+			digestState.put(entry.getKey(), normalizeBattleChunkCoreData(entry.getValue()));
+		}
+		return stateDigest(digestState);
+	}
+
+	private Map<String, Object> normalizeBattleChunkCoreData(Map<String, Object> source) {
+		Map<String, Object> normalized = new HashMap<>();
+		if (source == null || source.isEmpty()) {
+			return normalized;
+		}
+		copyBattleChunkFieldIfPresent(source, normalized, "chunkX");
+		copyBattleChunkFieldIfPresent(source, normalized, "chunkZ");
+		copyBattleChunkFieldIfPresent(source, normalized, "dimension");
+		copyBattleChunkFieldIfPresent(source, normalized, "symbol");
+		copyBattleChunkFieldIfPresent(source, normalized, "markerType");
+		copyBattleChunkFieldIfPresent(source, normalized, "colorRaw");
+		copyBattleChunkFieldIfPresent(source, normalized, "colorNote");
+		copyBattleChunkFieldIfPresent(source, normalized, "roomCode");
+		copyBattleChunkFieldIfPresent(source, normalized, "colorSemanticKey");
+		Object colorMode = source.get("colorMode");
+		normalized.put("colorMode", colorMode == null ? "raw_observed" : colorMode);
+		return normalized;
+	}
+
+	private void copyBattleChunkFieldIfPresent(Map<String, Object> source, Map<String, Object> target, String fieldName) {
+		if (source.containsKey(fieldName)) {
+			target.put(fieldName, source.get(fieldName));
+		}
 	}
 
 	private void replaceEntityCache(JsonObject entitiesJson) {
@@ -2572,10 +2951,12 @@ public class NetworkManager {
 				Map<String, Object> merged = new HashMap<>();
 				Map<String, Object> existing = remoteBattleChunkDataCache.get(chunkId);
 				if (existing != null) {
-					merged.putAll(existing);
+					merged.putAll(normalizeBattleChunkCoreData(existing));
 				}
-				merged.putAll(jsonObjectToValueMap(dataNode));
-				remoteBattleChunkDataCache.put(chunkId, merged);
+				merged.putAll(normalizeBattleChunkCoreData(jsonObjectToValueMap(dataNode)));
+				if (!merged.isEmpty()) {
+					remoteBattleChunkDataCache.put(chunkId, merged);
+				}
 			} catch (Exception e) {
 				LOGGER.error("TeamViewRelay Network - Error applying battle chunk patch: {}", e.getMessage());
 			}

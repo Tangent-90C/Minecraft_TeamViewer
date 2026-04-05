@@ -23,6 +23,7 @@ public class DisplayConfigScreen extends Screen {
     private ButtonWidget journeyMapRemotePlayerBeaconsButton;
     private ButtonWidget journeyMapRemotePlayerMapMarkersButton;
     private ButtonWidget xrayMarkersAndBoxesButton;
+    private ButtonWidget showNetworkTrafficHudButton;
     private ButtonWidget colorSettingsButton;
     private ButtonWidget waypointSettingsButton;
 
@@ -45,6 +46,7 @@ public class DisplayConfigScreen extends Screen {
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
         totalHeight += COMPONENT_SPACING;
+        totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
         totalHeight += BUTTON_SPACING;
@@ -179,6 +181,13 @@ public class DisplayConfigScreen extends Screen {
         ).dimensions(rightX, journeyMapToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.journeyMapRemotePlayerMapMarkersButton);
 
+        int hudToggleY = getNextButtonY();
+        this.showNetworkTrafficHudButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.show_network_traffic_hud"),
+            button -> toggleShowNetworkTrafficHud()
+        ).dimensions(leftX, hudToggleY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.showNetworkTrafficHudButton);
+
         this.addDrawableChild(ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.back"),
             button -> close()
@@ -190,6 +199,7 @@ public class DisplayConfigScreen extends Screen {
         updateJourneyMapRemotePlayerBeaconsButton();
         updateJourneyMapRemotePlayerMapMarkersButton();
         updateXrayMarkersAndBoxesButton();
+        updateShowNetworkTrafficHudButton();
     }
 
     @Override
@@ -234,6 +244,10 @@ public class DisplayConfigScreen extends Screen {
         }
         if (this.tracerStartModeButton != null && this.tracerStartModeButton.isMouseOver(mouseX, mouseY)) {
             drawTooltip(context, "screen.mc_teamviewer.config.tracer_start_mode.tooltip", mouseX, mouseY);
+            return;
+        }
+        if (this.showNetworkTrafficHudButton != null && this.showNetworkTrafficHudButton.isMouseOver(mouseX, mouseY)) {
+            drawTooltip(context, "screen.mc_teamviewer.config.show_network_traffic_hud.tooltip", mouseX, mouseY);
             return;
         }
         if (this.colorSettingsButton != null && this.colorSettingsButton.isMouseOver(mouseX, mouseY)) {
@@ -392,6 +406,21 @@ public class DisplayConfigScreen extends Screen {
         }
     }
 
+    private void toggleShowNetworkTrafficHud() {
+        boolean currentStatus = PlayerProcesses.getConfig().isShowNetworkTrafficHud();
+        PlayerProcesses.getConfig().setShowNetworkTrafficHud(!currentStatus);
+        updateShowNetworkTrafficHudButton();
+    }
+
+    private void updateShowNetworkTrafficHudButton() {
+        if (this.showNetworkTrafficHudButton != null) {
+            boolean isEnabled = PlayerProcesses.getConfig().isShowNetworkTrafficHud();
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.show_network_traffic_hud").getString();
+            buttonText += isEnabled ? " [ON]" : " [OFF]";
+            this.showNetworkTrafficHudButton.setMessage(Text.of(buttonText));
+        }
+    }
+
     private void applyFieldValues() {
         try {
             String renderDistanceStr = this.renderDistanceField.getText().trim();
@@ -420,5 +449,6 @@ public class DisplayConfigScreen extends Screen {
         updateJourneyMapRemotePlayerBeaconsButton();
         updateJourneyMapRemotePlayerMapMarkersButton();
         updateXrayMarkersAndBoxesButton();
+        updateShowNetworkTrafficHudButton();
     }
 }

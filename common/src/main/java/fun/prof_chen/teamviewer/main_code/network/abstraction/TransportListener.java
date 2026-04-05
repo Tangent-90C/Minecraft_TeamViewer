@@ -7,6 +7,8 @@ public interface TransportListener {
 
     void onBinaryMessage(byte[] payload);
 
+    void onTrafficEvent(TransportTrafficEvent event);
+
     void onClosed(int statusCode, String reason);
 
     void onFailure(Throwable error);

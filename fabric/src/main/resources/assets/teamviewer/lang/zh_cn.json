@@ -3,6 +3,8 @@
   "key.mc_teamviewer.config": "打开视野信息共享配置面板",
   "key.mc_teamviewer.mark": "快速报点",
   "category.mc_teamviewer.general": "TeamViewRelay",
+  "hud.mc_teamviewer.traffic.up": "↑ 未压%s 压后%s Σ未压%s 压后%s",
+  "hud.mc_teamviewer.traffic.down": "↓ 未压%s 压后%s Σ未压%s 压后%s",
   
   "screen.mc_teamviewer.config.title": "TeamViewRelay 配置",
   "screen.mc_teamviewer.config.url": "服务器URL",
@@ -25,6 +27,8 @@
   "screen.mc_teamviewer.config.show_boxes.tooltip": "开关玩家方框渲染。",
   "screen.mc_teamviewer.config.show_tracking_lines": "显示追踪线",
   "screen.mc_teamviewer.config.show_tracking_lines.tooltip": "开关玩家追踪线渲染。",
+  "screen.mc_teamviewer.config.show_network_traffic_hud": "显示网速HUD",
+  "screen.mc_teamviewer.config.show_network_traffic_hud.tooltip": "在游戏画面左上角显示紧凑的上下行实时速率和本次连接累计流量。",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_beacons": "JourneyMap远程玩家世界光柱",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_beacons.tooltip": "仅影响JourneyMap的世界内光柱显示。关闭后，远程玩家不再显示JourneyMap信标光柱，但地图角色标记不受影响。",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_map_markers": "JourneyMap远程玩家地图角色",
@@ -103,6 +107,8 @@
   "screen.mc_teamviewer.config.connection_status": "连接状态: %s",
   "screen.mc_teamviewer.config.connection_failed": "连接失败: %s",
   "screen.mc_teamviewer.config.connection_failed_short": "连接失败（鼠标悬浮查看原因）",
+  "screen.mc_teamviewer.config.traffic_rate": "实时网速: ↑ %s  ↓ %s",
+  "screen.mc_teamviewer.config.traffic_total": "累计流量: ↑ %s  ↓ %s",
   "screen.mc_teamviewer.config.save_required_hint": "服务器设置已更新，请点击保存以生效",
   "screen.mc_teamviewer.config.unknown_error": "未知错误",
   
@@ -131,6 +137,8 @@
   "screen.mc_teamviewer.packet_capture.last_file_empty": "最近完成: 暂无",
   
   "connection.status.connected": "已连接",
+  "connection.status.connecting": "正在连接",
   "connection.status.failed": "连接失败",
-  "connection.status.disconnected": "未连接"
+  "connection.status.disconnected": "未连接",
+  "connection.status.ws_connected_handshaking": "WS已连接，业务握手中"
 }

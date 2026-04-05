@@ -3,6 +3,8 @@
   "key.mc_teamviewer.config": "Open TeamViewRelay configuration panel",
   "key.mc_teamviewer.mark": "Quick Mark",
   "category.mc_teamviewer.general": "TeamViewRelay",
+  "hud.mc_teamviewer.traffic.up": "↑ unc%s cmp%s Σunc%s cmp%s",
+  "hud.mc_teamviewer.traffic.down": "↓ unc%s cmp%s Σunc%s cmp%s",
   
   "screen.mc_teamviewer.config.title": "TeamViewRelay Configuration",
   "screen.mc_teamviewer.config.url": "Server URL",
@@ -25,6 +27,8 @@
   "screen.mc_teamviewer.config.show_boxes.tooltip": "Toggle player box rendering.",
   "screen.mc_teamviewer.config.show_tracking_lines": "Show Tracking Lines",
   "screen.mc_teamviewer.config.show_tracking_lines.tooltip": "Toggle player tracer rendering.",
+  "screen.mc_teamviewer.config.show_network_traffic_hud": "Show Traffic HUD",
+  "screen.mc_teamviewer.config.show_network_traffic_hud.tooltip": "Show a compact top-left HUD with live upload/download rates and current-session traffic totals.",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_beacons": "JourneyMap Remote Player Beacons",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_beacons.tooltip": "JourneyMap only. Controls the in-world beacon beams for remote players. Turning it off hides the beams but keeps map markers untouched.",
   "screen.mc_teamviewer.config.show_journeymap_remote_player_map_markers": "JourneyMap Remote Player Map Markers",
@@ -103,6 +107,8 @@
   "screen.mc_teamviewer.config.connection_status": "Connection Status: %s",
   "screen.mc_teamviewer.config.connection_failed": "Connection failed: %s",
   "screen.mc_teamviewer.config.connection_failed_short": "Connection failed (hover for details)",
+  "screen.mc_teamviewer.config.traffic_rate": "Live Traffic: ↑ %s  ↓ %s",
+  "screen.mc_teamviewer.config.traffic_total": "Traffic Total: ↑ %s  ↓ %s",
   "screen.mc_teamviewer.config.save_required_hint": "Server settings updated. Click Save to apply",
   "screen.mc_teamviewer.config.unknown_error": "Unknown error",
   
@@ -131,6 +137,8 @@
   "screen.mc_teamviewer.packet_capture.last_file_empty": "Last Saved: None",
   
   "connection.status.connected": "Connected",
+  "connection.status.connecting": "Connecting",
   "connection.status.failed": "Failed",
-  "connection.status.disconnected": "Disconnected"
+  "connection.status.disconnected": "Disconnected",
+  "connection.status.ws_connected_handshaking": "WS connected, handshaking"
 }

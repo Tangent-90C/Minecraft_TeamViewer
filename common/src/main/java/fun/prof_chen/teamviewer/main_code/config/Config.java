@@ -44,6 +44,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean showJourneyMapRemotePlayerBeacons = true;
     private boolean showJourneyMapRemotePlayerMapMarkers = true;
     private boolean xrayMarkersAndBoxes = true;
+    private boolean showNetworkTrafficHud = false;
     private boolean enableMiddleDoubleClickMark = true;
     private boolean enableMiddleClickCancelWaypoint = true;
     private boolean autoCancelWaypointOnEntityDeath = true;
@@ -266,6 +267,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
         this.tracerTopOffset = Math.min(tracerTopOffset, 1.5);
     }
 
+    @Override
     public boolean isEnableCompression() {
         return enableCompression;
     }
@@ -340,6 +342,14 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
     public void setXrayMarkersAndBoxes(boolean xrayMarkersAndBoxes) {
         this.xrayMarkersAndBoxes = xrayMarkersAndBoxes;
+    }
+
+    public boolean isShowNetworkTrafficHud() {
+        return showNetworkTrafficHud;
+    }
+
+    public void setShowNetworkTrafficHud(boolean showNetworkTrafficHud) {
+        this.showNetworkTrafficHud = showNetworkTrafficHud;
     }
 
     public boolean isEnableMiddleDoubleClickMark() {

@@ -115,6 +115,7 @@ public final class ProtobufMessageCodec implements MessageCodec {
 										StateKeepalive.newBuilder()
 												.addAllPlayers(cleanStringList(keepalive.players))
 												.addAllEntities(cleanStringList(keepalive.entities))
+												.addAllBattleChunks(buildBattleChunkRefs(keepalive.battleChunks))
 												.build()
 								)
 								.build()
@@ -691,11 +692,42 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		if (value.hasMarkerType()) mapped.put("markerType", value.getMarkerType());
 		mapped.put("colorRaw", value.getColorRaw());
 		if (value.hasColorNote()) mapped.put("colorNote", value.getColorNote());
+		if (value.hasRoomCode()) mapped.put("roomCode", value.getRoomCode());
+		if (value.hasColorMode()) mapped.put("colorMode", value.getColorMode());
+		if (value.hasColorSemanticKey()) mapped.put("colorSemanticKey", value.getColorSemanticKey());
 		if (value.hasObservedAt()) mapped.put("observedAt", value.getObservedAt());
 		if (value.hasPositionSampledAt()) mapped.put("positionSampledAt", value.getPositionSampledAt());
 		if (value.hasAlignmentSource()) mapped.put("alignmentSource", value.getAlignmentSource());
 		if (value.hasReporterId()) mapped.put("reporterId", value.getReporterId());
 		return mapped;
+	}
+
+	private List<BattleChunkRef> buildBattleChunkRefs(List<String> chunkIds) {
+		List<BattleChunkRef> refs = new ArrayList<>();
+		for (String chunkId : cleanStringList(chunkIds)) {
+			String[] parts = chunkId.split("\\|");
+			if (parts.length != 3) {
+				continue;
+			}
+			Integer chunkX = toIntegerOrNull(parts[1]);
+			Integer chunkZ = toIntegerOrNull(parts[2]);
+			String dimension = normalizeText(parts[0]);
+			if (dimension == null || chunkX == null || chunkZ == null) {
+				continue;
+			}
+			refs.add(
+					BattleChunkRef.newBuilder()
+							.setDimension(dimension)
+							.setCoord(
+									BattleChunkCoord.newBuilder()
+											.setChunkX(chunkX)
+											.setChunkZ(chunkZ)
+											.build()
+							)
+							.build()
+			);
+		}
+		return refs;
 	}
 
 	private String buildBattleChunkSyntheticId(String dimension, int chunkX, int chunkZ) {

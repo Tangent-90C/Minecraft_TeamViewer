@@ -111,6 +111,7 @@ public final class ProtocolPackets {
 		public byte[] submitPlayerId;
 		public List<String> players;
 		public List<String> entities;
+		public List<String> battleChunks;
 	}
 
 	public static class SourceStateClearPacket {

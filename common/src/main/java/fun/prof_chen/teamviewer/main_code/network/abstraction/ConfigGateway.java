@@ -13,5 +13,7 @@ public interface ConfigGateway {
 
     void setUseSystemProxy(boolean useSystemProxy);
 
+    boolean isEnableCompression();
+
     int getUpdateIntervalTicks();
 }

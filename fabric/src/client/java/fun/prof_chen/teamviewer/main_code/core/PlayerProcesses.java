@@ -44,6 +44,7 @@ import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpTransportProce
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftPositionAdapter;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager.TrafficStatsSnapshot;
 import fun.prof_chen.teamviewer.main_code.bridge.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.bridge.UnifiedRenderModule;
 import fun.prof_chen.teamviewer.main_code.renderbridge.abstraction.RenderBridge;
@@ -60,6 +61,7 @@ import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePl
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -109,6 +111,11 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static final int MARKER_COLOR_RGB = 0xFF8C00;
 	private static final int AUTO_CONNECT_MAX_RETRIES = 2;
 	private static final long AUTO_CONNECT_RETRY_DELAY_MS = 10_000L;
+	private static final int HUD_MARGIN = 6;
+	private static final int HUD_COMPACT_PADDING_X = 4;
+	private static final int HUD_COMPACT_PADDING_Y = 2;
+	private static final int HUD_LINE_HEIGHT = 10;
+	private static final int HUD_BOX_GAP = 4;
 	private static boolean middlePressedLastTick = false;
 	private static long lastMiddleClickTs = 0L;
 	private static String lastLocalMarkedActionBarFingerprint = "";
@@ -118,6 +125,11 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static final BattleMapPositionHistory BATTLE_MAP_POSITION_HISTORY = new BattleMapPositionHistory(120);
 	private static volatile boolean battleMapObservationPending = true;
 	private static volatile long lastUploadedBattleMapSidebarRevision = -1L;
+	private static volatile String lastUploadedBattleChunkSemanticHash = "";
+	private static volatile long lastBattleChunkKeepaliveSentAtMs = 0L;
+
+	private record BattleChunkProjection(String semanticHash, Set<String> chunkIds) {
+	}
 	
 	@Override
 	public void onInitializeClient() {
@@ -222,8 +234,12 @@ public class PlayerProcesses implements ClientModInitializer {
 		});
 
 		HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
+			int topLeftY = HUD_MARGIN;
 			if (networkManager != null && networkManager.isPacketDumpCaptureActive()) {
-				renderPacketCaptureIndicator(drawContext);
+				topLeftY = renderPacketCaptureIndicator(drawContext, topLeftY);
+			}
+			if (config != null && config.isShowNetworkTrafficHud()) {
+				topLeftY = renderNetworkTrafficHud(drawContext, topLeftY);
 			}
 			if (ModEnable && localPlayerMarkedActive) {
 				renderLocalMarkedIndicator(drawContext);
@@ -439,10 +455,10 @@ public class PlayerProcesses implements ClientModInitializer {
 		if (parsed.isEmpty() || parsed.get().cells().isEmpty()) {
 			return;
 		}
+
+		Set<String> forcedRefreshChunkIds = networkManager.drainPendingBattleChunkRefreshIds();
+		boolean forceRefresh = !forcedRefreshChunkIds.isEmpty();
 		long currentSidebarRevision = BattleMapSidebarSnapshotTracker.currentRevision();
-		if (!battleMapObservationPending && currentSidebarRevision == lastUploadedBattleMapSidebarRevision) {
-			return;
-		}
 
 		long snapshotObservedAt = BattleMapSidebarSnapshotTracker.lastSidebarObservedAt();
 		if (snapshotObservedAt <= 0L) {
@@ -459,6 +475,28 @@ public class PlayerProcesses implements ClientModInitializer {
 						currentSidebarRevision,
 						snapshotObservedAt
 				);
+			}
+			return;
+		}
+		BattleChunkProjection projection = buildBattleChunkProjection(
+				parsed.get().dimension(),
+				candidates.getFirst(),
+				parsed.get().cells()
+		);
+		long nowMs = System.currentTimeMillis();
+		boolean semanticChanged = !Objects.equals(lastUploadedBattleChunkSemanticHash, projection.semanticHash());
+		boolean keepaliveDue = nowMs - lastBattleChunkKeepaliveSentAtMs >= Math.max(1_000L, networkManager.getBattleChunkKeepaliveIntervalMs());
+		if (!forceRefresh && !battleMapObservationPending && !semanticChanged) {
+			if (keepaliveDue && !projection.chunkIds().isEmpty()) {
+				networkManager.sendBattleChunkKeepalive(client.player.getUuid(), projection.chunkIds());
+				lastBattleChunkKeepaliveSentAtMs = nowMs;
+				if (config.isBattleMapDebugEnabled()) {
+					LOGGER.info(
+							"Sending battle chunk keepalive revision={} ids={}",
+							currentSidebarRevision,
+							projection.chunkIds().size()
+					);
+				}
 			}
 			return;
 		}
@@ -507,7 +545,61 @@ public class PlayerProcesses implements ClientModInitializer {
 		}
 		networkManager.sendBattleMapObservation(client.player.getUuid(), payload.toMap());
 		lastUploadedBattleMapSidebarRevision = currentSidebarRevision;
+		lastUploadedBattleChunkSemanticHash = projection.semanticHash();
+		lastBattleChunkKeepaliveSentAtMs = parsedAt;
 		battleMapObservationPending = false;
+	}
+
+	private BattleChunkProjection buildBattleChunkProjection(
+			String dimension,
+			BattleMapPositionHistory.ObservationCandidate candidate,
+			List<ScoreboardBattleMapParser.RelativeBattleChunkCell> cells
+	) {
+		Set<String> chunkIds = new HashSet<>();
+		List<String> semanticLines = new ArrayList<>();
+		if (candidate == null || cells == null || cells.isEmpty()) {
+			return new BattleChunkProjection("", chunkIds);
+		}
+		String normalizedDimension = dimension == null || dimension.isBlank() ? "minecraft:overworld" : dimension.trim();
+		for (ScoreboardBattleMapParser.RelativeBattleChunkCell cell : cells) {
+			if (cell == null) {
+				continue;
+			}
+			int absoluteChunkX = candidate.baseChunkX() + cell.relChunkX();
+			int absoluteChunkZ = candidate.baseChunkZ() + cell.relChunkZ();
+			String chunkId = buildBattleChunkSyntheticId(normalizedDimension, absoluteChunkX, absoluteChunkZ);
+			if (chunkId == null) {
+				continue;
+			}
+			String symbol = cell.symbol() == null ? "" : cell.symbol().trim();
+			String colorRaw = cell.colorRaw() == null ? "" : cell.colorRaw().trim();
+			chunkIds.add(chunkId);
+			semanticLines.add(chunkId + "|" + symbol + "|" + colorRaw);
+		}
+		Collections.sort(semanticLines);
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-1");
+			for (String line : semanticLines) {
+				digest.update(line.getBytes(StandardCharsets.UTF_8));
+				digest.update((byte) '\n');
+			}
+			byte[] bytes = digest.digest();
+			StringBuilder hex = new StringBuilder();
+			for (int i = 0; i < 8 && i < bytes.length; i++) {
+				hex.append(String.format("%02x", bytes[i]));
+			}
+			return new BattleChunkProjection(hex.toString(), chunkIds);
+		} catch (Exception e) {
+			return new BattleChunkProjection("projection_hash_error", chunkIds);
+		}
+	}
+
+	private String buildBattleChunkSyntheticId(String dimension, int chunkX, int chunkZ) {
+		String normalizedDimension = dimension == null ? null : dimension.trim();
+		if (normalizedDimension == null || normalizedDimension.isBlank()) {
+			return null;
+		}
+		return normalizedDimension + "|" + chunkX + "|" + chunkZ;
 	}
 
 	private void recordBattleMapPositionHistory(MinecraftClient client) {
@@ -522,6 +614,8 @@ public class PlayerProcesses implements ClientModInitializer {
 	private void clearBattleMapObservationContext() {
 		BATTLE_MAP_POSITION_HISTORY.clear();
 		BattleMapSidebarSnapshotTracker.reset();
+		lastUploadedBattleChunkSemanticHash = "";
+		lastBattleChunkKeepaliveSentAtMs = 0L;
 		markBattleMapObservationPending();
 	}
 
@@ -1224,21 +1318,73 @@ public class PlayerProcesses implements ClientModInitializer {
 		context.drawTextWithShadow(client.textRenderer, text, x + paddingX, y + paddingY + 1, 0xFFFF6B6B);
 	}
 
-	private void renderPacketCaptureIndicator(DrawContext context) {
+	private int renderPacketCaptureIndicator(DrawContext context, int topY) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client == null || client.textRenderer == null || context == null) {
-			return;
+			return topY;
 		}
 
 		String text = "抓包中 REC";
 		int textWidth = client.textRenderer.getWidth(text);
 		int paddingX = 5;
 		int paddingY = 3;
-		int x = 6;
-		int y = 6;
+		int x = HUD_MARGIN;
+		int y = topY;
 
 		context.fill(x, y, x + textWidth + paddingX * 2, y + 12 + paddingY * 2, 0x88AA0000);
 		context.drawTextWithShadow(client.textRenderer, text, x + paddingX, y + paddingY + 1, 0xFFFFE082);
+		return y + 12 + paddingY * 2 + HUD_BOX_GAP;
+	}
+
+	private int renderNetworkTrafficHud(DrawContext context, int topY) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		if (client == null || client.textRenderer == null || context == null || networkManager == null) {
+			return topY;
+		}
+
+		TrafficStatsSnapshot snapshot = networkManager.getTrafficStatsSnapshot();
+		String uploadLine = Text.translatable(
+				"hud.mc_teamviewer.traffic.up",
+				formatCompactRate(snapshot.getUploadApplicationBytesPerSecond()),
+				formatCompactRate(snapshot.getUploadWireBytesPerSecond()),
+				formatCompactSize(snapshot.getUploadApplicationBytesTotal()),
+				formatCompactSize(snapshot.getUploadWireBytesTotal())
+		).getString();
+		String downloadLine = Text.translatable(
+				"hud.mc_teamviewer.traffic.down",
+				formatCompactRate(snapshot.getDownloadApplicationBytesPerSecond()),
+				formatCompactRate(snapshot.getDownloadWireBytesPerSecond()),
+				formatCompactSize(snapshot.getDownloadApplicationBytesTotal()),
+				formatCompactSize(snapshot.getDownloadWireBytesTotal())
+		).getString();
+		int lineWidth = Math.max(client.textRenderer.getWidth(uploadLine), client.textRenderer.getWidth(downloadLine));
+		int boxWidth = lineWidth + HUD_COMPACT_PADDING_X * 2;
+		int boxHeight = HUD_COMPACT_PADDING_Y * 2 + HUD_LINE_HEIGHT * 2;
+		int x = HUD_MARGIN;
+		int y = topY;
+
+		context.fill(x, y, x + boxWidth, y + boxHeight, 0x66000000);
+		context.drawTextWithShadow(client.textRenderer, uploadLine, x + HUD_COMPACT_PADDING_X, y + HUD_COMPACT_PADDING_Y, 0xFF7DD3FC);
+		context.drawTextWithShadow(client.textRenderer, downloadLine, x + HUD_COMPACT_PADDING_X, y + HUD_COMPACT_PADDING_Y + HUD_LINE_HEIGHT, 0xFFA7F3D0);
+		return y + boxHeight + HUD_BOX_GAP;
+	}
+
+	private String formatCompactRate(long bytesPerSecond) {
+		return formatCompactSize(bytesPerSecond) + "/s";
+	}
+
+	private String formatCompactSize(long bytes) {
+		String[] units = {"B", "K", "M", "G"};
+		double value = Math.max(0L, bytes);
+		int unitIndex = 0;
+		while (value >= 1024.0 && unitIndex < units.length - 1) {
+			value /= 1024.0;
+			unitIndex++;
+		}
+		if (unitIndex == 0 || value >= 100.0) {
+			return String.format(Locale.ROOT, "%.0f%s", value, units[unitIndex]);
+		}
+		return String.format(Locale.ROOT, "%.1f%s", value, units[unitIndex]);
 	}
 
 	private List<SharedWaypointInfo> collectLocalPlayerTargetedWaypoints(MinecraftClient client, String currentDimension) {

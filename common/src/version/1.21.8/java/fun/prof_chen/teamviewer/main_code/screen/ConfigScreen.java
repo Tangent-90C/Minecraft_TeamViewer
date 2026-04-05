@@ -30,7 +30,7 @@ public class ConfigScreen extends Screen {
     private TextWidget saveHintWidget;
     private int connectionStatusX;
     private int connectionStatusY;
-    private String currentConnectionStatus = "Unknown";
+    private NetworkManager.ConnectionStage currentConnectionStage = NetworkManager.ConnectionStage.DISCONNECTED;
     // 保存原始值，用于取消时恢复
     private String originalURL;
     private String originalRoomCode;
@@ -242,7 +242,7 @@ public class ConfigScreen extends Screen {
             0xFFFFFF
         );
 
-        if ("Failed".equals(this.currentConnectionStatus) && isMouseOverConnectionStatus(mouseX, mouseY)) {
+        if (this.currentConnectionStage == NetworkManager.ConnectionStage.FAILED && isMouseOverConnectionStatus(mouseX, mouseY)) {
             String reason = PlayerProcesses.getNetworkManager().getLastConnectionError();
             if (reason == null || reason.isBlank()) {
                 reason = Text.translatable("screen.mc_teamviewer.config.unknown_error").getString();
@@ -315,6 +315,10 @@ public class ConfigScreen extends Screen {
             PlayerProcesses.setModEnable(true);
             PlayerProcesses.reconnectToServer();
         }
+
+        updateConnectionStatus();
+        updateConnectionStatusWidget();
+        updateConnectButton();
     }
     
     private void updateConnectButton() {
@@ -366,13 +370,7 @@ public class ConfigScreen extends Screen {
      */
     private void updateConnectionStatus() {
         NetworkManager networkManager = PlayerProcesses.getNetworkManager();
-        if (networkManager.isConnected()) {
-            this.currentConnectionStatus = "Connected";
-        } else if (!networkManager.getLastConnectionError().isBlank()) {
-            this.currentConnectionStatus = "Failed";
-        } else {
-            this.currentConnectionStatus = "Disconnected";
-        }
+        this.currentConnectionStage = networkManager.getConnectionStage();
     }
     
     /**
@@ -390,7 +388,7 @@ public class ConfigScreen extends Screen {
             COMPONENT_WIDTH, 
             COMPONENT_HEIGHT, 
             Text.translatable("screen.mc_teamviewer.config.connection_status", 
-                Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase())), 
+                Text.translatable(getConnectionStatusTranslationKey())), 
             this.textRenderer
         );
         
@@ -469,28 +467,38 @@ public class ConfigScreen extends Screen {
         if (this.connectionStatusWidget != null) {
             // 根据连接状态设置颜色
             int color;
-            if (this.currentConnectionStatus.equals("Connected")) {
-                color = 0x00FF00;
-            } else if (this.currentConnectionStatus.equals("Failed")) {
-                color = 0xFFAA00;
-            } else {
-                color = 0xFF0000;
+            switch (this.currentConnectionStage) {
+                case CONNECTED -> color = 0x00FF00;
+                case CONNECTING -> color = 0xFFFF55;
+                case WS_CONNECTED_HANDSHAKING -> color = 0x55FFFF;
+                case FAILED -> color = 0xFFAA00;
+                default -> color = 0xFF0000;
             }
             
             this.connectionStatusWidget.setTextColor(color);
             
             // 更新文本
-            if (this.currentConnectionStatus.equals("Failed")) {
+            if (this.currentConnectionStage == NetworkManager.ConnectionStage.FAILED) {
                 this.connectionStatusWidget.setMessage(
                     Text.translatable("screen.mc_teamviewer.config.connection_failed_short")
                 );
             } else {
                 this.connectionStatusWidget.setMessage(
                     Text.translatable("screen.mc_teamviewer.config.connection_status",
-                        Text.translatable("connection.status." + this.currentConnectionStatus.toLowerCase()))
+                        Text.translatable(getConnectionStatusTranslationKey()))
                 );
             }
         }
+    }
+
+    private String getConnectionStatusTranslationKey() {
+        return switch (this.currentConnectionStage) {
+            case CONNECTED -> "connection.status.connected";
+            case CONNECTING -> "connection.status.connecting";
+            case WS_CONNECTED_HANDSHAKING -> "connection.status.ws_connected_handshaking";
+            case FAILED -> "connection.status.failed";
+            case DISCONNECTED -> "connection.status.disconnected";
+        };
     }
 
     private boolean isMouseOverConnectionStatus(int mouseX, int mouseY) {
@@ -536,6 +544,8 @@ public class ConfigScreen extends Screen {
         // 更新连接按钮状态
         updateConnectButton();
         updateAutoConnectOnMultiplayerJoinButton();
+        updateConnectionStatus();
+        updateConnectionStatusWidget();
         updateSaveHintWidget();
         updateSaveButton();
     }
