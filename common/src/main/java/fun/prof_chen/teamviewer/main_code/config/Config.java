@@ -59,6 +59,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private double tampermonkeyBeamHeight = 384.0D;
     private boolean autoConnectOnMultiplayerJoin = false;
     private boolean useSystemProxy = false;
+    private boolean allowInsecureTls = false;
     private boolean preferLocalDataForRender = true;
     private boolean battleMapSyncEnabled = true;
     private boolean battleMapScoreboardDetectionEnabled = true;
@@ -555,6 +556,16 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     @Override
     public void setUseSystemProxy(boolean useSystemProxy) {
         this.useSystemProxy = useSystemProxy;
+    }
+
+    @Override
+    public boolean isAllowInsecureTls() {
+        return allowInsecureTls;
+    }
+
+    @Override
+    public void setAllowInsecureTls(boolean allowInsecureTls) {
+        this.allowInsecureTls = allowInsecureTls;
     }
 
     @Override

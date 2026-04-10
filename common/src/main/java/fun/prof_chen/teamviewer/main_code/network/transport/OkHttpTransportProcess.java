@@ -28,6 +28,9 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -41,6 +44,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 public final class OkHttpTransportProcess implements TransportProcess {
     private static final Logger LOGGER = LoggerFactory.getLogger(OkHttpTransportProcess.class);
@@ -60,6 +67,11 @@ public final class OkHttpTransportProcess implements TransportProcess {
         } else {
             builder.proxy(Proxy.NO_PROXY);
         }
+        if (options.allowInsecureTls() && isSecureWebSocketUri(uri)) {
+            UnsafeTlsComponents unsafeTls = createUnsafeTlsComponents();
+            builder.sslSocketFactory(unsafeTls.socketFactory(), unsafeTls.trustManager());
+            builder.hostnameVerifier((hostname, session) -> true);
+        }
 
         InstrumentedWebSocketSession session = new InstrumentedWebSocketSession(
                 builder.build(),
@@ -69,6 +81,40 @@ public final class OkHttpTransportProcess implements TransportProcess {
         );
         session.connect();
         return session;
+    }
+
+    private static boolean isSecureWebSocketUri(String uri) {
+        return uri != null && uri.regionMatches(true, 0, "wss://", 0, 6);
+    }
+
+    private static UnsafeTlsComponents createUnsafeTlsComponents() {
+        try {
+            X509TrustManager trustManager = new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            };
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[] { trustManager }, new SecureRandom());
+            return new UnsafeTlsComponents(sslContext.getSocketFactory(), trustManager);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Failed to initialize insecure TLS context", e);
+        }
+    }
+
+    private record UnsafeTlsComponents(
+            SSLSocketFactory socketFactory,
+            X509TrustManager trustManager
+    ) {
     }
 
     private static final class InstrumentedWebSocketSession implements SocketProcess, TrackingWebSocketReader.FrameCallback {

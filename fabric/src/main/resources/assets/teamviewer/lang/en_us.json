@@ -9,6 +9,8 @@
   "screen.mc_teamviewer.config.title": "TeamViewRelay Configuration",
   "screen.mc_teamviewer.config.url": "Server URL",
   "screen.mc_teamviewer.config.url_hint": "e.g. ws://127.0.0.1:8080/mc-client",
+  "screen.mc_teamviewer.config.allow_insecure_tls": "Allow Insecure Connection",
+  "screen.mc_teamviewer.config.allow_insecure_tls.tooltip": "Only applies to wss://. Skips certificate and hostname verification, commonly for self-signed certificates; you assume the security risk.",
   "screen.mc_teamviewer.config.room_code": "Room Code",
   "screen.mc_teamviewer.config.room_code_hint": "e.g. default or pvp-1",
   "screen.mc_teamviewer.config.render_distance": "Render Distance",

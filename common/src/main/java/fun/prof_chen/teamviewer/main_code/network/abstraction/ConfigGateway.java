@@ -13,6 +13,10 @@ public interface ConfigGateway {
 
     void setUseSystemProxy(boolean useSystemProxy);
 
+    boolean isAllowInsecureTls();
+
+    void setAllowInsecureTls(boolean allowInsecureTls);
+
     boolean isEnableCompression();
 
     int getUpdateIntervalTicks();

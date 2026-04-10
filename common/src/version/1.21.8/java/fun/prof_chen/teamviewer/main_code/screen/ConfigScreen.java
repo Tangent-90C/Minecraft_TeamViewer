@@ -3,9 +3,11 @@ package fun.prof_chen.teamviewer.main_code.screen;
 import fun.prof_chen.teamviewer.main_code.core.PlayerProcesses;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.CheckboxWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.text.Text;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.Formatting;
@@ -18,6 +20,7 @@ import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager.ConnectionStatus
 public class ConfigScreen extends Screen {
     private final Screen parent;
     private TextFieldWidget urlField;
+    private CheckboxWidget allowInsecureTlsCheckbox;
     private TextFieldWidget roomCodeField;
     private ButtonWidget autoConnectOnMultiplayerJoinButton;
     private ButtonWidget connectButton;
@@ -35,6 +38,7 @@ public class ConfigScreen extends Screen {
     private String originalURL;
     private String originalRoomCode;
     private boolean originalAutoConnectOnMultiplayerJoin;
+    private boolean originalAllowInsecureTls;
     
     // 自动布局相关变量
     private static final int COMPONENT_WIDTH = 200;
@@ -55,6 +59,7 @@ public class ConfigScreen extends Screen {
         this.originalURL = NetworkManager.getServerURL();
         this.originalRoomCode = NetworkManager.getRoomCode();
         this.originalAutoConnectOnMultiplayerJoin = PlayerProcesses.getConfig().isAutoConnectOnMultiplayerJoin();
+        this.originalAllowInsecureTls = NetworkManager.isAllowInsecureTls();
         // 初始化连接状态
         updateConnectionStatus();
     }
@@ -148,7 +153,7 @@ public class ConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
 
-        // 房间号输入框 + 自动连接开关
+        // 房间号输入框 + 不安全连接开关
         int roomCodeY = getNextY();
         int halfComponentWidth = getHalfComponentWidth();
         this.roomCodeField = new TextFieldWidget(
@@ -171,11 +176,21 @@ public class ConfigScreen extends Screen {
                 .setTextColor(0xFFFFFF)
         );
 
-        this.autoConnectOnMultiplayerJoinButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.auto_connect_compact"),
-            button -> toggleAutoConnectOnMultiplayerJoin()
-        ).dimensions(componentX + halfComponentWidth + HALF_COMPONENT_GAP, roomCodeY, halfComponentWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.autoConnectOnMultiplayerJoinButton);
+        this.allowInsecureTlsCheckbox = CheckboxWidget.builder(
+                Text.translatable("screen.mc_teamviewer.config.allow_insecure_tls"),
+                this.textRenderer
+            )
+            .pos(componentX + halfComponentWidth + HALF_COMPONENT_GAP, roomCodeY)
+            .maxWidth(halfComponentWidth)
+            .checked(NetworkManager.isAllowInsecureTls())
+            .tooltip(Tooltip.of(Text.translatable("screen.mc_teamviewer.config.allow_insecure_tls.tooltip")))
+            .callback((checkbox, checked) -> {
+                updateSaveHintWidget();
+                updateSaveButton();
+            })
+            .build();
+        this.addDrawableChild(this.allowInsecureTlsCheckbox);
+
         updateAutoConnectOnMultiplayerJoinButton();
         
         // 显示设置/网络设置按钮（左右布局）
@@ -194,11 +209,18 @@ public class ConfigScreen extends Screen {
         this.addDrawableChild(this.networkSettingsButton);
         
         int exitSaveY = getNextButtonY();
+        int saveButtonWidth = getHalfComponentWidth();
         this.exitSaveButton = ButtonWidget.builder(
             Text.translatable("screen.mc_teamviewer.config.save_network_settings"),
             button -> saveAndClose()
-        ).dimensions(componentX, exitSaveY, COMPONENT_WIDTH, COMPONENT_HEIGHT).build();
+        ).dimensions(componentX, exitSaveY, saveButtonWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.exitSaveButton);
+
+        this.autoConnectOnMultiplayerJoinButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.auto_connect_compact"),
+            button -> toggleAutoConnectOnMultiplayerJoin()
+        ).dimensions(componentX + saveButtonWidth + HALF_COMPONENT_GAP, exitSaveY, saveButtonWidth, COMPONENT_HEIGHT).build();
+        this.addDrawableChild(this.autoConnectOnMultiplayerJoinButton);
         
         // 连接按钮
         int connectY = getNextButtonY();
@@ -265,6 +287,7 @@ public class ConfigScreen extends Screen {
         // 恢复未保存的一级页面设置
         NetworkManager.setServerURL(this.originalURL);
         NetworkManager.setRoomCode(this.originalRoomCode);
+        NetworkManager.setAllowInsecureTls(this.originalAllowInsecureTls);
         PlayerProcesses.getConfig().setAutoConnectOnMultiplayerJoin(this.originalAutoConnectOnMultiplayerJoin);
         
         MinecraftClient.getInstance().setScreen(this.parent);
@@ -279,6 +302,7 @@ public class ConfigScreen extends Screen {
             }
             String roomCode = this.roomCodeField.getText().trim();
             NetworkManager.setRoomCode(roomCode);
+            NetworkManager.setAllowInsecureTls(this.allowInsecureTlsCheckbox != null && this.allowInsecureTlsCheckbox.isChecked());
             
             // 显示/网络开关设置在二级页面中实时保存
             // 保存配置到文件
@@ -288,6 +312,7 @@ public class ConfigScreen extends Screen {
             this.originalURL = NetworkManager.getServerURL();
             this.originalRoomCode = NetworkManager.getRoomCode();
             this.originalAutoConnectOnMultiplayerJoin = PlayerProcesses.getConfig().isAutoConnectOnMultiplayerJoin();
+            this.originalAllowInsecureTls = NetworkManager.isAllowInsecureTls();
             updateSaveHintWidget();
             updateSaveButton();
         } catch (NumberFormatException e) {
@@ -454,6 +479,13 @@ public class ConfigScreen extends Screen {
 
         boolean currentAutoConnect = PlayerProcesses.getConfig().isAutoConnectOnMultiplayerJoin();
         if (currentAutoConnect != this.originalAutoConnectOnMultiplayerJoin) {
+            return true;
+        }
+
+        boolean currentAllowInsecureTls = this.allowInsecureTlsCheckbox == null
+            ? this.originalAllowInsecureTls
+            : this.allowInsecureTlsCheckbox.isChecked();
+        if (currentAllowInsecureTls != this.originalAllowInsecureTls) {
             return true;
         }
 

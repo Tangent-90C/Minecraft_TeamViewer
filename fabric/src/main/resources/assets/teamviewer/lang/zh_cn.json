@@ -9,6 +9,8 @@
   "screen.mc_teamviewer.config.title": "TeamViewRelay 配置",
   "screen.mc_teamviewer.config.url": "服务器URL",
   "screen.mc_teamviewer.config.url_hint": "例如: ws://127.0.0.1:8080/mc-client",
+  "screen.mc_teamviewer.config.allow_insecure_tls": "允许不安全连接",
+  "screen.mc_teamviewer.config.allow_insecure_tls.tooltip": "仅对 wss:// 生效；跳过证书与主机名校验，多用于自签名证书，需自行承担安全风险。",
   "screen.mc_teamviewer.config.room_code": "房间号",
   "screen.mc_teamviewer.config.room_code_hint": "例如: default 或 pvp-1",
   "screen.mc_teamviewer.config.render_distance": "渲染距离",

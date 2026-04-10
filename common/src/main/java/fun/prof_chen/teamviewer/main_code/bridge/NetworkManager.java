@@ -458,10 +458,11 @@ public class NetworkManager {
 		final long attemptId = beginConnectionAttempt();
 		boolean useSystemProxy = configGateway.isUseSystemProxy();
 		boolean enableCompression = configGateway.isEnableCompression();
+		boolean allowInsecureTls = configGateway.isAllowInsecureTls();
 		String uri = configGateway.getServerURL();
 
 		try {
-			this.socket = transport.connect(uri, new TransportOptions(useSystemProxy, enableCompression), new TransportListener() {
+			this.socket = transport.connect(uri, new TransportOptions(useSystemProxy, enableCompression, allowInsecureTls), new TransportListener() {
 				@Override
 				public void onOpen(String negotiatedExtensions) {
 					handleTransportOpen(attemptId, negotiatedExtensions);
@@ -1770,6 +1771,16 @@ public class NetworkManager {
 	public static void setUseSystemProxy(boolean useSystemProxy) {
 		if (configGateway != null) {
 			configGateway.setUseSystemProxy(useSystemProxy);
+		}
+	}
+
+	public static boolean isAllowInsecureTls() {
+		return configGateway != null && configGateway.isAllowInsecureTls();
+	}
+
+	public static void setAllowInsecureTls(boolean allowInsecureTls) {
+		if (configGateway != null) {
+			configGateway.setAllowInsecureTls(allowInsecureTls);
 		}
 	}
 
