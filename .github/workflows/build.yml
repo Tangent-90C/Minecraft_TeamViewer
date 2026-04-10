@@ -34,7 +34,16 @@ jobs:
       # 1. 检出代码仓库
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
+
+      - name: Sync protocol submodule
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          test -d third_party/TeamViewRelay-Protocol/proto
+          git submodule status
 
       # 2. 设置环境
       - name: Set up Buf

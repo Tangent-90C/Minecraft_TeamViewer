@@ -64,6 +64,17 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Sync protocol submodule
+      shell: bash
+      run: |
+        git submodule sync --recursive
+        git submodule update --init --recursive
+        test -d third_party/TeamViewRelay-Protocol/proto
+        git submodule status
 
     # Add any setup steps before running the `github/codeql-action/init` action.
     # This includes steps like installing compilers or runtimes (`actions/setup-node`

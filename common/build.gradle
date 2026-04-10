@@ -24,6 +24,9 @@ def protoInputDir = new File(protoModuleDir, "proto")
 def bufTemplateFile = file("buf.gen.yaml")
 def generatedProtoJavaDir = file("${buildDir}/generated/source/proto/main/java")
 def resolvedBufBinary = System.getenv("BUF_BIN") ?: (file("/tmp/buf/bin/buf").exists() ? "/tmp/buf/bin/buf" : "buf")
+def protoSources = project.fileTree(protoInputDir) {
+    include("**/*.proto")
+}
 
 sourceSets {
     main {
@@ -36,7 +39,7 @@ tasks.register("generateProtoJava", Exec) {
     group = "build setup"
     description = "Generate Java protobuf sources from the shared protocol module."
 
-    inputs.dir(protoInputDir)
+    inputs.files(protoSources)
     inputs.file(bufTemplateFile)
     outputs.dir(generatedProtoJavaDir)
 
