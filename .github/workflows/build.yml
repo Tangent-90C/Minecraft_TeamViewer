@@ -49,6 +49,14 @@ jobs:
       - name: Set up Buf
         uses: bufbuild/buf-setup-action@v1
 
+      - name: Resolve Buf binary
+        shell: bash
+        run: |
+          buf_path="$(command -v buf)"
+          test -n "$buf_path"
+          echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
+          "$buf_path" --version
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:

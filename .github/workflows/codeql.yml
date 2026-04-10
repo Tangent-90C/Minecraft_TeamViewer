@@ -82,6 +82,19 @@ jobs:
     # - name: Setup runtime (example)
     #   uses: actions/setup-example@v1
 
+    - name: Set up Buf
+      if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
+      uses: bufbuild/buf-setup-action@v1
+
+    - name: Resolve Buf binary
+      if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
+      shell: bash
+      run: |
+        buf_path="$(command -v buf)"
+        test -n "$buf_path"
+        echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
+        "$buf_path" --version
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
