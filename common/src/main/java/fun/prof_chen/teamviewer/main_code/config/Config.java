@@ -2,6 +2,7 @@ package fun.prof_chen.teamviewer.main_code.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapMode;
 import fun.prof_chen.teamviewer.main_code.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 
@@ -63,6 +64,7 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean preferLocalDataForRender = true;
     private boolean battleMapSyncEnabled = true;
     private boolean battleMapScoreboardDetectionEnabled = true;
+    private String battleMapMode = BattleMapMode.NODEMC.id();
     private int battleMapUpdateIntervalTicks = 10;
     private int battleMapKeepaliveIntervalSeconds = 30;
     private int battleMapCacheRetentionSeconds = 7200;
@@ -595,6 +597,16 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
     public void setBattleMapScoreboardDetectionEnabled(boolean battleMapScoreboardDetectionEnabled) {
         this.battleMapScoreboardDetectionEnabled = battleMapScoreboardDetectionEnabled;
+    }
+
+    public String getBattleMapMode() {
+        return BattleMapMode.fromId(battleMapMode).id();
+    }
+
+    public void setBattleMapMode(String battleMapMode) {
+        BattleMapMode normalized = BattleMapMode.fromId(battleMapMode);
+        this.battleMapMode = normalized.id();
+        this.battleMapScoreboardDetectionEnabled = normalized == BattleMapMode.NODEMC;
     }
 
     public int getBattleMapUpdateIntervalTicks() {

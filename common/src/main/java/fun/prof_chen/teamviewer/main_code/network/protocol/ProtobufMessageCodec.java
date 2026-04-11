@@ -242,6 +242,7 @@ public final class ProtobufMessageCodec implements MessageCodec {
 
 	private BattleMapObservation buildBattleMapObservation(ProtocolPackets.BattleMapObservationPacket packet) {
 		BattleMapObservation.Builder builder = BattleMapObservation.newBuilder();
+		setOptionalString(builder::setMode, normalizeText(packet.mode));
 		builder.setDimension(defaultString(packet.dimension));
 		builder.setMapSize(defaultInt(packet.mapSize));
 		builder.setAnchorRow(defaultInt(packet.anchorRow));
@@ -695,6 +696,7 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		if (value.hasRoomCode()) mapped.put("roomCode", value.getRoomCode());
 		if (value.hasColorMode()) mapped.put("colorMode", value.getColorMode());
 		if (value.hasColorSemanticKey()) mapped.put("colorSemanticKey", value.getColorSemanticKey());
+		if (value.hasMode()) mapped.put("mode", value.getMode());
 		if (value.hasObservedAt()) mapped.put("observedAt", value.getObservedAt());
 		if (value.hasPositionSampledAt()) mapped.put("positionSampledAt", value.getPositionSampledAt());
 		if (value.hasAlignmentSource()) mapped.put("alignmentSource", value.getAlignmentSource());

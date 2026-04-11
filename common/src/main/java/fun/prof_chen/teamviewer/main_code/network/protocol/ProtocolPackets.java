@@ -154,6 +154,7 @@ public final class ProtocolPackets {
 	public static class BattleMapObservationPacket {
 		public final String type = "battle_map_observation";
 		public byte[] submitPlayerId;
+		public String mode;
 		public String dimension;
 		public Integer mapSize;
 		public Integer anchorRow;

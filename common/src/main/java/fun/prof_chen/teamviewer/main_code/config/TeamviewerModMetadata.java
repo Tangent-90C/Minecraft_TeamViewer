@@ -40,7 +40,7 @@ public final class TeamviewerModMetadata {
         private MetaProtocol() {
         }
 
-        public static final String CLIENT_PROTOCOL_VERSION = getBuildProperty("network_protocol_version", "0.6.1");
+        public static final String CLIENT_PROTOCOL_VERSION = getBuildProperty("network_protocol_version", "0.6.2");
         public static final String CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION = getBuildProperty("network_min_compatible_protocol_version", "0.6.1");
         public static final boolean CLIENT_SUPPORTS_DELTA = true;
         public static final String SERVER_PROTOCOL_VERSION_FALLBACK = "0.0.0";

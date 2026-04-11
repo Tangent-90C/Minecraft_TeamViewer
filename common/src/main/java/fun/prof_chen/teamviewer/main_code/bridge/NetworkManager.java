@@ -949,6 +949,7 @@ public class NetworkManager {
 		try {
 			ProtocolPackets.BattleMapObservationPacket packet = new ProtocolPackets.BattleMapObservationPacket();
 			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+			packet.mode = normalizeNullableText(observation.get("mode"));
 			packet.dimension = normalizeNullableText(observation.get("dimension"));
 			packet.mapSize = toIntegerOrNull(observation.get("mapSize"));
 			packet.anchorRow = toIntegerOrNull(observation.get("anchorRow"));
@@ -2960,6 +2961,7 @@ public class NetworkManager {
 		copyBattleChunkFieldIfPresent(source, normalized, "colorNote");
 		copyBattleChunkFieldIfPresent(source, normalized, "roomCode");
 		copyBattleChunkFieldIfPresent(source, normalized, "colorSemanticKey");
+		copyBattleChunkFieldIfPresent(source, normalized, "mode");
 		Object colorMode = source.get("colorMode");
 		normalized.put("colorMode", colorMode == null ? "raw_observed" : colorMode);
 		return normalized;

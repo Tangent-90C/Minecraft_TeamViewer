@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.screen;
 
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapMode;
 import fun.prof_chen.teamviewer.main_code.core.PlayerProcesses;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -20,7 +21,7 @@ public class NetworkConfigScreen extends Screen {
     private ButtonWidget preferLocalDataForRenderButton;
     private ButtonWidget useSystemProxyButton;
     private ButtonWidget battleMapSyncButton;
-    private ButtonWidget battleMapScoreboardDetectionButton;
+    private ButtonWidget battleMapModeButton;
     private ButtonWidget battleMapDebugButton;
     private ButtonWidget packetCapturePageButton;
 
@@ -210,11 +211,11 @@ public class NetworkConfigScreen extends Screen {
         ).dimensions(leftX, battleMapToggleY, componentWidth, COMPONENT_HEIGHT).build();
         this.addDrawableChild(this.battleMapSyncButton);
 
-        this.battleMapScoreboardDetectionButton = ButtonWidget.builder(
-            Text.translatable("screen.mc_teamviewer.config.battle_map_scoreboard_detection"),
-            button -> toggleBattleMapScoreboardDetection()
+        this.battleMapModeButton = ButtonWidget.builder(
+            Text.translatable("screen.mc_teamviewer.config.battle_map_mode"),
+            button -> cycleBattleMapMode()
         ).dimensions(rightX, battleMapToggleY, componentWidth, COMPONENT_HEIGHT).build();
-        this.addDrawableChild(this.battleMapScoreboardDetectionButton);
+        this.addDrawableChild(this.battleMapModeButton);
 
         int footerY = getNextButtonY();
         this.battleMapDebugButton = ButtonWidget.builder(
@@ -240,7 +241,7 @@ public class NetworkConfigScreen extends Screen {
         updatePreferLocalDataForRenderButton();
         updateUseSystemProxyButton();
         updateBattleMapSyncButton();
-        updateBattleMapScoreboardDetectionButton();
+        updateBattleMapModeButton();
         updateBattleMapDebugButton();
         updatePacketCapturePageButton();
     }
@@ -329,10 +330,10 @@ public class NetworkConfigScreen extends Screen {
         updateBattleMapSyncButton();
     }
 
-    private void toggleBattleMapScoreboardDetection() {
-        boolean currentStatus = PlayerProcesses.getConfig().isBattleMapScoreboardDetectionEnabled();
-        PlayerProcesses.getConfig().setBattleMapScoreboardDetectionEnabled(!currentStatus);
-        updateBattleMapScoreboardDetectionButton();
+    private void cycleBattleMapMode() {
+        BattleMapMode currentMode = BattleMapMode.fromId(PlayerProcesses.getConfig().getBattleMapMode());
+        PlayerProcesses.getConfig().setBattleMapMode(currentMode.next().id());
+        updateBattleMapModeButton();
     }
 
     private void toggleBattleMapDebug() {
@@ -390,12 +391,12 @@ public class NetworkConfigScreen extends Screen {
         }
     }
 
-    private void updateBattleMapScoreboardDetectionButton() {
-        if (this.battleMapScoreboardDetectionButton != null) {
-            boolean isEnabled = PlayerProcesses.getConfig().isBattleMapScoreboardDetectionEnabled();
-            String buttonText = Text.translatable("screen.mc_teamviewer.config.battle_map_scoreboard_detection").getString();
-            buttonText += isEnabled ? " [ON]" : " [OFF]";
-            this.battleMapScoreboardDetectionButton.setMessage(Text.of(buttonText));
+    private void updateBattleMapModeButton() {
+        if (this.battleMapModeButton != null) {
+            BattleMapMode mode = BattleMapMode.fromId(PlayerProcesses.getConfig().getBattleMapMode());
+            String buttonText = Text.translatable("screen.mc_teamviewer.config.battle_map_mode").getString();
+            buttonText += " [" + Text.translatable(mode.translationKey()).getString() + "]";
+            this.battleMapModeButton.setMessage(Text.of(buttonText));
         }
     }
 
@@ -425,7 +426,7 @@ public class NetworkConfigScreen extends Screen {
         updatePreferLocalDataForRenderButton();
         updateUseSystemProxyButton();
         updateBattleMapSyncButton();
-        updateBattleMapScoreboardDetectionButton();
+        updateBattleMapModeButton();
         updateBattleMapDebugButton();
         updatePacketCapturePageButton();
     }

@@ -68,6 +68,7 @@ public final class ReportDataSchemas {
             Map.entry("symbol", true),
             Map.entry("colorRaw", true),
             Map.entry("colorNote", true),
+            Map.entry("mode", true),
             Map.entry("observedAt", true),
             Map.entry("positionSampledAt", true),
             Map.entry("alignmentSource", true),
@@ -198,6 +199,7 @@ public final class ReportDataSchemas {
             String symbol,
             String colorRaw,
             String colorNote,
+            String mode,
             long observedAt,
             Long positionSampledAt,
             String alignmentSource,
@@ -211,6 +213,7 @@ public final class ReportDataSchemas {
             data.put("symbol", symbol);
             data.put("colorRaw", colorRaw);
             data.put("colorNote", colorNote);
+            data.put("mode", mode);
             data.put("observedAt", observedAt);
             data.put("positionSampledAt", positionSampledAt);
             data.put("alignmentSource", alignmentSource);
@@ -251,6 +254,7 @@ public final class ReportDataSchemas {
     }
 
     public record BattleMapObservationPayload(
+            String mode,
             String dimension,
             int mapSize,
             int anchorRow,
@@ -261,6 +265,7 @@ public final class ReportDataSchemas {
             java.util.List<Map<String, Object>> cells) {
         public Map<String, Object> toMap() {
             Map<String, Object> data = new HashMap<>();
+            data.put("mode", mode);
             data.put("dimension", dimension);
             data.put("mapSize", mapSize);
             data.put("anchorRow", anchorRow);

@@ -31,9 +31,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.config.FabricConfigLoader;
-import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapPositionHistory;
-import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapSidebarSnapshotTracker;
-import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardBattleMapParser;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapMode;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationProvider;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationResult;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapProviderRegistry;
 import fun.prof_chen.teamviewer.main_code.mapbridge.registry.MapBridgeRegistry;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
@@ -61,7 +62,6 @@ import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePl
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -109,6 +109,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
 	private static final double MARK_CANCEL_MAX_RADIUS = 4.0D;
 	private static final int MARKER_COLOR_RGB = 0xFF8C00;
+	private static final BattleMapProviderRegistry BATTLE_MAP_PROVIDER_REGISTRY = new BattleMapProviderRegistry();
 	private static final int AUTO_CONNECT_MAX_RETRIES = 2;
 	private static final long AUTO_CONNECT_RETRY_DELAY_MS = 10_000L;
 	private static final int HUD_MARGIN = 6;
@@ -121,15 +122,11 @@ public class PlayerProcesses implements ClientModInitializer {
 	private static String lastLocalMarkedActionBarFingerprint = "";
 	private static boolean localPlayerMarkedActive = false;
 	private static String localPlayerMarkedIndicatorText = "TV!";
-	private static final ScoreboardBattleMapParser SCOREBOARD_BATTLE_MAP_PARSER = new ScoreboardBattleMapParser();
-	private static final BattleMapPositionHistory BATTLE_MAP_POSITION_HISTORY = new BattleMapPositionHistory(120);
 	private static volatile boolean battleMapObservationPending = true;
-	private static volatile long lastUploadedBattleMapSidebarRevision = -1L;
 	private static volatile String lastUploadedBattleChunkSemanticHash = "";
 	private static volatile long lastBattleChunkKeepaliveSentAtMs = 0L;
-
-	private record BattleChunkProjection(String semanticHash, Set<String> chunkIds) {
-	}
+	private static volatile BattleMapMode lastActiveBattleMapMode = null;
+	private static volatile String lastBattleMapProviderAvailabilityKey = "";
 	
 	@Override
 	public void onInitializeClient() {
@@ -211,7 +208,7 @@ public class PlayerProcesses implements ClientModInitializer {
 			
 			// 更新玩家位置信息
 			updatePlayerPositions();
-			recordBattleMapPositionHistory(client);
+			tickBattleMapProvider(client);
 			handleMiddleMouseDoubleClickMarking(client);
 			handleAutoCancelWaypointOnEntityDeath(client);
 			handleLocalPlayerMarkedReminder(client);
@@ -438,8 +435,17 @@ public class PlayerProcesses implements ClientModInitializer {
 		if (client == null || client.player == null || networkManager == null || !networkManager.isConnected()) {
 			return;
 		}
-		if (config == null || !config.isBattleMapSyncEnabled() || !config.isBattleMapScoreboardDetectionEnabled()) {
+		if (config == null || !config.isBattleMapSyncEnabled()) {
 			return;
+		}
+		BattleMapMode selectedMode = resolveBattleMapMode();
+		if (selectedMode != lastActiveBattleMapMode) {
+			if (config.isBattleMapDebugEnabled()) {
+				LOGGER.info("Switching battle map provider mode from {} to {}", lastActiveBattleMapMode, selectedMode.id());
+			}
+			lastActiveBattleMapMode = selectedMode;
+			battleMapTickCounter = 0;
+			clearBattleMapObservationContext();
 		}
 
 		battleMapTickCounter++;
@@ -448,174 +454,91 @@ public class PlayerProcesses implements ClientModInitializer {
 		}
 		battleMapTickCounter = 0;
 
-		Optional<ScoreboardBattleMapParser.ParsedBattleMapSnapshot> parsed = SCOREBOARD_BATTLE_MAP_PARSER.parse(
-				client,
-				config.isBattleMapDebugEnabled()
-		);
-		if (parsed.isEmpty() || parsed.get().cells().isEmpty()) {
+		BattleMapObservationProvider provider = BATTLE_MAP_PROVIDER_REGISTRY.get(selectedMode);
+		if (!provider.isAvailable()) {
+			String availabilityKey = selectedMode.id() + "|" + String.valueOf(provider.unavailableReason());
+			if (!Objects.equals(lastBattleMapProviderAvailabilityKey, availabilityKey)) {
+				lastBattleMapProviderAvailabilityKey = availabilityKey;
+				LOGGER.info(
+						"Battle map provider {} unavailable; skip upload reason={}",
+						selectedMode.id(),
+						provider.unavailableReason()
+				);
+			}
+			return;
+		}
+		lastBattleMapProviderAvailabilityKey = "";
+
+		Optional<BattleMapObservationResult> observation = provider.collect(client, config);
+		if (observation.isEmpty() || observation.get().cells().isEmpty()) {
 			return;
 		}
 
 		Set<String> forcedRefreshChunkIds = networkManager.drainPendingBattleChunkRefreshIds();
 		boolean forceRefresh = !forcedRefreshChunkIds.isEmpty();
-		long currentSidebarRevision = BattleMapSidebarSnapshotTracker.currentRevision();
-
-		long snapshotObservedAt = BattleMapSidebarSnapshotTracker.lastSidebarObservedAt();
-		if (snapshotObservedAt <= 0L) {
-			snapshotObservedAt = System.currentTimeMillis();
-		}
-		List<BattleMapPositionHistory.ObservationCandidate> candidates = BATTLE_MAP_POSITION_HISTORY.selectCandidates(
-				snapshotObservedAt,
-				parsed.get().dimension()
-		);
-		if (candidates.isEmpty()) {
-			if (config.isBattleMapDebugEnabled()) {
-				LOGGER.info(
-						"Skip battle_map_observation: no aligned history sample revision={} observedAt={}",
-						currentSidebarRevision,
-						snapshotObservedAt
-				);
-			}
-			return;
-		}
-		BattleChunkProjection projection = buildBattleChunkProjection(
-				parsed.get().dimension(),
-				candidates.getFirst(),
-				parsed.get().cells()
-		);
+		BattleMapObservationResult result = observation.get();
 		long nowMs = System.currentTimeMillis();
-		boolean semanticChanged = !Objects.equals(lastUploadedBattleChunkSemanticHash, projection.semanticHash());
+		boolean semanticChanged = !Objects.equals(lastUploadedBattleChunkSemanticHash, result.semanticHash());
 		boolean keepaliveDue = nowMs - lastBattleChunkKeepaliveSentAtMs >= Math.max(1_000L, networkManager.getBattleChunkKeepaliveIntervalMs());
 		if (!forceRefresh && !battleMapObservationPending && !semanticChanged) {
-			if (keepaliveDue && !projection.chunkIds().isEmpty()) {
-				networkManager.sendBattleChunkKeepalive(client.player.getUuid(), projection.chunkIds());
+			if (keepaliveDue && !result.projectedChunkIds().isEmpty()) {
+				networkManager.sendBattleChunkKeepalive(client.player.getUuid(), result.projectedChunkIds());
 				lastBattleChunkKeepaliveSentAtMs = nowMs;
 				if (config.isBattleMapDebugEnabled()) {
 					LOGGER.info(
-							"Sending battle chunk keepalive revision={} ids={}",
-							currentSidebarRevision,
-							projection.chunkIds().size()
+							"Sending battle chunk keepalive mode={} ids={}",
+							result.mode(),
+							result.projectedChunkIds().size()
 					);
 				}
 			}
 			return;
 		}
-
-		List<Map<String, Object>> candidatePayloads = new ArrayList<>();
-		for (BattleMapPositionHistory.ObservationCandidate candidate : candidates) {
-			candidatePayloads.add(new ReportDataSchemas.BattleMapObservationCandidatePayload(
-					candidate.baseChunkX(),
-					candidate.baseChunkZ(),
-					candidate.positionSampledAt(),
-					candidate.source()
-			).toMap());
-		}
-
-		List<Map<String, Object>> cellPayloads = new ArrayList<>();
-		for (ScoreboardBattleMapParser.RelativeBattleChunkCell cell : parsed.get().cells()) {
-			cellPayloads.add(new ReportDataSchemas.BattleMapObservationCellPayload(
-					cell.relChunkX(),
-					cell.relChunkZ(),
-					cell.symbol(),
-					cell.colorRaw()
-			).toMap());
-		}
-
-		long parsedAt = System.currentTimeMillis();
 		ReportDataSchemas.BattleMapObservationPayload payload = new ReportDataSchemas.BattleMapObservationPayload(
-				parsed.get().dimension(),
-				parsed.get().size(),
-				parsed.get().anchorRow(),
-				parsed.get().anchorColumn(),
-				snapshotObservedAt,
-				parsedAt,
-				candidatePayloads,
-				cellPayloads
+				result.mode(),
+				result.dimension(),
+				result.mapSize(),
+				result.anchorRow(),
+				result.anchorCol(),
+				result.snapshotObservedAt(),
+				result.parsedAt(),
+				result.candidates(),
+				result.cells()
 		);
 		if (config.isBattleMapDebugEnabled()) {
 			LOGGER.info(
-					"Sending battle_map_observation revision={} observedAt={} parsedAt={} candidates={} cells={} dimension={}",
-					currentSidebarRevision,
-					snapshotObservedAt,
-					parsedAt,
-					candidatePayloads.size(),
-					cellPayloads.size(),
-					parsed.get().dimension()
+					"Sending battle_map_observation mode={} observedAt={} parsedAt={} candidates={} cells={} dimension={}",
+					result.mode(),
+					result.snapshotObservedAt(),
+					result.parsedAt(),
+					result.candidates().size(),
+					result.cells().size(),
+					result.dimension()
 			);
 		}
 		networkManager.sendBattleMapObservation(client.player.getUuid(), payload.toMap());
-		lastUploadedBattleMapSidebarRevision = currentSidebarRevision;
-		lastUploadedBattleChunkSemanticHash = projection.semanticHash();
-		lastBattleChunkKeepaliveSentAtMs = parsedAt;
+		lastUploadedBattleChunkSemanticHash = result.semanticHash();
+		lastBattleChunkKeepaliveSentAtMs = result.parsedAt();
 		battleMapObservationPending = false;
 	}
 
-	private BattleChunkProjection buildBattleChunkProjection(
-			String dimension,
-			BattleMapPositionHistory.ObservationCandidate candidate,
-			List<ScoreboardBattleMapParser.RelativeBattleChunkCell> cells
-	) {
-		Set<String> chunkIds = new HashSet<>();
-		List<String> semanticLines = new ArrayList<>();
-		if (candidate == null || cells == null || cells.isEmpty()) {
-			return new BattleChunkProjection("", chunkIds);
-		}
-		String normalizedDimension = dimension == null || dimension.isBlank() ? "minecraft:overworld" : dimension.trim();
-		for (ScoreboardBattleMapParser.RelativeBattleChunkCell cell : cells) {
-			if (cell == null) {
-				continue;
-			}
-			int absoluteChunkX = candidate.baseChunkX() + cell.relChunkX();
-			int absoluteChunkZ = candidate.baseChunkZ() + cell.relChunkZ();
-			String chunkId = buildBattleChunkSyntheticId(normalizedDimension, absoluteChunkX, absoluteChunkZ);
-			if (chunkId == null) {
-				continue;
-			}
-			String symbol = cell.symbol() == null ? "" : cell.symbol().trim();
-			String colorRaw = cell.colorRaw() == null ? "" : cell.colorRaw().trim();
-			chunkIds.add(chunkId);
-			semanticLines.add(chunkId + "|" + symbol + "|" + colorRaw);
-		}
-		Collections.sort(semanticLines);
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			for (String line : semanticLines) {
-				digest.update(line.getBytes(StandardCharsets.UTF_8));
-				digest.update((byte) '\n');
-			}
-			byte[] bytes = digest.digest();
-			StringBuilder hex = new StringBuilder();
-			for (int i = 0; i < 8 && i < bytes.length; i++) {
-				hex.append(String.format("%02x", bytes[i]));
-			}
-			return new BattleChunkProjection(hex.toString(), chunkIds);
-		} catch (Exception e) {
-			return new BattleChunkProjection("projection_hash_error", chunkIds);
-		}
+	private void tickBattleMapProvider(MinecraftClient client) {
+		BATTLE_MAP_PROVIDER_REGISTRY.get(resolveBattleMapMode()).tick(client);
 	}
 
-	private String buildBattleChunkSyntheticId(String dimension, int chunkX, int chunkZ) {
-		String normalizedDimension = dimension == null ? null : dimension.trim();
-		if (normalizedDimension == null || normalizedDimension.isBlank()) {
-			return null;
-		}
-		return normalizedDimension + "|" + chunkX + "|" + chunkZ;
-	}
-
-	private void recordBattleMapPositionHistory(MinecraftClient client) {
-		BATTLE_MAP_POSITION_HISTORY.recordCurrentPlayer(client);
+	private BattleMapMode resolveBattleMapMode() {
+		return BattleMapMode.fromId(config == null ? null : config.getBattleMapMode());
 	}
 
 	private void markBattleMapObservationPending() {
 		battleMapObservationPending = true;
-		lastUploadedBattleMapSidebarRevision = -1L;
 	}
 
 	private void clearBattleMapObservationContext() {
-		BATTLE_MAP_POSITION_HISTORY.clear();
-		BattleMapSidebarSnapshotTracker.reset();
+		BATTLE_MAP_PROVIDER_REGISTRY.resetAll();
 		lastUploadedBattleChunkSemanticHash = "";
 		lastBattleChunkKeepaliveSentAtMs = 0L;
+		lastBattleMapProviderAvailabilityKey = "";
 		markBattleMapObservationPending();
 	}
 
