@@ -35,15 +35,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
+          submodules: false
 
       - name: Sync protocol submodule
         shell: bash
         run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive
-          test -d third_party/TeamViewRelay-Protocol/proto
-          git submodule status
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            echo "Submodule sync attempt ${attempt}"
+            git submodule sync --recursive
+            if git -c protocol.version=2 submodule update --init --force --depth=1 --recursive; then
+              test -d third_party/TeamViewRelay-Protocol/proto
+              git submodule status
+              exit 0
+            fi
+            if [[ "${attempt}" -eq 5 ]]; then
+              echo "Submodule update failed after ${attempt} attempts" >&2
+              exit 1
+            fi
+            rm -rf third_party/TeamViewRelay-Protocol
+            sleep $((attempt * 5))
+          done
 
       # 2. 设置环境
       - name: Set up Buf
