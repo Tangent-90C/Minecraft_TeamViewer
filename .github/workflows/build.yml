@@ -15,8 +15,10 @@ on:
       - 'build.gradle'
       - 'Taskfile.yml'
       - 'common/**'
+      - 'common-sdk/**'
       - 'fabric/**'
       - 'forge/**'
+      - 'scripts/minecraft_targets.py'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
@@ -30,25 +32,34 @@ on:
       - 'build.gradle'
       - 'Taskfile.yml'
       - 'common/**'
+      - 'common-sdk/**'
       - 'fabric/**'
       - 'forge/**'
+      - 'scripts/minecraft_targets.py'
 
 jobs:
+  targets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Minecraft target manifest
+        id: targets
+        shell: bash
+        run: echo "matrix=$(python3 scripts/minecraft_targets.py ci-matrix)" >> "$GITHUB_OUTPUT"
+
   build:
     # 使用最新的Ubuntu系统
     runs-on: ubuntu-latest
+    needs: targets
     permissions:
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - minecraft: '1.21.8'
-            java: '21'
-            task: 'build'
-          - minecraft: '26.1.2'
-            java: '25'
-            task: 'build-26.1.2'
+      matrix: ${{ fromJson(needs.targets.outputs.matrix) }}
 
     steps:
       # 1. 检出代码仓库
@@ -105,10 +116,7 @@ jobs:
       - name: Build Minecraft ${{ matrix.minecraft }}
         shell: bash
         run: |
-          if [[ "${{ matrix.java }}" == "25" ]]; then
-            export JAVA25_HOME="$JAVA_HOME"
-          fi
-          task ${{ matrix.task }}
+          task build-target TARGET="${{ matrix.minecraft }}"
 
       - name: Read artifact versions
         id: versions

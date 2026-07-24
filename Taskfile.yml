@@ -19,82 +19,39 @@ tasks:
   build:
     desc: Build and collect every supported Minecraft version
     cmds:
-      - 'test -n "${JAVA25_HOME:-}" || (echo "JAVA25_HOME must point to a Java 25 JDK" >&2; exit 1)'
-      - 'test -x "$JAVA25_HOME/bin/java" || (echo "JAVA25_HOME does not contain an executable bin/java" >&2; exit 1)'
-      - task: build-1.21.8
-      - task: build-26.1.2
+      - |
+          set -eu
+          build_java_home="${JAVA_BUILD_HOME:-${JAVA25_HOME:-}}"
+          test -x "$build_java_home/bin/java" || {
+            echo "JAVA_BUILD_HOME (or JAVA25_HOME) must point to a JDK that can build every target" >&2
+            exit 1
+          }
+          for target in $(python3 scripts/minecraft_targets.py list); do
+            echo "Building Minecraft $target"
+            JAVA_HOME="$build_java_home" {{.GRADLE}} --no-daemon -Pmc_target="$target" :fabric:build
+            python3 scripts/minecraft_targets.py collect "$target"
+          done
+
+  build-target:
+    desc: 'Build one manifest target (usage: task build-target TARGET=1.21.8)'
+    requires:
+      vars: [TARGET]
+    cmds:
+      - 'python3 scripts/minecraft_targets.py validate "{{.TARGET}}"'
+      - '{{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :fabric:build'
+      - 'python3 scripts/minecraft_targets.py collect "{{.TARGET}}"'
 
   build-1.21.8:
     desc: Build Minecraft 1.21.8 (Java 21 bytecode) and collect its jar
     cmds:
-      - chmod +x ./gradlew
-      - |
-          if [ -n "${JAVA25_HOME:-}" ]; then
-            JAVA_HOME="$JAVA25_HOME" {{.GRADLE}} -Pmc_target=1.21.8 :fabric:build
-          else
-            {{.GRADLE}} -Pmc_target=1.21.8 :fabric:build
-          fi
-      - mkdir -p ./build-artifacts
-      - |
-          python3 - <<'PY'
-          import pathlib
-          import re
-          import shutil
-
-          root = pathlib.Path('.')
-          gradle_properties = (root / 'gradle.properties').read_text(encoding='utf-8')
-
-          def read_property(name: str) -> str:
-              match = re.search(rf'^\s*{re.escape(name)}\s*=\s*(.+?)\s*$', gradle_properties, re.MULTILINE)
-              if not match:
-                  raise SystemExit(f'Missing {name} in gradle.properties')
-              return match.group(1)
-
-          output_name = f"{read_property('archives_base_name')}-{read_property('mod_version')}.jar"
-          libs_dir = root / 'fabric' / 'build' / 'libs'
-          source_jar = libs_dir / output_name
-          if not source_jar.is_file():
-              available = sorted(jar.name for jar in libs_dir.glob('*.jar'))
-              raise SystemExit(
-                  f'Expected distributable jar {output_name} not found in {libs_dir}. '
-                  f'Available jars: {available}'
-              )
-
-          destination = root / 'build-artifacts' / output_name
-          shutil.copy2(source_jar, destination)
-          print(f'Created {destination}')
-          PY
+      - task: build-target
+        vars: { TARGET: '1.21.8' }
 
   build-26.1.2:
     desc: Build Minecraft 26.1.2 with Java 25 and collect its jar
     cmds:
-      - chmod +x ./gradlew
       - 'test -n "${JAVA25_HOME:-}" || (echo "JAVA25_HOME must point to a Java 25 JDK" >&2; exit 1)'
-      - 'JAVA_HOME="$JAVA25_HOME" {{.GRADLE}} -Pmc_target=26.1.2 :fabric:build'
-      - mkdir -p ./build-artifacts
-      - |
-          python3 - <<'PY'
-          import pathlib
-          import re
-          import shutil
-
-          root = pathlib.Path('.')
-          text = (root / 'gradle.properties').read_text(encoding='utf-8')
-
-          def prop(name: str) -> str:
-              match = re.search(rf'^\s*{re.escape(name)}\s*=\s*(.+?)\s*$', text, re.MULTILINE)
-              if not match:
-                  raise SystemExit(f'Missing {name} in gradle.properties')
-              return match.group(1)
-
-          output_name = f"{prop('archives_base_name')}-26.1.2-{prop('mod_version')}.jar"
-          source = root / 'fabric' / 'build' / '26.1.2' / 'libs' / output_name
-          if not source.is_file():
-              raise SystemExit(f'Expected distributable jar not found: {source}')
-          destination = root / 'build-artifacts' / output_name
-          shutil.copy2(source, destination)
-          print(f'Created {destination}')
-          PY
+      - 'JAVA_HOME="$JAVA25_HOME" task build-target TARGET=26.1.2'
 
   build-all:
     desc: Alias for the all-version build

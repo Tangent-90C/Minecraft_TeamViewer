@@ -38,9 +38,7 @@ def journeyMapApiJar = layout.buildDirectory.file(
 apply plugin: mappingsMode == "yarn" ? "fabric-loom" : "net.fabricmc.fabric-loom"
 
 base {
-    archivesName = minecraftTarget == defaultMinecraftTarget
-            ? project.archives_base_name
-            : "${project.archives_base_name}-${minecraftTargetVersion}"
+    archivesName = "${project.archives_base_name}-${minecraftTargetVersion}"
 }
 
 if (minecraftTarget != defaultMinecraftTarget) {
@@ -53,6 +51,7 @@ loom {
     runs {
         client {
             runDir = minecraftTarget == defaultMinecraftTarget ? "run" : "run/${minecraftTargetVersion}"
+            vmArg "-Dteamviewer.adapterTck.strict=true"
         }
     }
 
@@ -142,6 +141,8 @@ dependencies {
 
     implementation project(":common")
     include project(":common")
+    implementation project(":common-sdk")
+    include project(":common-sdk")
 
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     include "com.squareup.okhttp3:okhttp:4.12.0"
@@ -241,16 +242,17 @@ tasks.register("verifyAdapterSdkCompleteness") {
     group = "verification"
     description = "Verify every supported Minecraft adapter supplies the complete SDK bundle and feature ports."
     inputs.files(fileTree("src/version") { include "**/*.java", "**/*.json" })
+    inputs.property("minecraftAdapterVersion", minecraftAdapterVersion)
 
     doLast {
-        ["1.21.8", "26.1"].each { adapter ->
+        [minecraftAdapterVersion].each { adapter ->
             def root = file("src/version/${adapter}")
-            def entry = new File(root, "java/fun/prof_chen/teamviewer/main_code/core/PlayerProcesses.java")
-            if (!entry.isFile()) throw new GradleException("Missing ${adapter} adapter entrypoint")
+            def entry = new File(root, "java/fun/prof_chen/teamviewer/main_code/core/FabricClientAdapterFactory.java")
+            if (!entry.isFile()) throw new GradleException("Missing ${adapter} adapter factory")
             def text = entry.getText("UTF-8")
-            ["new ClientAdapterBundle(", "ClientAdapterDescriptor.complete("
+            ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>("
             ].each { token ->
-                if (!text.contains(token)) throw new GradleException("${adapter} adapter entrypoint missing '${token}'")
+                if (!text.contains(token)) throw new GradleException("${adapter} adapter factory missing '${token}'")
             }
             def requiredFiles = [
                     "client/bridge/FabricClientEventBridge.java",
@@ -258,24 +260,19 @@ tasks.register("verifyAdapterSdkCompleteness") {
                     "battlemap/FabricBattleMapNativeBridge.java",
                     "render/FabricWorldRenderSink.java",
                     "render/FabricHudRenderSink.java",
-                    "screen/ConfigScreen.java",
-                    "mapbridge/provider/journey/JourneyMapSharedWaypointAdapter.java"
+                    "screen/ConfigScreen.java"
             ]
             requiredFiles.each { relative ->
                 if (!new File(root, "java/fun/prof_chen/teamviewer/main_code/${relative}").isFile()) {
                     throw new GradleException("${adapter} adapter missing required port ${relative}")
                 }
             }
-            def sharedXaero = file("src/shared/java/fun/prof_chen/teamviewer/main_code/mapbridge/provider/xaero/XaeroMinimapSharedWaypointAdapter.java")
-            if (!sharedXaero.isFile()) {
-                throw new GradleException("Shared Xaero waypoint adapter port is missing")
-            }
             def mixin = new File(root, "resources/teamviewer.client.mixins.json")
             if (!mixin.isFile() || !mixin.getText("UTF-8").contains("Mixin\"")) {
                 throw new GradleException("${adapter} adapter must declare a non-empty Scoreboard Mixin list")
             }
             if (entry.readLines().size() > 120) {
-                throw new GradleException("${adapter} PlayerProcesses must remain a thin adapter entrypoint")
+                throw new GradleException("${adapter} FabricClientAdapterFactory must remain a thin adapter factory")
             }
         }
     }
@@ -285,17 +282,41 @@ tasks.named("compileClientJava") {
     dependsOn(tasks.named("verifyVersionAdapterBoundary"), tasks.named("verifyAdapterSdkCompleteness"))
 }
 
+def compileVersionAdapterAgainstSdk = tasks.register("compileVersionAdapterAgainstSdk", JavaCompile) {
+    group = "verification"
+    description = "Compile Minecraft adapter sources without the common runtime on their classpath."
+    dependsOn(project(":common-sdk").tasks.named("classes"))
+    if (mappingsMode == "none") {
+        dependsOn(tasks.named("extractJourneyMapApi"))
+    }
+    source(fileTree("src/version/${minecraftAdapterVersion}/java") { include "**/*.java" })
+    source(fileTree("src/shared/java") {
+        include "fun/prof_chen/teamviewer/main_code/mapbridge/**/*.java"
+    })
+    classpath = sourceSets.client.compileClasspath - project(":common").sourceSets.main.output
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/adapterSdkBoundary"))
+    options.encoding = "UTF-8"
+    options.release.set(targetJavaVersion)
+}
+
+tasks.named("compileClientJava") {
+    dependsOn(compileVersionAdapterAgainstSdk)
+}
+
 def verifyNoCommonClassShadowing = tasks.register("verifyNoCommonClassShadowing") {
     group = "verification"
     description = "Reject stale or version-specific bytecode that shadows classes supplied by common."
-    dependsOn(tasks.named("compileClientJava"), project(":common").tasks.named("classes"))
+    dependsOn(tasks.named("compileClientJava"), project(":common").tasks.named("classes"),
+            project(":common-sdk").tasks.named("classes"))
 
     doLast {
-        def commonClassesRoot = project(":common").layout.buildDirectory.dir("classes/java/main").get().asFile
-        def commonClasses = fileTree(commonClassesRoot) { include "**/*.class" }
-                .files
-                .collect { commonClassesRoot.toPath().relativize(it.toPath()).toString() }
-                .toSet()
+        def commonClasses = new HashSet<String>()
+        [project(":common"), project(":common-sdk")].each { commonProject ->
+            def classesRoot = commonProject.layout.buildDirectory.dir("classes/java/main").get().asFile
+            fileTree(classesRoot) { include "**/*.class" }.files.each { classFile ->
+                commonClasses.add(classesRoot.toPath().relativize(classFile.toPath()).toString())
+            }
+        }
         def shadowedClasses = []
 
         sourceSets.client.output.classesDirs.files.findAll { it.isDirectory() }.each { classesRoot ->

@@ -8,6 +8,7 @@ base {
 }
 
 dependencies {
+    api project(":common-sdk")
     implementation "com.google.code.gson:gson:2.11.0"
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation "com.squareup.okio:okio-jvm:3.6.0"
@@ -34,7 +35,39 @@ def protoSources = project.fileTree(protoInputDir) {
 
 sourceSets {
     main {
-        java.srcDirs = ["src/main/java", generatedProtoJavaDir]
+        java {
+            srcDirs = ["src/main/java", generatedProtoJavaDir]
+            exclude("fun/prof_chen/teamviewer/main_code/battlemap/BattleMapNativeBridge.java")
+            exclude("fun/prof_chen/teamviewer/main_code/battlemap/BattleMapObservationClock.java")
+            exclude("fun/prof_chen/teamviewer/main_code/battlemap/NativeBattleMapSnapshot.java")
+            exclude("fun/prof_chen/teamviewer/main_code/battlemap/ScoreboardSnapshot.java")
+            exclude("fun/prof_chen/teamviewer/main_code/client/bridge/GameClientBridge.java")
+            exclude("fun/prof_chen/teamviewer/main_code/client/model/**")
+            exclude("fun/prof_chen/teamviewer/main_code/client/sdk/**")
+            exclude("fun/prof_chen/teamviewer/main_code/config/TeamviewerModMetadata.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigControlId.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigControlKind.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigControlView.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigPageId.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigPageView.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiAction.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiController.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiSessions.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/UiRect.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/UiText.java")
+            exclude("fun/prof_chen/teamviewer/main_code/hud/abstraction/HudRenderSink.java")
+            exclude("fun/prof_chen/teamviewer/main_code/hud/model/**")
+            exclude("fun/prof_chen/teamviewer/main_code/mapbridge/abstraction/**")
+            exclude("fun/prof_chen/teamviewer/main_code/mapbridge/implementor/**")
+            exclude("fun/prof_chen/teamviewer/main_code/mapbridge/model/**")
+            exclude("fun/prof_chen/teamviewer/main_code/mapbridge/registry/MapBridgeRegistry.java")
+            exclude("fun/prof_chen/teamviewer/main_code/model/Position3D.java")
+            exclude("fun/prof_chen/teamviewer/main_code/model/RemotePlayerInfo.java")
+            exclude("fun/prof_chen/teamviewer/main_code/model/ReportDataSchemas.java")
+            exclude("fun/prof_chen/teamviewer/main_code/network/abstraction/RuntimeGateway.java")
+            exclude("fun/prof_chen/teamviewer/main_code/renderbridge/abstraction/**")
+            exclude("fun/prof_chen/teamviewer/main_code/renderbridge/model/**")
+        }
         resources.srcDirs = ["src/main/resources"]
     }
 }

@@ -29,5 +29,6 @@ pluginManagement {
 rootProject.name = "TeamViewRelay"
 
 include("common")
+include("common-sdk")
 include("fabric")
 include("forge")

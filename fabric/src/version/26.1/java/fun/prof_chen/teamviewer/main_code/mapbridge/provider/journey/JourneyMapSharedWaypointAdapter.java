@@ -2,6 +2,7 @@ package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.mapbridge.model.MapWaypointCommand;
 import fun.prof_chen.teamviewer.main_code.mapbridge.model.NativeMapWaypointSnapshot;
 import journeymap.api.v2.common.waypoint.Waypoint;
@@ -24,6 +25,9 @@ public final class JourneyMapSharedWaypointAdapter implements SharedWaypointMapA
 
     @Override
     public boolean isAvailable() { return JourneyMapClientPlugin.isAvailable(); }
+
+    @Override
+    public IntegrationSupportStatus supportStatus() { return JourneyMapClientPlugin.supportStatus(); }
 
     @Override
     public List<NativeMapWaypointSnapshot> listLocalWaypoints() {

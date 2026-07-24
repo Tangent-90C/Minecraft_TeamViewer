@@ -1,13 +1,13 @@
 package fun.prof_chen.teamviewer.main_code.screen;
 
-import fun.prof_chen.teamviewer.main_code.client.ClientServices;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigControlId;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigControlKind;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigControlView;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageId;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageView;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiAction;
-import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSession;
+import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
+import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSessions;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiRect;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiText;
 import net.minecraft.client.Minecraft;
@@ -27,16 +27,20 @@ import java.util.Map;
 /** Minecraft 26.1 widget host for the common configuration UI SDK. */
 public final class ConfigScreen extends Screen {
     private final Screen parent;
-    private final ConfigUiSession session;
+    private final ConfigUiController session;
     private final ConfigPageId pageId;
     private final Map<ConfigControlId, AbstractWidget> widgets = new EnumMap<>(ConfigControlId.class);
     private ConfigPageView pageView;
 
     public ConfigScreen(Screen parent) {
-        this(parent, new ConfigUiSession(ClientServices.control()), ConfigPageId.ROOT);
+        this(parent, ConfigUiSessions.create(), ConfigPageId.ROOT);
     }
 
-    private ConfigScreen(Screen parent, ConfigUiSession session, ConfigPageId pageId) {
+    public ConfigScreen(Screen parent, ConfigUiController session) {
+        this(parent, session, ConfigPageId.ROOT);
+    }
+
+    private ConfigScreen(Screen parent, ConfigUiController session, ConfigPageId pageId) {
         super(toComponent(titleFor(pageId)));
         this.parent = parent;
         this.session = session;

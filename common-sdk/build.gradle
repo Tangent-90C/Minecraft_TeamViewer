@@ -1,0 +1,62 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${project.archives_base_name}-common-sdk"
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir("../common/src/main/java")
+            include("fun/prof_chen/teamviewer/main_code/battlemap/BattleMapNativeBridge.java")
+            include("fun/prof_chen/teamviewer/main_code/battlemap/BattleMapObservationClock.java")
+            include("fun/prof_chen/teamviewer/main_code/battlemap/NativeBattleMapSnapshot.java")
+            include("fun/prof_chen/teamviewer/main_code/battlemap/ScoreboardSnapshot.java")
+            include("fun/prof_chen/teamviewer/main_code/client/bridge/GameClientBridge.java")
+            include("fun/prof_chen/teamviewer/main_code/client/model/**")
+            include("fun/prof_chen/teamviewer/main_code/client/sdk/**")
+            include("fun/prof_chen/teamviewer/main_code/config/TeamviewerModMetadata.java")
+            include("fun/prof_chen/teamviewer/main_code/config/ui/**")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiSession.java")
+            include("fun/prof_chen/teamviewer/main_code/hud/abstraction/HudRenderSink.java")
+            include("fun/prof_chen/teamviewer/main_code/hud/model/**")
+            include("fun/prof_chen/teamviewer/main_code/mapbridge/abstraction/**")
+            include("fun/prof_chen/teamviewer/main_code/mapbridge/implementor/**")
+            include("fun/prof_chen/teamviewer/main_code/mapbridge/model/**")
+            include("fun/prof_chen/teamviewer/main_code/mapbridge/registry/MapBridgeRegistry.java")
+            include("fun/prof_chen/teamviewer/main_code/model/Position3D.java")
+            include("fun/prof_chen/teamviewer/main_code/model/RemotePlayerInfo.java")
+            include("fun/prof_chen/teamviewer/main_code/model/ReportDataSchemas.java")
+            include("fun/prof_chen/teamviewer/main_code/network/abstraction/RuntimeGateway.java")
+            include("fun/prof_chen/teamviewer/main_code/renderbridge/abstraction/**")
+            include("fun/prof_chen/teamviewer/main_code/renderbridge/model/**")
+        }
+    }
+}
+
+def targetJavaVersion = 21
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(targetJavaVersion)
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = "${project.archives_base_name}-common-sdk"
+            from components.java
+        }
+    }
+}

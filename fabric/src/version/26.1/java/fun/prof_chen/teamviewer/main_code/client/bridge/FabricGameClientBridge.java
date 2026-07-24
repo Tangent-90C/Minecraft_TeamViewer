@@ -20,7 +20,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -130,13 +133,38 @@ public final class FabricGameClientBridge implements GameClientBridge {
     @Override
     public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
         Minecraft client = Minecraft.getInstance();
-        if (client.hitResult == null || client.hitResult.getType() == HitResult.Type.MISS || client.player == null
-                || client.hitResult.distanceTo(client.player) > maxDistance * maxDistance) {
+        Entity cameraEntity = client.getCameraEntity();
+        if (client.player == null || client.level == null || cameraEntity == null) {
             return Optional.empty();
         }
-        if (!(client.hitResult instanceof EntityHitResult hit)) {
+        double distance = Double.isFinite(maxDistance) && maxDistance > 0.0D
+                ? Math.min(maxDistance, MARK_TARGET_MAX_DISTANCE)
+                : MARK_TARGET_MAX_DISTANCE;
+        float partialTick = 1.0F;
+        Vec3 from = cameraEntity.getEyePosition(partialTick);
+        HitResult blockHit = cameraEntity.pick(distance, partialTick, false);
+        double nearestDistanceSquared = distance * distance;
+        if (blockHit.getType() != HitResult.Type.MISS) {
+            nearestDistanceSquared = from.distanceToSqr(blockHit.getLocation());
+        }
+
+        Vec3 direction = cameraEntity.getViewVector(partialTick);
+        double rayLength = Math.sqrt(nearestDistanceSquared);
+        Vec3 to = from.add(direction.scale(rayLength));
+        AABB searchArea = cameraEntity.getBoundingBox()
+                .expandTowards(direction.scale(rayLength))
+                .inflate(1.0D);
+        EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(
+                cameraEntity, from, to, searchArea, EntitySelector.CAN_BE_PICKED, nearestDistanceSquared);
+        HitResult target = entityHit != null
+                && from.distanceToSqr(entityHit.getLocation()) < from.distanceToSqr(blockHit.getLocation())
+                ? entityHit : blockHit;
+        if (target.getType() == HitResult.Type.MISS) {
+            return Optional.empty();
+        }
+        if (!(target instanceof EntityHitResult hit)) {
             return Optional.of(new EntityTargetSnapshot(
-                    toPosition(client.hitResult.getLocation()), null, null, null, false, false));
+                    toPosition(target.getLocation()), null, null, null, false, false));
         }
         Entity entity = hit.getEntity();
         return Optional.of(new EntityTargetSnapshot(

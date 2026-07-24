@@ -1,7 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.client.sdk;
 
 /** Callbacks consumed by a version event adapter. Render contexts remain opaque to common. */
-public interface ClientEventHandler {
+public interface ClientEventHandler<W, H> {
     void onEndClientTick();
     void onToggleRequested();
     void onConfigRequested();
@@ -9,6 +9,6 @@ public interface ClientEventHandler {
     void onJoinedMultiplayer();
     void onLeftPlaySession();
     void onClientStopping();
-    void onWorldRender(Object context);
-    void onHudRender(Object context);
+    void onWorldRender(W context);
+    void onHudRender(H context);
 }

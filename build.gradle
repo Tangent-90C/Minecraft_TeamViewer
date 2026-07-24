@@ -23,7 +23,7 @@ tasks.named("build") {
 }
 
 tasks.named("clean") {
-    dependsOn(":common:clean", ":fabric:clean", ":forge:clean")
+    dependsOn(":common:clean", ":common-sdk:clean", ":fabric:clean", ":forge:clean")
 }
 
 ["runClient", "runclient"].each { taskName ->

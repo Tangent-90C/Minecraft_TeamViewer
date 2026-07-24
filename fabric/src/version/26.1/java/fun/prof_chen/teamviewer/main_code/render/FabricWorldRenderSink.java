@@ -8,12 +8,13 @@ import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderFrame;
 import net.minecraft.gizmos.GizmoProperties;
 import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-public final class FabricWorldRenderSink implements WorldRenderSink<Void> {
+public final class FabricWorldRenderSink implements WorldRenderSink<LevelRenderContext> {
     @Override
-    public void render(Void ignored, WorldRenderFrame frame) {
+    public void render(LevelRenderContext ignored, WorldRenderFrame frame) {
         if (frame == null) return;
         for (WorldRenderCommand command : frame.commands()) {
             GizmoProperties properties;

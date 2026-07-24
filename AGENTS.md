@@ -39,14 +39,16 @@
 
 ### Mandatory bridge rules
 
-1. 每个版本必须构造一个字段全部非空的 `ClientAdapterBundle`，并声明
-   `ClientAdapterDescriptor.complete(adapterVersion)`。
-2. `PlayerProcesses` 只能是薄装配入口：创建适配器、创建 `ClientApplication`、注册事件；不得包含配置判断、
-   计时器、协议组装、缓存、同步或渲染算法。
+1. 每个版本必须通过 `ServiceLoader` 提供唯一的 `ClientAdapterFactory<W,H>`，并构造字段全部非空的
+   `ClientAdapterBundle<W,H>`。
+2. 版本 factory 只能装配原生适配器；共享 Fabric 启动层负责创建 `ClientApplication` 和运行 TCK。
+   版本层不得包含配置判断、计时器、协议组装、缓存、同步或渲染算法。
 3. 版本层只允许把原生 Minecraft 状态转换为 SDK snapshot，或把 common command 转换为原生 API 调用。
    版本层不得直接导入 `Config`、`NetworkManager`、协议消息、仓库或协调器实现。
 4. common 不得导入 Minecraft、Fabric、JourneyMap、Xaero 或其他游戏模组 API。
-5. 可选模组未安装时，必须提供非空适配器并返回 `available=false`；禁止传 `null`、空端口列表或静默删功能。
+5. 可选模组必须报告 `AVAILABLE`、`MOD_NOT_INSTALLED`、`UNSUPPORTED_VERSION` 或 `FAILED`；允许某版本不支持
+   某插件，但禁止用 `null` 或虚假的完整声明掩盖状态。模组未安装时必须先装配 SDK no-op 端口，禁止在
+   能力探测、tick 或清理路径中加载该模组的 API 类。
 6. 业务行为、页面控件、HUD 文本和渲染决策需要变化时，先修改 common 及其测试；版本层只补必要的 API 映射。
 7. 两个版本必须走同一条 `ClientApplication` / `ClientCoordinator` 执行路径。禁止为了修复单一版本而复制一份业务逻辑。
 
@@ -64,6 +66,7 @@
 - `verifyPlatformBoundary`：common 不得依赖平台 API。
 - `verifyVersionAdapterBoundary`：版本层不得越过 SDK 调用业务实现。
 - `verifyAdapterSdkCompleteness`：每版必须提供完整端口和功能声明。
+- `compileVersionAdapterAgainstSdk`：在移除 common-runtime 的类路径下重新编译版本 adapter。
 - `verifyNoCommonClassShadowing`：Fabric 外层不得包含与 common 同名的旧类或重复类。
 - 不得通过跳过上述任务、删除失败检查或使用旧构建目录来获得“成功”产物。
 

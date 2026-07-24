@@ -18,7 +18,7 @@ import static fun.prof_chen.teamviewer.main_code.config.ui.ConfigControlId.*;
  * The complete platform-neutral TeamViewRelay configuration UI state machine.
  * Minecraft adapters render the immutable page view and forward edits/actions here.
  */
-public final class ConfigUiSession {
+public final class ConfigUiSession implements ConfigUiController {
     private static final int HEIGHT = 20;
     private static final int LABEL_HEIGHT = 12;
     private static final int LABEL_SPACING = 12;

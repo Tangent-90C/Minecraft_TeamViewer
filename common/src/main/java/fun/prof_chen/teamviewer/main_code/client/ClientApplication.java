@@ -4,7 +4,10 @@ import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.bridge.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterBundle;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
+import fun.prof_chen.teamviewer.main_code.client.sdk.AdapterRuntimeTck;
 import fun.prof_chen.teamviewer.main_code.config.Config;
+import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSession;
+import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSessions;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpTransportProcess;
@@ -25,15 +28,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Single common client composition root. A Minecraft version supplies adapters only; common
  * owns configuration, network lifecycle, repositories, synchronization and feature policy.
  */
-public final class ClientApplication implements ClientEventHandler {
+public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
     public static final String CONFIG_FILE_NAME = "team-view-relay.json";
 
-    private final ClientAdapterBundle adapters;
+    private final ClientAdapterBundle<W, H> adapters;
     private final ClientCoordinator coordinator;
     private final SharedWaypointSyncCoordinator waypointCoordinator;
     private final AtomicBoolean stopped = new AtomicBoolean();
 
-    private ClientApplication(ClientAdapterBundle adapters) {
+    private ClientApplication(ClientAdapterBundle<W, H> adapters) {
         this.adapters = Objects.requireNonNull(adapters, "adapters");
         Config config = Config.load(adapters.runtimeGateway().getConfigDirectory().resolve(CONFIG_FILE_NAME));
         Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
@@ -56,10 +59,11 @@ public final class ClientApplication implements ClientEventHandler {
         coordinator.configureRuntimeSupport(
                 remoteRepository, waypointRepository, waypointCoordinator, waypointGateway, projectionCoordinator);
         coordinator.configureBattleMapSupport(adapters.battleMapNativeBridge());
+        ConfigUiSessions.install(() -> new ConfigUiSession(coordinator));
     }
 
-    public static ClientApplication start(ClientAdapterBundle adapters) {
-        ClientApplication application = new ClientApplication(adapters);
+    public static <W, H> ClientApplication<W, H> start(ClientAdapterBundle<W, H> adapters) {
+        ClientApplication<W, H> application = new ClientApplication<>(adapters);
         adapters.eventBridge().register(application);
         return application;
     }
@@ -80,7 +84,7 @@ public final class ClientApplication implements ClientEventHandler {
 
     @Override
     public void onConfigRequested() {
-        if (!stopped.get()) adapters.configScreenHost().open();
+        if (!stopped.get()) adapters.configScreenHost().open(new ConfigUiSession(coordinator));
     }
 
     @Override
@@ -104,15 +108,23 @@ public final class ClientApplication implements ClientEventHandler {
         coordinator.onLeftPlaySession();
         waypointCoordinator.stop();
         ClientServices.clear(coordinator);
+        ConfigUiSessions.clear();
+        AdapterRuntimeTck.clear();
     }
 
     @Override
-    public void onWorldRender(Object context) {
-        if (!stopped.get()) adapters.worldRenderSink().render(context, coordinator.buildWorldRenderFrame());
+    public void onWorldRender(W context) {
+        if (!stopped.get()) {
+            adapters.worldRenderSink().render(context, coordinator.buildWorldRenderFrame());
+            AdapterRuntimeTck.markWorldRenderSucceeded();
+        }
     }
 
     @Override
-    public void onHudRender(Object context) {
-        if (!stopped.get()) adapters.hudRenderSink().render(context, coordinator.buildHudFrame());
+    public void onHudRender(H context) {
+        if (!stopped.get()) {
+            adapters.hudRenderSink().render(context, coordinator.buildHudFrame());
+            AdapterRuntimeTck.markHudRenderSucceeded();
+        }
     }
 }

@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import journeymap.api.v2.common.waypoint.Waypoint;
 import journeymap.api.v2.common.waypoint.WaypointFactory;
@@ -26,6 +27,9 @@ public final class JourneyMapRemotePlayerBeaconProjection implements RemotePlaye
 
     @Override
     public boolean isAvailable() { return JourneyMapClientPlugin.isAvailable(); }
+
+    @Override
+    public IntegrationSupportStatus supportStatus() { return JourneyMapClientPlugin.supportStatus(); }
 
     @Override
     public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {

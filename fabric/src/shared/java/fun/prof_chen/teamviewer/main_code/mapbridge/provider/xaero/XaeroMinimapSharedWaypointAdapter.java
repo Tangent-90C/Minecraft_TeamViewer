@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.provider.xaero;
 
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.mapbridge.model.MapWaypointCommand;
 import fun.prof_chen.teamviewer.main_code.mapbridge.model.NativeMapWaypointSnapshot;
 import net.fabricmc.loader.api.FabricLoader;
@@ -25,6 +26,11 @@ public final class XaeroMinimapSharedWaypointAdapter implements SharedWaypointMa
 
     @Override
     public boolean isAvailable() { return FabricLoader.getInstance().isModLoaded("xaerominimap"); }
+
+    @Override
+    public IntegrationSupportStatus supportStatus() {
+        return isAvailable() ? IntegrationSupportStatus.AVAILABLE : IntegrationSupportStatus.MOD_NOT_INSTALLED;
+    }
 
     @Override
     public List<NativeMapWaypointSnapshot> listLocalWaypoints() {

@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import journeymap.api.v2.client.IClientAPI;
 import journeymap.api.v2.client.IClientPlugin;
 import journeymap.api.v2.client.JourneyMapPlugin;
@@ -27,6 +28,11 @@ public final class JourneyMapClientPlugin implements IClientPlugin {
 
     static boolean isAvailable() {
         return FabricLoader.getInstance().isModLoaded("journeymap") && clientApi != null;
+    }
+
+    static IntegrationSupportStatus supportStatus() {
+        return FabricLoader.getInstance().isModLoaded("journeymap")
+                ? IntegrationSupportStatus.AVAILABLE : IntegrationSupportStatus.MOD_NOT_INSTALLED;
     }
 
     static IClientAPI clientApi() {

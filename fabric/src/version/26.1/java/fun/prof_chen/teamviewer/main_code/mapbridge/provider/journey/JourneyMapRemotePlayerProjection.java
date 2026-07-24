@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 
 import java.util.Map;
@@ -16,6 +17,9 @@ public final class JourneyMapRemotePlayerProjection implements RemotePlayerProje
     public boolean isAvailable() {
         return JourneyMapClientPlugin.isAvailable();
     }
+
+    @Override
+    public IntegrationSupportStatus supportStatus() { return JourneyMapClientPlugin.supportStatus(); }
 
     @Override
     public Kind kind() { return Kind.JOURNEYMAP_MAP_MARKER; }
