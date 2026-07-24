@@ -1,10 +1,28 @@
 pluginManagement {
+    def versionProperties = new Properties()
+    file("gradle/minecraft-versions.properties").withInputStream {
+        versionProperties.load(it)
+    }
+    def defaultTarget = versionProperties.getProperty("default_target")
+    def selectedTarget = providers.gradleProperty("mc_target").getOrElse(defaultTarget)
+    def supportedTargets = versionProperties.getProperty("supported_targets")
+            .split(",")
+            .collect { it.trim() }
+    if (!supportedTargets.contains(selectedTarget)) {
+        throw new GradleException("Unsupported mc_target '${selectedTarget}'. Supported targets: ${supportedTargets.join(', ')}")
+    }
+
     repositories {
         maven {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
         gradlePluginPortal()
+    }
+
+    plugins {
+        id 'fabric-loom' version versionProperties.getProperty("${selectedTarget}.loom_version")
+        id 'net.fabricmc.fabric-loom' version versionProperties.getProperty("${selectedTarget}.loom_version")
     }
 }
 

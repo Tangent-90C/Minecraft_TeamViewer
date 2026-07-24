@@ -1,6 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.screen;
 
-import fun.prof_chen.teamviewer.main_code.core.PlayerProcesses;
+import fun.prof_chen.teamviewer.main_code.client.PlayerProcesses;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.CheckboxWidget;

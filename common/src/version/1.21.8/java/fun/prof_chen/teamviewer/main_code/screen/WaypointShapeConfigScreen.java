@@ -1,6 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.screen;
 
-import fun.prof_chen.teamviewer.main_code.core.PlayerProcesses;
+import fun.prof_chen.teamviewer.main_code.client.PlayerProcesses;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;

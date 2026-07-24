@@ -1,0 +1,54 @@
+package fun.prof_chen.teamviewer.main_code.network.bridge;
+
+import fun.prof_chen.teamviewer.main_code.config.FabricModVersionProvider;
+import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.Minecraft;
+
+import java.nio.file.Path;
+import java.util.UUID;
+
+public final class FabricRuntimeGateway implements RuntimeGateway {
+    @Override
+    public String getCurrentDimensionId() {
+        Minecraft client = Minecraft.getInstance();
+        return client.level == null ? "minecraft:overworld" : client.level.dimension().identifier().toString();
+    }
+
+    @Override
+    public UUID getLocalPlayerId() {
+        Minecraft client = Minecraft.getInstance();
+        return client.player == null ? null : client.player.getUUID();
+    }
+
+    @Override
+    public String getClientProgramVersion() {
+        return FabricModVersionProvider.getModVersion();
+    }
+
+    @Override
+    public String getClientProtocolVersion() {
+        return TeamviewerModMetadata.MetaProtocol.CLIENT_PROTOCOL_VERSION;
+    }
+
+    @Override
+    public String getClientMinCompatibleProtocolVersion() {
+        return TeamviewerModMetadata.MetaProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
+    }
+
+    @Override
+    public String getServerProtocolFallbackVersion() {
+        return TeamviewerModMetadata.MetaProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+    }
+
+    @Override
+    public String getProgramVersionUnknown() {
+        return TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
+    }
+
+    @Override
+    public Path getLogsDirectory() {
+        return FabricLoader.getInstance().getGameDir().resolve("logs");
+    }
+}

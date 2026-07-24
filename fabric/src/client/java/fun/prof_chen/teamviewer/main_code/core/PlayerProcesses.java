@@ -31,6 +31,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.config.FabricConfigLoader;
+import fun.prof_chen.teamviewer.main_code.client.ClientCoordinator;
+import fun.prof_chen.teamviewer.main_code.client.ClientServices;
+import fun.prof_chen.teamviewer.main_code.client.bridge.FabricGameClientBridge;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapMode;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationProvider;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationResult;
@@ -84,6 +87,7 @@ public class PlayerProcesses implements ClientModInitializer {
 	
 	// Network manager
 	private static NetworkManager networkManager;
+	private static ClientCoordinator clientCoordinator;
 	private static fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway waypointSyncGateway;
 	private static RemotePlayerRepository remotePlayerRepository;
 	private static SharedWaypointRepository sharedWaypointRepository;
@@ -146,6 +150,8 @@ public class PlayerProcesses implements ClientModInitializer {
 			markBattleMapObservationPending();
 		});
 		NetworkManager.setConfigGateway(config);
+		clientCoordinator = new ClientCoordinator(config, networkManager, new FabricGameClientBridge());
+		ClientServices.install(clientCoordinator);
 		waypointSyncGateway = new WaypointSyncGateway(networkManager);
 		remotePlayerRepository = new MapBackedRemotePlayerRepository(remotePlayers);
 		sharedWaypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
@@ -185,8 +191,8 @@ public class PlayerProcesses implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			// 先消费网络线程投递的任务：保证网络状态与共享缓存在主线程串行更新，
 			// 再执行本 tick 的输入处理、世界采集与上行发送，避免并发读写冲突。
-			if (networkManager != null) {
-				networkManager.pumpMainThreadTasks();
+			if (clientCoordinator != null) {
+				clientCoordinator.onEndClientTick();
 			}
 
 			// 处理按键输入
@@ -218,7 +224,6 @@ public class PlayerProcesses implements ClientModInitializer {
 			
 			// 发送玩家位置到服务器
 			if (ModEnable && networkManager != null) {
-				handleRegistrationAndPositionUpdates();
 				handleBattleMapSync(client);
 			}
 		});
@@ -257,13 +262,14 @@ public class PlayerProcesses implements ClientModInitializer {
 	
 	private void toggleMOD() {
 		ModEnable = !ModEnable;
-		
+		if (clientCoordinator != null) {
+			clientCoordinator.setEnabled(ModEnable);
+		}
+
 		if (ModEnable) {
-			// 连接到服务器
-			networkManager.connect();
 			LOGGER.info("TeamViewRelay enabled");
 		} else {
-			shutdownNetworkSession();
+			clearClientSessionState();
 			LOGGER.info("TeamViewRelay disabled");
 		}
 		
@@ -277,10 +283,9 @@ public class PlayerProcesses implements ClientModInitializer {
 		if (client == null || config == null || !config.isAutoConnectOnMultiplayerJoin()) {
 			return;
 		}
-		ModEnable = true;
-		if (networkManager != null) {
-			networkManager.disconnect();
-			networkManager.connectWithReconnectLimit(AUTO_CONNECT_MAX_RETRIES, AUTO_CONNECT_RETRY_DELAY_MS);
+		if (clientCoordinator != null) {
+			clientCoordinator.onJoinedMultiplayer();
+			ModEnable = clientCoordinator.isEnabled();
 		}
 		tickCounter = 0;
 		battleMapTickCounter = 0;
@@ -289,6 +294,9 @@ public class PlayerProcesses implements ClientModInitializer {
 	}
 
 	private void handleLeftPlaySession() {
+		if (clientCoordinator != null) {
+			clientCoordinator.onLeftPlaySession();
+		}
 		shutdownNetworkSession();
 		LOGGER.info("Left play session; stopped network session");
 	}
@@ -297,6 +305,10 @@ public class PlayerProcesses implements ClientModInitializer {
 		if (networkManager != null) {
 			networkManager.disconnect();
 		}
+		clearClientSessionState();
+	}
+
+	private void clearClientSessionState() {
 		remotePlayers.clear();
 		serverPlayerPositions.clear();
 		sharedWaypoints.clear();
@@ -1644,11 +1656,8 @@ public class PlayerProcesses implements ClientModInitializer {
 	
 	// 网络管理方法
 	public static void reconnectToServer() {
-		if (networkManager != null) {
-			networkManager.disconnect();
-			if (ModEnable) {
-				networkManager.connect();
-			}
+		if (clientCoordinator != null) {
+			clientCoordinator.reconnect();
 		}
 	}
 	
@@ -1659,6 +1668,9 @@ public class PlayerProcesses implements ClientModInitializer {
 	
 	public static void setModEnable(boolean espEnabled) {
 		PlayerProcesses.ModEnable = espEnabled;
+		if (clientCoordinator != null) {
+			clientCoordinator.setEnabled(espEnabled);
+		}
 	}
 	
 	

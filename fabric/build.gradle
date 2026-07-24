@@ -1,10 +1,49 @@
 plugins {
-    id 'fabric-loom' version '1.15.4'
+    id 'fabric-loom' apply false
+    id 'net.fabricmc.fabric-loom' apply false
     id 'maven-publish'
 }
 
+def minecraftVersionProperties = new Properties()
+rootProject.file("gradle/minecraft-versions.properties").withInputStream {
+    minecraftVersionProperties.load(it)
+}
+def defaultMinecraftTarget = minecraftVersionProperties.getProperty("default_target")
+def minecraftTarget = providers.gradleProperty("mc_target").getOrElse(defaultMinecraftTarget)
+def supportedMinecraftTargets = minecraftVersionProperties.getProperty("supported_targets")
+        .split(",")
+        .collect { it.trim() }
+if (!supportedMinecraftTargets.contains(minecraftTarget)) {
+    throw new GradleException("Unsupported mc_target '${minecraftTarget}'. Supported targets: ${supportedMinecraftTargets.join(', ')}")
+}
+def profileProperty = { String name ->
+    def value = minecraftVersionProperties.getProperty("${minecraftTarget}.${name}")
+    if (value == null || value.isBlank()) {
+        throw new GradleException("Missing ${name} for Minecraft target ${minecraftTarget}")
+    }
+    value
+}
+def minecraftTargetVersion = profileProperty("minecraft_target_version")
+def minecraftAdapterVersion = profileProperty("minecraft_adapter_version")
+def targetJavaVersion = profileProperty("java_version").toInteger()
+def loaderVersion = profileProperty("loader_version")
+def fabricApiVersion = profileProperty("fabric_api_version")
+def mappingsMode = profileProperty("mappings_mode")
+def modmenuVersion = profileProperty("modmenu_version")
+def journeyMapDependency = profileProperty("journeymap_dependency")
+def journeyMapApiJar = layout.buildDirectory.file(
+        "generated/journeymap-api/META-INF/jars/journeymap-api-fabric-2.0.0-26.1.jar")
+
+apply plugin: mappingsMode == "yarn" ? "fabric-loom" : "net.fabricmc.fabric-loom"
+
 base {
-    archivesName = project.archives_base_name
+    archivesName = minecraftTarget == defaultMinecraftTarget
+            ? project.archives_base_name
+            : "${project.archives_base_name}-${minecraftTargetVersion}"
+}
+
+if (minecraftTarget != defaultMinecraftTarget) {
+    layout.buildDirectory = file("build/${minecraftTarget}")
 }
 
 loom {
@@ -29,6 +68,13 @@ repositories {
         name = "JourneyMap"
         url = "https://jm.gserv.me/repository/maven-snapshots/"
     }
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
 }
 
 sourceSets {
@@ -37,14 +83,12 @@ sourceSets {
         resources.srcDirs = ["src/main/resources"]
     }
     client {
-        java.srcDirs = [
-                "src/client/java",
-                "../common/src/version/${project.minecraft_version}/java"
-        ]
-        resources.srcDirs = [
-                "src/client/resources",
-                "../common/src/version/${project.minecraft_version}/resources"
-        ]
+        java.srcDirs = minecraftTarget == defaultMinecraftTarget
+                ? ["src/client/java", "../common/src/version/${minecraftAdapterVersion}/java"]
+                : ["src/version/${minecraftAdapterVersion}/java", "../common/src/version/${minecraftAdapterVersion}/java"]
+        resources.srcDirs = minecraftTarget == defaultMinecraftTarget
+                ? ["src/client/resources", "../common/src/version/${minecraftAdapterVersion}/resources"]
+                : ["src/version/${minecraftAdapterVersion}/resources", "../common/src/version/${minecraftAdapterVersion}/resources"]
     }
 }
 
@@ -72,16 +116,26 @@ configurations.configureEach {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-
-    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
-    modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
-
-    modCompileOnly "info.journeymap:journeymap-api-fabric:2.0.0-1.21.1-SNAPSHOT"
+    minecraft "com.mojang:minecraft:${minecraftTargetVersion}"
+    if (mappingsMode == "yarn") {
+        mappings "net.fabricmc:yarn:${profileProperty('yarn_mappings')}:v2"
+    } else if (mappingsMode != "none") {
+        throw new GradleException("Unsupported mappings mode '${mappingsMode}' for ${minecraftTarget}")
+    }
+    if (mappingsMode == "yarn") {
+        modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+        modCompileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
+        modLocalRuntime "com.terraformersmc:modmenu:${modmenuVersion}"
+        modCompileOnly journeyMapDependency
+    } else {
+        implementation "net.fabricmc:fabric-loader:${loaderVersion}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+        compileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
+        runtimeOnly "com.terraformersmc:modmenu:${modmenuVersion}"
+        compileOnly journeyMapDependency
+        compileOnly files(journeyMapApiJar)
+    }
 
     implementation project(":common")
     include project(":common")
@@ -104,27 +158,43 @@ dependencies {
     implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
     include "com.fasterxml.jackson.core:jackson-databind:2.18.6"
 
-    implementation "com.google.protobuf:protobuf-java:4.34.1"
-    include "com.google.protobuf:protobuf-java:4.34.1"
+    implementation "com.google.protobuf:protobuf-java:${project.protobuf_version}"
+    include "com.google.protobuf:protobuf-java:${project.protobuf_version}"
 
-    implementation "com.google.protobuf:protobuf-java-util:4.34.1"
-    include "com.google.protobuf:protobuf-java-util:4.34.1"
+    implementation "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+    include "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+}
+
+if (mappingsMode == "none") {
+    configurations {
+        journeyMapApiBundle
+    }
+    dependencies {
+        journeyMapApiBundle journeyMapDependency
+    }
+    tasks.register("extractJourneyMapApi", Copy) {
+        from({ zipTree(configurations.journeyMapApiBundle.singleFile) }) {
+            include "META-INF/jars/journeymap-api-fabric-2.0.0-26.1.jar"
+        }
+        into layout.buildDirectory.dir("generated/journeymap-api")
+    }
+    tasks.named("compileClientJava") {
+        dependsOn tasks.named("extractJourneyMapApi")
+    }
 }
 
 processResources {
     inputs.property "version", project.version
-    inputs.property "minecraft_version", project.minecraft_version
-    inputs.property "loader_version", project.loader_version
+    inputs.property "minecraft_version", minecraftTargetVersion
+    inputs.property "loader_version", loaderVersion
     filteringCharset = "UTF-8"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version
+                "minecraft_version": minecraftTargetVersion,
+                "loader_version": loaderVersion
     }
 }
-
-def targetJavaVersion = 21
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"

@@ -15,8 +15,12 @@ dependencies {
     implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
     implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
     implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
-    implementation "com.google.protobuf:protobuf-java:4.34.1"
-    implementation "com.google.protobuf:protobuf-java-util:4.34.1"
+    implementation "com.google.protobuf:protobuf-java:${project.protobuf_version}"
+    implementation "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+    testImplementation platform("org.junit:junit-bom:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testRuntimeOnly "org.slf4j:slf4j-simple:2.0.16"
 }
 
 def protoModuleDir = rootProject.file("third_party/TeamViewRelay-Protocol")
@@ -74,6 +78,40 @@ tasks.withType(JavaCompile).configureEach {
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)
     }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+tasks.register("verifyPlatformBoundary") {
+    group = "verification"
+    description = "Ensure common main sources do not import Minecraft, Fabric, or optional map APIs."
+    inputs.files(fileTree("src/main/java") { include "**/*.java" })
+
+    doLast {
+        def forbiddenImports = [
+                "import net.minecraft.",
+                "import net.fabricmc.",
+                "import journeymap.",
+                "import xaero."
+        ]
+        def violations = []
+        inputs.files.files.sort().each { sourceFile ->
+            sourceFile.eachLine { line, lineNumber ->
+                if (forbiddenImports.any { line.trim().startsWith(it) }) {
+                    violations << "${sourceFile}:$lineNumber: ${line.trim()}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Platform imports leaked into common main sources:\n" + violations.join("\n"))
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(tasks.named("verifyPlatformBoundary"))
 }
 
 java {
