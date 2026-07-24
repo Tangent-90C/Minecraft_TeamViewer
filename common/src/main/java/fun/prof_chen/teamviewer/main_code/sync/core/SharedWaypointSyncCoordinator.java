@@ -77,6 +77,19 @@ public final class SharedWaypointSyncCoordinator {
 		gateway.sendWaypointDeletes(submitPlayerId, waypointIds);
 	}
 
+	public void cancelEntityDeath(
+			UUID submitPlayerId,
+			List<String> waypointIds,
+			List<String> targetEntityIds) {
+		if (waypointIds != null && !waypointIds.isEmpty()) {
+			repository.removeAll(waypointIds);
+			deleteManagedWaypoints(waypointIds);
+		}
+		if (targetEntityIds != null && !targetEntityIds.isEmpty()) {
+			gateway.sendWaypointEntityDeathCancel(submitPlayerId, targetEntityIds);
+		}
+	}
+
 	public void deleteManagedWaypoint(String waypointId) {
 		deleteManagedWaypoints(List.of(waypointId));
 	}

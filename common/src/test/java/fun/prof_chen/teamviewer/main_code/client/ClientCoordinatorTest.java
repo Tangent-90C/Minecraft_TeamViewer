@@ -10,8 +10,13 @@ import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
+import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
+import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
+import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -71,6 +76,34 @@ class ClientCoordinatorTest {
         assertEquals(2, network.disconnectCount);
     }
 
+    @Test
+    void createsQuickMarkThroughVersionNeutralTargetSnapshot() {
+        Config config = new Config();
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        network.connected = true;
+        UUID localId = UUID.randomUUID();
+        FakeGameClientBridge game = new FakeGameClientBridge(
+                snapshot(localId),
+                new EntityTargetSnapshot(new Position3D(12.8, 64.2, -3.1), null, null, null, false, false));
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+        Map<String, SharedWaypointInfo> waypoints = new HashMap<>();
+        MapBackedSharedWaypointRepository repository = new MapBackedSharedWaypointRepository(waypoints);
+        RecordingWaypointGateway gateway = new RecordingWaypointGateway();
+        SharedWaypointSyncCoordinator waypointCoordinator = new SharedWaypointSyncCoordinator(
+                repository, gateway, List.of());
+        coordinator.configureWaypointSupport(repository, waypointCoordinator);
+        coordinator.setEnabled(true);
+
+        assertTrue(coordinator.createQuickMark());
+        assertEquals(1, waypoints.size());
+        SharedWaypointInfo waypoint = waypoints.values().iterator().next();
+        assertEquals("block", waypoint.targetType());
+        assertEquals(12, waypoint.x());
+        assertEquals(-4, waypoint.z());
+        assertEquals(localId, gateway.submitPlayerId);
+        assertEquals(1, gateway.upserts.size());
+    }
+
     private static ClientReportSnapshot snapshot(UUID localId) {
         PlayerSnapshot player = new PlayerSnapshot(
                 localId,
@@ -104,10 +137,16 @@ class ClientCoordinatorTest {
 
     private static final class FakeGameClientBridge implements GameClientBridge {
         private final ClientReportSnapshot snapshot;
+        private final EntityTargetSnapshot target;
         private int captureCount;
 
         private FakeGameClientBridge(ClientReportSnapshot snapshot) {
+            this(snapshot, null);
+        }
+
+        private FakeGameClientBridge(ClientReportSnapshot snapshot, EntityTargetSnapshot target) {
             this.snapshot = snapshot;
+            this.target = target;
         }
 
         @Override
@@ -118,7 +157,7 @@ class ClientCoordinatorTest {
 
         @Override
         public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
-            return Optional.empty();
+            return Optional.ofNullable(target);
         }
 
         @Override
@@ -139,6 +178,24 @@ class ClientCoordinatorTest {
         @Override
         public void showActionBar(String message) {
         }
+    }
+
+    private static final class RecordingWaypointGateway
+            implements fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway {
+        private UUID submitPlayerId;
+        private Map<String, WaypointSyncPayload> upserts = Map.of();
+
+        public boolean isConnected() { return true; }
+        public void addWaypointUpdateListener(WaypointUpdateListener listener) { }
+        public void removeWaypointUpdateListener(WaypointUpdateListener listener) { }
+        public void sendWaypointUpserts(UUID submitPlayerId, Map<String, WaypointSyncPayload> payloads) {
+            this.submitPlayerId = submitPlayerId;
+            this.upserts = Map.copyOf(payloads);
+        }
+        public void sendWaypointDeletes(UUID submitPlayerId, List<String> waypointIds) { }
+        public void sendWaypointEntityDeathCancel(UUID submitPlayerId, List<String> targetEntityIds) { }
+        public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) { return null; }
+        public Position3D getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) { return null; }
     }
 
     private static final class RecordingNetworkManager extends NetworkManager {

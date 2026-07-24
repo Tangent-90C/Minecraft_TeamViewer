@@ -16,6 +16,8 @@ import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.scoreboard.Team;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 
@@ -63,6 +65,13 @@ public final class FabricGameClientBridge implements GameClientBridge {
     @Override
     public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
         MinecraftClient client = MinecraftClient.getInstance();
+        if (client.crosshairTarget == null || client.crosshairTarget.getType() == HitResult.Type.MISS
+                || client.player == null || client.player.getEyePos().squaredDistanceTo(client.crosshairTarget.getPos()) > maxDistance * maxDistance) {
+            return Optional.empty();
+        }
+        if (client.crosshairTarget instanceof BlockHitResult hit) {
+            return Optional.of(new EntityTargetSnapshot(toPosition(hit.getPos()), null, null, null, false, false));
+        }
         if (!(client.crosshairTarget instanceof EntityHitResult hit)) {
             return Optional.empty();
         }

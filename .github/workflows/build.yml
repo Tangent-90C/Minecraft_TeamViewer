@@ -9,6 +9,11 @@ on:
       - '.gitmodules'
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/buf.gen.yaml'
+      - 'gradle/minecraft-versions.properties'
+      - 'gradle.properties'
+      - 'settings.gradle'
+      - 'build.gradle'
+      - 'Taskfile.yml'
       - 'common/**'
       - 'fabric/**'
       - 'forge/**'
@@ -19,6 +24,11 @@ on:
       - '.gitmodules'
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/buf.gen.yaml'
+      - 'gradle/minecraft-versions.properties'
+      - 'gradle.properties'
+      - 'settings.gradle'
+      - 'build.gradle'
+      - 'Taskfile.yml'
       - 'common/**'
       - 'fabric/**'
       - 'forge/**'
@@ -29,6 +39,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - minecraft: '1.21.8'
+            java: '21'
+            task: 'build'
+          - minecraft: '26.1.2'
+            java: '25'
+            task: 'build-26.1.2'
 
     steps:
       # 1. 检出代码仓库
@@ -69,10 +89,10 @@ jobs:
           echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
           "$buf_path" --version
 
-      - name: Set up JDK
+      - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '${{ matrix.java }}'
           distribution: 'temurin'
           cache: 'gradle' # 自动缓存Gradle依赖
           cache-dependency-path: 'build.gradle' # 指定Mod的Gradle文件
@@ -82,9 +102,13 @@ jobs:
 
       # 3. 开始编译
 
-      - name: Build versioned artifacts with Task
+      - name: Build Minecraft ${{ matrix.minecraft }}
         shell: bash
-        run: task build
+        run: |
+          if [[ "${{ matrix.java }}" == "25" ]]; then
+            export JAVA25_HOME="$JAVA_HOME"
+          fi
+          task ${{ matrix.task }}
 
       - name: Read artifact versions
         id: versions
@@ -99,7 +123,7 @@ jobs:
       - name: Upload built mod JAR
         uses: actions/upload-artifact@v4
         with:
-          name: team-view-relay-mod-${{ steps.versions.outputs.mod_version }}
-          path: build-artifacts/${{ steps.versions.outputs.archives_base_name }}-${{ steps.versions.outputs.mod_version }}.jar
+          name: team-view-relay-${{ matrix.minecraft }}-${{ steps.versions.outputs.mod_version }}
+          path: build-artifacts/*.jar
           if-no-files-found: error
                   

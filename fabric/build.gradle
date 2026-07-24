@@ -28,6 +28,7 @@ def minecraftAdapterVersion = profileProperty("minecraft_adapter_version")
 def targetJavaVersion = profileProperty("java_version").toInteger()
 def loaderVersion = profileProperty("loader_version")
 def fabricApiVersion = profileProperty("fabric_api_version")
+def fabricApiModId = profileProperty("fabric_api_mod_id")
 def mappingsMode = profileProperty("mappings_mode")
 def modmenuVersion = profileProperty("modmenu_version")
 def journeyMapDependency = profileProperty("journeymap_dependency")
@@ -48,6 +49,12 @@ if (minecraftTarget != defaultMinecraftTarget) {
 
 loom {
     splitEnvironmentSourceSets()
+
+    runs {
+        client {
+            runDir = minecraftTarget == defaultMinecraftTarget ? "run" : "run/${minecraftTargetVersion}"
+        }
+    }
 
     mods {
         "teamviewer" {
@@ -187,12 +194,14 @@ processResources {
     inputs.property "version", project.version
     inputs.property "minecraft_version", minecraftTargetVersion
     inputs.property "loader_version", loaderVersion
+    inputs.property "fabric_api_mod_id", fabricApiModId
     filteringCharset = "UTF-8"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
                 "minecraft_version": minecraftTargetVersion,
-                "loader_version": loaderVersion
+                "loader_version": loaderVersion,
+                "fabric_api_mod_id": fabricApiModId
     }
 }
 

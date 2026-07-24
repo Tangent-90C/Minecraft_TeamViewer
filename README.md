@@ -1,6 +1,6 @@
 # TeamViewRelay Mod
 
-TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。当前主要以 **Minecraft 1.21.8 + Fabric** 版本开发和验证。
+TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。当前支持 **Minecraft 1.21.8** 和 **Minecraft 26.1.2** 的 Fabric 版本。
 
 整套系统通常由以下组件配合使用：
 
@@ -39,12 +39,20 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 ## 安装 / 运行
 
-至少需要：
+1.21.8 版本至少需要：
 
 - Minecraft `1.21.8`
 - Fabric Loader `0.17.2`
 - Fabric API `0.131.0+1.21.8`
 - 本项目 Mod Jar
+
+26.1.2 版本至少需要：
+
+- Minecraft `26.1.2`
+- Java `25`
+- Fabric Loader `0.19.3`
+- Fabric API `0.155.2+26.1.2`
+- 文件名含 `26.1.2` 的本项目 Mod Jar
 
 推荐安装：
 
@@ -58,6 +66,23 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 ```bash
 ./gradlew build
 ```
+
+该命令保持原行为，默认构建 1.21.8。构建 26.1.2 时，Gradle 本身也必须运行在 Java 25 上：
+
+```bash
+JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
+```
+
+使用 Task 同时收集两个版本的产物：
+
+```bash
+JAVA25_HOME=/path/to/jdk-25 task build-all
+```
+
+产物分别为：
+
+- `TeamViewRelay-<mod_version>.jar`（1.21.8，保持旧名称）
+- `TeamViewRelay-26.1.2-<mod_version>.jar`（26.1.2）
 
 开发调试客户端：
 
@@ -138,6 +163,7 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 ```bash
 ./gradlew build
+JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 ./gradlew runClient
 ```
 
@@ -145,16 +171,18 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 - `common/src/main/java`：共享逻辑
 - `common/src/version/1.21.8`：版本相关代码
+- `common/src/version/26.1`：26.1 系列的版本适配代码
 - `fabric/src/client`：Fabric 客户端代码
+- `fabric/src/version/26.1`：Minecraft 26.1 的 Fabric/Minecraft API 适配
 - `fabric/src/main/resources`：Fabric 资源与语言文件
 
 ## 协议 / 版本兼容
 
 当前版本基线：
 
-- Minecraft：`1.21.8`
-- Mod：`v0.4.12-proto0.6.1`
-- 协议版本：`0.6.1`
+- Minecraft：`1.21.8` / `26.1.2`
+- Mod：`v0.4.14-proto0.6.2`
+- 协议版本：`0.6.2`
 - 最低兼容协议版本：`0.6.1`
 
 子模块与协议仓库：

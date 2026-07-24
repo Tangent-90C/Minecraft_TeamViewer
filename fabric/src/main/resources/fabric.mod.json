@@ -41,7 +41,7 @@
 
   "depends": {
     "fabricloader": ">=${loader_version}",
-    "fabric": "*",
+    "${fabric_api_mod_id}": "*",
     "minecraft": "${minecraft_version}"
   },
   "suggests": {

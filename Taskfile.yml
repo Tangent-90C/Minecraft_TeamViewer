@@ -1,23 +1,26 @@
 version: '3'
 
+vars:
+  GRADLE: '{{default "./gradlew" .GRADLE}}'
+
 tasks:
   compile:
     desc: Fast compile check for Fabric client sources
     cmds:
       - chmod +x ./gradlew
-      - ./gradlew :fabric:compileClientJava
+      - '{{.GRADLE}} :fabric:compileClientJava'
 
   clean:
     desc: Clean all module build outputs
     cmds:
       - chmod +x ./gradlew
-      - ./gradlew clean
+      - '{{.GRADLE}} clean'
 
   build:
-    desc: Build Fabric mod and collect distributable jars
+    desc: Build the default Minecraft 1.21.8 mod and collect its jar
     cmds:
       - chmod +x ./gradlew
-      - ./gradlew :fabric:build
+      - '{{.GRADLE}} :fabric:build'
       - mkdir -p ./build-artifacts
       - |
           python3 - <<'PY'
@@ -54,3 +57,44 @@ tasks:
           shutil.copy2(source_jar, build_artifacts_dir / output_name)
           print(f'Created {build_artifacts_dir / output_name}')
           PY
+
+  build-1.21.8:
+    desc: Build Minecraft 1.21.8 with Java 21
+    deps: [build]
+
+  build-26.1.2:
+    desc: Build Minecraft 26.1.2 with Java 25 and collect its jar
+    cmds:
+      - chmod +x ./gradlew
+      - 'test -n "${JAVA25_HOME:-}" || (echo "JAVA25_HOME must point to a Java 25 JDK" >&2; exit 1)'
+      - 'JAVA_HOME="$JAVA25_HOME" {{.GRADLE}} -Pmc_target=26.1.2 :fabric:build'
+      - mkdir -p ./build-artifacts
+      - |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import shutil
+
+          root = pathlib.Path('.')
+          text = (root / 'gradle.properties').read_text(encoding='utf-8')
+
+          def prop(name: str) -> str:
+              match = re.search(rf'^\s*{re.escape(name)}\s*=\s*(.+?)\s*$', text, re.MULTILINE)
+              if not match:
+                  raise SystemExit(f'Missing {name} in gradle.properties')
+              return match.group(1)
+
+          output_name = f"{prop('archives_base_name')}-26.1.2-{prop('mod_version')}.jar"
+          source = root / 'fabric' / 'build' / '26.1.2' / 'libs' / output_name
+          if not source.is_file():
+              raise SystemExit(f'Expected distributable jar not found: {source}')
+          destination = root / 'build-artifacts' / output_name
+          shutil.copy2(source, destination)
+          print(f'Created {destination}')
+          PY
+
+  build-all:
+    desc: Build and collect both Minecraft 1.21.8 and 26.1.2 jars
+    cmds:
+      - task: build
+      - task: build-26.1.2

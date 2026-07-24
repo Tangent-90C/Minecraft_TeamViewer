@@ -5,6 +5,8 @@ import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
+import fun.prof_chen.teamviewer.main_code.bridge.MinecraftPositionAdapter;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -14,6 +16,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import org.lwjgl.glfw.GLFW;
@@ -37,7 +40,7 @@ public final class FabricGameClientBridge implements GameClientBridge {
                     && String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT).contains("horse");
             players.add(new PlayerSnapshot(
                     player.getUUID(), toPosition(player.position()), toPosition(player.getDeltaMovement()),
-                    player.level().dimension().identifier().toString(), player.getName().getString(),
+                    MinecraftDimensionAdapter.toDimensionId(player.level().dimension()), player.getName().getString(),
                     player.getHealth(), player.getMaxHealth(), player.getArmorValue(), riding,
                     player.getBbWidth(), player.getBbHeight()));
         }
@@ -49,22 +52,26 @@ public final class FabricGameClientBridge implements GameClientBridge {
                 }
                 entities.add(new EntitySnapshot(
                         entity.getStringUUID(), toPosition(entity.position()), toPosition(entity.getDeltaMovement()),
-                        entity.level().dimension().identifier().toString(), entity.getType().toString(),
+                        MinecraftDimensionAdapter.toDimensionId(entity.level().dimension()), entity.getType().toString(),
                         entity.hasCustomName() ? entity.getDisplayName().getString() : null,
                         entity.getBbWidth(), entity.getBbHeight()));
             }
         }
         return new ClientReportSnapshot(
                 client.player.getUUID(), client.player.isAlive(),
-                client.level.dimension().identifier().toString(), players, entities, collectTabPlayers(client));
+                MinecraftDimensionAdapter.toDimensionId(client.level.dimension()), players, entities, collectTabPlayers(client));
     }
 
     @Override
     public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
         Minecraft client = Minecraft.getInstance();
-        if (!(client.hitResult instanceof EntityHitResult hit) || client.player == null
-                || hit.distanceTo(client.player) > maxDistance * maxDistance) {
+        if (client.hitResult == null || client.hitResult.getType() == HitResult.Type.MISS || client.player == null
+                || client.hitResult.distanceTo(client.player) > maxDistance * maxDistance) {
             return Optional.empty();
+        }
+        if (!(client.hitResult instanceof EntityHitResult hit)) {
+            return Optional.of(new EntityTargetSnapshot(
+                    toPosition(client.hitResult.getLocation()), null, null, null, false, false));
         }
         Entity entity = hit.getEntity();
         return Optional.of(new EntityTargetSnapshot(
@@ -76,7 +83,7 @@ public final class FabricGameClientBridge implements GameClientBridge {
     @Override
     public Optional<Position3D> resolveEntityPosition(String entityId, String entityName, String dimensionId) {
         Minecraft client = Minecraft.getInstance();
-        if (client.level == null || !client.level.dimension().identifier().toString().equals(dimensionId)) {
+        if (client.level == null || !MinecraftDimensionAdapter.toDimensionId(client.level.dimension()).equals(dimensionId)) {
             return Optional.empty();
         }
         for (Entity entity : client.level.entitiesForRendering()) {
@@ -141,6 +148,6 @@ public final class FabricGameClientBridge implements GameClientBridge {
     }
 
     private static Position3D toPosition(Vec3 position) {
-        return new Position3D(position.x, position.y, position.z);
+        return MinecraftPositionAdapter.toPosition3D(position);
     }
 }

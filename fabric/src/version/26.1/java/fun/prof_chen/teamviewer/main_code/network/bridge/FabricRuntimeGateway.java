@@ -2,6 +2,7 @@ package fun.prof_chen.teamviewer.main_code.network.bridge;
 
 import fun.prof_chen.teamviewer.main_code.config.FabricModVersionProvider;
 import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
+import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -13,7 +14,7 @@ public final class FabricRuntimeGateway implements RuntimeGateway {
     @Override
     public String getCurrentDimensionId() {
         Minecraft client = Minecraft.getInstance();
-        return client.level == null ? "minecraft:overworld" : client.level.dimension().identifier().toString();
+        return client.level == null ? "minecraft:overworld" : MinecraftDimensionAdapter.toDimensionId(client.level.dimension());
     }
 
     @Override
