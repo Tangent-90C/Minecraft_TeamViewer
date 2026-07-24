@@ -17,10 +17,23 @@ tasks:
       - '{{.GRADLE}} clean'
 
   build:
-    desc: Build the default Minecraft 1.21.8 mod and collect its jar
+    desc: Build and collect every supported Minecraft version
+    cmds:
+      - 'test -n "${JAVA25_HOME:-}" || (echo "JAVA25_HOME must point to a Java 25 JDK" >&2; exit 1)'
+      - 'test -x "$JAVA25_HOME/bin/java" || (echo "JAVA25_HOME does not contain an executable bin/java" >&2; exit 1)'
+      - task: build-1.21.8
+      - task: build-26.1.2
+
+  build-1.21.8:
+    desc: Build Minecraft 1.21.8 (Java 21 bytecode) and collect its jar
     cmds:
       - chmod +x ./gradlew
-      - '{{.GRADLE}} :fabric:build'
+      - |
+          if [ -n "${JAVA25_HOME:-}" ]; then
+            JAVA_HOME="$JAVA25_HOME" {{.GRADLE}} -Pmc_target=1.21.8 :fabric:build
+          else
+            {{.GRADLE}} -Pmc_target=1.21.8 :fabric:build
+          fi
       - mkdir -p ./build-artifacts
       - |
           python3 - <<'PY'
@@ -37,14 +50,7 @@ tasks:
                   raise SystemExit(f'Missing {name} in gradle.properties')
               return match.group(1)
 
-          mod_version = read_property('mod_version')
-          archives_base_name = read_property('archives_base_name')
-          output_name = f'{archives_base_name}-{mod_version}.jar'
-
-          build_artifacts_dir = root / 'build-artifacts'
-          for old_file in build_artifacts_dir.glob('*.jar'):
-              old_file.unlink()
-
+          output_name = f"{read_property('archives_base_name')}-{read_property('mod_version')}.jar"
           libs_dir = root / 'fabric' / 'build' / 'libs'
           source_jar = libs_dir / output_name
           if not source_jar.is_file():
@@ -54,13 +60,10 @@ tasks:
                   f'Available jars: {available}'
               )
 
-          shutil.copy2(source_jar, build_artifacts_dir / output_name)
-          print(f'Created {build_artifacts_dir / output_name}')
+          destination = root / 'build-artifacts' / output_name
+          shutil.copy2(source_jar, destination)
+          print(f'Created {destination}')
           PY
-
-  build-1.21.8:
-    desc: Build Minecraft 1.21.8 with Java 21
-    deps: [build]
 
   build-26.1.2:
     desc: Build Minecraft 26.1.2 with Java 25 and collect its jar
@@ -94,7 +97,6 @@ tasks:
           PY
 
   build-all:
-    desc: Build and collect both Minecraft 1.21.8 and 26.1.2 jars
+    desc: Alias for the all-version build
     cmds:
       - task: build
-      - task: build-26.1.2

@@ -21,3 +21,51 @@
 - 看到协议相关问题时，优先检查 submodule 是否初始化、是否锁到预期 tag、Gradle 生成是否重新运行。
 - 不要在本仓库手工恢复或编辑已删除的 Java 生成文件。
 - 不要执行“把 submodule 拉到最新 main”这种不带版本锁定的升级。
+
+## Common Adapter SDK Architecture
+
+修改客户端代码前，必须完整阅读 `docs/adapter-sdk.md`。本项目采用桥接模式，
+`common/src/main/java` 是唯一业务实现，Minecraft/Fabric 版本目录只能实现 Common Adapter SDK。
+
+### Source boundaries
+
+- `common/src/main/java`：协议编排、连接生命周期、同步策略、状态机、配置读写、七页配置页面模型、
+  战局地图解析与投影、地图差异计算、世界渲染帧和 HUD 帧计算。
+- `fabric/src/shared/java`：确认在所有目标版本中稳定的 Fabric Loader/Fabric API 胶水，以及不直接依赖
+  Minecraft 类的可选模组反射端口。
+- `fabric/src/version/<adapter>/java`：具体 Minecraft API 转换、Fabric 事件注册、原生 Screen 控件、
+  渲染命令执行、Scoreboard/Mixin 和可选地图模组原生 CRUD。
+- 禁止重新创建 `common/src/version/*` 或 `fabric/src/client` 这种不对称版本入口。
+
+### Mandatory bridge rules
+
+1. 每个版本必须构造一个字段全部非空的 `ClientAdapterBundle`，并声明
+   `ClientAdapterDescriptor.complete(adapterVersion)`。
+2. `PlayerProcesses` 只能是薄装配入口：创建适配器、创建 `ClientApplication`、注册事件；不得包含配置判断、
+   计时器、协议组装、缓存、同步或渲染算法。
+3. 版本层只允许把原生 Minecraft 状态转换为 SDK snapshot，或把 common command 转换为原生 API 调用。
+   版本层不得直接导入 `Config`、`NetworkManager`、协议消息、仓库或协调器实现。
+4. common 不得导入 Minecraft、Fabric、JourneyMap、Xaero 或其他游戏模组 API。
+5. 可选模组未安装时，必须提供非空适配器并返回 `available=false`；禁止传 `null`、空端口列表或静默删功能。
+6. 业务行为、页面控件、HUD 文本和渲染决策需要变化时，先修改 common 及其测试；版本层只补必要的 API 映射。
+7. 两个版本必须走同一条 `ClientApplication` / `ClientCoordinator` 执行路径。禁止为了修复单一版本而复制一份业务逻辑。
+
+### Adding or changing a Minecraft version
+
+1. 在 `gradle/minecraft-versions.properties` 增加目标版本与 adapter 版本映射。
+2. 以 `fabric/src/version/1.21.8` 为完整参考，逐项实现 `docs/adapter-sdk.md` 列出的全部端口。
+3. 如果 Minecraft API 变化需要新的能力，先扩充 SDK 的强类型 snapshot/command；不要把原生类型泄漏进 common。
+4. 同步实现 Scoreboard Mixin、配置 Screen 宿主、世界/HUD sink、JourneyMap/Xaero 端口和战局地图桥。
+5. 为 common 业务补假适配器测试，并更新功能矩阵/完整性守卫。缺失能力必须构建失败，不允许生成缩水 Jar。
+6. 执行 `task build`，再分别启动各目标客户端进行游戏内烟测。
+
+### Required verification
+
+- `verifyPlatformBoundary`：common 不得依赖平台 API。
+- `verifyVersionAdapterBoundary`：版本层不得越过 SDK 调用业务实现。
+- `verifyAdapterSdkCompleteness`：每版必须提供完整端口和功能声明。
+- `verifyNoCommonClassShadowing`：Fabric 外层不得包含与 common 同名的旧类或重复类。
+- 不得通过跳过上述任务、删除失败检查或使用旧构建目录来获得“成功”产物。
+
+默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；单版本调试使用
+`task build-1.21.8` 或 `task build-26.1.2`。
