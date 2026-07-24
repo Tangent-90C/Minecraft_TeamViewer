@@ -1,0 +1,240 @@
+package fun.prof_chen.teamviewer.main_code.client.bridge;
+
+import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationClock;
+import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
+import fun.prof_chen.teamviewer.main_code.model.Position3D;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScoreboardDisplaySlot;
+import net.minecraft.scoreboard.ScoreboardEntry;
+import net.minecraft.scoreboard.ScoreboardObjective;
+import net.minecraft.scoreboard.Team;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.Vec3d;
+import org.lwjgl.glfw.GLFW;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+public final class FabricGameClientBridge implements GameClientBridge {
+    private static final Comparator<ScoreboardEntry> SCOREBOARD_ENTRY_COMPARATOR = Comparator
+            .comparingInt(ScoreboardEntry::value)
+            .reversed()
+            .thenComparing(ScoreboardEntry::owner, String.CASE_INSENSITIVE_ORDER);
+
+    @Override
+    public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null) {
+            return ClientReportSnapshot.unavailable();
+        }
+        List<PlayerSnapshot> players = new ArrayList<>();
+        for (AbstractClientPlayerEntity player : client.world.getPlayers()) {
+            Entity vehicle = player.getVehicle();
+            boolean riding = vehicle != null
+                    && String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT).contains("horse");
+            players.add(new PlayerSnapshot(
+                    player.getUuid(), toPosition(player.getPos()), toPosition(player.getVelocity()),
+                    player.getWorld().getRegistryKey().getValue().toString(), player.getName().getString(),
+                    player.getHealth(), player.getMaxHealth(), player.getArmor(), riding,
+                    player.getWidth(), player.getHeight()));
+        }
+        List<EntitySnapshot> entities = new ArrayList<>();
+        if (includeEntities) {
+            for (Entity entity : client.world.getEntities()) {
+                if (entity == client.player) {
+                    continue;
+                }
+                entities.add(new EntitySnapshot(
+                        entity.getUuidAsString(), toPosition(entity.getPos()), toPosition(entity.getVelocity()),
+                        entity.getWorld().getRegistryKey().getValue().toString(), entity.getType().toString(),
+                        entity.hasCustomName() ? entity.getDisplayName().getString() : null,
+                        entity.getWidth(), entity.getHeight()));
+            }
+        }
+        return new ClientReportSnapshot(
+                client.player.getUuid(), client.player.isAlive(),
+                client.world.getRegistryKey().getValue().toString(), players, entities, collectTabPlayers(client));
+    }
+
+    @Override
+    public ClientWorldSnapshot captureWorldSnapshot() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null) {
+            return ClientWorldSnapshot.unavailable();
+        }
+        ClientReportSnapshot report = captureReportSnapshot(true);
+        Vec3d look = client.player.getRotationVec(1.0F).normalize();
+        Vec3d right = look.crossProduct(new Vec3d(0, 1, 0));
+        if (right.lengthSquared() < 1.0E-6) {
+            right = new Vec3d(1, 0, 0);
+        }
+        Vec3d cameraUp = right.normalize().crossProduct(look).normalize();
+        return new ClientWorldSnapshot(
+                report.localPlayerId(), client.player.getName().getString(), report.localPlayerAlive(), report.dimension(),
+                client.world.getBottomY(), toPosition(client.player.getPos()),
+                toPosition(client.gameRenderer.getCamera().getPos()), toPosition(look), toPosition(cameraUp),
+                report.players(), report.entities());
+    }
+
+    @Override
+    public ScoreboardSnapshot captureScoreboardSnapshot() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.world == null) {
+            return ScoreboardSnapshot.unavailable();
+        }
+        Scoreboard scoreboard = client.world.getScoreboard();
+        ScoreboardObjective objective = scoreboard.getObjectiveForSlot(ScoreboardDisplaySlot.SIDEBAR);
+        if (objective == null) {
+            return ScoreboardSnapshot.unavailable();
+        }
+        List<ScoreboardEntry> entries = new ArrayList<>(scoreboard.getScoreboardEntries(objective));
+        entries.removeIf(ScoreboardEntry::hidden);
+        entries.sort(SCOREBOARD_ENTRY_COMPARATOR);
+        List<ScoreboardSnapshot.Line> lines = new ArrayList<>();
+        for (ScoreboardEntry entry : entries) {
+            String owner = entry.owner();
+            Team team = owner == null ? null : scoreboard.getScoreHolderTeam(owner);
+            Text decorated = Team.decorateName(team, Text.literal(owner == null ? "" : owner));
+            List<ScoreboardSnapshot.Run> runs = new ArrayList<>();
+            decorated.visit((style, text) -> {
+                runs.add(new ScoreboardSnapshot.Run(text, normalizeColor(style)));
+                return Optional.empty();
+            }, Style.EMPTY);
+            lines.add(new ScoreboardSnapshot.Line(decorated.getString(), runs));
+        }
+        return new ScoreboardSnapshot(
+                client.world.getRegistryKey().getValue().toString(),
+                BattleMapObservationClock.lastObservedAt(),
+                lines);
+    }
+
+    @Override
+    public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.crosshairTarget == null || client.crosshairTarget.getType() == HitResult.Type.MISS
+                || client.player == null || client.player.getEyePos().squaredDistanceTo(client.crosshairTarget.getPos()) > maxDistance * maxDistance) {
+            return Optional.empty();
+        }
+        if (client.crosshairTarget instanceof BlockHitResult hit) {
+            return Optional.of(new EntityTargetSnapshot(toPosition(hit.getPos()), null, null, null, false, false));
+        }
+        if (!(client.crosshairTarget instanceof EntityHitResult hit)) {
+            return Optional.empty();
+        }
+        Entity entity = hit.getEntity();
+        return Optional.of(new EntityTargetSnapshot(
+                toPosition(hit.getPos()), entity.getUuidAsString(), entity.getType().toString(),
+                entity.getName().getString(), entity instanceof LivingEntity,
+                entity instanceof LivingEntity living && (!living.isAlive() || living.isDead())));
+    }
+
+    @Override
+    public Optional<Position3D> resolveEntityPosition(String entityId, String entityName, String dimensionId) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null || !client.world.getRegistryKey().getValue().toString().equals(dimensionId)) {
+            return Optional.empty();
+        }
+        for (Entity entity : client.world.getEntities()) {
+            if (entity.getUuidAsString().equals(entityId)
+                    || (entityName != null && entity.getName().getString().equalsIgnoreCase(entityName))) {
+                return Optional.of(toPosition(entity.getPos()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean isEntityDead(String entityId) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null) {
+            return false;
+        }
+        for (Entity entity : client.world.getEntities()) {
+            if (entity.getUuidAsString().equals(entityId) && entity instanceof LivingEntity living) {
+                return !living.isAlive() || living.isDead();
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isMiddleMouseButtonDown() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        return client.getWindow() != null
+                && GLFW.glfwGetMouseButton(client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_MIDDLE) == GLFW.GLFW_PRESS;
+    }
+
+    @Override
+    public boolean isGameplayInputAvailable() {
+        return MinecraftClient.getInstance().currentScreen == null;
+    }
+
+    @Override
+    public void showActionBar(String message) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal(message), true);
+        }
+    }
+
+    private static List<TabPlayerSnapshot> collectTabPlayers(MinecraftClient client) {
+        ClientPlayNetworkHandler handler = client.getNetworkHandler();
+        if (handler == null) {
+            return List.of();
+        }
+        List<TabPlayerSnapshot> result = new ArrayList<>();
+        Scoreboard scoreboard = client.world == null ? null : client.world.getScoreboard();
+        for (PlayerListEntry entry : handler.getPlayerList()) {
+            if (entry == null || entry.getProfile() == null || entry.getProfile().getName() == null) {
+                continue;
+            }
+            String profileName = entry.getProfile().getName();
+            Team team = entry.getScoreboardTeam();
+            if (team == null && scoreboard != null) {
+                team = scoreboard.getScoreHolderTeam(profileName);
+            }
+            result.add(new TabPlayerSnapshot(
+                    entry.getProfile().getId() == null ? null : entry.getProfile().getId().toString(),
+                    profileName,
+                    team == null ? null : team.getName(),
+                    team == null ? null : team.getPrefix().toString()));
+        }
+        return result;
+    }
+
+    private static Position3D toPosition(Vec3d position) {
+        return new Position3D(position.x, position.y, position.z);
+    }
+
+    private static String normalizeColor(Style style) {
+        TextColor color = style == null ? null : style.getColor();
+        if (color == null) {
+            return "#FFFFFF";
+        }
+        String name = color.getName();
+        if (name != null && !name.isBlank()) {
+            return name.startsWith("#") ? name.toUpperCase(Locale.ROOT) : name.toLowerCase(Locale.ROOT);
+        }
+        return String.format("#%06X", color.getRgb() & 0xFFFFFF);
+    }
+}

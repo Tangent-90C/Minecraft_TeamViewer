@@ -17,6 +17,9 @@ public interface ClientControlGateway {
 
     void reconnect();
 
+    /** Show a short platform-native action-bar notification. */
+    void showActionBar(String message);
+
     default void disconnect() {
         setEnabled(false);
         getNetworkManager().disconnect();

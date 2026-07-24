@@ -6,7 +6,18 @@ import java.util.Map;
 import java.util.UUID;
 
 public interface RemotePlayerProjection {
+	enum Kind {
+		JOURNEYMAP_BEACON,
+		JOURNEYMAP_MAP_MARKER,
+		XAERO_WORLD_MAP_MARKER,
+		OTHER
+	}
+
 	String id();
+
+	default Kind kind() {
+		return Kind.OTHER;
+	}
 
 	boolean isAvailable();
 

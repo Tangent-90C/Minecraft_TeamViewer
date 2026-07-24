@@ -1,6 +1,5 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
-import fun.prof_chen.teamviewer.main_code.client.PlayerProcesses;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 
@@ -19,9 +18,11 @@ public final class JourneyMapRemotePlayerProjection implements RemotePlayerProje
     }
 
     @Override
+    public Kind kind() { return Kind.JOURNEYMAP_MAP_MARKER; }
+
+    @Override
     public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
-        boolean showMarkers = PlayerProcesses.getConfig().isShowJourneyMapRemotePlayerMapMarkers();
-        JourneyMapRemotePlayerMarkerBridge.tick(players, enabled && showMarkers);
+        JourneyMapRemotePlayerMarkerBridge.tick(players, enabled);
     }
 
     @Override

@@ -4,15 +4,26 @@ import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.bridge.ClientControlGateway;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
+import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
+import fun.prof_chen.teamviewer.main_code.renderbridge.core.WorldRenderPlanner;
+import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderFrame;
+import fun.prof_chen.teamviewer.main_code.hud.core.HudPlanner;
+import fun.prof_chen.teamviewer.main_code.hud.model.HudFrame;
+import fun.prof_chen.teamviewer.main_code.hud.model.LocalMarkedState;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCoordinator;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapNativeBridge;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
@@ -28,6 +39,10 @@ import java.util.UUID;
 public final class ClientCoordinator implements ClientControlGateway {
     private static final int AUTO_CONNECT_MAX_RETRIES = 2;
     private static final long AUTO_CONNECT_RETRY_DELAY_MS = 10_000L;
+    private static final long MARK_DOUBLE_CLICK_MS = 300L;
+    private static final double MARK_CANCEL_BASE_RADIUS = 1.2D;
+    private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
+    private static final double MARK_CANCEL_MAX_RADIUS = 4.0D;
 
     private final Config config;
     private final NetworkManager networkManager;
@@ -37,6 +52,15 @@ public final class ClientCoordinator implements ClientControlGateway {
     private int entityDeathTickCounter;
     private SharedWaypointRepository waypointRepository;
     private SharedWaypointSyncCoordinator waypointCoordinator;
+    private RemotePlayerRepository remotePlayerRepository;
+    private RemotePlayerProjectionCoordinator remotePlayerProjectionCoordinator;
+    private WorldRenderPlanner worldRenderPlanner;
+    private final HudPlanner hudPlanner = new HudPlanner();
+    private boolean middlePressedLastTick;
+    private long lastMiddleClickAt;
+    private LocalMarkedState localMarkedState = LocalMarkedState.inactive();
+    private String lastMarkedFingerprint = "";
+    private BattleMapCoordinator battleMapCoordinator;
 
     public ClientCoordinator(Config config, NetworkManager networkManager, GameClientBridge gameClient) {
         this.config = Objects.requireNonNull(config, "config");
@@ -46,11 +70,22 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     public void onEndClientTick() {
         networkManager.pumpMainThreadTasks();
+        if (battleMapCoordinator != null) {
+            battleMapCoordinator.tick(enabled);
+        }
         if (!enabled) {
             return;
         }
         sendReportWhenDue();
         cancelWaypointsForDeadEntitiesWhenDue();
+        handleMiddleMouseDoubleClick();
+        updateLocalMarkedState();
+        if (remotePlayerProjectionCoordinator != null && remotePlayerRepository != null) {
+            remotePlayerProjectionCoordinator.tick(remotePlayerRepository.snapshot(), enabled);
+        }
+        if (waypointCoordinator != null) {
+            waypointCoordinator.tick(enabled);
+        }
     }
 
     public void onJoinedMultiplayer() {
@@ -66,6 +101,7 @@ public final class ClientCoordinator implements ClientControlGateway {
     public void onLeftPlaySession() {
         enabled = false;
         networkManager.disconnect();
+        clearRuntimeState();
         resetReportClock();
     }
 
@@ -109,6 +145,51 @@ public final class ClientCoordinator implements ClientControlGateway {
             SharedWaypointSyncCoordinator coordinator) {
         this.waypointRepository = Objects.requireNonNull(repository, "repository");
         this.waypointCoordinator = Objects.requireNonNull(coordinator, "coordinator");
+    }
+
+    public void configureRuntimeSupport(
+            RemotePlayerRepository remotePlayerRepository,
+            SharedWaypointRepository sharedWaypointRepository,
+            SharedWaypointSyncCoordinator sharedWaypointSyncCoordinator,
+            fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway waypointGateway,
+            RemotePlayerProjectionCoordinator remotePlayerProjectionCoordinator) {
+        this.remotePlayerRepository = Objects.requireNonNull(remotePlayerRepository, "remotePlayerRepository");
+        this.remotePlayerProjectionCoordinator = Objects.requireNonNull(remotePlayerProjectionCoordinator, "remotePlayerProjectionCoordinator");
+        configureWaypointSupport(sharedWaypointRepository, sharedWaypointSyncCoordinator);
+        this.worldRenderPlanner = new WorldRenderPlanner(config, networkManager::getPlayerMarkTeam, waypointGateway);
+    }
+
+    /** Installs the native optional-mod port; NodeMC scoreboard parsing remains entirely in common. */
+    public void configureBattleMapSupport(BattleMapNativeBridge nativeBridge) {
+        if (battleMapCoordinator != null) {
+            throw new IllegalStateException("Battle-map support is already configured");
+        }
+        battleMapCoordinator = new BattleMapCoordinator(config, networkManager, gameClient,
+                Objects.requireNonNull(nativeBridge, "nativeBridge"));
+        networkManager.addConnectionStatusListener(connected -> battleMapCoordinator.markPending());
+    }
+
+    public boolean handleQuickMarkAction(boolean tryCancelFirst) {
+        if (tryCancelFirst && tryCancelTargetedWaypoint()) {
+            return true;
+        }
+        return createQuickMark();
+    }
+
+    public WorldRenderFrame buildWorldRenderFrame() {
+        if (worldRenderPlanner == null || remotePlayerRepository == null || waypointRepository == null) {
+            return WorldRenderFrame.empty();
+        }
+        return worldRenderPlanner.plan(enabled, gameClient.captureWorldSnapshot(),
+                remotePlayerRepository.snapshot(), waypointRepository.snapshot());
+    }
+
+    public HudFrame buildHudFrame() {
+        return hudPlanner.plan(config, networkManager, enabled, localMarkedState);
+    }
+
+    public LocalMarkedState getLocalMarkedState() {
+        return localMarkedState;
     }
 
     /** Creates a platform-neutral quick mark from the target snapshot supplied by the version bridge. */
@@ -207,6 +288,122 @@ public final class ClientCoordinator implements ClientControlGateway {
         }
     }
 
+    private void handleMiddleMouseDoubleClick() {
+        boolean pressed = gameClient.isGameplayInputAvailable() && gameClient.isMiddleMouseButtonDown();
+        if (!config.isEnableMiddleDoubleClickMark()) {
+            middlePressedLastTick = pressed;
+            lastMiddleClickAt = 0L;
+            return;
+        }
+        if (pressed && !middlePressedLastTick) {
+            long now = System.currentTimeMillis();
+            if (lastMiddleClickAt > 0L && now - lastMiddleClickAt <= MARK_DOUBLE_CLICK_MS) {
+                handleQuickMarkAction(true);
+                lastMiddleClickAt = 0L;
+            } else {
+                lastMiddleClickAt = now;
+            }
+        }
+        middlePressedLastTick = pressed;
+    }
+
+    private boolean tryCancelTargetedWaypoint() {
+        if (!enabled || !config.isEnableMiddleClickCancelWaypoint() || waypointRepository == null || waypointCoordinator == null
+                || !networkManager.isConnected()) {
+            return false;
+        }
+        ClientWorldSnapshot world = gameClient.captureWorldSnapshot();
+        if (!world.available()) {
+            return false;
+        }
+        EntityTargetSnapshot target = gameClient.resolveMarkTarget(Math.max(16.0, config.getRenderDistance())).orElse(null);
+        if (target == null || target.position() == null) {
+            return false;
+        }
+        double targetDistance = distance(world.localPlayerPosition(), target.position());
+        double radius = Math.min(MARK_CANCEL_MAX_RADIUS, MARK_CANCEL_BASE_RADIUS + targetDistance * MARK_CANCEL_RADIUS_PER_BLOCK);
+        String nearestId = null;
+        double nearestDistance = Double.MAX_VALUE;
+        for (Map.Entry<String, SharedWaypointInfo> entry : waypointRepository.snapshot().entrySet()) {
+            SharedWaypointInfo waypoint = entry.getValue();
+            if (waypoint == null || !world.localPlayerId().equals(waypoint.ownerId())
+                    || (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(world.dimension()))) {
+                continue;
+            }
+            if (target.entityId() != null && target.entityId().equals(waypoint.targetEntityId())) {
+                nearestId = entry.getKey();
+                break;
+            }
+            Position3D position = new Position3D(waypoint.x() + 0.5, waypoint.y(), waypoint.z() + 0.5);
+            double currentDistance = distance(position, target.position());
+            if (currentDistance <= radius && currentDistance < nearestDistance) {
+                nearestDistance = currentDistance;
+                nearestId = entry.getKey();
+            }
+        }
+        if (nearestId == null) {
+            return false;
+        }
+        waypointCoordinator.deleteLocalWaypoints(world.localPlayerId(), List.of(nearestId));
+        gameClient.showActionBar("§a[TV] 已撤销报点");
+        return true;
+    }
+
+    private void updateLocalMarkedState() {
+        if (waypointRepository == null) {
+            localMarkedState = LocalMarkedState.inactive();
+            return;
+        }
+        ClientWorldSnapshot world = gameClient.captureWorldSnapshot();
+        if (!world.available()) {
+            localMarkedState = LocalMarkedState.inactive();
+            lastMarkedFingerprint = "";
+            return;
+        }
+        java.util.LinkedHashSet<String> owners = new java.util.LinkedHashSet<>();
+        int count = 0;
+        for (SharedWaypointInfo waypoint : waypointRepository.snapshot().values()) {
+            if (waypoint == null || !"entity".equalsIgnoreCase(waypoint.targetType())
+                    || (waypoint.dimension() != null && !waypoint.dimension().isBlank() && !waypoint.dimension().equals(world.dimension()))) {
+                continue;
+            }
+            boolean targetsLocal = world.localPlayerId().toString().equals(waypoint.targetEntityId())
+                    || (world.localPlayerName() != null && world.localPlayerName().equalsIgnoreCase(waypoint.targetEntityName()));
+            if (!targetsLocal) {
+                continue;
+            }
+            count++;
+            if (waypoint.ownerName() != null && !waypoint.ownerName().isBlank()) {
+                owners.add(waypoint.ownerName().trim());
+            }
+        }
+        if (count == 0) {
+            localMarkedState = LocalMarkedState.inactive();
+            lastMarkedFingerprint = "";
+            return;
+        }
+        String summary = owners.isEmpty() ? "队友" : owners.iterator().next();
+        if (owners.size() > 1) {
+            summary += " 等" + owners.size() + " 人";
+        }
+        localMarkedState = new LocalMarkedState(true, count, summary);
+        String fingerprint = count + "|" + summary;
+        if (!fingerprint.equals(lastMarkedFingerprint)) {
+            gameClient.showActionBar("§e[TV] 你已被标记，来源: " + summary);
+            lastMarkedFingerprint = fingerprint;
+        }
+    }
+
+    private static double distance(Position3D first, Position3D second) {
+        if (first == null || second == null) {
+            return Double.MAX_VALUE;
+        }
+        double x = first.x() - second.x();
+        double y = first.y() - second.y();
+        double z = first.z() - second.z();
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
     @Override
     public Config getConfig() {
         return config;
@@ -233,6 +430,7 @@ public final class ClientCoordinator implements ClientControlGateway {
             networkManager.connect();
         } else {
             networkManager.disconnect();
+            clearRuntimeState();
         }
     }
 
@@ -243,5 +441,23 @@ public final class ClientCoordinator implements ClientControlGateway {
             networkManager.connect();
         }
         resetReportClock();
+    }
+
+    @Override
+    public void showActionBar(String message) {
+        gameClient.showActionBar(message);
+    }
+
+    private void clearRuntimeState() {
+        if (remotePlayerRepository != null) remotePlayerRepository.clear();
+        if (waypointRepository != null) waypointRepository.clear();
+        if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.clear();
+        if (waypointCoordinator != null) waypointCoordinator.clear();
+        if (worldRenderPlanner != null) worldRenderPlanner.clear();
+        if (battleMapCoordinator != null) battleMapCoordinator.reset();
+        localMarkedState = LocalMarkedState.inactive();
+        lastMarkedFingerprint = "";
+        middlePressedLastTick = false;
+        lastMiddleClickAt = 0L;
     }
 }

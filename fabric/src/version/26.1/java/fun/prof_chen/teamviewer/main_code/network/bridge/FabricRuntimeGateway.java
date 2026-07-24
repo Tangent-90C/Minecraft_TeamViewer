@@ -52,4 +52,9 @@ public final class FabricRuntimeGateway implements RuntimeGateway {
     public Path getLogsDirectory() {
         return FabricLoader.getInstance().getGameDir().resolve("logs");
     }
+
+    @Override
+    public Path getConfigDirectory() {
+        return FabricLoader.getInstance().getConfigDir();
+    }
 }

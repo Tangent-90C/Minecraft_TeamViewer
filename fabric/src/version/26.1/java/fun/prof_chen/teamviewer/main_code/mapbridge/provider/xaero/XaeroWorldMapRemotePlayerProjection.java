@@ -18,6 +18,9 @@ public final class XaeroWorldMapRemotePlayerProjection implements RemotePlayerPr
     }
 
     @Override
+    public Kind kind() { return Kind.XAERO_WORLD_MAP_MARKER; }
+
+    @Override
     public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
         XaeroWorldMapBridge.tick(players, enabled);
     }

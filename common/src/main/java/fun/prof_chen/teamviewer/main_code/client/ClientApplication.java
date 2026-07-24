@@ -1,0 +1,118 @@
+package fun.prof_chen.teamviewer.main_code.client;
+
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
+import fun.prof_chen.teamviewer.main_code.bridge.WaypointSyncGateway;
+import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterBundle;
+import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
+import fun.prof_chen.teamviewer.main_code.config.Config;
+import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpTransportProcess;
+import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
+import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
+import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePlayerRepository;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * Single common client composition root. A Minecraft version supplies adapters only; common
+ * owns configuration, network lifecycle, repositories, synchronization and feature policy.
+ */
+public final class ClientApplication implements ClientEventHandler {
+    public static final String CONFIG_FILE_NAME = "team-view-relay.json";
+
+    private final ClientAdapterBundle adapters;
+    private final ClientCoordinator coordinator;
+    private final SharedWaypointSyncCoordinator waypointCoordinator;
+    private final AtomicBoolean stopped = new AtomicBoolean();
+
+    private ClientApplication(ClientAdapterBundle adapters) {
+        this.adapters = Objects.requireNonNull(adapters, "adapters");
+        Config config = Config.load(adapters.runtimeGateway().getConfigDirectory().resolve(CONFIG_FILE_NAME));
+        Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
+        Map<String, SharedWaypointInfo> sharedWaypoints = new ConcurrentHashMap<>();
+        NetworkManager network = new NetworkManager(
+                remotePlayers, adapters.runtimeGateway(), new OkHttpTransportProcess());
+        NetworkManager.setConfigGateway(config);
+        coordinator = new ClientCoordinator(config, network, adapters.gameClientBridge());
+        ClientServices.install(coordinator);
+
+        RemotePlayerRepository remoteRepository = new MapBackedRemotePlayerRepository(remotePlayers);
+        SharedWaypointRepository waypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
+        WaypointSyncGateway waypointGateway = new WaypointSyncGateway(network);
+        RemotePlayerProjectionCoordinator projectionCoordinator = new RemotePlayerProjectionCoordinator(
+                adapters.mapAdapters().remotePlayerProjections(), config, adapters.gameClientBridge());
+        waypointCoordinator = new SharedWaypointSyncCoordinator(
+                waypointRepository, waypointGateway, adapters.mapAdapters().sharedWaypointAdapters(),
+                config, adapters.gameClientBridge());
+        waypointCoordinator.start();
+        coordinator.configureRuntimeSupport(
+                remoteRepository, waypointRepository, waypointCoordinator, waypointGateway, projectionCoordinator);
+        coordinator.configureBattleMapSupport(adapters.battleMapNativeBridge());
+    }
+
+    public static ClientApplication start(ClientAdapterBundle adapters) {
+        ClientApplication application = new ClientApplication(adapters);
+        adapters.eventBridge().register(application);
+        return application;
+    }
+
+    public ClientCoordinator coordinator() {
+        return coordinator;
+    }
+
+    @Override
+    public void onEndClientTick() {
+        if (!stopped.get()) coordinator.onEndClientTick();
+    }
+
+    @Override
+    public void onToggleRequested() {
+        if (!stopped.get()) coordinator.setEnabled(!coordinator.isEnabled());
+    }
+
+    @Override
+    public void onConfigRequested() {
+        if (!stopped.get()) adapters.configScreenHost().open();
+    }
+
+    @Override
+    public void onQuickMarkRequested() {
+        if (!stopped.get()) coordinator.handleQuickMarkAction(true);
+    }
+
+    @Override
+    public void onJoinedMultiplayer() {
+        if (!stopped.get()) coordinator.onJoinedMultiplayer();
+    }
+
+    @Override
+    public void onLeftPlaySession() {
+        if (!stopped.get()) coordinator.onLeftPlaySession();
+    }
+
+    @Override
+    public void onClientStopping() {
+        if (!stopped.compareAndSet(false, true)) return;
+        coordinator.onLeftPlaySession();
+        waypointCoordinator.stop();
+        ClientServices.clear(coordinator);
+    }
+
+    @Override
+    public void onWorldRender(Object context) {
+        if (!stopped.get()) adapters.worldRenderSink().render(context, coordinator.buildWorldRenderFrame());
+    }
+
+    @Override
+    public void onHudRender(Object context) {
+        if (!stopped.get()) adapters.hudRenderSink().render(context, coordinator.buildHudFrame());
+    }
+}

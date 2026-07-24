@@ -3,6 +3,7 @@ package fun.prof_chen.teamviewer.main_code.client;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
@@ -90,7 +91,7 @@ class ClientCoordinatorTest {
         MapBackedSharedWaypointRepository repository = new MapBackedSharedWaypointRepository(waypoints);
         RecordingWaypointGateway gateway = new RecordingWaypointGateway();
         SharedWaypointSyncCoordinator waypointCoordinator = new SharedWaypointSyncCoordinator(
-                repository, gateway, List.of());
+                repository, gateway, List.of(), config, game);
         coordinator.configureWaypointSupport(repository, waypointCoordinator);
         coordinator.setEnabled(true);
 
@@ -156,6 +157,16 @@ class ClientCoordinatorTest {
         }
 
         @Override
+        public ClientWorldSnapshot captureWorldSnapshot() {
+            return ClientWorldSnapshot.unavailable();
+        }
+
+        @Override
+        public fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot captureScoreboardSnapshot() {
+            return fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot.unavailable();
+        }
+
+        @Override
         public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
             return Optional.ofNullable(target);
         }
@@ -173,6 +184,11 @@ class ClientCoordinatorTest {
         @Override
         public boolean isMiddleMouseButtonDown() {
             return false;
+        }
+
+        @Override
+        public boolean isGameplayInputAvailable() {
+            return true;
         }
 
         @Override

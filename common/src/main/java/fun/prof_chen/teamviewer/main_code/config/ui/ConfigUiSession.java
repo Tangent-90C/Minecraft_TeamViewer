@@ -1,0 +1,628 @@
+package fun.prof_chen.teamviewer.main_code.config.ui;
+
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapMode;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
+import fun.prof_chen.teamviewer.main_code.client.bridge.ClientControlGateway;
+import fun.prof_chen.teamviewer.main_code.config.Config;
+
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+
+import static fun.prof_chen.teamviewer.main_code.config.ui.ConfigControlId.*;
+
+/**
+ * The complete platform-neutral TeamViewRelay configuration UI state machine.
+ * Minecraft adapters render the immutable page view and forward edits/actions here.
+ */
+public final class ConfigUiSession {
+    private static final int HEIGHT = 20;
+    private static final int LABEL_HEIGHT = 12;
+    private static final int LABEL_SPACING = 12;
+
+    private final ClientControlGateway control;
+    private final Config config;
+    private final EnumMap<ConfigControlId, String> textValues = new EnumMap<>(ConfigControlId.class);
+    private String originalUrl;
+    private String originalRoomCode;
+    private boolean originalAutoConnect;
+    private boolean originalAllowInsecureTls;
+    private boolean allowInsecureTls;
+
+    public ConfigUiSession(ClientControlGateway control) {
+        this.control = Objects.requireNonNull(control, "control");
+        this.config = Objects.requireNonNull(control.getConfig(), "config");
+        captureRootBaseline();
+        initializeTextValues();
+    }
+
+    public ConfigPageView page(ConfigPageId pageId, int width, int height) {
+        return switch (pageId) {
+            case ROOT -> rootPage(width, height);
+            case DISPLAY -> displayPage(width, height);
+            case NETWORK -> networkPage(width, height);
+            case COLOR -> colorPage(width, height);
+            case WAYPOINT -> waypointPage(width, height);
+            case WAYPOINT_SHAPE -> waypointShapePage(width, height);
+            case PACKET_CAPTURE -> packetCapturePage(width, height);
+        };
+    }
+
+    public void setText(ConfigControlId id, String value) {
+        if (id != null && value != null) {
+            textValues.put(id, value);
+        }
+    }
+
+    public void setChecked(ConfigControlId id, boolean checked) {
+        if (id == ALLOW_INSECURE_TLS) {
+            allowInsecureTls = checked;
+        }
+    }
+
+    public ConfigUiAction activate(ConfigPageId currentPage, ConfigControlId id) {
+        if (id == null) {
+            return ConfigUiAction.stay();
+        }
+        return switch (id) {
+            case OPEN_DISPLAY -> ConfigUiAction.open(ConfigPageId.DISPLAY);
+            case OPEN_NETWORK -> ConfigUiAction.open(ConfigPageId.NETWORK);
+            case OPEN_COLOR -> ConfigUiAction.open(ConfigPageId.COLOR);
+            case OPEN_WAYPOINT -> ConfigUiAction.open(ConfigPageId.WAYPOINT);
+            case OPEN_WAYPOINT_SHAPE -> ConfigUiAction.open(ConfigPageId.WAYPOINT_SHAPE);
+            case OPEN_PACKET_CAPTURE -> ConfigUiAction.open(ConfigPageId.PACKET_CAPTURE);
+            case BACK -> {
+                applyPageFields(currentPage);
+                yield ConfigUiAction.closeToParent();
+            }
+            case SAVE_ROOT -> {
+                saveRoot();
+                yield ConfigUiAction.closeToParent();
+            }
+            case AUTO_CONNECT -> toggleAutoConnect();
+            case CONNECT -> connect();
+            case DISCONNECT -> disconnect();
+            case SHOW_BOXES -> toggle(config.isShowBoxes(), config::setShowBoxes);
+            case SHOW_LINES -> toggle(config.isShowLines(), config::setShowLines);
+            case TRACER_START_MODE -> cycleTracerMode();
+            case XRAY_MARKERS_AND_BOXES -> toggle(config.isXrayMarkersAndBoxes(), config::setXrayMarkersAndBoxes);
+            case JOURNEYMAP_REMOTE_BEACONS -> toggle(config.isShowJourneyMapRemotePlayerBeacons(), config::setShowJourneyMapRemotePlayerBeacons);
+            case JOURNEYMAP_REMOTE_MARKERS -> toggle(config.isShowJourneyMapRemotePlayerMapMarkers(), config::setShowJourneyMapRemotePlayerMapMarkers);
+            case SHOW_NETWORK_TRAFFIC_HUD -> toggle(config.isShowNetworkTrafficHud(), config::setShowNetworkTrafficHud);
+            case SHOW_SHARED_WAYPOINTS -> toggle(config.isShowSharedWaypoints(), config::setShowSharedWaypoints);
+            case SHOW_OWN_SHARED_WAYPOINTS -> toggle(config.isShowOwnSharedWaypointsOnMinimap(), config::setShowOwnSharedWaypointsOnMinimap);
+            case MIDDLE_DOUBLE_CLICK_MARK -> toggle(config.isEnableMiddleDoubleClickMark(), config::setEnableMiddleDoubleClickMark);
+            case MIDDLE_CLICK_CANCEL -> toggle(config.isEnableMiddleClickCancelWaypoint(), config::setEnableMiddleClickCancelWaypoint);
+            case AUTO_CANCEL_ON_ENTITY_DEATH -> toggle(config.isAutoCancelWaypointOnEntityDeath(), config::setAutoCancelWaypointOnEntityDeath);
+            case ENABLE_LONG_TERM_WAYPOINT -> toggle(config.isEnableLongTermWaypoint(), config::setEnableLongTermWaypoint);
+            case WAYPOINT_UI_STYLE -> cycleWaypointStyle();
+            case UPLOAD_ENTITIES -> toggle(config.isUploadEntities(), config::setUploadEntities);
+            case UPLOAD_SHARED_WAYPOINTS -> toggle(config.isUploadSharedWaypoints(), config::setUploadSharedWaypoints);
+            case USE_SYSTEM_PROXY -> toggle(config.isUseSystemProxy(), config::setUseSystemProxy);
+            case PREFER_LOCAL_DATA -> toggle(config.isPreferLocalDataForRender(), config::setPreferLocalDataForRender);
+            case BATTLE_MAP_SYNC -> toggle(config.isBattleMapSyncEnabled(), config::setBattleMapSyncEnabled);
+            case BATTLE_MAP_MODE -> cycleBattleMapMode();
+            case BATTLE_MAP_DEBUG -> toggle(config.isBattleMapDebugEnabled(), config::setBattleMapDebugEnabled);
+            case PACKET_CAPTURE_START -> startPacketCapture();
+            case PACKET_CAPTURE_STOP -> stopPacketCapture();
+            default -> ConfigUiAction.stay();
+        };
+    }
+
+    public ConfigUiAction close(ConfigPageId pageId) {
+        if (pageId == ConfigPageId.ROOT) {
+            cancelRoot();
+        } else {
+            applyPageFields(pageId);
+        }
+        return ConfigUiAction.closeToParent();
+    }
+
+    public void saveRoot() {
+        String url = value(SERVER_URL).trim();
+        if (!url.isEmpty()) {
+            config.setServerURL(url);
+        }
+        config.setRoomCode(value(ROOM_CODE).trim());
+        config.setAllowInsecureTls(allowInsecureTls);
+        config.save();
+        captureRootBaseline();
+    }
+
+    public void cancelRoot() {
+        config.setServerURL(originalUrl);
+        config.setRoomCode(originalRoomCode);
+        config.setAutoConnectOnMultiplayerJoin(originalAutoConnect);
+        config.setAllowInsecureTls(originalAllowInsecureTls);
+        allowInsecureTls = originalAllowInsecureTls;
+        textValues.put(SERVER_URL, originalUrl);
+        textValues.put(ROOM_CODE, originalRoomCode);
+    }
+
+    public boolean hasUnsavedRootChanges() {
+        return !value(SERVER_URL).trim().equals(originalUrl)
+                || !value(ROOM_CODE).trim().equals(originalRoomCode)
+                || config.isAutoConnectOnMultiplayerJoin() != originalAutoConnect
+                || allowInsecureTls != originalAllowInsecureTls;
+    }
+
+    private void captureRootBaseline() {
+        originalUrl = config.getServerURL();
+        originalRoomCode = config.getRoomCode();
+        originalAutoConnect = config.isAutoConnectOnMultiplayerJoin();
+        originalAllowInsecureTls = config.isAllowInsecureTls();
+        allowInsecureTls = originalAllowInsecureTls;
+    }
+
+    private void initializeTextValues() {
+        textValues.put(SERVER_URL, config.getServerURL());
+        textValues.put(ROOM_CODE, config.getRoomCode());
+        textValues.put(RENDER_DISTANCE, String.valueOf(config.getRenderDistance()));
+        textValues.put(TRACER_TOP_OFFSET, String.valueOf(config.getTracerTopOffset()));
+        textValues.put(BOX_COLOR, color(config.getBoxColor()));
+        textValues.put(LINE_COLOR, color(config.getLineColor()));
+        textValues.put(FRIENDLY_TEAM_COLOR, color(config.getFriendlyTeamColor()));
+        textValues.put(NEUTRAL_TEAM_COLOR, color(config.getNeutralTeamColor()));
+        textValues.put(ENEMY_TEAM_COLOR, color(config.getEnemyTeamColor()));
+        textValues.put(WAYPOINT_TIMEOUT, String.valueOf(config.getWaypointTimeoutSeconds()));
+        textValues.put(LONG_TERM_WAYPOINT_TIMEOUT, String.valueOf(config.getLongTermWaypointTimeoutSeconds()));
+        textValues.put(QUICK_MARK_MAX_COUNT, String.valueOf(config.getMaxQuickMarkCount()));
+        textValues.put(WAYPOINT_BEAM_WIDTH, String.valueOf(config.getWaypointBeaconBeamWidth()));
+        textValues.put(WAYPOINT_BEAM_HEIGHT, String.valueOf(config.getWaypointBeaconBeamHeight()));
+        textValues.put(TAMPERMONKEY_BEAM_WIDTH, String.valueOf(config.getTampermonkeyBeamWidth()));
+        textValues.put(TAMPERMONKEY_BEAM_HEIGHT, String.valueOf(config.getTampermonkeyBeamHeight()));
+        textValues.put(UPDATE_INTERVAL, String.valueOf(config.getUpdateInterval()));
+        textValues.put(BATTLE_MAP_UPDATE_INTERVAL, String.valueOf(config.getBattleMapUpdateIntervalTicks()));
+        textValues.put(BATTLE_MAP_KEEPALIVE_INTERVAL, String.valueOf(config.getBattleMapKeepaliveIntervalSeconds()));
+        textValues.put(BATTLE_MAP_CACHE_RETENTION, String.valueOf(config.getBattleMapCacheRetentionSeconds()));
+    }
+
+    private ConfigPageView rootPage(int width, int height) {
+        int componentWidth = 200;
+        int totalHeight = 30 * 5 + 25 * 3;
+        int start = (height - totalHeight) / 2;
+        int y = start + 30;
+        int x = (width - componentWidth) / 2;
+        int half = (componentWidth - 4) / 2;
+        List<ConfigControlView> controls = new ArrayList<>();
+        controls.add(field(SERVER_URL, x, y, componentWidth, "screen.mc_teamviewer.config.url",
+                "screen.mc_teamviewer.config.url_hint", null, 2048));
+        y += 30;
+        controls.add(field(ROOM_CODE, x, y, half, "screen.mc_teamviewer.config.room_code",
+                "screen.mc_teamviewer.config.room_code_hint", null, 64));
+        controls.add(ConfigControlView.checkbox(ALLOW_INSECURE_TLS, new UiRect(x + half + 4, y, half, HEIGHT),
+                tr("screen.mc_teamviewer.config.allow_insecure_tls"), tr("screen.mc_teamviewer.config.allow_insecure_tls.tooltip"),
+                allowInsecureTls));
+        y += 30;
+        controls.add(button(OPEN_DISPLAY, x, y, 99, "screen.mc_teamviewer.config.display_settings", null));
+        controls.add(button(OPEN_NETWORK, x + 101, y, 99, "screen.mc_teamviewer.config.network_settings", null));
+        y += 25;
+        ConfigControlView save = button(SAVE_ROOT, x, y, half, "screen.mc_teamviewer.config.save_network_settings", null);
+        if (hasUnsavedRootChanges()) {
+            save = new ConfigControlView(save.id(), save.kind(), save.bounds(), save.labelBounds(), save.label(), save.hint(),
+                    save.tooltip(), save.value(), save.maxLength(), save.checked(), save.active(), save.visible(), 0x55FF55,
+                    save.alignment());
+        }
+        controls.add(save);
+        controls.add(ConfigControlView.button(AUTO_CONNECT, new UiRect(x + half + 4, y, half, HEIGHT),
+                UiText.toggle("screen.mc_teamviewer.config.auto_connect_compact", config.isAutoConnectOnMultiplayerJoin()), null, true));
+        y += 25;
+        controls.add(ConfigControlView.button(CONNECT, new UiRect(x, y, 99, HEIGHT),
+                tr(control.isEnabled() ? "screen.mc_teamviewer.config.reconnect" : "screen.mc_teamviewer.config.connect"), null, true));
+        controls.add(ConfigControlView.button(DISCONNECT, new UiRect(x + 101, y, 99, HEIGHT),
+                tr("screen.mc_teamviewer.config.disconnect"), null,
+                control.isEnabled() || control.getNetworkManager().isConnected()));
+        y += 25;
+        NetworkManager.ConnectionStage stage = control.getNetworkManager().getConnectionStage();
+        UiText status = stage == NetworkManager.ConnectionStage.FAILED
+                ? tr("screen.mc_teamviewer.config.connection_failed_short")
+                : UiText.translatable("screen.mc_teamviewer.config.connection_status", tr(statusKey(stage)));
+        controls.add(ConfigControlView.text(CONNECTION_STATUS, new UiRect(x, y, componentWidth, HEIGHT), status,
+                stage == NetworkManager.ConnectionStage.FAILED
+                        ? (isBlank(control.getNetworkManager().getLastConnectionError())
+                        ? tr("screen.mc_teamviewer.config.unknown_error")
+                        : UiText.literal(control.getNetworkManager().getLastConnectionError())) : null,
+                statusColor(stage), true, ConfigControlView.TextAlignment.CENTER));
+        y += 30;
+        controls.add(ConfigControlView.text(SAVE_HINT, new UiRect(x, y, componentWidth, HEIGHT),
+                tr("screen.mc_teamviewer.config.save_required_hint"), null, 0xFFAA00,
+                hasUnsavedRootChanges(), ConfigControlView.TextAlignment.CENTER));
+        return new ConfigPageView(ConfigPageId.ROOT, tr("screen.mc_teamviewer.config.title"), start - 30, controls);
+    }
+
+    private ConfigPageView displayPage(int width, int height) {
+        int start = (height - (30 * 3 + 25 * 6)) / 2;
+        int y = start + 30;
+        int left = (width - 346) / 2;
+        int right = left + 176;
+        List<ConfigControlView> c = new ArrayList<>();
+        c.add(field(RENDER_DISTANCE, left, y, 170, "screen.mc_teamviewer.config.render_distance",
+                "screen.mc_teamviewer.config.render_distance_hint", "screen.mc_teamviewer.config.render_distance.tooltip", 100));
+        c.add(field(TRACER_TOP_OFFSET, right, y, 170, "screen.mc_teamviewer.config.tracer_top_offset",
+                "screen.mc_teamviewer.config.tracer_top_offset_hint", "screen.mc_teamviewer.config.tracer_top_offset.tooltip", 10));
+        y += 30;
+        c.add(toggleButtonWithTooltip(SHOW_BOXES, left, y, 170, "screen.mc_teamviewer.config.show_boxes", config.isShowBoxes()));
+        c.add(toggleButtonWithTooltip(SHOW_LINES, right, y, 170, "screen.mc_teamviewer.config.show_tracking_lines", config.isShowLines()));
+        y += 25;
+        String tracerMode = config.isTracerStartTop()
+                ? "screen.mc_teamviewer.config.tracer_start_mode.top" : "screen.mc_teamviewer.config.tracer_start_mode.crosshair";
+        c.add(ConfigControlView.button(TRACER_START_MODE, new UiRect(left, y, 170, HEIGHT),
+                tr("screen.mc_teamviewer.config.tracer_start_mode").append(": ").append(""),
+                tr("screen.mc_teamviewer.config.tracer_start_mode.tooltip"), true));
+        // The mode suffix is a translated argument, so use a standard translatable label for adapters.
+        c.set(c.size() - 1, ConfigControlView.button(TRACER_START_MODE, new UiRect(left, y, 170, HEIGHT),
+                UiText.translatable("screen.mc_teamviewer.config.value", tr("screen.mc_teamviewer.config.tracer_start_mode"), tr(tracerMode)),
+                tr("screen.mc_teamviewer.config.tracer_start_mode.tooltip"), true));
+        c.add(toggleButtonWithTooltip(XRAY_MARKERS_AND_BOXES, right, y, 170, "screen.mc_teamviewer.config.xray_markers_and_boxes", config.isXrayMarkersAndBoxes()));
+        y += 25;
+        c.add(button(OPEN_COLOR, left, y, 170, "screen.mc_teamviewer.config.color_settings", "screen.mc_teamviewer.config.color_settings.tooltip"));
+        c.add(button(OPEN_WAYPOINT, right, y, 170, "screen.mc_teamviewer.config.waypoint_settings", "screen.mc_teamviewer.config.waypoint_settings.tooltip"));
+        y += 25;
+        c.add(toggleButtonWithTooltip(JOURNEYMAP_REMOTE_BEACONS, left, y, 170, "screen.mc_teamviewer.config.show_journeymap_remote_player_beacons", config.isShowJourneyMapRemotePlayerBeacons()));
+        c.add(toggleButtonWithTooltip(JOURNEYMAP_REMOTE_MARKERS, right, y, 170, "screen.mc_teamviewer.config.show_journeymap_remote_player_map_markers", config.isShowJourneyMapRemotePlayerMapMarkers()));
+        y += 25;
+        c.add(toggleButtonWithTooltip(SHOW_NETWORK_TRAFFIC_HUD, left, y, 170, "screen.mc_teamviewer.config.show_network_traffic_hud", config.isShowNetworkTrafficHud()));
+        y += 25;
+        c.add(button(BACK, left, y, 346, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.DISPLAY, tr("screen.mc_teamviewer.display_config.title"), start - 30, c);
+    }
+
+    private ConfigPageView networkPage(int width, int height) {
+        int column = Math.max(150, Math.min(200, (width - 80 - 8) / 2));
+        int left = (width - column * 2 - 8) / 2;
+        int right = left + column + 8;
+        int start = (height - (30 * 3 + 25 * 5)) / 2;
+        int y = start + 30;
+        List<ConfigControlView> c = new ArrayList<>();
+        c.add(field(UPDATE_INTERVAL, left, y, column, "screen.mc_teamviewer.config.update_interval",
+                "screen.mc_teamviewer.config.update_interval_hint", null, 5));
+        c.add(field(BATTLE_MAP_UPDATE_INTERVAL, right, y, column, "screen.mc_teamviewer.config.battle_map_update_interval",
+                "screen.mc_teamviewer.config.battle_map_update_interval_hint", null, 5));
+        y += 30;
+        c.add(field(BATTLE_MAP_KEEPALIVE_INTERVAL, left, y, column, "screen.mc_teamviewer.config.battle_map_keepalive_interval",
+                "screen.mc_teamviewer.config.battle_map_keepalive_interval_hint", null, 5));
+        c.add(field(BATTLE_MAP_CACHE_RETENTION, right, y, column, "screen.mc_teamviewer.config.battle_map_cache_retention",
+                "screen.mc_teamviewer.config.battle_map_cache_retention_hint", null, 6));
+        y += 30;
+        c.add(toggleButton(UPLOAD_ENTITIES, left, y, column, "screen.mc_teamviewer.config.upload_entities", config.isUploadEntities()));
+        c.add(toggleButton(UPLOAD_SHARED_WAYPOINTS, right, y, column, "screen.mc_teamviewer.config.upload_shared_waypoints", config.isUploadSharedWaypoints()));
+        y += 25;
+        c.add(toggleButton(PREFER_LOCAL_DATA, left, y, column, "screen.mc_teamviewer.config.prefer_local_data_for_rendering", config.isPreferLocalDataForRender()));
+        c.add(toggleButton(USE_SYSTEM_PROXY, right, y, column, "screen.mc_teamviewer.config.use_system_proxy", config.isUseSystemProxy()));
+        y += 25;
+        c.add(toggleButton(BATTLE_MAP_SYNC, left, y, column, "screen.mc_teamviewer.config.battle_map_sync", config.isBattleMapSyncEnabled()));
+        BattleMapMode mode = BattleMapMode.fromId(config.getBattleMapMode());
+        c.add(ConfigControlView.button(BATTLE_MAP_MODE, new UiRect(right, y, column, HEIGHT),
+                UiText.translatable("screen.mc_teamviewer.config.value", tr("screen.mc_teamviewer.config.battle_map_mode"), tr(mode.translationKey())), null, true));
+        y += 25;
+        c.add(toggleButton(BATTLE_MAP_DEBUG, left, y, column, "screen.mc_teamviewer.config.battle_map_debug", config.isBattleMapDebugEnabled()));
+        c.add(ConfigControlView.button(OPEN_PACKET_CAPTURE, new UiRect(right, y, column, HEIGHT),
+                tr("screen.mc_teamviewer.config.packet_capture_page").append(
+                        control.getNetworkManager().isPacketDumpCaptureActive() ? " [RUN]" : " [IDLE]"), null, true));
+        y += 25;
+        c.add(button(BACK, left, y, column * 2 + 8, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.NETWORK, tr("screen.mc_teamviewer.network_config.title"), start - 30, c);
+    }
+
+    private ConfigPageView waypointPage(int width, int height) {
+        int start = (height - (30 * 3 + 25 * 6)) / 2;
+        int y = start + 30;
+        int left = (width - 346) / 2;
+        int right = left + 176;
+        List<ConfigControlView> c = new ArrayList<>();
+        c.add(field(WAYPOINT_TIMEOUT, left, y, 170, "screen.mc_teamviewer.config.waypoint_timeout",
+                "screen.mc_teamviewer.config.waypoint_timeout_hint", "screen.mc_teamviewer.config.waypoint_timeout.tooltip", 10));
+        c.add(field(LONG_TERM_WAYPOINT_TIMEOUT, right, y, 170, "screen.mc_teamviewer.config.long_term_waypoint_timeout",
+                "screen.mc_teamviewer.config.long_term_waypoint_timeout_hint", "screen.mc_teamviewer.config.long_term_waypoint_timeout.tooltip", 10));
+        y += 30;
+        c.add(field(QUICK_MARK_MAX_COUNT, left, y, 170, "screen.mc_teamviewer.config.quick_mark_max_count",
+                "screen.mc_teamviewer.config.quick_mark_max_count_hint", "screen.mc_teamviewer.config.quick_mark_max_count.tooltip", 10));
+        String styleKey = "screen.mc_teamviewer.config.waypoint_ui_style." + config.getWaypointUiStyle();
+        c.add(ConfigControlView.button(WAYPOINT_UI_STYLE, new UiRect(right, y, 170, HEIGHT),
+                UiText.translatable("screen.mc_teamviewer.config.value", tr("screen.mc_teamviewer.config.waypoint_ui_style"), tr(styleKey)),
+                tr("screen.mc_teamviewer.config.waypoint_ui_style.tooltip"), true));
+        y += 30;
+        c.add(toggleButtonWithTooltip(SHOW_SHARED_WAYPOINTS, left, y, 170, "screen.mc_teamviewer.config.show_shared_waypoints", config.isShowSharedWaypoints()));
+        c.add(toggleButtonWithTooltip(SHOW_OWN_SHARED_WAYPOINTS, right, y, 170, "screen.mc_teamviewer.config.show_own_shared_waypoints_on_minimap", config.isShowOwnSharedWaypointsOnMinimap()));
+        y += 25;
+        c.add(toggleButtonWithTooltip(MIDDLE_DOUBLE_CLICK_MARK, left, y, 170, "screen.mc_teamviewer.config.middle_double_click_mark", config.isEnableMiddleDoubleClickMark()));
+        c.add(toggleButtonWithTooltip(MIDDLE_CLICK_CANCEL, right, y, 170, "screen.mc_teamviewer.config.middle_click_cancel_waypoint", config.isEnableMiddleClickCancelWaypoint()));
+        y += 25;
+        c.add(toggleButtonWithTooltip(ENABLE_LONG_TERM_WAYPOINT, left, y, 170, "screen.mc_teamviewer.config.enable_long_term_waypoint", config.isEnableLongTermWaypoint()));
+        c.add(toggleButtonWithTooltip(AUTO_CANCEL_ON_ENTITY_DEATH, right, y, 170, "screen.mc_teamviewer.config.auto_cancel_waypoint_on_entity_death", config.isAutoCancelWaypointOnEntityDeath()));
+        y += 25;
+        c.add(button(OPEN_WAYPOINT_SHAPE, left, y, 346, "screen.mc_teamviewer.config.waypoint_shape_settings", "screen.mc_teamviewer.config.waypoint_shape_settings.tooltip"));
+        y += 25;
+        c.add(button(BACK, left, y, 346, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.WAYPOINT, tr("screen.mc_teamviewer.waypoint_config.title"), start - 30, c);
+    }
+
+    private ConfigPageView waypointShapePage(int width, int height) {
+        int start = (height - (30 * 3 + 25)) / 2;
+        int y = start + 30;
+        int left = (width - 346) / 2;
+        int right = left + 176;
+        List<ConfigControlView> c = new ArrayList<>();
+        c.add(field(WAYPOINT_BEAM_WIDTH, left, y, 170, "screen.mc_teamviewer.config.waypoint_beacon_beam_width",
+                "screen.mc_teamviewer.config.waypoint_beacon_beam_width_hint", "screen.mc_teamviewer.config.waypoint_beacon_beam_width.tooltip", 10));
+        c.add(field(WAYPOINT_BEAM_HEIGHT, right, y, 170, "screen.mc_teamviewer.config.waypoint_beacon_beam_height",
+                "screen.mc_teamviewer.config.waypoint_beacon_beam_height_hint", "screen.mc_teamviewer.config.waypoint_beacon_beam_height.tooltip", 10));
+        y += 30;
+        c.add(field(TAMPERMONKEY_BEAM_WIDTH, left, y, 170, "screen.mc_teamviewer.config.tampermonkey_beam_width",
+                "screen.mc_teamviewer.config.tampermonkey_beam_width_hint", "screen.mc_teamviewer.config.tampermonkey_beam_width.tooltip", 10));
+        c.add(field(TAMPERMONKEY_BEAM_HEIGHT, right, y, 170, "screen.mc_teamviewer.config.tampermonkey_beam_height",
+                "screen.mc_teamviewer.config.tampermonkey_beam_height_hint", "screen.mc_teamviewer.config.tampermonkey_beam_height.tooltip", 10));
+        y += 30;
+        c.add(button(BACK, left, y, 346, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.WAYPOINT_SHAPE, tr("screen.mc_teamviewer.waypoint_shape_config.title"), start - 30, c);
+    }
+
+    private ConfigPageView colorPage(int width, int height) {
+        int start = (height - 30 * 7) / 2;
+        int y = start + 30;
+        int x = (width - 200) / 2;
+        List<ConfigControlView> c = new ArrayList<>();
+        c.add(field(BOX_COLOR, x, y, 200, "screen.mc_teamviewer.color_config.box_color", null, null, 16));
+        y += 30;
+        c.add(field(LINE_COLOR, x, y, 200, "screen.mc_teamviewer.color_config.line_color", null, null, 16));
+        y += 30;
+        c.add(field(FRIENDLY_TEAM_COLOR, x, y, 200, "screen.mc_teamviewer.color_config.friendly_team_color", null, null, 16));
+        y += 30;
+        c.add(field(NEUTRAL_TEAM_COLOR, x, y, 200, "screen.mc_teamviewer.color_config.neutral_team_color", null, null, 16));
+        y += 30;
+        c.add(field(ENEMY_TEAM_COLOR, x, y, 200, "screen.mc_teamviewer.color_config.enemy_team_color", null, null, 16));
+        y += 30;
+        c.add(button(BACK, x, y, 200, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.COLOR, tr("screen.mc_teamviewer.color_config.title"), start - 30, c);
+    }
+
+    private ConfigPageView packetCapturePage(int width, int height) {
+        int total = 18 * 5 + 28 * 3;
+        int start = (height - total) / 2;
+        int x = (width - 240) / 2;
+        NetworkManager network = control.getNetworkManager();
+        boolean active = network.isPacketDumpCaptureActive();
+        String current = network.getPacketDumpCurrentPath();
+        String last = network.getPacketDumpLastSavedPath();
+        List<ConfigControlView> c = new ArrayList<>();
+        c.add(ConfigControlView.text(PACKET_CAPTURE_DESCRIPTION, new UiRect(x, start, 240, 12),
+                tr("screen.mc_teamviewer.packet_capture.description"), null, 0xE0E0E0, true, ConfigControlView.TextAlignment.CENTER));
+        UiText status = !active ? tr("screen.mc_teamviewer.packet_capture.status_idle")
+                : isBlank(current) ? tr("screen.mc_teamviewer.packet_capture.status_waiting")
+                : tr("screen.mc_teamviewer.packet_capture.status_running");
+        c.add(ConfigControlView.text(PACKET_CAPTURE_STATUS, new UiRect(x, start + 18, 240, 12),
+                status, null, 0xFFD166, true, ConfigControlView.TextAlignment.CENTER));
+        c.add(ConfigControlView.text(PACKET_CAPTURE_CURRENT_PATH, new UiRect(x, start + 36, 240, 12),
+                isBlank(current) ? tr("screen.mc_teamviewer.packet_capture.current_file_empty")
+                        : UiText.translatable("screen.mc_teamviewer.packet_capture.current_file", UiText.literal(abbreviatePath(current))),
+                isBlank(current) ? null : UiText.literal(current), 0xA7F3D0, true, ConfigControlView.TextAlignment.CENTER));
+        c.add(ConfigControlView.text(PACKET_CAPTURE_LAST_PATH, new UiRect(x, start + 54, 240, 12),
+                isBlank(last) ? tr("screen.mc_teamviewer.packet_capture.last_file_empty")
+                        : UiText.translatable("screen.mc_teamviewer.packet_capture.last_file", UiText.literal(abbreviatePath(last))),
+                isBlank(last) ? null : UiText.literal(last), 0x93C5FD, true, ConfigControlView.TextAlignment.CENTER));
+        int y = start + 72;
+        c.add(ConfigControlView.button(PACKET_CAPTURE_START, new UiRect(x, y, 240, HEIGHT),
+                tr("screen.mc_teamviewer.packet_capture.start"), null, !active));
+        y += 28;
+        c.add(ConfigControlView.button(PACKET_CAPTURE_STOP, new UiRect(x, y, 240, HEIGHT),
+                tr("screen.mc_teamviewer.packet_capture.stop"), null, active));
+        y += 28;
+        c.add(button(BACK, x, y, 240, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.PACKET_CAPTURE, tr("screen.mc_teamviewer.packet_capture.title"), start - 24, c);
+    }
+
+    private void applyPageFields(ConfigPageId page) {
+        switch (page) {
+            case DISPLAY -> applyDisplayFields();
+            case NETWORK -> applyNetworkFields();
+            case COLOR -> applyColorFields();
+            case WAYPOINT -> applyWaypointFields();
+            case WAYPOINT_SHAPE -> applyWaypointShapeFields();
+            default -> { }
+        }
+    }
+
+    private void applyDisplayFields() {
+        try {
+            String distance = value(RENDER_DISTANCE).trim();
+            if (!distance.isEmpty()) {
+                int parsed = Integer.parseInt(distance);
+                if (parsed > 0) config.setRenderDistance(parsed);
+            }
+            String offset = value(TRACER_TOP_OFFSET).trim();
+            if (!offset.isEmpty()) config.setTracerTopOffset(Double.parseDouble(offset));
+        } catch (NumberFormatException ignored) { }
+    }
+
+    private void applyNetworkFields() {
+        try {
+            int update = Integer.parseInt(value(UPDATE_INTERVAL).trim());
+            if (update > 0) config.setUpdateInterval(update);
+            int battleUpdate = Integer.parseInt(value(BATTLE_MAP_UPDATE_INTERVAL).trim());
+            if (battleUpdate > 0) config.setBattleMapUpdateIntervalTicks(battleUpdate);
+            int keepalive = Integer.parseInt(value(BATTLE_MAP_KEEPALIVE_INTERVAL).trim());
+            if (keepalive > 0) config.setBattleMapKeepaliveIntervalSeconds(keepalive);
+            int retention = Integer.parseInt(value(BATTLE_MAP_CACHE_RETENTION).trim());
+            if (retention > 0) config.setBattleMapCacheRetentionSeconds(retention);
+        } catch (NumberFormatException ignored) { }
+    }
+
+    private void applyColorFields() {
+        try {
+            Integer parsed = parseColor(value(BOX_COLOR));
+            if (parsed != null) config.setBoxColor(parsed);
+            parsed = parseColor(value(LINE_COLOR));
+            if (parsed != null) config.setLineColor(parsed);
+            parsed = parseColor(value(FRIENDLY_TEAM_COLOR));
+            if (parsed != null) config.setFriendlyTeamColor(parsed);
+            parsed = parseColor(value(NEUTRAL_TEAM_COLOR));
+            if (parsed != null) config.setNeutralTeamColor(parsed);
+            parsed = parseColor(value(ENEMY_TEAM_COLOR));
+            if (parsed != null) config.setEnemyTeamColor(parsed);
+        } catch (NumberFormatException ignored) { }
+    }
+
+    private void applyWaypointFields() {
+        try {
+            String normal = value(WAYPOINT_TIMEOUT).trim();
+            if (!normal.isEmpty()) config.setWaypointTimeoutSeconds(Integer.parseInt(normal));
+            String longTerm = value(LONG_TERM_WAYPOINT_TIMEOUT).trim();
+            if (!longTerm.isEmpty()) config.setLongTermWaypointTimeoutSeconds(Integer.parseInt(longTerm));
+            String max = value(QUICK_MARK_MAX_COUNT).trim();
+            if (!max.isEmpty()) config.setMaxQuickMarkCount(Integer.parseInt(max));
+        } catch (NumberFormatException ignored) { }
+    }
+
+    private void applyWaypointShapeFields() {
+        try {
+            config.setWaypointBeaconBeamWidth(Double.parseDouble(value(WAYPOINT_BEAM_WIDTH).trim()));
+            config.setWaypointBeaconBeamHeight(Double.parseDouble(value(WAYPOINT_BEAM_HEIGHT).trim()));
+            config.setTampermonkeyBeamWidth(Double.parseDouble(value(TAMPERMONKEY_BEAM_WIDTH).trim()));
+            config.setTampermonkeyBeamHeight(Double.parseDouble(value(TAMPERMONKEY_BEAM_HEIGHT).trim()));
+        } catch (NumberFormatException ignored) { }
+    }
+
+    private ConfigUiAction toggleAutoConnect() {
+        config.setAutoConnectOnMultiplayerJoin(!config.isAutoConnectOnMultiplayerJoin());
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction connect() {
+        saveRoot();
+        if (control.isEnabled()) {
+            control.reconnect();
+        } else {
+            control.setEnabled(true);
+            control.reconnect();
+        }
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction disconnect() {
+        control.disconnect();
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction cycleTracerMode() {
+        config.setTracerStartMode(config.isTracerStartTop() ? Config.TRACER_START_CROSSHAIR : Config.TRACER_START_TOP);
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction cycleWaypointStyle() {
+        String next = switch (config.getWaypointUiStyle()) {
+            case Config.WAYPOINT_UI_BEACON -> Config.WAYPOINT_UI_RING;
+            case Config.WAYPOINT_UI_RING -> Config.WAYPOINT_UI_PIN;
+            default -> Config.WAYPOINT_UI_BEACON;
+        };
+        config.setWaypointUiStyle(next);
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction cycleBattleMapMode() {
+        config.setBattleMapMode(BattleMapMode.fromId(config.getBattleMapMode()).next().id());
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction startPacketCapture() {
+        control.getNetworkManager().startPacketDumpCapture();
+        control.showActionBar("§c[TV] 已开始抓包，游戏内将持续显示抓包提示");
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction stopPacketCapture() {
+        control.getNetworkManager().stopPacketDumpCapture();
+        control.showActionBar("§a[TV] 已结束抓包");
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction toggle(boolean current, BooleanSetter setter) {
+        setter.set(!current);
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigControlView field(ConfigControlId id, int x, int y, int width, String label,
+                                    String hint, String tooltip, int maxLength) {
+        return ConfigControlView.textField(id, new UiRect(x, y, width, HEIGHT),
+                new UiRect(x, y - LABEL_SPACING, width, LABEL_HEIGHT), tr(label),
+                hint == null ? null : tr(hint), tooltip == null ? null : tr(tooltip), value(id), maxLength);
+    }
+
+    private ConfigControlView button(ConfigControlId id, int x, int y, int width, String label, String tooltip) {
+        return ConfigControlView.button(id, new UiRect(x, y, width, HEIGHT), tr(label),
+                tooltip == null ? null : tr(tooltip), true);
+    }
+
+    private ConfigControlView toggleButton(ConfigControlId id, int x, int y, int width, String label, boolean enabled) {
+        return ConfigControlView.button(id, new UiRect(x, y, width, HEIGHT), UiText.toggle(label, enabled),
+                null, true);
+    }
+
+    private ConfigControlView toggleButtonWithTooltip(ConfigControlId id, int x, int y, int width, String label, boolean enabled) {
+        return ConfigControlView.button(id, new UiRect(x, y, width, HEIGHT), UiText.toggle(label, enabled),
+                tr(label + ".tooltip"), true);
+    }
+
+    private String value(ConfigControlId id) {
+        return textValues.getOrDefault(id, "");
+    }
+
+    private static UiText tr(String key) {
+        return UiText.translatable(key);
+    }
+
+    private static String color(int value) {
+        return String.format(Locale.ROOT, "0x%08X", value);
+    }
+
+    private static Integer parseColor(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return null;
+        String text = raw.trim();
+        if (text.startsWith("0x") || text.startsWith("0X")) return (int) Long.parseLong(text.substring(2), 16);
+        if (text.startsWith("#")) {
+            String hex = text.substring(1);
+            if (hex.length() == 6) return 0xFF000000 | Integer.parseInt(hex, 16);
+            if (hex.length() == 8) return (int) Long.parseLong(hex, 16);
+        }
+        return Integer.parseInt(text);
+    }
+
+    private static String statusKey(NetworkManager.ConnectionStage stage) {
+        return switch (stage) {
+            case CONNECTED -> "connection.status.connected";
+            case CONNECTING -> "connection.status.connecting";
+            case WS_CONNECTED_HANDSHAKING -> "connection.status.ws_connected_handshaking";
+            case FAILED -> "connection.status.failed";
+            case DISCONNECTED -> "connection.status.disconnected";
+        };
+    }
+
+    private static int statusColor(NetworkManager.ConnectionStage stage) {
+        return switch (stage) {
+            case CONNECTED -> 0x00FF00;
+            case CONNECTING -> 0xFFFF55;
+            case WS_CONNECTED_HANDSHAKING -> 0x55FFFF;
+            case FAILED -> 0xFFAA00;
+            case DISCONNECTED -> 0xFF0000;
+        };
+    }
+
+    private static String abbreviatePath(String path) {
+        return path == null || path.length() <= 36 ? fallback(path, "") : "..." + path.substring(path.length() - 33);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String fallback(String value, String fallback) {
+        return isBlank(value) ? fallback : value;
+    }
+
+    @FunctionalInterface
+    private interface BooleanSetter {
+        void set(boolean value);
+    }
+}

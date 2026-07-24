@@ -90,12 +90,8 @@ sourceSets {
         resources.srcDirs = ["src/main/resources"]
     }
     client {
-        java.srcDirs = minecraftTarget == defaultMinecraftTarget
-                ? ["src/client/java", "../common/src/version/${minecraftAdapterVersion}/java"]
-                : ["src/version/${minecraftAdapterVersion}/java", "../common/src/version/${minecraftAdapterVersion}/java"]
-        resources.srcDirs = minecraftTarget == defaultMinecraftTarget
-                ? ["src/client/resources", "../common/src/version/${minecraftAdapterVersion}/resources"]
-                : ["src/version/${minecraftAdapterVersion}/resources", "../common/src/version/${minecraftAdapterVersion}/resources"]
+        java.srcDirs = ["src/shared/java", "src/version/${minecraftAdapterVersion}/java"]
+        resources.srcDirs = ["src/shared/resources", "src/version/${minecraftAdapterVersion}/resources"]
     }
 }
 
@@ -210,6 +206,122 @@ tasks.withType(JavaCompile).configureEach {
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         options.release.set(targetJavaVersion)
     }
+}
+
+tasks.register("verifyVersionAdapterBoundary") {
+    group = "verification"
+    description = "Keep Minecraft version sources behind the Common Adapter SDK boundary."
+    inputs.files(fileTree("src/version") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
+
+    doLast {
+        def forbiddenImports = [
+                "fun.prof_chen.teamviewer.main_code.config.Config",
+                "fun.prof_chen.teamviewer.main_code.bridge.NetworkManager",
+                "fun.prof_chen.teamviewer.main_code.client.ClientCoordinator",
+                "fun.prof_chen.teamviewer.main_code.sync.core.",
+                "fun.prof_chen.teamviewer.main_code.sync.impl.repository.",
+                "fun.prof_chen.teamviewer.protocol."
+        ]
+        def violations = []
+        inputs.files.files.sort().each { sourceFile ->
+            sourceFile.eachLine { line, lineNumber ->
+                def trimmed = line.trim()
+                if (trimmed.startsWith("import ") && forbiddenImports.any { trimmed.contains(it) }) {
+                    violations << "${sourceFile}:$lineNumber: ${trimmed}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Version adapter imported common implementation details:\n" + violations.join("\n"))
+        }
+    }
+}
+
+tasks.register("verifyAdapterSdkCompleteness") {
+    group = "verification"
+    description = "Verify every supported Minecraft adapter supplies the complete SDK bundle and feature ports."
+    inputs.files(fileTree("src/version") { include "**/*.java", "**/*.json" })
+
+    doLast {
+        ["1.21.8", "26.1"].each { adapter ->
+            def root = file("src/version/${adapter}")
+            def entry = new File(root, "java/fun/prof_chen/teamviewer/main_code/core/PlayerProcesses.java")
+            if (!entry.isFile()) throw new GradleException("Missing ${adapter} adapter entrypoint")
+            def text = entry.getText("UTF-8")
+            ["new ClientAdapterBundle(", "ClientAdapterDescriptor.complete("
+            ].each { token ->
+                if (!text.contains(token)) throw new GradleException("${adapter} adapter entrypoint missing '${token}'")
+            }
+            def requiredFiles = [
+                    "client/bridge/FabricClientEventBridge.java",
+                    "client/bridge/FabricGameClientBridge.java",
+                    "battlemap/FabricBattleMapNativeBridge.java",
+                    "render/FabricWorldRenderSink.java",
+                    "render/FabricHudRenderSink.java",
+                    "screen/ConfigScreen.java",
+                    "mapbridge/provider/journey/JourneyMapSharedWaypointAdapter.java"
+            ]
+            requiredFiles.each { relative ->
+                if (!new File(root, "java/fun/prof_chen/teamviewer/main_code/${relative}").isFile()) {
+                    throw new GradleException("${adapter} adapter missing required port ${relative}")
+                }
+            }
+            def sharedXaero = file("src/shared/java/fun/prof_chen/teamviewer/main_code/mapbridge/provider/xaero/XaeroMinimapSharedWaypointAdapter.java")
+            if (!sharedXaero.isFile()) {
+                throw new GradleException("Shared Xaero waypoint adapter port is missing")
+            }
+            def mixin = new File(root, "resources/teamviewer.client.mixins.json")
+            if (!mixin.isFile() || !mixin.getText("UTF-8").contains("Mixin\"")) {
+                throw new GradleException("${adapter} adapter must declare a non-empty Scoreboard Mixin list")
+            }
+            if (entry.readLines().size() > 120) {
+                throw new GradleException("${adapter} PlayerProcesses must remain a thin adapter entrypoint")
+            }
+        }
+    }
+}
+
+tasks.named("compileClientJava") {
+    dependsOn(tasks.named("verifyVersionAdapterBoundary"), tasks.named("verifyAdapterSdkCompleteness"))
+}
+
+def verifyNoCommonClassShadowing = tasks.register("verifyNoCommonClassShadowing") {
+    group = "verification"
+    description = "Reject stale or version-specific bytecode that shadows classes supplied by common."
+    dependsOn(tasks.named("compileClientJava"), project(":common").tasks.named("classes"))
+
+    doLast {
+        def commonClassesRoot = project(":common").layout.buildDirectory.dir("classes/java/main").get().asFile
+        def commonClasses = fileTree(commonClassesRoot) { include "**/*.class" }
+                .files
+                .collect { commonClassesRoot.toPath().relativize(it.toPath()).toString() }
+                .toSet()
+        def shadowedClasses = []
+
+        sourceSets.client.output.classesDirs.files.findAll { it.isDirectory() }.each { classesRoot ->
+            fileTree(classesRoot) { include "**/*.class" }.files.each { classFile ->
+                def relativePath = classesRoot.toPath().relativize(classFile.toPath()).toString()
+                if (commonClasses.contains(relativePath)) {
+                    shadowedClasses << relativePath
+                }
+            }
+        }
+
+        if (!shadowedClasses.isEmpty()) {
+            throw new GradleException(
+                    "Fabric adapter bytecode shadows Common SDK classes. " +
+                            "Remove the duplicate source or run './gradlew clean' to clear stale outputs:\n" +
+                            shadowedClasses.toSorted().join("\n"))
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyNoCommonClassShadowing)
+}
+
+tasks.matching { it.name in ["runClient", "remapJar"] }.configureEach {
+    dependsOn(verifyNoCommonClassShadowing)
 }
 
 java {

@@ -1,29 +1,30 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.implementor;
 
-import fun.prof_chen.teamviewer.main_code.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
-import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
-import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
+import fun.prof_chen.teamviewer.main_code.mapbridge.model.MapWaypointCommand;
+import fun.prof_chen.teamviewer.main_code.mapbridge.model.NativeMapWaypointSnapshot;
 
 import java.util.List;
-import java.util.Map;
 
 public interface SharedWaypointMapAdapter {
 	String id();
 
 	boolean isAvailable();
 
-	void tick(WaypointSyncGateway gateway, Map<String, SharedWaypointInfo> remoteWaypoints, boolean enabled, SharedWaypointMapBridgeConfig config);
+	/** Lists user-created native waypoints only; managed TeamViewRelay objects are excluded. */
+	List<NativeMapWaypointSnapshot> listLocalWaypoints();
 
-	void deleteWaypoint(String waypointId);
+	void upsertRemoteWaypoint(MapWaypointCommand command);
+
+	void deleteRemoteWaypoint(String waypointId);
 
 	default void deleteWaypoints(List<String> waypointIds) {
 		if (waypointIds == null || waypointIds.isEmpty()) {
 			return;
 		}
 		for (String waypointId : waypointIds) {
-			deleteWaypoint(waypointId);
+			deleteRemoteWaypoint(waypointId);
 		}
 	}
 
-	void clear();
+	void clearRemoteWaypoints();
 }

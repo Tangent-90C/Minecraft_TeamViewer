@@ -7,6 +7,7 @@
   "hud.mc_teamviewer.traffic.down": "↓ unc%s cmp%s Σunc%s cmp%s",
   
   "screen.mc_teamviewer.config.title": "TeamViewRelay Configuration",
+  "screen.mc_teamviewer.config.value": "%s: %s",
   "screen.mc_teamviewer.config.url": "Server URL",
   "screen.mc_teamviewer.config.url_hint": "e.g. ws://127.0.0.1:8080/mc-client",
   "screen.mc_teamviewer.config.allow_insecure_tls": "Allow Insecure Connection",

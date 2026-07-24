@@ -1,12 +1,13 @@
 package fun.prof_chen.teamviewer.main_code.sync.core;
 
-import fun.prof_chen.teamviewer.main_code.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
+import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
+import fun.prof_chen.teamviewer.main_code.config.Config;
 
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,7 @@ public final class SharedWaypointSyncCoordinator {
 	private final SharedWaypointRepository repository;
 	private final WaypointSyncGateway gateway;
 	private final List<SharedWaypointMapAdapter> adapters;
+	private final SharedWaypointMapSyncPolicy mapPolicy;
 	private final WaypointUpdateListener inboundListener = new WaypointUpdateListener() {
 		@Override
 		public void onWaypointsReceived(Map<String, SharedWaypointInfo> waypoints) {
@@ -33,10 +35,13 @@ public final class SharedWaypointSyncCoordinator {
 	public SharedWaypointSyncCoordinator(
 			SharedWaypointRepository repository,
 			WaypointSyncGateway gateway,
-			List<SharedWaypointMapAdapter> adapters) {
+			List<SharedWaypointMapAdapter> adapters,
+			Config config,
+			GameClientBridge game) {
 		this.repository = Objects.requireNonNull(repository, "repository");
 		this.gateway = Objects.requireNonNull(gateway, "gateway");
 		this.adapters = List.copyOf(adapters);
+		this.mapPolicy = new SharedWaypointMapSyncPolicy(config, game, gateway);
 	}
 
 	public void start() {
@@ -47,14 +52,9 @@ public final class SharedWaypointSyncCoordinator {
 		gateway.removeWaypointUpdateListener(inboundListener);
 	}
 
-	public void tick(boolean enabled, SharedWaypointMapBridgeConfig config) {
+	public void tick(boolean enabled) {
 		Map<String, SharedWaypointInfo> snapshot = repository.snapshot();
-		for (SharedWaypointMapAdapter adapter : adapters) {
-			if (!adapter.isAvailable()) {
-				continue;
-			}
-			adapter.tick(gateway, snapshot, enabled, config);
-		}
+		mapPolicy.tick(adapters, snapshot, enabled);
 	}
 
 	public void upsertLocalWaypoints(UUID submitPlayerId, Map<String, WaypointSyncPayload> payloads) {
@@ -98,15 +98,11 @@ public final class SharedWaypointSyncCoordinator {
 		if (waypointIds == null || waypointIds.isEmpty()) {
 			return;
 		}
-		for (SharedWaypointMapAdapter adapter : adapters) {
-			adapter.deleteWaypoints(waypointIds);
-		}
+		mapPolicy.deleteRemoteWaypoints(adapters, waypointIds);
 	}
 
 	public void clear() {
 		repository.clear();
-		for (SharedWaypointMapAdapter adapter : adapters) {
-			adapter.clear();
-		}
+		mapPolicy.clear(adapters);
 	}
 }

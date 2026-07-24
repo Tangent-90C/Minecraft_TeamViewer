@@ -7,6 +7,7 @@
   "hud.mc_teamviewer.traffic.down": "↓ 未压%s 压后%s Σ未压%s 压后%s",
   
   "screen.mc_teamviewer.config.title": "TeamViewRelay 配置",
+  "screen.mc_teamviewer.config.value": "%s：%s",
   "screen.mc_teamviewer.config.url": "服务器URL",
   "screen.mc_teamviewer.config.url_hint": "例如: ws://127.0.0.1:8080/mc-client",
   "screen.mc_teamviewer.config.allow_insecure_tls": "允许不安全连接",

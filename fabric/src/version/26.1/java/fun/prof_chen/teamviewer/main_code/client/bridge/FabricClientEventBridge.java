@@ -1,0 +1,48 @@
+package fun.prof_chen.teamviewer.main_code.client.bridge;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
+import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.Identifier;
+
+import java.util.Objects;
+
+/** Complete Minecraft 26.1 Fabric event and input adapter. */
+public final class FabricClientEventBridge implements ClientEventBridge {
+    private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
+            Identifier.fromNamespaceAndPath("team-view-relay", "general"));
+
+    @Override
+    public void register(ClientEventHandler handler) {
+        Objects.requireNonNull(handler, "handler");
+        KeyMapping toggle = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.mc_teamviewer.toggle", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), CATEGORY));
+        KeyMapping config = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.mc_teamviewer.config", InputConstants.Type.KEYSYM, InputConstants.KEY_O, CATEGORY));
+        KeyMapping mark = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.mc_teamviewer.mark", InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), CATEGORY));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            handler.onEndClientTick();
+            while (toggle.consumeClick()) handler.onToggleRequested();
+            while (config.consumeClick()) handler.onConfigRequested();
+            while (mark.consumeClick()) {
+                if (client.screen == null) handler.onQuickMarkRequested();
+            }
+        });
+        ClientPlayConnectionEvents.JOIN.register((networkHandler, sender, client) -> {
+            if (networkHandler != null && !networkHandler.getConnection().isMemoryConnection()) handler.onJoinedMultiplayer();
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> handler.onLeftPlaySession());
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> handler.onClientStopping());
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("team-view-relay", "network-status"),
+                (graphics, deltaTracker) -> handler.onHudRender(graphics));
+        LevelRenderEvents.BEFORE_GIZMOS.register(handler::onWorldRender);
+    }
+}

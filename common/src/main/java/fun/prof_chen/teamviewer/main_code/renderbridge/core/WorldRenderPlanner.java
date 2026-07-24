@@ -1,0 +1,265 @@
+package fun.prof_chen.teamviewer.main_code.renderbridge.core;
+
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.config.Config;
+import fun.prof_chen.teamviewer.main_code.model.Position3D;
+import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.main_code.renderbridge.model.AxisAlignedBox3D;
+import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderCommand;
+import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderFrame;
+import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Function;
+
+/** All TeamViewRelay world-render decisions, independent of Minecraft rendering APIs. */
+public final class WorldRenderPlanner {
+    private final Config config;
+    private final Function<UUID, String> teamResolver;
+    private final WaypointSyncGateway waypointGateway;
+    private final Map<String, Position3D> trackedEntityWaypointLastPositions = new HashMap<>();
+
+    public WorldRenderPlanner(Config config, Function<UUID, String> teamResolver, WaypointSyncGateway waypointGateway) {
+        this.config = config;
+        this.teamResolver = teamResolver == null ? ignored -> null : teamResolver;
+        this.waypointGateway = waypointGateway;
+    }
+
+    public WorldRenderFrame plan(
+            boolean enabled,
+            ClientWorldSnapshot world,
+            Map<UUID, RemotePlayerInfo> remotePlayers,
+            Map<String, SharedWaypointInfo> sharedWaypoints) {
+        if (!enabled || world == null || !world.available()) {
+            return WorldRenderFrame.empty();
+        }
+        List<WorldRenderCommand> commands = new ArrayList<>();
+        boolean depthTest = !config.isXrayMarkersAndBoxes();
+        planPlayers(world, remotePlayers == null ? Map.of() : remotePlayers, depthTest, commands);
+        planWaypoints(world, sharedWaypoints == null ? Map.of() : sharedWaypoints, depthTest, commands);
+        return new WorldRenderFrame(world.cameraPosition(), commands);
+    }
+
+    public void clear() {
+        trackedEntityWaypointLastPositions.clear();
+    }
+
+    private void planPlayers(ClientWorldSnapshot world, Map<UUID, RemotePlayerInfo> remotePlayers,
+                             boolean depthTest, List<WorldRenderCommand> commands) {
+        Map<UUID, RemotePlayerInfo> resolved = new HashMap<>(remotePlayers);
+        if (config.isPreferLocalDataForRender()) {
+            for (PlayerSnapshot player : world.players()) {
+                if (!player.id().equals(world.localPlayerId())) {
+                    resolved.put(player.id(), new RemotePlayerInfo(player.id(), player.position(), player.dimension(), player.name()));
+                }
+            }
+        }
+        for (RemotePlayerInfo remote : resolved.values()) {
+            if (remote == null || remote.uuid() == null || remote.position() == null
+                    || remote.uuid().equals(world.localPlayerId()) || !sameDimension(world.dimension(), remote.dimension())
+                    || distance(world.localPlayerPosition(), remote.position()) > config.getRenderDistance()) {
+                continue;
+            }
+            String team = teamResolver.apply(remote.uuid());
+            int boxColor = teamColor(team, config.getBoxColor());
+            int lineColor = teamColor(team, config.getLineColor());
+            Position3D position = remote.position();
+            if (config.isShowBoxes()) {
+                commands.add(new WorldRenderCommand.Box(new AxisAlignedBox3D(
+                        position.x() - 0.3, position.y(), position.z() - 0.3,
+                        position.x() + 0.3, position.y() + 1.8, position.z() + 0.3), boxColor, depthTest));
+            }
+            if (config.isShowLines()) {
+                Position3D start = add(world.cameraPosition(), multiply(normalize(world.lookDirection()), 0.6));
+                if (config.isTracerStartTop()) {
+                    start = add(start, multiply(normalize(world.cameraUpDirection()), config.getTracerTopOffset()));
+                }
+                commands.add(new WorldRenderCommand.Line(start, add(position, new Position3D(0, 1, 0)), lineColor, depthTest, 1.0F));
+            }
+        }
+    }
+
+    private void planWaypoints(ClientWorldSnapshot world, Map<String, SharedWaypointInfo> sharedWaypoints,
+                               boolean depthTest, List<WorldRenderCommand> commands) {
+        if (!config.isShowSharedWaypoints() || sharedWaypoints.isEmpty()) {
+            return;
+        }
+        double maxDistance = Math.max(config.getRenderDistance(), 16.0);
+        for (SharedWaypointInfo waypoint : sharedWaypoints.values()) {
+            if (waypoint == null || isLocalPlayerTarget(world, waypoint)
+                    || !sameDimension(world.dimension(), waypoint.dimension())) {
+                continue;
+            }
+            Position3D position = resolveWaypointPosition(world, waypoint);
+            if (position == null) {
+                continue;
+            }
+            boolean tactical = isTactical(waypoint);
+            if (!tactical && distance(world.localPlayerPosition(), position) > maxDistance) {
+                continue;
+            }
+            int color = withAlpha(waypoint.color(), 0xCC);
+            if (tactical) {
+                planTacticalPillar(world, position, color, depthTest, commands);
+            } else {
+                planWaypointStyle(position, color, depthTest, commands);
+            }
+        }
+    }
+
+    private void planTacticalPillar(ClientWorldSnapshot world, Position3D position, int color,
+                                    boolean depthTest, List<WorldRenderCommand> commands) {
+        Position3D base = new Position3D(position.x(), world.worldBottomY() + 0.08, position.z());
+        double height = config.getTampermonkeyBeamHeight();
+        commands.add(new WorldRenderCommand.VerticalBeam(base, height, config.getTampermonkeyBeamWidth(), withAlpha(color, 0x55), depthTest));
+        commands.add(new WorldRenderCommand.HorizontalPlane(new Position3D(position.x(), world.worldBottomY() + 0.03, position.z()),
+                1.8, withAlpha(color, 0x4C), depthTest));
+        commands.add(new WorldRenderCommand.Circle(base, 1.15, 24, withAlpha(color, 0xA6), depthTest));
+        commands.add(new WorldRenderCommand.Circle(add(base, new Position3D(0, height, 0)), 0.48, 18, withAlpha(color, 0x9A), depthTest));
+    }
+
+    private void planWaypointStyle(Position3D position, int color, boolean depthTest,
+                                   List<WorldRenderCommand> commands) {
+        if (Config.WAYPOINT_UI_RING.equals(config.getWaypointUiStyle())) {
+            Position3D center = add(position, new Position3D(0, 0.05, 0));
+            commands.add(new WorldRenderCommand.Circle(center, 0.95, 24, color, depthTest));
+            commands.add(new WorldRenderCommand.Circle(add(center, new Position3D(0, 0.3, 0)), 0.65, 18, withAlpha(color, 0x9A), depthTest));
+            for (int i = 0; i < 4; i++) {
+                double angle = Math.PI * 0.5 * i;
+                Position3D direction = new Position3D(Math.cos(angle), 0, Math.sin(angle));
+                commands.add(new WorldRenderCommand.Line(add(center, multiply(direction, 0.3)), add(center, multiply(direction, 1.2)),
+                        withAlpha(color, 0x88), depthTest, 1.0F));
+            }
+            commands.add(new WorldRenderCommand.Line(add(center, new Position3D(0, 0.1, 0)),
+                    add(center, new Position3D(0, 3, 0)), withAlpha(color, 0xB5), depthTest, 1.0F));
+            return;
+        }
+        if (Config.WAYPOINT_UI_PIN.equals(config.getWaypointUiStyle())) {
+            Position3D center = add(position, new Position3D(0, 0.1, 0));
+            Position3D head = add(position, new Position3D(0, 2.8, 0));
+            commands.add(new WorldRenderCommand.Line(center, head, color, depthTest, 1.0F));
+            double size = 0.42;
+            Position3D north = add(head, new Position3D(0, 0, -size));
+            Position3D south = add(head, new Position3D(0, 0, size));
+            Position3D east = add(head, new Position3D(size, 0, 0));
+            Position3D west = add(head, new Position3D(-size, 0, 0));
+            commands.add(new WorldRenderCommand.Line(north, south, color, depthTest, 1.0F));
+            commands.add(new WorldRenderCommand.Line(east, west, color, depthTest, 1.0F));
+            commands.add(new WorldRenderCommand.Line(north, east, withAlpha(color, 0x9A), depthTest, 1.0F));
+            commands.add(new WorldRenderCommand.Line(east, south, withAlpha(color, 0x9A), depthTest, 1.0F));
+            commands.add(new WorldRenderCommand.Line(south, west, withAlpha(color, 0x9A), depthTest, 1.0F));
+            commands.add(new WorldRenderCommand.Line(west, north, withAlpha(color, 0x9A), depthTest, 1.0F));
+            commands.add(new WorldRenderCommand.Circle(add(center, new Position3D(0, 0.02, 0)), 0.35, 12, withAlpha(color, 0xB0), depthTest));
+            return;
+        }
+        Position3D center = add(position, new Position3D(0, 0.1, 0));
+        double height = config.getWaypointBeaconBeamHeight();
+        commands.add(new WorldRenderCommand.VerticalBeam(center, height, config.getWaypointBeaconBeamWidth(), withAlpha(color, 0x66), depthTest));
+        commands.add(new WorldRenderCommand.Circle(add(center, new Position3D(0, 0.02, 0)), 0.75, 18, withAlpha(color, 0xB0), depthTest));
+        commands.add(new WorldRenderCommand.Circle(add(center, new Position3D(0, height, 0)), 0.42, 14, withAlpha(color, 0xA0), depthTest));
+    }
+
+    private Position3D resolveWaypointPosition(ClientWorldSnapshot world, SharedWaypointInfo waypoint) {
+        if (!"entity".equalsIgnoreCase(waypoint.targetType()) || isBlank(waypoint.targetEntityId())) {
+            return new Position3D(waypoint.x() + 0.5, waypoint.y(), waypoint.z() + 0.5);
+        }
+        Position3D local = findLocalEntity(world, waypoint.targetEntityId(), waypoint.targetEntityName());
+        if (local != null) {
+            trackedEntityWaypointLastPositions.put(waypoint.waypointId(), local);
+            return local;
+        }
+        if (waypointGateway != null) {
+            Position3D remote = waypointGateway.getRemoteEntityPosition(waypoint.targetEntityId(), world.dimension());
+            if (remote == null && isPlayerTarget(waypoint)) {
+                remote = waypointGateway.getRemotePlayerPosition(waypoint.targetEntityId(), waypoint.targetEntityName(), world.dimension());
+            }
+            if (remote != null) {
+                trackedEntityWaypointLastPositions.put(waypoint.waypointId(), remote);
+                return remote;
+            }
+        }
+        return trackedEntityWaypointLastPositions.computeIfAbsent(waypoint.waypointId(),
+                ignored -> new Position3D(waypoint.x() + 0.5, waypoint.y(), waypoint.z() + 0.5));
+    }
+
+    private static Position3D findLocalEntity(ClientWorldSnapshot world, String id, String name) {
+        for (EntitySnapshot entity : world.entities()) {
+            if (id.equals(entity.id()) || (!isBlank(name) && name.equalsIgnoreCase(entity.name()))) return entity.position();
+        }
+        for (PlayerSnapshot player : world.players()) {
+            if (id.equals(player.id().toString()) || (!isBlank(name) && name.equalsIgnoreCase(player.name()))) return player.position();
+        }
+        return null;
+    }
+
+    private static boolean isLocalPlayerTarget(ClientWorldSnapshot world, SharedWaypointInfo waypoint) {
+        if (!"entity".equalsIgnoreCase(waypoint.targetType())) return false;
+        return world.localPlayerId().toString().equals(waypoint.targetEntityId())
+                || (!isBlank(world.localPlayerName()) && world.localPlayerName().equalsIgnoreCase(waypoint.targetEntityName()));
+    }
+
+    private int teamColor(String team, int fallback) {
+        if (isBlank(team)) return fallback;
+        return switch (team.trim().toLowerCase()) {
+            case "friendly", "friend", "ally" -> config.getFriendlyTeamColor();
+            case "enemy", "hostile" -> config.getEnemyTeamColor();
+            case "neutral" -> config.getNeutralTeamColor();
+            default -> fallback;
+        };
+    }
+
+    private static boolean isTactical(SharedWaypointInfo waypoint) {
+        return isTacticalKind(waypoint.sourceType()) || isTacticalKind(waypoint.waypointKind());
+    }
+
+    private static boolean isTacticalKind(String value) {
+        return "web_map_tactical".equalsIgnoreCase(value) || "admin_tactical".equalsIgnoreCase(value);
+    }
+
+    private static boolean isPlayerTarget(SharedWaypointInfo waypoint) {
+        return "minecraft:player".equalsIgnoreCase(waypoint.targetEntityType());
+    }
+
+    private static boolean sameDimension(String expected, String actual) {
+        return isBlank(actual) || actual.equals(expected);
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return ((alpha & 0xFF) << 24) | (color & 0x00FFFFFF);
+    }
+
+    private static double distance(Position3D a, Position3D b) {
+        double x = a.x() - b.x();
+        double y = a.y() - b.y();
+        double z = a.z() - b.z();
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
+    private static Position3D add(Position3D a, Position3D b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        return new Position3D(a.x() + b.x(), a.y() + b.y(), a.z() + b.z());
+    }
+
+    private static Position3D multiply(Position3D value, double scale) {
+        if (value == null) return new Position3D(0, 0, 0);
+        return new Position3D(value.x() * scale, value.y() * scale, value.z() * scale);
+    }
+
+    private static Position3D normalize(Position3D value) {
+        if (value == null) return new Position3D(0, 0, 0);
+        double length = Math.sqrt(value.x() * value.x() + value.y() * value.y() + value.z() * value.z());
+        return length < 1.0E-9 ? new Position3D(0, 0, 0) : multiply(value, 1.0 / length);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+}

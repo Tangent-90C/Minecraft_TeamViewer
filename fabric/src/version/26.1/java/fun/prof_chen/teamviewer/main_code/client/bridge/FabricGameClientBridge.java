@@ -1,32 +1,48 @@
 package fun.prof_chen.teamviewer.main_code.client.bridge;
 
 import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationClock;
+import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftPositionAdapter;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.DisplaySlot;
+import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.PlayerScoreEntry;
+import net.minecraft.world.scores.Scoreboard;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 public final class FabricGameClientBridge implements GameClientBridge {
+    private static final Comparator<PlayerScoreEntry> SCOREBOARD_ENTRY_COMPARATOR = Comparator
+            .comparingInt(PlayerScoreEntry::value)
+            .reversed()
+            .thenComparing(PlayerScoreEntry::owner, String.CASE_INSENSITIVE_ORDER);
+
     @Override
     public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) {
         Minecraft client = Minecraft.getInstance();
@@ -60,6 +76,55 @@ public final class FabricGameClientBridge implements GameClientBridge {
         return new ClientReportSnapshot(
                 client.player.getUUID(), client.player.isAlive(),
                 MinecraftDimensionAdapter.toDimensionId(client.level.dimension()), players, entities, collectTabPlayers(client));
+    }
+
+    @Override
+    public ClientWorldSnapshot captureWorldSnapshot() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.level == null) {
+            return ClientWorldSnapshot.unavailable();
+        }
+        ClientReportSnapshot report = captureReportSnapshot(true);
+        Camera camera = client.gameRenderer.getMainCamera();
+        org.joml.Vector3fc forward = camera.forwardVector();
+        org.joml.Vector3fc up = camera.upVector();
+        return new ClientWorldSnapshot(
+                report.localPlayerId(), client.player.getName().getString(), report.localPlayerAlive(), report.dimension(),
+                client.level.getMinY(), toPosition(client.player.position()), toPosition(camera.position()),
+                new Position3D(forward.x(), forward.y(), forward.z()),
+                new Position3D(up.x(), up.y(), up.z()), report.players(), report.entities());
+    }
+
+    @Override
+    public ScoreboardSnapshot captureScoreboardSnapshot() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.level == null) {
+            return ScoreboardSnapshot.unavailable();
+        }
+        Scoreboard scoreboard = client.level.getScoreboard();
+        Objective objective = scoreboard.getDisplayObjective(DisplaySlot.SIDEBAR);
+        if (objective == null) {
+            return ScoreboardSnapshot.unavailable();
+        }
+        List<PlayerScoreEntry> entries = new ArrayList<>(scoreboard.listPlayerScores(objective));
+        entries.removeIf(PlayerScoreEntry::isHidden);
+        entries.sort(SCOREBOARD_ENTRY_COMPARATOR);
+        List<ScoreboardSnapshot.Line> lines = new ArrayList<>();
+        for (PlayerScoreEntry entry : entries) {
+            String owner = entry.owner();
+            PlayerTeam team = owner == null ? null : scoreboard.getPlayersTeam(owner);
+            Component decorated = PlayerTeam.formatNameForTeam(team, Component.literal(owner == null ? "" : owner));
+            List<ScoreboardSnapshot.Run> runs = new ArrayList<>();
+            decorated.visit((style, text) -> {
+                runs.add(new ScoreboardSnapshot.Run(text, normalizeColor(style)));
+                return Optional.empty();
+            }, Style.EMPTY);
+            lines.add(new ScoreboardSnapshot.Line(decorated.getString(), runs));
+        }
+        return new ScoreboardSnapshot(
+                MinecraftDimensionAdapter.toDimensionId(client.level.dimension()),
+                BattleMapObservationClock.lastObservedAt(),
+                lines);
     }
 
     @Override
@@ -116,6 +181,11 @@ public final class FabricGameClientBridge implements GameClientBridge {
     }
 
     @Override
+    public boolean isGameplayInputAvailable() {
+        return Minecraft.getInstance().screen == null;
+    }
+
+    @Override
     public void showActionBar(String message) {
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
@@ -149,5 +219,10 @@ public final class FabricGameClientBridge implements GameClientBridge {
 
     private static Position3D toPosition(Vec3 position) {
         return MinecraftPositionAdapter.toPosition3D(position);
+    }
+
+    private static String normalizeColor(Style style) {
+        TextColor color = style == null ? null : style.getColor();
+        return color == null ? "#FFFFFF" : color.toString();
     }
 }
