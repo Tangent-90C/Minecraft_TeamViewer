@@ -137,9 +137,7 @@ public final class FabricGameClientBridge implements GameClientBridge {
         if (client.player == null || client.level == null || cameraEntity == null) {
             return Optional.empty();
         }
-        double distance = Double.isFinite(maxDistance) && maxDistance > 0.0D
-                ? Math.min(maxDistance, MARK_TARGET_MAX_DISTANCE)
-                : MARK_TARGET_MAX_DISTANCE;
+        double distance = GameClientBridge.normalizeMarkTargetDistance(maxDistance);
         float partialTick = 1.0F;
         Vec3 from = cameraEntity.getEyePosition(partialTick);
         HitResult blockHit = cameraEntity.pick(distance, partialTick, false);

@@ -275,6 +275,16 @@ tasks.register("verifyAdapterSdkCompleteness") {
                     throw new GradleException("${adapter} adapter missing required port ${relative}")
                 }
             }
+            def gameBridge = new File(root,
+                    "java/fun/prof_chen/teamviewer/main_code/client/bridge/FabricGameClientBridge.java")
+            def gameBridgeText = gameBridge.getText("UTF-8")
+            if (!gameBridgeText.contains("normalizeMarkTargetDistance(maxDistance)")) {
+                throw new GradleException("${adapter} mark targeting must use the SDK distance bound")
+            }
+            if (adapter == "1.21.8" && gameBridgeText.contains("crosshairTarget")) {
+                throw new GradleException(
+                        "${adapter} mark targeting must raycast beyond Minecraft's interaction-limited crosshairTarget")
+            }
             def mixin = new File(root, "resources/teamviewer.client.mixins.json")
             if (!mixin.isFile() || !mixin.getText("UTF-8").contains("Mixin\"")) {
                 throw new GradleException("${adapter} adapter must declare a non-empty Scoreboard Mixin list")

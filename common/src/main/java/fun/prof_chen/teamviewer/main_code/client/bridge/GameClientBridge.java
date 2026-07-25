@@ -16,6 +16,13 @@ public interface GameClientBridge {
     /** Hard upper bound for quick-mark raycasts; keeps native block traversal and entity queries bounded. */
     double MARK_TARGET_MAX_DISTANCE = 512.0D;
 
+    /** Normalize a version adapter's native raycast range without allowing unbounded traversal. */
+    static double normalizeMarkTargetDistance(double requestedDistance) {
+        return Double.isFinite(requestedDistance) && requestedDistance > 0.0D
+                ? Math.min(requestedDistance, MARK_TARGET_MAX_DISTANCE)
+                : MARK_TARGET_MAX_DISTANCE;
+    }
+
     ClientReportSnapshot captureReportSnapshot(boolean includeEntities);
 
     /** Capture camera/world state required by common rendering and HUD decisions. */

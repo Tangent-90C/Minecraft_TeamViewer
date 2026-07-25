@@ -15,6 +15,8 @@ import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.projectile.ProjectileUtil;
+import net.minecraft.predicate.entity.EntityPredicates;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardEntry;
@@ -24,8 +26,8 @@ import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
 import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 
@@ -131,15 +133,36 @@ public final class FabricGameClientBridge implements GameClientBridge {
     @Override
     public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.crosshairTarget == null || client.crosshairTarget.getType() == HitResult.Type.MISS
-                || client.player == null || client.player.getEyePos().squaredDistanceTo(client.crosshairTarget.getPos()) > maxDistance * maxDistance) {
+        Entity cameraEntity = client.getCameraEntity();
+        if (client.player == null || client.world == null || cameraEntity == null) {
             return Optional.empty();
         }
-        if (client.crosshairTarget instanceof BlockHitResult hit) {
-            return Optional.of(new EntityTargetSnapshot(toPosition(hit.getPos()), null, null, null, false, false));
+        double distance = GameClientBridge.normalizeMarkTargetDistance(maxDistance);
+        float tickDelta = 1.0F;
+        Vec3d from = cameraEntity.getCameraPosVec(tickDelta);
+        HitResult blockHit = cameraEntity.raycast(distance, tickDelta, false);
+        double nearestDistanceSquared = distance * distance;
+        if (blockHit.getType() != HitResult.Type.MISS) {
+            nearestDistanceSquared = from.squaredDistanceTo(blockHit.getPos());
         }
-        if (!(client.crosshairTarget instanceof EntityHitResult hit)) {
+
+        Vec3d direction = cameraEntity.getRotationVec(tickDelta);
+        double rayLength = Math.sqrt(nearestDistanceSquared);
+        Vec3d to = from.add(direction.multiply(rayLength));
+        Box searchArea = cameraEntity.getBoundingBox()
+                .stretch(direction.multiply(rayLength))
+                .expand(1.0D);
+        EntityHitResult entityHit = ProjectileUtil.raycast(
+                cameraEntity, from, to, searchArea, EntityPredicates.CAN_HIT, nearestDistanceSquared);
+        HitResult target = entityHit != null
+                && from.squaredDistanceTo(entityHit.getPos()) < from.squaredDistanceTo(blockHit.getPos())
+                ? entityHit : blockHit;
+        if (target.getType() == HitResult.Type.MISS) {
             return Optional.empty();
+        }
+        if (!(target instanceof EntityHitResult hit)) {
+            return Optional.of(new EntityTargetSnapshot(
+                    toPosition(target.getPos()), null, null, null, false, false));
         }
         Entity entity = hit.getEntity();
         return Optional.of(new EntityTargetSnapshot(
