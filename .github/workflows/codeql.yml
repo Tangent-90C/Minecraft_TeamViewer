@@ -17,13 +17,13 @@ on:
     paths:
       - 'common/**'
       - 'fabric/**'
-      - 'forge/**'
+      - 'neoforge/**'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
       - 'common/**'
       - 'fabric/**'
-      - 'forge/**'
+      - 'neoforge/**'
   schedule:
     - cron: '21 14 * * 2'
 

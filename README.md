@@ -1,6 +1,6 @@
 # TeamViewRelay Mod
 
-TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。当前支持 **Minecraft 1.21.8** 和 **Minecraft 26.1.2** 的 Fabric 版本。
+TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。当前支持 **Minecraft 1.21.8** 和 **Minecraft 26.1.2** 的 Fabric 与 NeoForge 版本。
 
 整套系统通常由以下组件配合使用：
 
@@ -31,7 +31,7 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 ## 快速开始
 
-1. 安装 Fabric Loader、Fabric API 和本 Mod。
+1. 安装对应版本的 Fabric Loader + Fabric API，或 NeoForge，以及 Loader 匹配的本 Mod。
 2. 启动后按 `O` 打开配置页。
 3. 把 `Server URL` 改成你的后端地址，例如 `ws://127.0.0.1:8765/mc-client`。
 4. 设置同一房间号（`roomCode`），点击保存并连接。
@@ -55,6 +55,10 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 - Fabric API `0.155.2+26.1.2`
 - 文件名含 `26.1.2` 的本项目 Mod Jar
 
+NeoForge 版本分别要求 NeoForge `21.8.54`（Minecraft 1.21.8）或 `26.1.2.86`
+（Minecraft 26.1.2）。首轮 NeoForge 的 JourneyMap、Xaero、SimMC 原生联动会明确报告
+`UNSUPPORTED_VERSION`，核心连接、同步、HUD、世界渲染、配置与 NodeMC 功能不因此缩水。
+
 推荐安装：
 
 - Mod Menu：方便直接打开配置页
@@ -74,7 +78,7 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 ```
 
-使用 Task 同时构建两个独立版本和 All-in-One（需要对应的两个 JDK）：
+使用 Task 构建全部五个正式产物（需要对应的两个 JDK）：
 
 ```bash
 JAVA21_HOME=/path/to/jdk-21 JAVA25_HOME=/path/to/jdk-25 task build
@@ -82,12 +86,17 @@ JAVA21_HOME=/path/to/jdk-21 JAVA25_HOME=/path/to/jdk-25 task build
 
 `build-artifacts` 最终包含：
 
-- `TeamViewRelay-1.21.8-<mod_version>.jar`（1.21.8独立版）
-- `TeamViewRelay-26.1.2-<mod_version>.jar`（26.1.2）
-- `TeamViewRelay-all-<mod_version>.jar`（两个版本通用）
+- `TeamViewRelay-Fabric-1.21.8-<mod_version>.jar`
+- `TeamViewRelay-Fabric-26.1.2-<mod_version>.jar`
+- `TeamViewRelay-Fabric-all-<mod_version>.jar`
+- `TeamViewRelay-NeoForge-1.21.8-<mod_version>.jar`
+- `TeamViewRelay-NeoForge-26.1.2-<mod_version>.jar`
 
 独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
 仅供打包使用，不是玩家可安装产物。
+
+Loader 公开 Mod ID 分别为：Fabric `team-view-relay`、NeoForge `team_view_relay`。NeoForge 使用下划线
+是因为 FML 的 Mod ID 语法不允许连字符；配置文件名、协议身份和功能行为不因此改变。
 
 开发调试客户端：
 
@@ -176,10 +185,13 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 
 - `common-sdk`：平台无关的 Adapter SDK 编译边界（snapshot、事件、UI/HUD/世界渲染命令和插件端口）
 - `common/src/main/java`：网络、配置、同步、战局地图、HUD/世界渲染规划等唯一业务实现
-- `fabric-bootstrap/src/main/java`：Java 17 Fabric Loader 启动器和 Adapter TCK
+- `client-bootstrap/src/main/java`：Java 17 Loader 中立启动编排和 Adapter TCK
+- `fabric-bootstrap/src/main/java`：Java 17 Fabric Loader 薄入口
 - `fabric/src/shared`：确实跨 Minecraft 版本稳定的 adapter 胶水
 - `fabric/src/version/1.21.8`：Minecraft 1.21.8 API 适配
 - `fabric/src/version/26.1`：Minecraft 26.1.2 API 适配
+- `neoforge/src/shared`：NeoForge 薄入口及稳定事件总线胶水
+- `neoforge/src/version/1.21.8` / `26.1`：NeoForge Minecraft API 适配
 - `universal`：All-in-One 元数据、组装和产物守卫
 
 具体版本代码只能实现 Common Adapter SDK，不得复制业务逻辑。完整边界与打包约束见

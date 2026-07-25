@@ -42,7 +42,7 @@ def journeyMapApiJar = layout.buildDirectory.file(
 apply plugin: mappingsMode == "yarn" ? "fabric-loom" : "net.fabricmc.fabric-loom"
 
 base {
-    archivesName = "${project.archives_base_name}-${minecraftTargetVersion}"
+    archivesName = "${project.archives_base_name}-Fabric-${minecraftTargetVersion}"
 }
 
 if (minecraftTarget != defaultMinecraftTarget) {
@@ -103,19 +103,13 @@ configurations.configureEach {
         eachDependency { DependencyResolveDetails details ->
             def group = details.requested.group
             def name = details.requested.name
-            def jacksonRequiredVersion = "2.18.6"
-            def jsonRequiredVersion = "2.5.2"
+            def gsonRequiredVersion = project.gson_version.toString()
+            def slf4jRequiredVersion = project.slf4j_version.toString()
 
-            if (group == 'com.fasterxml.jackson.core' && (name == 'jackson-core' || name == 'jackson-databind' || name == 'jackson-annotations')) {
-                details.useVersion jacksonRequiredVersion
-                if (details.requested.version) {
-                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${jacksonRequiredVersion}")
-                }
-            } else if (group == 'net.minidev' && name == 'json-smart') {
-                details.useVersion "[${jsonRequiredVersion},)"
-                if (details.requested.version) {
-                    logger.warn("检测到 ${group}:${name} 请求版本 ${details.requested.version}，已强制升级至 >= ${jsonRequiredVersion}")
-                }
+            if (group == 'com.google.code.gson' && name == 'gson') {
+                details.useVersion gsonRequiredVersion
+            } else if (group == 'org.slf4j' && name == 'slf4j-api') {
+                details.useVersion slf4jRequiredVersion
             }
         }
     }
@@ -150,23 +144,14 @@ dependencies {
 
     implementation project(":fabric-bootstrap")
 
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    include "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
+    include "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
 
-    implementation "com.squareup.okio:okio-jvm:3.6.0"
-    include "com.squareup.okio:okio-jvm:3.6.0"
+    implementation "com.squareup.okio:okio-jvm:${project.okio_version}"
+    include "com.squareup.okio:okio-jvm:${project.okio_version}"
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
-    include "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
-
-    implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
-    include "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
-
-    implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
-    include "com.fasterxml.jackson.core:jackson-core:2.18.6"
-
-    implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
-    include "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
+    include "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
 
     implementation "com.google.protobuf:protobuf-java:${project.protobuf_version}"
     include "com.google.protobuf:protobuf-java:${project.protobuf_version}"
@@ -513,7 +498,8 @@ def verifyAdapterArtifact = tasks.register("verifyAdapterArtifact") {
 def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
     group = "verification"
     description = "Verify the selected standalone Jar remains complete and directly installable."
-    dependsOn(tasks.named(productionJarTaskName), ":fabric-bootstrap:jar", ":common:jar", ":common-sdk:jar")
+    dependsOn(tasks.named(productionJarTaskName), ":fabric-bootstrap:jar", ":client-bootstrap:jar",
+            ":common:jar", ":common-sdk:jar")
     inputs.file(tasks.named(productionJarTaskName).flatMap { it.archiveFile })
 
     doLast {
@@ -533,8 +519,7 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             def nested = entryNames.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
             def requiredNestedPrefixes = [
                     "TeamViewRelay-common-", "TeamViewRelay-common-sdk-",
-                    "okhttp-", "okio-jvm-", "kotlin-stdlib-", "jackson-annotations-", "jackson-core-",
-                    "jackson-databind-", "protobuf-java-", "protobuf-java-util-"
+                    "okhttp-", "okio-jvm-", "kotlin-stdlib-", "protobuf-java-", "protobuf-java-util-"
             ]
             requiredNestedPrefixes.each { prefix ->
                 def matches = nested.findAll { name ->
@@ -554,8 +539,14 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             if (nested.any { it.contains("teamviewer-adapter-") }) {
                 throw new GradleException("Standalone must flatten its adapter instead of exposing the internal adapter ID")
             }
+            if (nested.any { it.substring("META-INF/jars/".length()).startsWith("jackson-") }) {
+                throw new GradleException("Standalone must not duplicate Minecraft's Jackson modules")
+            }
             if (!entries.contains("fun/prof_chen/teamviewer/client/TeamviewerClient.class")) {
                 throw new GradleException("Standalone is missing the shared Java 17 bootstrap entrypoint")
+            }
+            if (!entries.contains("fun/prof_chen/teamviewer/client/bootstrap/ClientBootstrap.class")) {
+                throw new GradleException("Standalone is missing the Loader-neutral Java 17 client bootstrap")
             }
             def providerPath = "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory"
             def providerEntries = entryNames.findAll { it == providerPath }
@@ -599,8 +590,9 @@ java {
 }
 
 jar {
-    dependsOn(":fabric-bootstrap:classes")
+    dependsOn(":fabric-bootstrap:classes", ":client-bootstrap:classes")
     from(project(":fabric-bootstrap").sourceSets.main.output)
+    from(project(":client-bootstrap").sourceSets.main.output)
     from(rootProject.file("LICENSE.txt")) {
         rename { "${it}_${project.base.archivesName.get()}" }
     }

@@ -31,7 +31,8 @@ public final class AdapterTck {
         for (ConfigPageId pageId : ConfigPageId.values()) {
             probe("config page " + pageId, issues, () -> validatePage(configUi.page(pageId, 854, 480), pageId));
         }
-        List<IntegrationCapability> integrations = adapters.mapAdapters().capabilities();
+        List<IntegrationCapability> integrations = new ArrayList<>(adapters.mapAdapters().capabilities());
+        integrations.add(adapters.battleMapNativeBridge().capability());
         return new AdapterTckReport(
                 adapters.adapterVersion(),
                 adapters.runtimeGateway().getClientProgramVersion(),

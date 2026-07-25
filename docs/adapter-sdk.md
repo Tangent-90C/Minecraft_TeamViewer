@@ -3,13 +3,13 @@
 `common` is the only client business implementation. `common-sdk` is a separately compiled API
 surface selected from the platform-neutral SDK sources under `common/src/main/java`. A Minecraft
 adapter is compiled against `common-sdk` without `common-runtime`: it reads native state into
-immutable snapshots, forwards Fabric events, executes render/UI commands, and calls optional-map
+immutable snapshots, forwards Loader events, executes render/UI commands, and calls optional-map
 APIs.
 
 ## Composition contract
 
 Every version exposes exactly one `ClientAdapterFactory<W, H>` through Java `ServiceLoader`. The
-factory constructs a non-null `ClientAdapterBundle<W, H>`; the shared Fabric bootstrap starts the
+factory constructs a non-null `ClientAdapterBundle<W, H>`; the Loader-neutral `client-bootstrap` starts the
 common runtime. `W` and `H` are the native world/HUD render contexts, so event/sink mismatches are
 compile errors rather than runtime casts.
 
@@ -25,7 +25,7 @@ compile errors rather than runtime casts.
   whose prepared crosshair hit is interaction-limited perform their own native raycast, stop at the
   first block obstruction, and hard-limit traversal with `MARK_TARGET_MAX_DISTANCE`.
 - `ClientEventBridge<W,H>` registers tick, toggle/config/mark input, remote join, disconnect, stopping,
-  world render and HUD render exactly once. Callbacks run on Fabric's client/render threads and
+  world render and HUD render exactly once. Callbacks run on the Loader's client/render threads and
   must not retain render contexts after the callback returns. `registeredEvents()` must report
   every `ClientEventType` after registration.
 - `WorldRenderSink<W>` and `HudRenderSink<H>` execute immutable common frames. They perform native
@@ -72,7 +72,7 @@ that manifest through `scripts/minecraft_targets.py`; `task build` iterates ever
 Task starts each target in a separate no-daemon Gradle process so Loom and mapping services from
 one target cannot leak into the next target.
 
-`common-sdk`, common runtime and `fabric-bootstrap` are Java 17 ABI artifacts. Each adapter is
+`common-sdk`, common runtime and `client-bootstrap` are Java 17 ABI artifacts. Each adapter is
 compiled with its target's `adapter_java_release`. A target below Java 17 is rejected until a
 separate legacy runtime exists; running an old Minecraft release on a newer JRE is not a supported
 substitute. Every target produces a complete standalone Jar plus an internal remapped slim adapter.
@@ -99,3 +99,10 @@ To add a version, declare its manifest profile, copy the reference directory sha
 port against that version's native API, register its factory in `META-INF/services`, and run
 `task build`. The `compileVersionAdapterAgainstSdk` task proves the adapter compiles without
 common-runtime implementation classes.
+
+NeoForge follows the same contract under `neoforge/src/version/1.21.8` and
+`neoforge/src/version/26.1`. `compileNeoForgeAdapterAgainstSdk` enforces the same restricted
+classpath. Loader entrypoints may initialize an event-bus holder and call `ClientBootstrap.start()`;
+they must not own client state or business timing. Initial NeoForge JourneyMap, Xaero and SimMC
+ports are deliberately non-null `UNSUPPORTED_VERSION` adapters, so capability reports stay honest
+without weakening the core bundle.

@@ -8,7 +8,7 @@ on:
     paths:
       - 'common/**'
       - 'fabric/**'
-      - 'forge/**'
+      - 'neoforge/**'
 
 jobs:
   dependency-review:

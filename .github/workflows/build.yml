@@ -9,8 +9,10 @@ on:
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/**'
       - 'common-sdk/**'
+      - 'client-bootstrap/**'
       - 'fabric-bootstrap/**'
       - 'fabric/**'
+      - 'neoforge/**'
       - 'universal/**'
       - 'gradle/**'
       - 'gradle.properties'
@@ -26,8 +28,10 @@ on:
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/**'
       - 'common-sdk/**'
+      - 'client-bootstrap/**'
       - 'fabric-bootstrap/**'
       - 'fabric/**'
+      - 'neoforge/**'
       - 'universal/**'
       - 'gradle/**'
       - 'gradle.properties'
@@ -80,7 +84,7 @@ jobs:
       - name: Test Java 17 shared runtime and bootstrap
         shell: bash
         # Avoid configuring Fabric Loom, whose Gradle plugin itself requires Java 21.
-        run: ./gradlew --no-daemon --configure-on-demand :common:test :common-sdk:build :fabric-bootstrap:build
+        run: ./gradlew --no-daemon --configure-on-demand :common:test :common-sdk:build :client-bootstrap:build :fabric-bootstrap:build
 
   target-build:
     runs-on: ubuntu-latest
@@ -108,19 +112,25 @@ jobs:
           cache: gradle
       - name: Setup Task
         uses: arduino/setup-task@v2
-      - name: Build Minecraft ${{ matrix.minecraft }}
+      - name: Build ${{ matrix.loader }} Minecraft ${{ matrix.minecraft }}
         shell: bash
-        run: task build-target TARGET="${{ matrix.minecraft }}"
+        run: |
+          if [[ "${{ matrix.loader }}" == "fabric" ]]; then
+            task build-target TARGET="${{ matrix.minecraft }}"
+          else
+            task build-neoforge-target TARGET="${{ matrix.minecraft }}"
+          fi
       - name: Upload standalone Jar
         uses: actions/upload-artifact@v4
         with:
-          name: team-view-relay-standalone-${{ matrix.minecraft }}
+          name: team-view-relay-standalone-${{ matrix.loader }}-${{ matrix.minecraft }}
           path: build-artifacts/*.jar
           if-no-files-found: error
       - name: Upload internal slim adapter
+        if: matrix.loader == 'fabric'
         uses: actions/upload-artifact@v4
         with:
-          name: team-view-relay-adapter-${{ matrix.minecraft }}
+          name: team-view-relay-adapter-fabric-${{ matrix.minecraft }}
           path: build/adapter-artifacts/*.jar
           if-no-files-found: error
 

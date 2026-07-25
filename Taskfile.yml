@@ -17,20 +17,24 @@ tasks:
       - '{{.GRADLE}} clean'
 
   build:
-    desc: Build and collect every supported Minecraft version
+    desc: Build two Fabric standalone, Fabric All-in-One and two NeoForge standalone Jars
     cmds:
       - |
           set -eu
           python3 scripts/minecraft_targets.py prepare-build
           for target in $(python3 scripts/minecraft_targets.py list); do
-            echo "Building Minecraft $target"
+            echo "Building Fabric Minecraft $target"
             task build-target TARGET="$target"
+          done
+          for target in $(python3 scripts/minecraft_targets.py list); do
+            echo "Building NeoForge Minecraft $target"
+            task build-neoforge-target TARGET="$target"
           done
           task package-all
           python3 scripts/minecraft_targets.py verify-release-set
 
   build-target:
-    desc: 'Build one manifest target (usage: task build-target TARGET=1.21.8)'
+    desc: 'Build one Fabric target (usage: task build-target TARGET=1.21.8)'
     requires:
       vars: [TARGET]
     cmds:
@@ -39,6 +43,17 @@ tasks:
           java_home="$(python3 scripts/minecraft_targets.py java-home "{{.TARGET}}")"
           JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :fabric:build
           python3 scripts/minecraft_targets.py collect "{{.TARGET}}"
+
+  build-neoforge-target:
+    desc: 'Build one NeoForge target (usage: task build-neoforge-target TARGET=1.21.8)'
+    requires:
+      vars: [TARGET]
+    cmds:
+      - 'python3 scripts/minecraft_targets.py validate "{{.TARGET}}"'
+      - |
+          java_home="$(python3 scripts/minecraft_targets.py java-home "{{.TARGET}}")"
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :neoforge:build
+          python3 scripts/minecraft_targets.py collect-neoforge "{{.TARGET}}"
 
   build-1.21.8:
     desc: Build Minecraft 1.21.8 (Java 21 bytecode) and collect its jar
@@ -53,7 +68,7 @@ tasks:
         vars: { TARGET: '26.1.2' }
 
   package-all:
-    desc: Assemble and collect the official All-in-One Jar from every staged adapter
+    desc: Assemble and collect the Fabric-only All-in-One Jar from every staged Fabric adapter
     cmds:
       - |
           default_target="$(python3 scripts/minecraft_targets.py default-target)"

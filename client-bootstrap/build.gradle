@@ -1,0 +1,71 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${project.archives_base_name}-client-bootstrap"
+}
+
+dependencies {
+    api project(":common")
+    api project(":common-sdk")
+    compileOnly "org.slf4j:slf4j-api:${project.slf4j_version}"
+}
+
+def sharedJavaRelease = rootProject.ext.sharedJavaRelease as int
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(sharedJavaRelease)
+}
+
+def verifyBootstrapBoundary = tasks.register("verifyBootstrapBoundary") {
+    group = "verification"
+    description = "Keep the shared client bootstrap independent of game and mod-loader APIs."
+    inputs.files(fileTree("src/main/java") { include "**/*.java" })
+
+    doLast {
+        def forbiddenImports = [
+                "import net.minecraft.",
+                "import net.fabricmc.",
+                "import net.neoforged.",
+                "import net.minecraftforge.",
+                "import journeymap.",
+                "import xaero."
+        ]
+        def violations = []
+        inputs.files.files.sort().each { sourceFile ->
+            sourceFile.eachLine { line, lineNumber ->
+                def trimmed = line.trim()
+                if (forbiddenImports.any { trimmed.startsWith(it) }) {
+                    violations << "${sourceFile}:$lineNumber: ${trimmed}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Loader/game APIs leaked into Java 17 client bootstrap:\n" + violations.join("\n"))
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyBootstrapBoundary)
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(sharedJavaRelease)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(sharedJavaRelease)
+    }
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = "${project.archives_base_name}-client-bootstrap"
+            from components.java
+        }
+    }
+}

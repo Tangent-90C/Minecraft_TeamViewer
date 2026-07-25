@@ -1,0 +1,381 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+def versionManifest = new Properties()
+rootProject.file("gradle/minecraft-versions.properties").withInputStream {
+    versionManifest.load(it)
+}
+def defaultTarget = versionManifest.getProperty("default_target")
+def minecraftTarget = providers.gradleProperty("mc_target").getOrElse(defaultTarget)
+def supportedTargets = versionManifest.getProperty("neoforge_supported_targets")
+        .split(",").collect { it.trim() }
+if (!supportedTargets.contains(minecraftTarget)) {
+    throw new GradleException("Unsupported NeoForge mc_target '${minecraftTarget}'; supported: ${supportedTargets}")
+}
+def profile = { String key ->
+    def value = versionManifest.getProperty("${minecraftTarget}.${key}")
+    if (value == null || value.isBlank()) throw new GradleException("Missing ${minecraftTarget}.${key}")
+    value
+}
+def minecraftVersion = profile("minecraft_target_version")
+def adapterVersion = profile("neoforge_adapter_version")
+def neoForgeVersion = profile("neoforge_version")
+def targetJavaRelease = profile("adapter_java_release").toInteger()
+// FML requires the metadata version to start with a digit. Keep the public
+// artifact version unchanged while stripping the display-only leading "v".
+def neoForgeModVersion = project.version.toString().replaceFirst(/^v(?=\d)/, "")
+if (!(neoForgeModVersion ==~ /^\d+.*/)) {
+    throw new GradleException("NeoForge metadata version must start with a digit: ${neoForgeModVersion}")
+}
+
+base {
+    archivesName = "${project.archives_base_name}-NeoForge-${minecraftVersion}"
+}
+
+if (minecraftTarget != defaultTarget) {
+    layout.buildDirectory = file("build/${minecraftTarget}")
+}
+
+sourceSets {
+    main {
+        java.srcDirs = ["src/shared/java", "src/version/${adapterVersion}/java"]
+        resources.srcDirs = ["src/shared/resources", "src/version/${adapterVersion}/resources"]
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        force "com.google.code.gson:gson:${project.gson_version}"
+        force "org.slf4j:slf4j-api:${project.slf4j_version}"
+    }
+}
+
+neoForge {
+    version = neoForgeVersion
+
+    runs {
+        client {
+            client()
+            gameDirectory = file(minecraftTarget == defaultTarget ? "run" : "run/${minecraftVersion}")
+            systemProperty "teamviewer.adapterTck.strict", "true"
+        }
+    }
+
+    mods {
+        team_view_relay {
+            // ModDev isolates mod classes in a module layer. Register the shared
+            // Java 17 outputs as part of the same development mod so runClient
+            // matches the standalone Jar assembled below.
+            sourceSet project(":common-sdk").sourceSets.main
+            sourceSet project(":common").sourceSets.main
+            sourceSet project(":client-bootstrap").sourceSets.main
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    implementation project(":common-sdk")
+    implementation project(":common")
+    implementation project(":client-bootstrap")
+    compileOnly "org.slf4j:slf4j-api:${project.slf4j_version}"
+
+    // NeoForge turns each JarJar dependency into a named module. The SDK and
+    // runtime share domain packages by design, so publish them as one module.
+    jarJar project(path: ":common", configuration: "neoForgeRuntimeElements")
+    jarJar "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
+    jarJar "com.squareup.okio:okio-jvm:${project.okio_version}"
+    jarJar "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
+    jarJar "com.google.protobuf:protobuf-java:${project.protobuf_version}"
+    jarJar "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+}
+
+processResources {
+    inputs.property("mod_version", neoForgeModVersion)
+    inputs.property("minecraft_version", minecraftVersion)
+    inputs.property("neoforge_version", neoForgeVersion)
+    inputs.property("java_version", targetJavaRelease)
+    filteringCharset = "UTF-8"
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand(
+                mod_version: neoForgeModVersion,
+                minecraft_version: minecraftVersion,
+                neoforge_version: neoForgeVersion,
+                java_version: targetJavaRelease)
+    }
+    from(rootProject.file("fabric/src/main/resources")) {
+        include "assets/**"
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(targetJavaRelease)
+}
+
+def verifyNeoForgeAdapterBoundary = tasks.register("verifyNeoForgeAdapterBoundary") {
+    group = "verification"
+    description = "Keep NeoForge version code behind the Common Adapter SDK boundary."
+    inputs.files(fileTree("src/version") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
+    doLast {
+        def forbiddenImports = [
+                "fun.prof_chen.teamviewer.main_code.config.Config",
+                "fun.prof_chen.teamviewer.main_code.bridge.NetworkManager",
+                "fun.prof_chen.teamviewer.main_code.client.ClientCoordinator",
+                "fun.prof_chen.teamviewer.main_code.sync.core.",
+                "fun.prof_chen.teamviewer.main_code.sync.impl.repository.",
+                "fun.prof_chen.teamviewer.protocol.",
+                "net.fabricmc.",
+                "net.minecraftforge."
+        ]
+        def violations = []
+        inputs.files.files.sort().each { sourceFile ->
+            sourceFile.eachLine { line, lineNumber ->
+                def trimmed = line.trim()
+                if (trimmed.startsWith("import ") && forbiddenImports.any { trimmed.contains(it) }) {
+                    violations << "${sourceFile}:$lineNumber: ${trimmed}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("NeoForge adapter imported forbidden implementation/Loader APIs:\n" +
+                    violations.join("\n"))
+        }
+    }
+}
+
+def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCompleteness") {
+    group = "verification"
+    description = "Require every NeoForge target to supply every mandatory SDK port."
+    inputs.files(fileTree("src/version/${adapterVersion}"), fileTree("src/shared"))
+    doLast {
+        def root = file("src/version/${adapterVersion}")
+        def javaRoot = new File(root, "java/fun/prof_chen/teamviewer/main_code")
+        def required = [
+                "core/NeoForgeClientAdapterFactory.java",
+                "client/bridge/NeoForgeClientEventBridge.java",
+                "client/bridge/NeoForgeGameClientBridge.java",
+                "network/bridge/NeoForgeRuntimeGateway.java",
+                "render/NeoForgeWorldRenderSink.java",
+                "render/NeoForgeHudRenderSink.java",
+                "screen/ConfigScreen.java"
+        ]
+        required.each { relative ->
+            if (!new File(javaRoot, relative).isFile()) {
+                throw new GradleException("${minecraftVersion} NeoForge adapter missing required port ${relative}")
+            }
+        }
+        def factory = new File(javaRoot, "core/NeoForgeClientAdapterFactory.java")
+        def factoryText = factory.getText("UTF-8")
+        ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(",
+         "new NeoForgeUnsupportedBattleMapBridge()", "NeoForgeMapAdapters.unsupported()"].each { token ->
+            if (!factoryText.contains(token)) throw new GradleException("NeoForge factory missing '${token}'")
+        }
+        if (factory.readLines().size() > 100) throw new GradleException("NeoForge factory must remain thin")
+        def gameBridge = new File(javaRoot, "client/bridge/NeoForgeGameClientBridge.java").getText("UTF-8")
+        if (!gameBridge.contains("normalizeMarkTargetDistance(maxDistance)") || gameBridge.contains("crosshairTarget")) {
+            throw new GradleException("NeoForge raycast must use the shared 512-block distance bound")
+        }
+        def service = new File(root,
+                "resources/META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory")
+        if (!service.isFile() || service.readLines().findAll { !it.trim().isEmpty() }.size() != 1) {
+            throw new GradleException("NeoForge target must declare exactly one ServiceLoader provider")
+        }
+        def mixin = new File(root, "resources/teamviewer.neoforge.client.mixins.json")
+        if (!mixin.isFile() || !mixin.getText("UTF-8").contains("Mixin\"")) {
+            throw new GradleException("NeoForge target must declare a non-empty Scoreboard Mixin")
+        }
+    }
+}
+
+tasks.named("compileJava") {
+    dependsOn(verifyNeoForgeAdapterBoundary, verifyNeoForgeAdapterCompleteness)
+}
+
+def compileNeoForgeAdapterAgainstSdk = tasks.register("compileNeoForgeAdapterAgainstSdk", JavaCompile) {
+    group = "verification"
+    description = "Compile NeoForge adapter ports without the common runtime on their classpath."
+    dependsOn(project(":common-sdk").tasks.named("classes"), tasks.named("createMinecraftArtifacts"))
+    source(fileTree("src/version/${adapterVersion}/java") { include "**/*.java" })
+    source(fileTree("src/shared/java") { include "fun/prof_chen/teamviewer/main_code/**/*.java" })
+    source(file("src/shared/java/fun/prof_chen/teamviewer/neoforge/NeoForgeClientContext.java"))
+    classpath = sourceSets.main.compileClasspath - project(":common").sourceSets.main.output -
+            project(":client-bootstrap").sourceSets.main.output
+    destinationDirectory.set(layout.buildDirectory.dir("classes/java/adapterSdkBoundary"))
+    options.encoding = "UTF-8"
+    options.release.set(targetJavaRelease)
+}
+
+tasks.named("compileJava") {
+    dependsOn(compileNeoForgeAdapterAgainstSdk)
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaRelease)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaRelease)
+    }
+    withSourcesJar()
+}
+
+jar {
+    dependsOn(":client-bootstrap:classes")
+    from(project(":client-bootstrap").sourceSets.main.output)
+    from(rootProject.file("LICENSE.txt")) {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
+    group = "verification"
+    description = "Verify the NeoForge standalone descriptor, SDK bundle, JarJar dependencies and bytecode."
+    dependsOn(tasks.named("jar"))
+    inputs.file(tasks.named("jar").flatMap { it.archiveFile })
+    doLast {
+        def artifact = tasks.named("jar").get().archiveFile.get().asFile
+        def expectedName = profile("neoforge_standalone_artifact").replace("{mod_version}", project.version.toString())
+        if (artifact.name != expectedName) {
+            throw new GradleException("NeoForge artifact name ${artifact.name} != ${expectedName}")
+        }
+        def zip = new java.util.zip.ZipFile(artifact)
+        try {
+            def names = zip.entries().collect { it.name }
+            def entries = names as Set
+            ["META-INF/neoforge.mods.toml", "META-INF/jarjar/metadata.json",
+             "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
+             "teamviewer.neoforge.client.mixins.json",
+             "fun/prof_chen/teamviewer/client/bootstrap/ClientBootstrap.class"].each { required ->
+                if (!entries.contains(required)) throw new GradleException("NeoForge standalone missing ${required}")
+            }
+            if (entries.contains("fabric.mod.json") || names.any { it.contains("FabricClientAdapterFactory") }) {
+                throw new GradleException("NeoForge standalone contains a Fabric descriptor or adapter")
+            }
+            def descriptor = zip.getInputStream(zip.getEntry("META-INF/neoforge.mods.toml")).getText("UTF-8")
+            ["modId=\"team_view_relay\"", "version=\"${neoForgeModVersion}\"",
+             "versionRange=\"[${minecraftVersion}]\"",
+             "versionRange=\"[${neoForgeVersion},)\"", "[features.team_view_relay]",
+             "javaVersion=\"[${targetJavaRelease},)\""].each { token ->
+                if (!descriptor.contains(token)) throw new GradleException("NeoForge descriptor missing ${token}")
+            }
+            def providers = zip.getInputStream(zip.getEntry(
+                    "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory"))
+                    .getText("UTF-8").readLines().collect { it.trim() }
+                    .findAll { !it.isEmpty() && !it.startsWith("#") }
+            if (providers != ["fun.prof_chen.teamviewer.main_code.core.NeoForgeClientAdapterFactory"]) {
+                throw new GradleException("NeoForge standalone must expose exactly one target Factory: ${providers}")
+            }
+            def jarJarEntries = names.findAll { it.startsWith("META-INF/jarjar/") && it.endsWith(".jar") }
+            ["okhttp-", "okio-jvm-",
+             "kotlin-stdlib-", "protobuf-java-", "protobuf-java-util-"].each { prefix ->
+                def matches = jarJarEntries.findAll { name ->
+                    def fileName = name.substring("META-INF/jarjar/".length())
+                    if (prefix == "protobuf-java-") return fileName.startsWith(prefix) && !fileName.startsWith("protobuf-java-util-")
+                    fileName.contains(prefix)
+                }
+                if (matches.size() != 1) throw new GradleException("NeoForge JarJar requires one ${prefix}; found ${matches}")
+            }
+            def mergedRuntimeEntries = jarJarEntries.findAll { name ->
+                def fileName = name.substring("META-INF/jarjar/".length())
+                fileName.contains("TeamViewRelay-common-") && fileName.contains("neoforge-runtime")
+            }
+            if (mergedRuntimeEntries.size() != 1) {
+                throw new GradleException("NeoForge JarJar requires exactly one merged common runtime; found ${mergedRuntimeEntries}")
+            }
+            def obsoleteCommonEntries = jarJarEntries.findAll { name ->
+                def fileName = name.substring("META-INF/jarjar/".length())
+                fileName.contains("TeamViewRelay-common-sdk-") ||
+                        (fileName.contains("TeamViewRelay-common-") && !fileName.contains("neoforge-runtime"))
+            }
+            if (!obsoleteCommonEntries.isEmpty()) {
+                throw new GradleException("NeoForge JarJar must not contain separate common/common-sdk modules: ${obsoleteCommonEntries}")
+            }
+            if (jarJarEntries.any { it.substring("META-INF/jarjar/".length()).startsWith("jackson-") }) {
+                throw new GradleException("NeoForge JarJar must not duplicate Minecraft's Jackson modules")
+            }
+
+            def nestedPackages = [:].withDefault { new LinkedHashSet<String>() }
+            names.findAll { it.endsWith(".class") && !it.startsWith("META-INF/jarjar/") }.each { rootClassName ->
+                def className = rootClassName
+                if (className == "module-info.class" || className.endsWith("/module-info.class")) return
+                if (className.startsWith("META-INF/versions/")) {
+                    className = className.replaceFirst(/^META-INF\/versions\/\d+\//, "")
+                }
+                int slash = className.lastIndexOf('/')
+                if (slash > 0) nestedPackages[className.substring(0, slash)] << "<team_view_relay root mod>"
+            }
+            jarJarEntries.each { nestedName ->
+                byte[] nestedBytes = zip.getInputStream(zip.getEntry(nestedName)).bytes
+                def nestedZip = new java.util.zip.ZipInputStream(new ByteArrayInputStream(nestedBytes))
+                def nestedClassNames = new LinkedHashSet<String>()
+                try {
+                    java.util.zip.ZipEntry nestedEntry
+                    while ((nestedEntry = nestedZip.nextEntry) != null) {
+                        def className = nestedEntry.name
+                        if (nestedEntry.isDirectory() || !className.endsWith(".class")) continue
+                        if (className == "module-info.class" || className.endsWith("/module-info.class")) continue
+                        if (className.startsWith("META-INF/versions/")) {
+                            className = className.replaceFirst(/^META-INF\/versions\/\d+\//, "")
+                        }
+                        if (!nestedClassNames.add(className)) {
+                            throw new GradleException("Duplicate class ${className} inside ${nestedName}")
+                        }
+                        int slash = className.lastIndexOf('/')
+                        if (slash > 0) nestedPackages[className.substring(0, slash)] << nestedName
+                    }
+                } finally {
+                    nestedZip.close()
+                }
+            }
+            def splitPackages = nestedPackages.findAll { packageName, owners -> owners.size() > 1 }
+            if (!splitPackages.isEmpty()) {
+                def details = splitPackages.collect { packageName, owners ->
+                    "${packageName.replace('/', '.')}: ${owners.join(', ')}"
+                }.sort().join("\n")
+                throw new GradleException("NeoForge JarJar contains JPMS split packages:\n${details}")
+            }
+
+            def mergedBytes = zip.getInputStream(zip.getEntry(mergedRuntimeEntries[0])).bytes
+            def mergedZip = new java.util.zip.ZipInputStream(new ByteArrayInputStream(mergedBytes))
+            def mergedNames = new LinkedHashSet<String>()
+            try {
+                java.util.zip.ZipEntry mergedEntry
+                while ((mergedEntry = mergedZip.nextEntry) != null) {
+                    if (!mergedNames.add(mergedEntry.name)) {
+                        throw new GradleException("Merged NeoForge runtime contains duplicate entry ${mergedEntry.name}")
+                    }
+                }
+            } finally {
+                mergedZip.close()
+            }
+            ["fun/prof_chen/teamviewer/main_code/client/sdk/ClientAdapterFactory.class",
+             "fun/prof_chen/teamviewer/main_code/client/ClientApplication.class",
+             "fun/prof_chen/teamviewer/main_code/battlemap/BattleMapCoordinator.class"].each { required ->
+                if (!mergedNames.contains(required)) {
+                    throw new GradleException("Merged NeoForge runtime missing ${required}")
+                }
+            }
+            int expectedMajor = targetJavaRelease + 44
+            int maximumMajor = 0
+            names.findAll { it.endsWith(".class") }.each { name ->
+                byte[] header = new byte[8]
+                def stream = zip.getInputStream(zip.getEntry(name))
+                try { if (stream.read(header) != 8) throw new GradleException("Invalid class ${name}") }
+                finally { stream.close() }
+                int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                maximumMajor = Math.max(maximumMajor, major)
+                if (major > expectedMajor) throw new GradleException("${name} has class major ${major} > ${expectedMajor}")
+            }
+            if (maximumMajor != expectedMajor) {
+                throw new GradleException("NeoForge adapter maximum class major ${maximumMajor}, expected ${expectedMajor}")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyNeoForgeStandalone)
+}

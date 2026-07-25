@@ -44,6 +44,29 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
 }
 
+def verifySdkBoundary = tasks.register("verifySdkBoundary") {
+    group = "verification"
+    description = "Ensure Common Adapter SDK sources remain Loader and game independent."
+    inputs.files(sourceSets.main.allJava)
+    doLast {
+        def forbidden = ["import net.minecraft.", "import net.fabricmc.", "import net.neoforged.",
+                         "import net.minecraftforge.", "import journeymap.", "import xaero."]
+        def violations = []
+        inputs.files.files.sort().each { sourceFile ->
+            sourceFile.eachLine { line, lineNumber ->
+                if (forbidden.any { line.trim().startsWith(it) }) {
+                    violations << "${sourceFile}:$lineNumber: ${line.trim()}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) throw new GradleException("Platform API leaked into common-sdk:\n" + violations.join("\n"))
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifySdkBoundary)
+}
+
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
     if (JavaVersion.current() < javaVersion) {

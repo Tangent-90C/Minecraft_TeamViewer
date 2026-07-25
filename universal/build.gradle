@@ -38,12 +38,9 @@ configurations {
 dependencies {
     sharedNested project(":common")
     sharedNested project(":common-sdk")
-    sharedNested "com.squareup.okhttp3:okhttp:4.12.0"
-    sharedNested "com.squareup.okio:okio-jvm:3.6.0"
-    sharedNested "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
-    sharedNested "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
-    sharedNested "com.fasterxml.jackson.core:jackson-core:2.18.6"
-    sharedNested "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+    sharedNested "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
+    sharedNested "com.squareup.okio:okio-jvm:${project.okio_version}"
+    sharedNested "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
     sharedNested "com.google.protobuf:protobuf-java:${project.protobuf_version}"
     sharedNested "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
 }
@@ -178,12 +175,13 @@ def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
 def packageUniversalJar = tasks.register("packageUniversalJar", Jar) {
     group = "build"
     description = "Assemble the official TeamViewRelay All-in-One Jar."
-    dependsOn(generateUniversalMetadata, ":fabric-bootstrap:classes")
-    archiveFileName.set("${project.archives_base_name}-all-${project.version}.jar")
+    dependsOn(generateUniversalMetadata, ":fabric-bootstrap:classes", ":client-bootstrap:classes")
+    archiveFileName.set("${project.archives_base_name}-Fabric-all-${project.version}.jar")
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
     duplicatesStrategy = DuplicatesStrategy.FAIL
 
     from(project(":fabric-bootstrap").sourceSets.main.output)
+    from(project(":client-bootstrap").sourceSets.main.output)
     from(rootProject.file("fabric/src/main/resources")) {
         include "assets/**"
     }
@@ -217,6 +215,9 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
             }
             if (entries.any { it.startsWith("fun/prof_chen/teamviewer/main_code/core/FabricClientAdapterFactory") }) {
                 throw new GradleException("Universal root namespace contains a flattened Minecraft adapter")
+            }
+            if (entries.any { it.startsWith("META-INF/jars/jackson-") }) {
+                throw new GradleException("Universal Jar must not duplicate Minecraft's Jackson modules")
             }
             def rootMod = new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry("fabric.mod.json")))
             if (rootMod.id != "team-view-relay" || rootMod.depends?.get("team-view-relay-adapter") != "*") {

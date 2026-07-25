@@ -25,7 +25,7 @@ public interface RuntimeGateway {
 
     Path getLogsDirectory();
 
-    /** Fabric config directory. The common runtime owns config file naming, parsing and saving. */
+    /** Loader config directory. The common runtime owns config file naming, parsing and saving. */
     default Path getConfigDirectory() {
         Path logs = getLogsDirectory();
         return logs == null || logs.getParent() == null ? Path.of("config") : logs.getParent().resolve("config");

@@ -14,6 +14,10 @@ pluginManagement {
 
     repositories {
         maven {
+            name = 'NeoForged'
+            url = 'https://maven.neoforged.net/releases'
+        }
+        maven {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
@@ -23,6 +27,7 @@ pluginManagement {
     plugins {
         id 'fabric-loom' version versionProperties.getProperty("${selectedTarget}.loom_version")
         id 'net.fabricmc.fabric-loom' version versionProperties.getProperty("${selectedTarget}.loom_version")
+        id 'net.neoforged.moddev' version versionProperties.getProperty('neoforge_moddev_version')
     }
 }
 
@@ -30,7 +35,8 @@ rootProject.name = "TeamViewRelay"
 
 include("common")
 include("common-sdk")
+include("client-bootstrap")
 include("fabric-bootstrap")
 include("fabric")
-include("forge")
+include("neoforge")
 include("universal")

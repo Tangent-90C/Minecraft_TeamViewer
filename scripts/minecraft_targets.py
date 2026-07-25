@@ -29,6 +29,9 @@ REQUIRED_PROFILE_KEYS = (
     "mappings_mode",
     "modmenu_version",
     "journeymap_dependency",
+    "neoforge_version",
+    "neoforge_adapter_version",
+    "neoforge_standalone_artifact",
 )
 
 
@@ -83,6 +86,19 @@ def load_manifest() -> tuple[dict[str, str], list[str]]:
         adapter_dir = ROOT / "fabric" / "src" / "version" / properties[f"{target}.minecraft_adapter_version"]
         if not adapter_dir.is_dir():
             raise SystemExit(f"Adapter directory does not exist for {target}: {adapter_dir}")
+        neoforge_adapter_dir = (
+            ROOT / "neoforge" / "src" / "version" / properties[f"{target}.neoforge_adapter_version"]
+        )
+        if not neoforge_adapter_dir.is_dir():
+            raise SystemExit(f"NeoForge adapter directory does not exist for {target}: {neoforge_adapter_dir}")
+    loaders = [value.strip() for value in properties.get("supported_loaders", "").split(",") if value.strip()]
+    if loaders != ["fabric", "neoforge"]:
+        raise SystemExit(f"supported_loaders must be fabric,neoforge; got {loaders}")
+    neoforge_targets = [
+        value.strip() for value in properties.get("neoforge_supported_targets", "").split(",") if value.strip()
+    ]
+    if neoforge_targets != targets:
+        raise SystemExit(f"NeoForge target list must match supported_targets; got {neoforge_targets}")
     return properties, targets
 
 
@@ -111,7 +127,7 @@ def collect_artifact(properties: dict[str, str], target: str) -> list[pathlib.Pa
     mod_version = gradle_property("mod_version")
     minecraft_version = target_profile["minecraft_target_version"]
     artifact_name = target_profile["standalone_artifact"].replace("{mod_version}", mod_version)
-    expected_name = f"{base_name}-{minecraft_version}-{mod_version}.jar"
+    expected_name = f"{base_name}-Fabric-{minecraft_version}-{mod_version}.jar"
     if artifact_name != expected_name:
         raise SystemExit(f"Standalone artifact manifest mismatch for {target}: {artifact_name} != {expected_name}")
     build_root = ROOT / "fabric" / "build"
@@ -125,6 +141,29 @@ def collect_artifact(properties: dict[str, str], target: str) -> list[pathlib.Pa
     destination = destination_dir / artifact_name
     shutil.copy2(source, destination)
     return [destination]
+
+
+def collect_neoforge_artifact(properties: dict[str, str], target: str) -> pathlib.Path:
+    target_profile = profile(properties, target)
+    default_target = properties["default_target"]
+    base_name = gradle_property("archives_base_name")
+    mod_version = gradle_property("mod_version")
+    minecraft_version = target_profile["minecraft_target_version"]
+    artifact_name = target_profile["neoforge_standalone_artifact"].replace("{mod_version}", mod_version)
+    expected_name = f"{base_name}-NeoForge-{minecraft_version}-{mod_version}.jar"
+    if artifact_name != expected_name:
+        raise SystemExit(f"NeoForge artifact manifest mismatch for {target}: {artifact_name} != {expected_name}")
+    build_root = ROOT / "neoforge" / "build"
+    libs = build_root / "libs" if target == default_target else build_root / target / "libs"
+    source = libs / artifact_name
+    if not source.is_file():
+        available = sorted(path.name for path in libs.glob("*.jar")) if libs.is_dir() else []
+        raise SystemExit(f"Expected NeoForge artifact not found: {source}; available={available}")
+    destination_dir = ROOT / "build-artifacts"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination = destination_dir / artifact_name
+    shutil.copy2(source, destination)
+    return destination
 
 
 def java_home(properties: dict[str, str], target: str) -> pathlib.Path:
@@ -153,7 +192,7 @@ def java_home(properties: dict[str, str], target: str) -> pathlib.Path:
 def collect_universal() -> pathlib.Path:
     base_name = gradle_property("archives_base_name")
     mod_version = gradle_property("mod_version")
-    artifact_name = f"{base_name}-all-{mod_version}.jar"
+    artifact_name = f"{base_name}-Fabric-all-{mod_version}.jar"
     source = ROOT / "universal" / "build" / "libs" / artifact_name
     if not source.is_file():
         raise SystemExit(f"Expected universal artifact not found: {source}")
@@ -181,11 +220,18 @@ def verify_release_set(properties: dict[str, str], targets: list[str]) -> list[p
         profile(properties, target)["standalone_artifact"].replace("{mod_version}", mod_version)
         for target in targets
     }
-    expected.add(f"{base_name}-all-{mod_version}.jar")
+    expected.add(f"{base_name}-Fabric-all-{mod_version}.jar")
+    expected.update(
+        profile(properties, target)["neoforge_standalone_artifact"].replace("{mod_version}", mod_version)
+        for target in targets
+    )
     artifact_dir = ROOT / "build-artifacts"
     actual = {path.name for path in artifact_dir.glob("*.jar")} if artifact_dir.is_dir() else set()
     if actual != expected:
         raise SystemExit(f"Release artifacts mismatch: expected={sorted(expected)}, actual={sorted(actual)}")
+    legacy = [name for name in actual if not ("-Fabric-" in name or "-NeoForge-" in name)]
+    if legacy:
+        raise SystemExit(f"Loader-ambiguous legacy artifacts are forbidden: {legacy}")
     return [artifact_dir / name for name in sorted(expected)]
 
 
@@ -208,6 +254,8 @@ def main() -> None:
     get_parser.add_argument("key")
     collect_parser = subparsers.add_parser("collect")
     collect_parser.add_argument("target")
+    collect_neoforge_parser = subparsers.add_parser("collect-neoforge")
+    collect_neoforge_parser.add_argument("target")
     java_home_parser = subparsers.add_parser("java-home")
     java_home_parser.add_argument("target")
     args = parser.parse_args()
@@ -220,11 +268,13 @@ def main() -> None:
     elif args.command == "ci-matrix":
         include = [
             {
+                "loader": loader,
                 "minecraft": target,
                 "java": profile(properties, target)["gradle_runtime_java"],
                 "game_java": profile(properties, target)["game_java_version"],
                 "adapter_java": profile(properties, target)["adapter_java_release"],
             }
+            for loader in ("fabric", "neoforge")
             for target in targets
         ]
         print(json.dumps({"include": include}, separators=(",", ":")))
@@ -254,6 +304,10 @@ def main() -> None:
         require_target(targets, args.target)
         for artifact in collect_artifact(properties, args.target):
             print(f"Created {artifact.relative_to(ROOT)}")
+    elif args.command == "collect-neoforge":
+        require_target(targets, args.target)
+        artifact = collect_neoforge_artifact(properties, args.target)
+        print(f"Created {artifact.relative_to(ROOT)}")
     elif args.command == "java-home":
         require_target(targets, args.target)
         print(java_home(properties, args.target))

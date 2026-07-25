@@ -21,6 +21,10 @@ allprojects {
             url = "https://maven.fabricmc.net/"
         }
         maven {
+            name = "NeoForged"
+            url = "https://maven.neoforged.net/releases"
+        }
+        maven {
             name = "Terraformers"
             url = "https://maven.terraformersmc.com/releases/"
         }
@@ -29,12 +33,12 @@ allprojects {
 }
 
 tasks.named("build") {
-    dependsOn(":fabric:build")
+    dependsOn(":fabric:build", ":neoforge:build")
 }
 
 tasks.named("clean") {
-    dependsOn(":common:clean", ":common-sdk:clean", ":fabric-bootstrap:clean", ":fabric:clean",
-            ":forge:clean", ":universal:clean")
+    dependsOn(":common:clean", ":common-sdk:clean", ":client-bootstrap:clean", ":fabric-bootstrap:clean",
+            ":fabric:clean", ":neoforge:clean", ":universal:clean")
 }
 
 ["runClient", "runclient"].each { taskName ->

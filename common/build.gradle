@@ -9,19 +9,16 @@ base {
 
 dependencies {
     api project(":common-sdk")
-    implementation "com.google.code.gson:gson:2.11.0"
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    implementation "com.squareup.okio:okio-jvm:3.6.0"
-    compileOnly "org.slf4j:slf4j-api:2.0.16"
-    implementation "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
-    implementation "com.fasterxml.jackson.core:jackson-core:2.18.6"
-    implementation "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+    implementation "com.google.code.gson:gson:${project.gson_version}"
+    implementation "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
+    implementation "com.squareup.okio:okio-jvm:${project.okio_version}"
+    compileOnly "org.slf4j:slf4j-api:${project.slf4j_version}"
     implementation "com.google.protobuf:protobuf-java:${project.protobuf_version}"
     implementation "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
     testImplementation platform("org.junit:junit-bom:5.13.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    testRuntimeOnly "org.slf4j:slf4j-simple:2.0.16"
+    testRuntimeOnly "org.slf4j:slf4j-simple:${project.slf4j_version}"
 }
 
 def protoModuleDir = rootProject.file("third_party/TeamViewRelay-Protocol")
@@ -117,6 +114,41 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
+// NeoForge loads every JarJar dependency as a named JPMS module. common-sdk
+// and common intentionally keep a compile-time boundary while sharing domain
+// packages, so they must be one runtime module in NeoForge production jars.
+def neoForgeRuntimeJar = tasks.register("neoForgeRuntimeJar", Jar) {
+    group = "build"
+    description = "Merge common-sdk and common into one NeoForge runtime module."
+    archiveClassifier = "neoforge-runtime"
+    dependsOn(tasks.named("classes"), project(":common-sdk").tasks.named("classes"))
+    from(sourceSets.main.output)
+    from(project(":common-sdk").sourceSets.main.output)
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    manifest {
+        attributes("Automatic-Module-Name": "fun.prof.chen.TeamViewRelay.common.runtime")
+    }
+}
+
+configurations {
+    neoForgeRuntimeElements {
+        canBeConsumed = true
+        canBeResolved = false
+        outgoing.capability("${project.group}:${project.name}-neoforge-runtime:${project.version}")
+        attributes {
+            attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, Category.LIBRARY))
+            attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+            attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+            attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling, Bundling.EXTERNAL))
+            attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, targetJavaVersion)
+        }
+    }
+}
+
+artifacts {
+    neoForgeRuntimeElements(neoForgeRuntimeJar)
+}
+
 tasks.register("verifyPlatformBoundary") {
     group = "verification"
     description = "Ensure common main sources do not import Minecraft, Fabric, or optional map APIs."
@@ -126,6 +158,8 @@ tasks.register("verifyPlatformBoundary") {
         def forbiddenImports = [
                 "import net.minecraft.",
                 "import net.fabricmc.",
+                "import net.neoforged.",
+                "import net.minecraftforge.",
                 "import journeymap.",
                 "import xaero."
         ]

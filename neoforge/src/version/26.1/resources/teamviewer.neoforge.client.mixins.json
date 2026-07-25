@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "fun.prof_chen.teamviewer.mixin.client",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["ClientPacketListenerMixin"],
+  "injectors": {"defaultRequire": 1}
+}

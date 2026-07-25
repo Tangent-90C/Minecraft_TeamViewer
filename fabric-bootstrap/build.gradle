@@ -8,10 +8,9 @@ base {
 }
 
 dependencies {
-    api project(":common")
-    api project(":common-sdk")
+    api project(":client-bootstrap")
     compileOnly "net.fabricmc:fabric-loader:0.17.2"
-    compileOnly "org.slf4j:slf4j-api:2.0.16"
+    compileOnly "org.slf4j:slf4j-api:${project.slf4j_version}"
 }
 
 def sharedJavaRelease = rootProject.ext.sharedJavaRelease as int
@@ -23,13 +22,15 @@ tasks.withType(JavaCompile).configureEach {
 
 def verifyBootstrapBoundary = tasks.register("verifyBootstrapBoundary") {
     group = "verification"
-    description = "Keep the shared bootstrap on Fabric Loader and Common APIs only."
+    description = "Keep the Fabric bootstrap on Fabric Loader and client-bootstrap APIs only."
     inputs.files(fileTree("src/main/java") { include "**/*.java" })
 
     doLast {
         def forbiddenImports = [
                 "import net.minecraft.",
                 "import net.fabricmc.fabric.api.",
+                "import net.neoforged.",
+                "import net.minecraftforge.",
                 "import journeymap.",
                 "import xaero."
         ]
