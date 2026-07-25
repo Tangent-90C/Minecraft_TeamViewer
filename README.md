@@ -42,6 +42,7 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 1.21.8 版本至少需要：
 
 - Minecraft `1.21.8`
+- Java `21`
 - Fabric Loader `0.17.2`
 - Fabric API `0.131.0+1.21.8`
 - 本项目 Mod Jar
@@ -73,16 +74,20 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 ```
 
-使用 Task 同时收集两个版本的产物：
+使用 Task 同时构建两个独立版本和 All-in-One（需要对应的两个 JDK）：
 
 ```bash
-JAVA25_HOME=/path/to/jdk-25 task build-all
+JAVA21_HOME=/path/to/jdk-21 JAVA25_HOME=/path/to/jdk-25 task build
 ```
 
-产物分别为：
+`build-artifacts` 最终包含：
 
-- `TeamViewRelay-<mod_version>.jar`（1.21.8，保持旧名称）
+- `TeamViewRelay-1.21.8-<mod_version>.jar`（1.21.8独立版）
 - `TeamViewRelay-26.1.2-<mod_version>.jar`（26.1.2）
+- `TeamViewRelay-all-<mod_version>.jar`（两个版本通用）
+
+独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
+仅供打包使用，不是玩家可安装产物。
 
 开发调试客户端：
 
@@ -169,11 +174,17 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 
 主要代码目录：
 
-- `common/src/main/java`：共享逻辑
-- `common/src/version/1.21.8`：版本相关代码
-- `common/src/version/26.1`：26.1 系列的版本适配代码
-- `fabric/src/client`：Fabric 客户端代码
-- `fabric/src/version/26.1`：Minecraft 26.1 的 Fabric/Minecraft API 适配
+- `common-sdk`：平台无关的 Adapter SDK 编译边界（snapshot、事件、UI/HUD/世界渲染命令和插件端口）
+- `common/src/main/java`：网络、配置、同步、战局地图、HUD/世界渲染规划等唯一业务实现
+- `fabric-bootstrap/src/main/java`：Java 17 Fabric Loader 启动器和 Adapter TCK
+- `fabric/src/shared`：确实跨 Minecraft 版本稳定的 adapter 胶水
+- `fabric/src/version/1.21.8`：Minecraft 1.21.8 API 适配
+- `fabric/src/version/26.1`：Minecraft 26.1.2 API 适配
+- `universal`：All-in-One 元数据、组装和产物守卫
+
+具体版本代码只能实现 Common Adapter SDK，不得复制业务逻辑。完整边界与打包约束见
+[`docs/adapter-sdk.md`](docs/adapter-sdk.md) 和
+[`docs/multi-version-packaging.md`](docs/multi-version-packaging.md)。
 - `fabric/src/main/resources`：Fabric 资源与语言文件
 
 ## 协议 / 版本兼容

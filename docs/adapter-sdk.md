@@ -72,6 +72,13 @@ that manifest through `scripts/minecraft_targets.py`; `task build` iterates ever
 Task starts each target in a separate no-daemon Gradle process so Loom and mapping services from
 one target cannot leak into the next target.
 
+`common-sdk`, common runtime and `fabric-bootstrap` are Java 17 ABI artifacts. Each adapter is
+compiled with its target's `adapter_java_release`. A target below Java 17 is rejected until a
+separate legacy runtime exists; running an old Minecraft release on a newer JRE is not a supported
+substitute. Every target produces a complete standalone Jar plus an internal remapped slim adapter.
+The same slim bytecode is embedded into the All-in-One container, while business/runtime classes
+and third-party libraries remain shared once. See `docs/multi-version-packaging.md`.
+
 ## 1.21.8 reference index
 
 The complete reference adapter is under `fabric/src/version/1.21.8`:

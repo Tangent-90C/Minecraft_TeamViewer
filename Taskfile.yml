@@ -21,16 +21,13 @@ tasks:
     cmds:
       - |
           set -eu
-          build_java_home="${JAVA_BUILD_HOME:-${JAVA25_HOME:-}}"
-          test -x "$build_java_home/bin/java" || {
-            echo "JAVA_BUILD_HOME (or JAVA25_HOME) must point to a JDK that can build every target" >&2
-            exit 1
-          }
+          python3 scripts/minecraft_targets.py prepare-build
           for target in $(python3 scripts/minecraft_targets.py list); do
             echo "Building Minecraft $target"
-            JAVA_HOME="$build_java_home" {{.GRADLE}} --no-daemon -Pmc_target="$target" :fabric:build
-            python3 scripts/minecraft_targets.py collect "$target"
+            task build-target TARGET="$target"
           done
+          task package-all
+          python3 scripts/minecraft_targets.py verify-release-set
 
   build-target:
     desc: 'Build one manifest target (usage: task build-target TARGET=1.21.8)'
@@ -38,8 +35,10 @@ tasks:
       vars: [TARGET]
     cmds:
       - 'python3 scripts/minecraft_targets.py validate "{{.TARGET}}"'
-      - '{{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :fabric:build'
-      - 'python3 scripts/minecraft_targets.py collect "{{.TARGET}}"'
+      - |
+          java_home="$(python3 scripts/minecraft_targets.py java-home "{{.TARGET}}")"
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :fabric:build
+          python3 scripts/minecraft_targets.py collect "{{.TARGET}}"
 
   build-1.21.8:
     desc: Build Minecraft 1.21.8 (Java 21 bytecode) and collect its jar
@@ -50,8 +49,17 @@ tasks:
   build-26.1.2:
     desc: Build Minecraft 26.1.2 with Java 25 and collect its jar
     cmds:
-      - 'test -n "${JAVA25_HOME:-}" || (echo "JAVA25_HOME must point to a Java 25 JDK" >&2; exit 1)'
-      - 'JAVA_HOME="$JAVA25_HOME" task build-target TARGET=26.1.2'
+      - task: build-target
+        vars: { TARGET: '26.1.2' }
+
+  package-all:
+    desc: Assemble and collect the official All-in-One Jar from every staged adapter
+    cmds:
+      - |
+          default_target="$(python3 scripts/minecraft_targets.py default-target)"
+          java_home="$(python3 scripts/minecraft_targets.py java-home "$default_target")"
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon :universal:build
+          python3 scripts/minecraft_targets.py collect-universal
 
   build-all:
     desc: Alias for the all-version build

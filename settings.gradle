@@ -30,5 +30,7 @@ rootProject.name = "TeamViewRelay"
 
 include("common")
 include("common-sdk")
+include("fabric-bootstrap")
 include("fabric")
 include("forge")
+include("universal")

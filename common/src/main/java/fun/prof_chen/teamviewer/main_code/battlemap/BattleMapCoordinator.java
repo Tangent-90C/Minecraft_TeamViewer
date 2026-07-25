@@ -77,7 +77,7 @@ public final class BattleMapCoordinator {
                         cell.relChunkX(), cell.relChunkZ(), cell.symbol(), cell.colorRaw()).toMap())
                 .toList();
         BattleMapProjection.Result projection = BattleMapProjection.build(value.dimension(),
-                candidates.getFirst().baseChunkX(), candidates.getFirst().baseChunkZ(), cells);
+                candidates.get(0).baseChunkX(), candidates.get(0).baseChunkZ(), cells);
         return Optional.of(new Observation(BattleMapMode.NODEMC.id(), value.dimension(), value.size(),
                 value.anchorRow(), value.anchorColumn(), observedAt, System.currentTimeMillis(), candidatePayloads,
                 cells, projection.semanticHash(), projection.chunkIds()));

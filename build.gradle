@@ -5,11 +5,21 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
+def minecraftVersionProperties = new Properties()
+file("gradle/minecraft-versions.properties").withInputStream {
+    minecraftVersionProperties.load(it)
+}
+ext.sharedJavaRelease = minecraftVersionProperties.getProperty("shared_java_release").toInteger()
+
 allprojects {
     group = rootProject.group
     version = rootProject.version
 
     repositories {
+        maven {
+            name = "Fabric"
+            url = "https://maven.fabricmc.net/"
+        }
         maven {
             name = "Terraformers"
             url = "https://maven.terraformersmc.com/releases/"
@@ -23,7 +33,8 @@ tasks.named("build") {
 }
 
 tasks.named("clean") {
-    dependsOn(":common:clean", ":common-sdk:clean", ":fabric:clean", ":forge:clean")
+    dependsOn(":common:clean", ":common-sdk:clean", ":fabric-bootstrap:clean", ":fabric:clean",
+            ":forge:clean", ":universal:clean")
 }
 
 ["runClient", "runclient"].each { taskName ->

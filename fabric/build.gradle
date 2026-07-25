@@ -4,6 +4,8 @@ plugins {
     id 'maven-publish'
 }
 
+evaluationDependsOn(":fabric-bootstrap")
+
 def minecraftVersionProperties = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     minecraftVersionProperties.load(it)
@@ -25,7 +27,9 @@ def profileProperty = { String name ->
 }
 def minecraftTargetVersion = profileProperty("minecraft_target_version")
 def minecraftAdapterVersion = profileProperty("minecraft_adapter_version")
-def targetJavaVersion = profileProperty("java_version").toInteger()
+def targetJavaVersion = profileProperty("adapter_java_release").toInteger()
+def gameJavaVersion = profileProperty("game_java_version").toInteger()
+def sharedJavaVersion = minecraftVersionProperties.getProperty("shared_java_release").toInteger()
 def loaderVersion = profileProperty("loader_version")
 def fabricApiVersion = profileProperty("fabric_api_version")
 def fabricApiModId = profileProperty("fabric_api_mod_id")
@@ -144,6 +148,8 @@ dependencies {
     implementation project(":common-sdk")
     include project(":common-sdk")
 
+    implementation project(":fabric-bootstrap")
+
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     include "com.squareup.okhttp3:okhttp:4.12.0"
 
@@ -192,13 +198,15 @@ processResources {
     inputs.property "minecraft_version", minecraftTargetVersion
     inputs.property "loader_version", loaderVersion
     inputs.property "fabric_api_mod_id", fabricApiModId
+    inputs.property "java_version", gameJavaVersion
     filteringCharset = "UTF-8"
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
                 "minecraft_version": minecraftTargetVersion,
                 "loader_version": loaderVersion,
-                "fabric_api_mod_id": fabricApiModId
+                "fabric_api_mod_id": fabricApiModId,
+                "java_version": gameJavaVersion
     }
 }
 
@@ -341,6 +349,233 @@ tasks.named("check") {
     dependsOn(verifyNoCommonClassShadowing)
 }
 
+def adapterArtifactDirectory = rootProject.layout.buildDirectory.dir("adapter-artifacts")
+def adapterArtifactName = profileProperty("slim_adapter_artifact")
+def generatedAdapterMetadataDirectory = layout.buildDirectory.dir("generated/adapter-metadata")
+def productionJarTaskName = mappingsMode == "none" ? "jar" : "remapJar"
+def normalizedPublicVersion = project.version.toString().replaceFirst(/^v/, "")
+def internalAdapterVersion = "${normalizedPublicVersion}.mc.${minecraftTargetVersion.replaceAll(/[^0-9A-Za-z-]+/, '.')}"
+
+def generateAdapterMetadata = tasks.register("generateAdapterMetadata") {
+    group = "build"
+    description = "Generate internal Fabric metadata for the selected slim adapter."
+    outputs.dir(generatedAdapterMetadataDirectory)
+    inputs.property("modVersion", project.version.toString())
+    inputs.property("minecraftTargetVersion", minecraftTargetVersion)
+    inputs.property("minecraftAdapterVersion", minecraftAdapterVersion)
+    inputs.property("targetJavaVersion", targetJavaVersion)
+    inputs.property("loaderVersion", loaderVersion)
+    inputs.property("fabricApiVersion", fabricApiVersion)
+    inputs.property("fabricApiModId", fabricApiModId)
+
+    doLast {
+        def outputRoot = generatedAdapterMetadataDirectory.get().asFile
+        def adapterInfoRoot = new File(outputRoot, "META-INF/teamviewer")
+        adapterInfoRoot.mkdirs()
+        def fabricMetadata = [
+                schemaVersion: 1,
+                id: "team-view-relay-adapter",
+                version: internalAdapterVersion,
+                name: "TeamViewRelay Adapter ${minecraftTargetVersion}",
+                description: "Internal Minecraft ${minecraftTargetVersion} adapter for TeamViewRelay.",
+                environment: "client",
+                depends: [
+                        fabricloader: ">=${loaderVersion}",
+                        minecraft: minecraftTargetVersion,
+                        java: ">=${targetJavaVersion}",
+                        (fabricApiModId): "*"
+                ],
+                custom: ["teamviewer:internal": true]
+        ]
+        new File(outputRoot, "fabric.mod.json").text =
+                groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(fabricMetadata))
+        def adapterInfo = [
+                minecraft: minecraftTargetVersion,
+                adapter: minecraftAdapterVersion,
+                internalModVersion: internalAdapterVersion,
+                sharedJavaRelease: sharedJavaVersion,
+                adapterJavaRelease: targetJavaVersion,
+                gameJavaVersion: gameJavaVersion,
+                loader: loaderVersion,
+                fabricApiModId: fabricApiModId,
+                fabricApi: fabricApiVersion,
+                serviceProvider: "fun.prof_chen.teamviewer.main_code.core.FabricClientAdapterFactory"
+        ]
+        new File(adapterInfoRoot, "adapter.json").text =
+                groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(adapterInfo))
+    }
+}
+
+def remapAdapterJar = tasks.register("remapAdapterJar", Jar) {
+    group = "build"
+    description = "Extract the already-remapped Minecraft adapter into an internal slim Jar."
+    dependsOn(tasks.named(productionJarTaskName), generateAdapterMetadata)
+    archiveFileName.set(adapterArtifactName)
+    destinationDirectory.set(adapterArtifactDirectory)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from({ zipTree(tasks.named(productionJarTaskName).get().archiveFile.get().asFile) }) {
+        include "fun/**"
+        exclude "fun/prof_chen/teamviewer/client/TeamviewerClient.class"
+        include "META-INF/services/**"
+        include "teamviewer.client.mixins.json"
+    }
+    from(generatedAdapterMetadataDirectory)
+}
+
+def verifyAdapterArtifact = tasks.register("verifyAdapterArtifact") {
+    group = "verification"
+    description = "Verify slim adapter contents, metadata, service provider, Mixin and bytecode release."
+    dependsOn(remapAdapterJar)
+    inputs.file(remapAdapterJar.flatMap { it.archiveFile })
+
+    doLast {
+        def adapterFile = remapAdapterJar.get().archiveFile.get().asFile
+        def zip = new java.util.zip.ZipFile(adapterFile)
+        try {
+            def entryNames = zip.entries().collect { it.name } as Set
+            def requiredEntries = [
+                    "fabric.mod.json",
+                    "META-INF/teamviewer/adapter.json",
+                    "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
+                    "teamviewer.client.mixins.json"
+            ]
+            def missing = requiredEntries.findAll { !entryNames.contains(it) }
+            if (!missing.isEmpty()) {
+                throw new GradleException("Slim adapter ${minecraftTargetVersion} is missing: ${missing}")
+            }
+            def forbiddenPrefixes = [
+                    "fun/prof_chen/teamviewer/client/TeamviewerClient",
+                    "fun/prof_chen/teamviewer/main_code/client/ClientApplication",
+                    "fun/prof_chen/teamviewer/main_code/client/ClientCoordinator",
+                    "fun/prof_chen/teamviewer/protocol/",
+                    "okhttp3/", "okio/", "com/fasterxml/jackson/", "com/google/protobuf/"
+            ]
+            def forbidden = entryNames.findAll { name -> forbiddenPrefixes.any { name.startsWith(it) } }
+            if (!forbidden.isEmpty()) {
+                throw new GradleException("Slim adapter contains shared/runtime classes: ${forbidden.toSorted()}")
+            }
+            def sharedClasses = new HashSet<String>()
+            [project(":common"), project(":common-sdk")].each { sharedProject ->
+                def classesRoot = sharedProject.layout.buildDirectory.dir("classes/java/main").get().asFile
+                fileTree(classesRoot) { include "**/*.class" }.files.each { classFile ->
+                    sharedClasses.add(classesRoot.toPath().relativize(classFile.toPath()).toString().replace('\\', '/'))
+                }
+            }
+            def sharedOverlap = entryNames.findAll { sharedClasses.contains(it) }
+            if (!sharedOverlap.isEmpty()) {
+                throw new GradleException("Slim adapter shadows Common SDK/runtime classes: ${sharedOverlap.toSorted()}")
+            }
+            def providerEntry = zip.getEntry(requiredEntries[2])
+            def providers = zip.getInputStream(providerEntry).getText("UTF-8").readLines()
+                    .collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith("#") }
+            if (providers != ["fun.prof_chen.teamviewer.main_code.core.FabricClientAdapterFactory"]) {
+                throw new GradleException("Slim adapter must expose exactly one factory; found ${providers}")
+            }
+            def mixin = new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry("teamviewer.client.mixins.json")))
+            if (!(mixin.client instanceof List) || mixin.client.isEmpty()) {
+                throw new GradleException("Slim adapter must contain a non-empty client Mixin list")
+            }
+            int expectedMajor = targetJavaVersion + 44
+            int maximumMajor = 0
+            entryNames.findAll { it.endsWith(".class") }.each { name ->
+                byte[] header = new byte[8]
+                def stream = zip.getInputStream(zip.getEntry(name))
+                try {
+                    if (stream.read(header) != 8) throw new GradleException("Invalid class entry ${name}")
+                } finally {
+                    stream.close()
+                }
+                int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                maximumMajor = Math.max(maximumMajor, major)
+                if (major > expectedMajor) {
+                    throw new GradleException("${name} has class major ${major}, expected <= ${expectedMajor}")
+                }
+            }
+            if (maximumMajor != expectedMajor) {
+                throw new GradleException("Slim adapter maximum class major ${maximumMajor}, expected ${expectedMajor}")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
+    group = "verification"
+    description = "Verify the selected standalone Jar remains complete and directly installable."
+    dependsOn(tasks.named(productionJarTaskName), ":fabric-bootstrap:jar", ":common:jar", ":common-sdk:jar")
+    inputs.file(tasks.named(productionJarTaskName).flatMap { it.archiveFile })
+
+    doLast {
+        def standaloneFile = tasks.named(productionJarTaskName).get().archiveFile.get().asFile
+        def zip = new java.util.zip.ZipFile(standaloneFile)
+        try {
+            def entryNames = zip.entries().collect { it.name }
+            def entries = entryNames as Set
+            def descriptorEntry = zip.getEntry("fabric.mod.json")
+            if (descriptorEntry == null) throw new GradleException("Standalone is missing fabric.mod.json")
+            def descriptor = new groovy.json.JsonSlurper().parse(zip.getInputStream(descriptorEntry))
+            if (descriptor.id != "team-view-relay"
+                    || descriptor.depends?.minecraft != minecraftTargetVersion
+                    || descriptor.depends?.java != ">=${gameJavaVersion}") {
+                throw new GradleException("Standalone metadata does not match target ${minecraftTargetVersion}")
+            }
+            def nested = entryNames.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
+            def requiredNestedPrefixes = [
+                    "TeamViewRelay-common-", "TeamViewRelay-common-sdk-",
+                    "okhttp-", "okio-jvm-", "kotlin-stdlib-", "jackson-annotations-", "jackson-core-",
+                    "jackson-databind-", "protobuf-java-", "protobuf-java-util-"
+            ]
+            requiredNestedPrefixes.each { prefix ->
+                def matches = nested.findAll { name ->
+                    def fileName = name.substring("META-INF/jars/".length())
+                    if (prefix == "TeamViewRelay-common-") {
+                        return fileName.startsWith(prefix) && !fileName.startsWith("TeamViewRelay-common-sdk-")
+                    }
+                    if (prefix == "protobuf-java-") {
+                        return fileName.startsWith(prefix) && !fileName.startsWith("protobuf-java-util-")
+                    }
+                    fileName.startsWith(prefix)
+                }
+                if (matches.size() != 1) {
+                    throw new GradleException("Standalone requires exactly one ${prefix} nested Jar; found ${matches}")
+                }
+            }
+            if (nested.any { it.contains("teamviewer-adapter-") }) {
+                throw new GradleException("Standalone must flatten its adapter instead of exposing the internal adapter ID")
+            }
+            if (!entries.contains("fun/prof_chen/teamviewer/client/TeamviewerClient.class")) {
+                throw new GradleException("Standalone is missing the shared Java 17 bootstrap entrypoint")
+            }
+            def providerPath = "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory"
+            def providerEntries = entryNames.findAll { it == providerPath }
+            if (providerEntries.size() != 1) {
+                throw new GradleException("Standalone must contain exactly one adapter provider resource")
+            }
+            def providers = zip.getInputStream(zip.getEntry(providerPath)).getText("UTF-8").readLines()
+                    .collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith("#") }
+            if (providers.size() != 1) {
+                throw new GradleException("Standalone must expose exactly one adapter factory; found ${providers}")
+            }
+            if (!entries.contains("teamviewer.client.mixins.json")) {
+                throw new GradleException("Standalone is missing its target Mixin config")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.register("standaloneJar") {
+    group = "build"
+    description = "Build the complete standalone Jar for the selected Minecraft target."
+    dependsOn(tasks.named(productionJarTaskName), verifyAdapterArtifact, verifyStandaloneArtifact)
+}
+
+tasks.named("build") {
+    dependsOn(verifyAdapterArtifact, verifyStandaloneArtifact)
+}
+
 tasks.matching { it.name in ["runClient", "remapJar"] }.configureEach {
     dependsOn(verifyNoCommonClassShadowing)
 }
@@ -354,6 +589,8 @@ java {
 }
 
 jar {
+    dependsOn(":fabric-bootstrap:classes")
+    from(project(":fabric-bootstrap").sourceSets.main.output)
     from(rootProject.file("LICENSE.txt")) {
         rename { "${it}_${project.base.archivesName.get()}" }
     }

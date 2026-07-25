@@ -43,6 +43,9 @@ class AdapterTckTest {
 
         assertTrue(report.passed(), report.issues().toString());
         assertTrue(report.toJson().contains("\"passed\":true"));
+        assertTrue(report.toJson().contains("\"modVersion\":\"test\""));
+        assertTrue(report.toJson().contains("\"minecraftVersion\":\"test-minecraft\""));
+        assertTrue(report.toJson().contains("\"javaVersion\":"));
     }
 
     @Test
@@ -69,6 +72,7 @@ class AdapterTckTest {
             public String getCurrentDimensionId() { return null; }
             public UUID getLocalPlayerId() { return null; }
             public String getClientProgramVersion() { return "test"; }
+            public String getMinecraftVersion() { return "test-minecraft"; }
             public String getClientProtocolVersion() { return "test"; }
             public String getClientMinCompatibleProtocolVersion() { return "test"; }
             public String getServerProtocolFallbackVersion() { return "test"; }

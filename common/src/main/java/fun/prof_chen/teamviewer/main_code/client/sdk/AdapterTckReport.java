@@ -6,6 +6,9 @@ import java.util.Objects;
 /** Result of the runtime Adapter SDK technology compatibility kit. */
 public record AdapterTckReport(
         String adapterVersion,
+        String modVersion,
+        String minecraftVersion,
+        String javaVersion,
         boolean passed,
         List<String> issues,
         List<IntegrationCapability> integrations,
@@ -13,6 +16,9 @@ public record AdapterTckReport(
         boolean firstHudRenderObserved) {
     public AdapterTckReport {
         adapterVersion = Objects.requireNonNull(adapterVersion, "adapterVersion");
+        modVersion = Objects.requireNonNullElse(modVersion, "unknown");
+        minecraftVersion = Objects.requireNonNullElse(minecraftVersion, "unknown");
+        javaVersion = Objects.requireNonNullElse(javaVersion, "unknown");
         issues = List.copyOf(Objects.requireNonNull(issues, "issues"));
         integrations = List.copyOf(Objects.requireNonNull(integrations, "integrations"));
     }
@@ -20,6 +26,9 @@ public record AdapterTckReport(
     public String toJson() {
         StringBuilder json = new StringBuilder();
         json.append("{\n  \"adapterVersion\":\"").append(escape(adapterVersion)).append("\",");
+        json.append("\n  \"modVersion\":\"").append(escape(modVersion)).append("\",");
+        json.append("\n  \"minecraftVersion\":\"").append(escape(minecraftVersion)).append("\",");
+        json.append("\n  \"javaVersion\":\"").append(escape(javaVersion)).append("\",");
         json.append("\n  \"passed\":").append(passed).append(',');
         json.append("\n  \"firstWorldRenderObserved\":").append(firstWorldRenderObserved).append(',');
         json.append("\n  \"firstHudRenderObserved\":").append(firstHudRenderObserved).append(',');
@@ -38,7 +47,8 @@ public record AdapterTckReport(
     }
 
     public AdapterTckReport withRenderObservations(boolean world, boolean hud) {
-        return new AdapterTckReport(adapterVersion, passed, issues, integrations, world, hud);
+        return new AdapterTckReport(adapterVersion, modVersion, minecraftVersion, javaVersion,
+                passed, issues, integrations, world, hud);
     }
 
     private static void appendStrings(StringBuilder json, List<String> values) {

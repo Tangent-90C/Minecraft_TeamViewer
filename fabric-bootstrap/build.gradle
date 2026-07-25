@@ -1,0 +1,70 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${project.archives_base_name}-fabric-bootstrap"
+}
+
+dependencies {
+    api project(":common")
+    api project(":common-sdk")
+    compileOnly "net.fabricmc:fabric-loader:0.17.2"
+    compileOnly "org.slf4j:slf4j-api:2.0.16"
+}
+
+def sharedJavaRelease = rootProject.ext.sharedJavaRelease as int
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(sharedJavaRelease)
+}
+
+def verifyBootstrapBoundary = tasks.register("verifyBootstrapBoundary") {
+    group = "verification"
+    description = "Keep the shared bootstrap on Fabric Loader and Common APIs only."
+    inputs.files(fileTree("src/main/java") { include "**/*.java" })
+
+    doLast {
+        def forbiddenImports = [
+                "import net.minecraft.",
+                "import net.fabricmc.fabric.api.",
+                "import journeymap.",
+                "import xaero."
+        ]
+        def violations = []
+        inputs.files.files.sort().each { sourceFile ->
+            sourceFile.eachLine { line, lineNumber ->
+                def trimmed = line.trim()
+                if (forbiddenImports.any { trimmed.startsWith(it) }) {
+                    violations << "${sourceFile}:$lineNumber: ${trimmed}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Platform APIs leaked into Java 17 bootstrap:\n" + violations.join("\n"))
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyBootstrapBoundary)
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(sharedJavaRelease)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(sharedJavaRelease)
+    }
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = "${project.archives_base_name}-fabric-bootstrap"
+            from components.java
+        }
+    }
+}

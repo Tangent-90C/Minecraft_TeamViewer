@@ -52,9 +52,9 @@ class ClientCoordinatorTest {
         coordinator.onEndClientTick();
         assertEquals(1, network.playerReports.size());
         assertEquals(localId, network.lastSubmitPlayerId);
-        assertEquals("local", network.playerReports.getFirst().get(localId).get("playerName"));
-        assertEquals("minecraft:overworld", network.entityReports.getFirst().get("entity-1").get("dimension"));
-        assertEquals("local", network.tabReports.getFirst().getFirst().get("name"));
+        assertEquals("local", network.playerReports.get(0).get(localId).get("playerName"));
+        assertEquals("minecraft:overworld", network.entityReports.get(0).get("entity-1").get("dimension"));
+        assertEquals("local", network.tabReports.get(0).get(0).get("name"));
         assertEquals(1, game.captureCount);
     }
 

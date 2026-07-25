@@ -10,6 +10,11 @@ public interface RuntimeGateway {
 
     String getClientProgramVersion();
 
+    /** Exact Minecraft runtime version when supplied by the platform loader. */
+    default String getMinecraftVersion() {
+        return "unknown";
+    }
+
     String getClientProtocolVersion();
 
     String getClientMinCompatibleProtocolVersion();

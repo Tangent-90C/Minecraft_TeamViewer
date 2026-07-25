@@ -15,7 +15,7 @@
   "license": "MIT",
   "icon": "assets/teamviewer/icon.ico",
 
-  "environment": "*",
+  "environment": "client",
   "entrypoints": {
     "fabric-datagen": [
       "fun.prof_chen.teamviewer.client.TeamviewerDataGenerator"
@@ -32,8 +32,7 @@
   },
 
   "mixins": [
-    "teamviewer.mixins.json"
-    ,{
+    {
       "config": "teamviewer.client.mixins.json",
       "environment": "client"
     }
@@ -42,7 +41,8 @@
   "depends": {
     "fabricloader": ">=${loader_version}",
     "${fabric_api_mod_id}": "*",
-    "minecraft": "${minecraft_version}"
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}"
   },
   "suggests": {
     "modmenu": "*"

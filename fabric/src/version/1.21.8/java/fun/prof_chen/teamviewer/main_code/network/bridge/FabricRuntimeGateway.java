@@ -33,6 +33,13 @@ public final class FabricRuntimeGateway implements RuntimeGateway {
     }
 
     @Override
+    public String getMinecraftVersion() {
+        return FabricLoader.getInstance().getModContainer("minecraft")
+                .map(container -> container.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
+    }
+
+    @Override
     public String getClientProtocolVersion() {
         return TeamviewerModMetadata.MetaProtocol.CLIENT_PROTOCOL_VERSION;
     }

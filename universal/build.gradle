@@ -1,0 +1,345 @@
+plugins {
+    id 'base'
+}
+
+def versionManifest = new Properties()
+rootProject.file("gradle/minecraft-versions.properties").withInputStream {
+    versionManifest.load(it)
+}
+def supportedTargets = versionManifest.getProperty("supported_targets").split(",").collect { it.trim() }
+def sharedJavaRelease = versionManifest.getProperty("shared_java_release").toInteger()
+def minimumLoaderVersion = supportedTargets.collect {
+    versionManifest.getProperty("${it}.loader_version")
+}.min { left, right ->
+    def leftParts = left.tokenize('.').collect { it.toInteger() }
+    def rightParts = right.tokenize('.').collect { it.toInteger() }
+    for (int i = 0; i < Math.max(leftParts.size(), rightParts.size()); i++) {
+        int l = i < leftParts.size() ? leftParts[i] : 0
+        int r = i < rightParts.size() ? rightParts[i] : 0
+        if (l != r) return l <=> r
+    }
+    0
+}
+
+def adapterDirectory = rootProject.layout.buildDirectory.dir("adapter-artifacts")
+def adapterFiles = supportedTargets.collect { target ->
+    def adapterName = versionManifest.getProperty("${target}.slim_adapter_artifact")
+    adapterDirectory.map { it.file(adapterName).asFile }
+}
+
+configurations {
+    sharedNested {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+dependencies {
+    sharedNested project(":common")
+    sharedNested project(":common-sdk")
+    sharedNested "com.squareup.okhttp3:okhttp:4.12.0"
+    sharedNested "com.squareup.okio:okio-jvm:3.6.0"
+    sharedNested "org.jetbrains.kotlin:kotlin-stdlib:1.9.25"
+    sharedNested "com.fasterxml.jackson.core:jackson-annotations:2.18.6"
+    sharedNested "com.fasterxml.jackson.core:jackson-core:2.18.6"
+    sharedNested "com.fasterxml.jackson.core:jackson-databind:2.18.6"
+    sharedNested "com.google.protobuf:protobuf-java:${project.protobuf_version}"
+    sharedNested "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+}
+
+// Fabric Loader only exposes nested libraries that carry Fabric metadata. Reuse Loom's
+// processIncludeJars output so the universal container has the same loadable common and
+// third-party jars as a standalone artifact, without applying Loom to this project.
+def packagingTarget = providers.gradleProperty("mc_target").getOrElse(
+        versionManifest.getProperty("default_target"))
+def processedSharedDirectory = packagingTarget == versionManifest.getProperty("default_target")
+        ? rootProject.file("fabric/build/processIncludeJars")
+        : rootProject.file("fabric/build/${packagingTarget}/processIncludeJars")
+def processedSharedFiles = providers.provider {
+    configurations.sharedNested.files.toList().sort { it.name }.collect {
+        new File(processedSharedDirectory, it.name)
+    }
+}
+
+def generatedMetadataDirectory = layout.buildDirectory.dir("generated/universal-metadata")
+
+def sha256 = { File file ->
+    def digest = java.security.MessageDigest.getInstance("SHA-256")
+    file.withInputStream { stream ->
+        byte[] buffer = new byte[8192]
+        for (int read = stream.read(buffer); read >= 0; read = stream.read(buffer)) {
+            if (read > 0) digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { String.format("%02x", it & 0xff) }.join()
+}
+
+def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
+    group = "build"
+    description = "Generate Fabric and target metadata for the All-in-One container."
+    dependsOn(":common:jar", ":common-sdk:jar", ":fabric:processIncludeJars")
+    inputs.files(adapterFiles)
+    inputs.files(processedSharedFiles)
+    inputs.file(rootProject.file("gradle/minecraft-versions.properties"))
+    inputs.property("modVersion", project.version.toString())
+    inputs.property("protocolVersion", project.network_protocol_version.toString())
+    outputs.dir(generatedMetadataDirectory)
+
+    doLast {
+        def missingAdapters = adapterFiles.collect { it.get() }.findAll { !it.isFile() }
+        if (!missingAdapters.isEmpty()) {
+            throw new GradleException("Missing slim adapters: ${missingAdapters}. Run 'task build' or every build-target first.")
+        }
+        def sharedFiles = processedSharedFiles.get()
+        def missingShared = sharedFiles.findAll { !it.isFile() }
+        if (!missingShared.isEmpty()) {
+            throw new GradleException("Missing Loom-processed shared nested Jars: ${missingShared}")
+        }
+        def duplicateNames = (sharedFiles.collect { it.name } + adapterFiles.collect { it.get().name })
+                .countBy { it }.findAll { it.value != 1 }
+        if (!duplicateNames.isEmpty()) {
+            throw new GradleException("Duplicate universal nested Jar names: ${duplicateNames}")
+        }
+
+        def outputRoot = generatedMetadataDirectory.get().asFile
+        def targetMetadataRoot = new File(outputRoot, "META-INF/teamviewer")
+        targetMetadataRoot.mkdirs()
+        def nestedJars = sharedFiles.collect { [file: "META-INF/jars/${it.name}"] }
+        nestedJars.addAll(adapterFiles.collect { [file: "META-INF/jars/${it.get().name}"] })
+        def fabricMetadata = [
+                schemaVersion: 1,
+                id: "team-view-relay",
+                version: project.version.toString(),
+                name: "TeamViewRelay",
+                description: "用于团队协同作战的视野与报点共享系统。支持同步玩家位置、实体信息、共享路标。",
+                authors: ["Prof. Chen"],
+                contact: [
+                        homepage: "https://github.com/MC-TeamViewer/Minecraft_TeamViewer",
+                        sources: "https://github.com/MC-TeamViewer/Minecraft_TeamViewer",
+                        issues: "https://github.com/MC-TeamViewer/Minecraft_TeamViewer/issues"
+                ],
+                license: "MIT",
+                icon: "assets/teamviewer/icon.ico",
+                environment: "client",
+                entrypoints: [
+                        "fabric-datagen": ["fun.prof_chen.teamviewer.client.TeamviewerDataGenerator"],
+                        client: ["fun.prof_chen.teamviewer.client.TeamviewerClient"],
+                        journeymap: ["fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapClientPlugin"],
+                        modmenu: ["fun.prof_chen.teamviewer.client.TeamviewerModMenuApi"]
+                ],
+                mixins: [[config: "teamviewer.client.mixins.json", environment: "client"]],
+                depends: [
+                        fabricloader: ">=${minimumLoaderVersion}",
+                        java: ">=${sharedJavaRelease}",
+                        "team-view-relay-adapter": "*"
+                ],
+                suggests: [modmenu: "*"],
+                jars: nestedJars
+        ]
+        new File(outputRoot, "fabric.mod.json").text =
+                groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(fabricMetadata))
+
+        def targets = supportedTargets.collect { target ->
+            def adapterFile = adapterFiles[supportedTargets.indexOf(target)].get()
+            def adapterZip = new java.util.zip.ZipFile(adapterFile)
+            def adapterMod
+            try {
+                adapterMod = new groovy.json.JsonSlurper().parse(
+                        adapterZip.getInputStream(adapterZip.getEntry("fabric.mod.json")))
+            } finally {
+                adapterZip.close()
+            }
+            [
+                    minecraft: versionManifest.getProperty("${target}.minecraft_target_version"),
+                    adapter: versionManifest.getProperty("${target}.minecraft_adapter_version"),
+                    internalAdapterVersion: adapterMod.version,
+                    gameJavaVersion: versionManifest.getProperty("${target}.game_java_version").toInteger(),
+                    adapterJavaRelease: versionManifest.getProperty("${target}.adapter_java_release").toInteger(),
+                    loader: versionManifest.getProperty("${target}.loader_version"),
+                    fabricApiModId: versionManifest.getProperty("${target}.fabric_api_mod_id"),
+                    fabricApi: versionManifest.getProperty("${target}.fabric_api_version"),
+                    file: "META-INF/jars/${adapterFile.name}",
+                    size: adapterFile.length(),
+                    sha256: sha256(adapterFile)
+            ]
+        }
+        def targetMetadata = [
+                modVersion: project.version.toString(),
+                protocolVersion: project.network_protocol_version.toString(),
+                sharedJavaRelease: sharedJavaRelease,
+                targets: targets
+        ]
+        new File(targetMetadataRoot, "targets.json").text =
+                groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(targetMetadata))
+    }
+}
+
+def packageUniversalJar = tasks.register("packageUniversalJar", Jar) {
+    group = "build"
+    description = "Assemble the official TeamViewRelay All-in-One Jar."
+    dependsOn(generateUniversalMetadata, ":fabric-bootstrap:classes")
+    archiveFileName.set("${project.archives_base_name}-all-${project.version}.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("libs"))
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+
+    from(project(":fabric-bootstrap").sourceSets.main.output)
+    from(rootProject.file("fabric/src/main/resources")) {
+        include "assets/**"
+    }
+    from(rootProject.file("LICENSE.txt")) {
+        rename { "${it}_${project.archives_base_name}-all" }
+    }
+    from(generatedMetadataDirectory)
+    from(processedSharedFiles) {
+        into "META-INF/jars"
+    }
+    from(adapterFiles.collect { it.map { file -> file } }) {
+        into "META-INF/jars"
+    }
+}
+
+def verifyUniversalJar = tasks.register("verifyUniversalJar") {
+    group = "verification"
+    description = "Verify All-in-One adapter isolation, hashes, shared bytecode and metadata."
+    dependsOn(packageUniversalJar)
+    inputs.file(packageUniversalJar.flatMap { it.archiveFile })
+
+    doLast {
+        def universalFile = packageUniversalJar.get().archiveFile.get().asFile
+        def zip = new java.util.zip.ZipFile(universalFile)
+        try {
+            def entries = zip.entries().collect { it.name } as Set
+            def expectedAdapters = adapterFiles.collect { "META-INF/jars/${it.get().name}" } as Set
+            def actualAdapters = entries.findAll { it.startsWith("META-INF/jars/teamviewer-adapter-") && it.endsWith(".jar") } as Set
+            if (actualAdapters != expectedAdapters) {
+                throw new GradleException("Universal adapters ${actualAdapters} do not match manifest ${expectedAdapters}")
+            }
+            if (entries.any { it.startsWith("fun/prof_chen/teamviewer/main_code/core/FabricClientAdapterFactory") }) {
+                throw new GradleException("Universal root namespace contains a flattened Minecraft adapter")
+            }
+            def rootMod = new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry("fabric.mod.json")))
+            if (rootMod.id != "team-view-relay" || rootMod.depends?.get("team-view-relay-adapter") != "*") {
+                throw new GradleException("Invalid universal root Fabric metadata")
+            }
+            def targetInfo = new groovy.json.JsonSlurper().parse(
+                    zip.getInputStream(zip.getEntry("META-INF/teamviewer/targets.json")))
+            if ((targetInfo.targets*.minecraft as Set) != supportedTargets.collect {
+                versionManifest.getProperty("${it}.minecraft_target_version")
+            } as Set) {
+                throw new GradleException("Universal target metadata does not match target manifest")
+            }
+            targetInfo.targets.each { target ->
+                def nestedEntry = zip.getEntry(target.file as String)
+                File expectedFile = adapterFiles.find { "META-INF/jars/${it.get().name}" == target.file }.get()
+                def nestedDigest = java.security.MessageDigest.getInstance("SHA-256")
+                if (nestedEntry != null) {
+                    zip.getInputStream(nestedEntry).withCloseable { stream ->
+                        byte[] buffer = new byte[8192]
+                        for (int read = stream.read(buffer); read >= 0; read = stream.read(buffer)) {
+                            if (read > 0) nestedDigest.update(buffer, 0, read)
+                        }
+                    }
+                }
+                def nestedSha = nestedEntry == null ? null : nestedDigest.digest()
+                        .collect { String.format("%02x", it & 0xff) }.join()
+                if (nestedEntry == null || target.sha256 != sha256(expectedFile)
+                        || target.sha256 != nestedSha || target.size != expectedFile.length()) {
+                    throw new GradleException("Adapter hash/size mismatch for ${target.minecraft}")
+                }
+                def adapterZip = new java.util.zip.ZipFile(expectedFile)
+                try {
+                    def adapterMod = new groovy.json.JsonSlurper().parse(
+                            adapterZip.getInputStream(adapterZip.getEntry("fabric.mod.json")))
+                    if (adapterMod.id != "team-view-relay-adapter"
+                            || adapterMod.version != target.internalAdapterVersion
+                            || adapterMod.depends?.minecraft != target.minecraft
+                            || adapterMod.depends?.java != ">=${target.adapterJavaRelease}") {
+                        throw new GradleException("Invalid nested adapter metadata for ${target.minecraft}")
+                    }
+                    def providerPath = "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory"
+                    def providers = adapterZip.getInputStream(adapterZip.getEntry(providerPath)).getText("UTF-8")
+                            .readLines().collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith("#") }
+                    if (providers.size() != 1) {
+                        throw new GradleException("Adapter ${target.minecraft} must expose exactly one Factory")
+                    }
+                } finally {
+                    adapterZip.close()
+                }
+            }
+            if ((targetInfo.targets*.internalAdapterVersion as Set).size() != supportedTargets.size()) {
+                throw new GradleException("Every universal adapter candidate must have a unique internal version")
+            }
+            processedSharedFiles.get().each { sharedFile ->
+                def expectedPath = "META-INF/jars/${sharedFile.name}".toString()
+                if (!entries.contains(expectedPath)) {
+                    throw new GradleException("Missing universal shared dependency ${expectedPath}")
+                }
+                def sharedZip = new java.util.zip.ZipFile(sharedFile)
+                try {
+                    def descriptor = sharedZip.getEntry("fabric.mod.json")
+                    if (descriptor == null) {
+                        throw new GradleException(
+                                "Universal shared dependency ${sharedFile.name} lacks Fabric Loader metadata")
+                    }
+                } finally {
+                    sharedZip.close()
+                }
+            }
+            int expectedSharedMajor = sharedJavaRelease + 44
+            entries.findAll { it.endsWith(".class") }.each { name ->
+                byte[] header = new byte[8]
+                def stream = zip.getInputStream(zip.getEntry(name))
+                try {
+                    if (stream.read(header) != 8) throw new GradleException("Invalid root class ${name}")
+                } finally {
+                    stream.close()
+                }
+                int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                if (major > expectedSharedMajor) {
+                    throw new GradleException("Universal root class ${name} has major ${major}, expected <= ${expectedSharedMajor}")
+                }
+            }
+            processedSharedFiles.get().each { sharedFile ->
+                def sharedZip = new java.util.zip.ZipFile(sharedFile)
+                int maximumMajor = 0
+                try {
+                    sharedZip.entries().each { entry ->
+                        if (!entry.name.endsWith(".class")) return
+                        def versioned = (entry.name =~ /^META-INF\/versions\/(\d+)\//)
+                        if (versioned.find() && versioned.group(1).toInteger() > sharedJavaRelease) return
+                        byte[] header = new byte[8]
+                        def stream = sharedZip.getInputStream(entry)
+                        try {
+                            if (stream.read(header) != 8) throw new GradleException("Invalid class ${entry.name}")
+                        } finally {
+                            stream.close()
+                        }
+                        int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                        maximumMajor = Math.max(maximumMajor, major)
+                        if (major > expectedSharedMajor) {
+                            throw new GradleException(
+                                    "Shared dependency ${sharedFile.name}!/${entry.name} has class major ${major}, " +
+                                            "expected <= ${expectedSharedMajor}")
+                        }
+                    }
+                } finally {
+                    sharedZip.close()
+                }
+                if ((sharedFile.name.startsWith("TeamViewRelay-common-")
+                        || sharedFile.name.startsWith("TeamViewRelay-common-sdk-"))
+                        && maximumMajor != expectedSharedMajor) {
+                    throw new GradleException(
+                            "Shared TeamViewRelay Jar ${sharedFile.name} maximum major ${maximumMajor}, " +
+                                    "expected ${expectedSharedMajor}")
+                }
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named("build") {
+    dependsOn(verifyUniversalJar)
+}

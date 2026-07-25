@@ -33,8 +33,11 @@
   战局地图解析与投影、地图差异计算、世界渲染帧和 HUD 帧计算。
 - `fabric/src/shared/java`：确认在所有目标版本中稳定的 Fabric Loader/Fabric API 胶水，以及不直接依赖
   Minecraft 类的可选模组反射端口。
+- `fabric-bootstrap/src/main/java`：Java 17 共享 Fabric Loader 入口、Factory 发现、`ClientApplication` 启动和
+  Adapter TCK；不得依赖 Minecraft 或 Fabric API 类型。
 - `fabric/src/version/<adapter>/java`：具体 Minecraft API 转换、Fabric 事件注册、原生 Screen 控件、
   渲染命令执行、Scoreboard/Mixin 和可选地图模组原生 CRUD。
+- `universal`：只负责组装和校验 All-in-One，不得实现业务或重新编译 adapter。
 - 禁止重新创建 `common/src/version/*` 或 `fabric/src/client` 这种不对称版本入口。
 
 ### Mandatory bridge rules
@@ -51,6 +54,10 @@
    能力探测、tick 或清理路径中加载该模组的 API 类。
 6. 业务行为、页面控件、HUD 文本和渲染决策需要变化时，先修改 common 及其测试；版本层只补必要的 API 映射。
 7. 两个版本必须走同一条 `ClientApplication` / `ClientCoordinator` 执行路径。禁止为了修复单一版本而复制一份业务逻辑。
+8. common、common-sdk 和 bootstrap 固定为 Java 17；adapter 使用 manifest 的 `adapter_java_release`。
+   低于 Java 17 的目标必须先设计 legacy runtime，禁止强迫旧版玩家使用高版本 JRE 绕过兼容边界。
+9. standalone 必须保持完整可安装；slim adapter 只能作为构建中间件。All-in-One 中版本类必须保留在各自
+   nested Jar，禁止平铺到根命名空间。
 
 ### Adding or changing a Minecraft version
 
@@ -68,7 +75,10 @@
 - `verifyAdapterSdkCompleteness`：每版必须提供完整端口和功能声明。
 - `compileVersionAdapterAgainstSdk`：在移除 common-runtime 的类路径下重新编译版本 adapter。
 - `verifyNoCommonClassShadowing`：Fabric 外层不得包含与 common 同名的旧类或重复类。
+- `verifyAdapterArtifact` / `verifyStandaloneArtifact`：slim 不得夹带 runtime，独立 Jar 必须完整。
+- `verifyUniversalJar`：通用包必须包含 manifest 的全部 adapter、正确哈希和唯一共享依赖。
 - 不得通过跳过上述任务、删除失败检查或使用旧构建目录来获得“成功”产物。
 
 默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；单版本调试使用
 `task build-1.21.8` 或 `task build-26.1.2`。
+正式产物只有各版本 standalone 和 `TeamViewRelay-all-<mod_version>.jar`；`build/adapter-artifacts` 不得发布。

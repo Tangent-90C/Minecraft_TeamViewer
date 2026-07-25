@@ -37,7 +37,7 @@ sourceSets {
     }
 }
 
-def targetJavaVersion = 21
+def targetJavaVersion = rootProject.ext.sharedJavaRelease as int
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"

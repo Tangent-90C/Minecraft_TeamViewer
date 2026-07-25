@@ -32,7 +32,12 @@ public final class AdapterTck {
             probe("config page " + pageId, issues, () -> validatePage(configUi.page(pageId, 854, 480), pageId));
         }
         List<IntegrationCapability> integrations = adapters.mapAdapters().capabilities();
-        return new AdapterTckReport(adapters.adapterVersion(), issues.isEmpty(), issues, integrations, false, false);
+        return new AdapterTckReport(
+                adapters.adapterVersion(),
+                adapters.runtimeGateway().getClientProgramVersion(),
+                adapters.runtimeGateway().getMinecraftVersion(),
+                System.getProperty("java.version", "unknown"),
+                issues.isEmpty(), issues, integrations, false, false);
     }
 
     private static void validateReport(ClientReportSnapshot snapshot) {
