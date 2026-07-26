@@ -204,7 +204,7 @@ end
 
 -- 5. Capability registration and cleanup / 能力注册与清理
 tv.register_remote_player_projection({
-  id = WORLD_ID, kind = "XAERO_WORLD_MAP_MARKER", probe = world_probe,
+  id = WORLD_ID, probe = world_probe,
   sync = sync_world_map, clear = function() sync_world_map({}, false) end
 })
 tv.register_shared_waypoint_adapter({

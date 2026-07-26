@@ -1,13 +1,10 @@
 package fun.prof_chen.teamviewer.main_code.core;
 
-import fun.prof_chen.teamviewer.main_code.battlemap.FabricBattleMapNativeBridge;
 import fun.prof_chen.teamviewer.main_code.client.bridge.FabricClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.bridge.FabricGameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterBundle;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory;
-import fun.prof_chen.teamviewer.main_code.client.sdk.MapAdapterBundle;
-import fun.prof_chen.teamviewer.main_code.mapbridge.registry.FabricMapBridgeBootstrap;
-import fun.prof_chen.teamviewer.main_code.mapbridge.registry.MapBridgeRegistry;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 import fun.prof_chen.teamviewer.main_code.network.bridge.FabricRuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.render.FabricHudRenderSink;
 import fun.prof_chen.teamviewer.main_code.render.FabricWorldRenderSink;
@@ -20,7 +17,6 @@ import net.minecraft.client.gui.DrawContext;
 public final class FabricClientAdapterFactory implements ClientAdapterFactory<WorldRenderContext, DrawContext> {
     @Override
     public ClientAdapterBundle<WorldRenderContext, DrawContext> create() {
-        MapBridgeRegistry maps = FabricMapBridgeBootstrap.createRegistry();
         return new ClientAdapterBundle<>(
                 "1.21.8",
                 new FabricRuntimeGateway(),
@@ -32,7 +28,6 @@ public final class FabricClientAdapterFactory implements ClientAdapterFactory<Wo
                     MinecraftClient client = MinecraftClient.getInstance();
                     client.setScreen(new ConfigScreen(client.currentScreen, controller));
                 },
-                new FabricBattleMapNativeBridge(),
-                new MapAdapterBundle(maps.remotePlayerProjections(), maps.sharedWaypointAdapters()));
+                new IntegrationRegistry());
     }
 }

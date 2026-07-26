@@ -2,18 +2,14 @@ package fun.prof_chen.teamviewer.main_code.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.annotations.SerializedName;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds;
-import fun.prof_chen.teamviewer.main_code.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
+public class Config implements ConfigGateway {
     public static final String TRACER_START_CROSSHAIR = "crosshair";
     public static final String TRACER_START_TOP = "top";
     public static final String WAYPOINT_UI_BEACON = "beacon";
@@ -45,8 +41,6 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean uploadSharedWaypoints = false;
     private boolean showSharedWaypoints = true;
     private boolean showOwnSharedWaypointsOnMinimap = true;
-    private transient Boolean legacyShowJourneyMapRemotePlayerBeacons;
-    private transient Boolean legacyShowJourneyMapRemotePlayerMapMarkers;
     private boolean xrayMarkersAndBoxes = true;
     private boolean showNetworkTrafficHud = false;
     private boolean enableMiddleDoubleClickMark = true;
@@ -66,7 +60,6 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean allowInsecureTls = false;
     private boolean preferLocalDataForRender = true;
     private boolean battleMapSyncEnabled = true;
-    @SerializedName(value = "battleMapSourceId", alternate = {"battleMapMode"})
     private String battleMapSourceId = IntegrationIds.NODEMC_BATTLE_MAP;
     private int battleMapUpdateIntervalTicks = 10;
     private int battleMapKeepaliveIntervalSeconds = 30;
@@ -80,20 +73,11 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
         try {
             String content = Files.readString(configPath);
-            JsonObject json = JsonParser.parseString(content).getAsJsonObject();
-            Config config = GSON.fromJson(json, Config.class);
+            Config config = GSON.fromJson(content, Config.class);
             if (config == null) {
                 return createWithStoragePath(configPath);
             }
             config.storagePath = configPath;
-            if (json.has("showJourneyMapRemotePlayerBeacons")) {
-                config.legacyShowJourneyMapRemotePlayerBeacons =
-                        json.get("showJourneyMapRemotePlayerBeacons").getAsBoolean();
-            }
-            if (json.has("showJourneyMapRemotePlayerMapMarkers")) {
-                config.legacyShowJourneyMapRemotePlayerMapMarkers =
-                        json.get("showJourneyMapRemotePlayerMapMarkers").getAsBoolean();
-            }
             config.battleMapSourceId = config.getBattleMapSourceId();
             return config;
         } catch (Exception e) {
@@ -334,14 +318,6 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
     public void setShowOwnSharedWaypointsOnMinimap(boolean showOwnSharedWaypointsOnMinimap) {
         this.showOwnSharedWaypointsOnMinimap = showOwnSharedWaypointsOnMinimap;
-    }
-
-    public Boolean legacyShowJourneyMapRemotePlayerBeacons() {
-        return legacyShowJourneyMapRemotePlayerBeacons;
-    }
-
-    public Boolean legacyShowJourneyMapRemotePlayerMapMarkers() {
-        return legacyShowJourneyMapRemotePlayerMapMarkers;
     }
 
     public boolean isXrayMarkersAndBoxes() {
@@ -597,12 +573,8 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     }
 
     public String getBattleMapSourceId() {
-        if (battleMapSourceId == null || battleMapSourceId.isBlank()
-                || "nodemc".equalsIgnoreCase(battleMapSourceId)) {
+        if (battleMapSourceId == null || battleMapSourceId.isBlank()) {
             return IntegrationIds.NODEMC_BATTLE_MAP;
-        }
-        if ("simmc".equalsIgnoreCase(battleMapSourceId)) {
-            return IntegrationIds.SIMMC_BATTLE_MAP;
         }
         return IntegrationIds.canonicalize(battleMapSourceId);
     }

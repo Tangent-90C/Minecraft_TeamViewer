@@ -171,7 +171,7 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
         def factory = new File(javaRoot, "core/NeoForgeClientAdapterFactory.java")
         def factoryText = factory.getText("UTF-8")
         ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(",
-         "new NeoForgeUnsupportedBattleMapBridge()", "NeoForgeMapAdapters.unsupported()"].each { token ->
+         "new IntegrationRegistry()"].each { token ->
             if (!factoryText.contains(token)) throw new GradleException("NeoForge factory missing '${token}'")
         }
         if (factory.readLines().size() > 100) throw new GradleException("NeoForge factory must remain thin")

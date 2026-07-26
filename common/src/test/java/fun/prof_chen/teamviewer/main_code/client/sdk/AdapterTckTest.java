@@ -1,6 +1,5 @@
 package fun.prof_chen.teamviewer.main_code.client.sdk;
 
-import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapNativeBridge;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
@@ -15,9 +14,6 @@ import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiRect;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiText;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
-import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.UnavailableSharedWaypointMapAdapter;
-import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.UnavailableRemotePlayerProjection;
-import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +36,7 @@ class AdapterTckTest {
         };
         ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
                 "test", runtime(), game(), events, (context, frame) -> { }, (context, frame) -> { },
-                controller -> { }, battleMap(), completeMaps(List.of()));
+                controller -> { }, completeRegistry());
 
         AdapterTckReport report = AdapterTck.inspect(adapters, configUi());
 
@@ -57,12 +53,12 @@ class AdapterTckTest {
             public void register(ClientEventHandler<Object, Object> handler) { }
             public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
         };
-        MapAdapterBundle maps = completeMaps(List.of(
-                new UnavailableSharedWaypointMapAdapter(
-                        "optional-map", IntegrationSupportStatus.FAILED, "initialization failed")));
+        IntegrationRegistry registry = completeRegistry();
+        registry.declare("optional-map", IntegrationRole.SHARED_WAYPOINT.id(), "test.optional",
+                "Optional Map", IntegrationSupportStatus.FAILED, "initialization failed");
         ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
                 "test", runtime(), game(), events, (context, frame) -> { }, (context, frame) -> { },
-                controller -> { }, battleMap(), maps);
+                controller -> { }, registry);
 
         AdapterTckReport report = AdapterTck.inspect(adapters, configUi());
 
@@ -76,17 +72,11 @@ class AdapterTckTest {
             public void register(ClientEventHandler<Object, Object> handler) { }
             public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
         };
-        MapAdapterBundle missingXaeroWorldMap = new MapAdapterBundle(List.of(
-                unavailable(IntegrationIds.JOURNEYMAP_PLAYERS, RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER),
-                unavailable(IntegrationIds.JOURNEYMAP_BEACONS, RemotePlayerProjection.Kind.JOURNEYMAP_BEACON)),
-                List.of(
-                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.JOURNEYMAP_WAYPOINTS,
-                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed"),
-                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.XAERO_MINIMAP,
-                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed")));
+        IntegrationRegistry missingXaeroWorldMap = completeRegistry();
+        missingXaeroWorldMap = registryWithout(missingXaeroWorldMap, IntegrationIds.XAERO_WORLDMAP);
         ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
                 "test", runtime(), game(), events, (context, frame) -> { }, (context, frame) -> { },
-                controller -> { }, battleMap(), missingXaeroWorldMap);
+                controller -> { }, missingXaeroWorldMap);
 
         AdapterTckReport report = AdapterTck.inspect(adapters, configUi());
 
@@ -123,32 +113,22 @@ class AdapterTckTest {
         };
     }
 
-    private static BattleMapNativeBridge battleMap() {
-        return new BattleMapNativeBridge() {
-            public boolean isAvailable() { return false; }
-            public String unavailableReason() { return "not installed"; }
-            public Optional<fun.prof_chen.teamviewer.main_code.battlemap.NativeBattleMapSnapshot> capture() { return Optional.empty(); }
-        };
+    private static IntegrationRegistry completeRegistry() {
+        IntegrationRegistry registry = new IntegrationRegistry();
+        IntegrationIds.expectedRoles().forEach((id, role) -> registry.declare(
+                id, role, IntegrationIds.pluginIdForCapability(id), id,
+                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed"));
+        return registry;
     }
 
-    private static MapAdapterBundle completeMaps(List<UnavailableSharedWaypointMapAdapter> extras) {
-        List<fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter> waypoints =
-                new java.util.ArrayList<>(List.of(
-                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.JOURNEYMAP_WAYPOINTS,
-                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed"),
-                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.XAERO_MINIMAP,
-                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed")));
-        waypoints.addAll(extras);
-        return new MapAdapterBundle(List.of(
-                unavailable(IntegrationIds.JOURNEYMAP_PLAYERS, RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER),
-                unavailable(IntegrationIds.JOURNEYMAP_BEACONS, RemotePlayerProjection.Kind.JOURNEYMAP_BEACON),
-                unavailable(IntegrationIds.XAERO_WORLDMAP, RemotePlayerProjection.Kind.XAERO_WORLD_MAP_MARKER)),
-                waypoints);
-    }
-
-    private static UnavailableRemotePlayerProjection unavailable(String id, RemotePlayerProjection.Kind kind) {
-        return new UnavailableRemotePlayerProjection(id, kind,
-                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed");
+    private static IntegrationRegistry registryWithout(IntegrationRegistry source, String excludedId) {
+        IntegrationRegistry result = new IntegrationRegistry();
+        source.capabilities().stream()
+                .filter(capability -> !capability.id().equals(excludedId))
+                .forEach(capability -> result.declare(
+                        capability.id(), capability.role(), capability.pluginId(), capability.displayName(),
+                        capability.status(), capability.detail()));
+        return result;
     }
 
     private static ConfigUiController configUi() {

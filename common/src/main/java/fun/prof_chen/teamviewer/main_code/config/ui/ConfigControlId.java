@@ -98,7 +98,7 @@ public record ConfigControlId(String value) {
     public static final ConfigControlId USE_SYSTEM_PROXY = fixed("USE_SYSTEM_PROXY");
     public static final ConfigControlId PREFER_LOCAL_DATA = fixed("PREFER_LOCAL_DATA");
     public static final ConfigControlId BATTLE_MAP_SYNC = fixed("BATTLE_MAP_SYNC");
-    public static final ConfigControlId BATTLE_MAP_MODE = fixed("BATTLE_MAP_MODE");
+    public static final ConfigControlId BATTLE_MAP_SOURCE = fixed("BATTLE_MAP_SOURCE");
     public static final ConfigControlId BATTLE_MAP_DEBUG = fixed("BATTLE_MAP_DEBUG");
     public static final ConfigControlId OPEN_PACKET_CAPTURE = fixed("OPEN_PACKET_CAPTURE");
     public static final ConfigControlId PACKET_CAPTURE_DESCRIPTION = fixed("PACKET_CAPTURE_DESCRIPTION");

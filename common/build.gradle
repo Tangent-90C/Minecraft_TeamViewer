@@ -35,9 +35,7 @@ sourceSets {
     main {
         java {
             srcDirs = ["src/main/java", generatedProtoJavaDir]
-            exclude("fun/prof_chen/teamviewer/main_code/battlemap/BattleMapNativeBridge.java")
             exclude("fun/prof_chen/teamviewer/main_code/battlemap/BattleMapObservationClock.java")
-            exclude("fun/prof_chen/teamviewer/main_code/battlemap/NativeBattleMapSnapshot.java")
             exclude("fun/prof_chen/teamviewer/main_code/battlemap/ScoreboardSnapshot.java")
             exclude("fun/prof_chen/teamviewer/main_code/client/bridge/GameClientBridge.java")
             exclude("fun/prof_chen/teamviewer/main_code/client/model/**")
@@ -55,10 +53,8 @@ sourceSets {
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/UiText.java")
             exclude("fun/prof_chen/teamviewer/main_code/hud/abstraction/HudRenderSink.java")
             exclude("fun/prof_chen/teamviewer/main_code/hud/model/**")
-            exclude("fun/prof_chen/teamviewer/main_code/mapbridge/abstraction/**")
             exclude("fun/prof_chen/teamviewer/main_code/mapbridge/implementor/**")
             exclude("fun/prof_chen/teamviewer/main_code/mapbridge/model/**")
-            exclude("fun/prof_chen/teamviewer/main_code/mapbridge/registry/MapBridgeRegistry.java")
             exclude("fun/prof_chen/teamviewer/main_code/model/Position3D.java")
             exclude("fun/prof_chen/teamviewer/main_code/model/RemotePlayerInfo.java")
             exclude("fun/prof_chen/teamviewer/main_code/model/ReportDataSchemas.java")

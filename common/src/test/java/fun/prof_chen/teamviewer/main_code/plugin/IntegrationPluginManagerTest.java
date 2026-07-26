@@ -10,6 +10,12 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
+import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCoordinator;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
+import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
@@ -18,12 +24,14 @@ import fun.prof_chen.teamviewer.main_code.mapbridge.model.NativeMapWaypointSnaps
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -118,12 +126,12 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
-    void canonicalizesLegacyPlaceholderIds() {
+    void doesNotRewriteLegacyPlaceholderIds() {
         IntegrationCapability capability = new IntegrationCapability(
                 "xaero-world-map-players", IntegrationRole.REMOTE_PLAYER.id(),
                 IntegrationSupportStatus.NOT_IMPLEMENTED, "not implemented");
-        assertEquals(IntegrationIds.XAERO_WORLDMAP, capability.id());
-        assertEquals(IntegrationIds.PLUGIN_XAERO, capability.pluginId());
+        assertEquals("xaero-world-map-players", capability.id());
+        assertEquals("external", capability.pluginId());
     }
 
     @Test
@@ -177,7 +185,7 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
-    void migratesDivergedJourneyMapSettingsAndCanonicalBattleMapSourceOnce() throws Exception {
+    void ignoresRemovedJourneyMapAndBattleMapLegacyConfig() throws Exception {
         Path configPath = temporary.resolve("config.json");
         Files.writeString(configPath, """
                 {
@@ -201,17 +209,18 @@ class IntegrationPluginManagerTest {
                 new TestRuntime(temporary), completeRegistry(), config);
 
         PluginSnapshot journeyMap = manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
-        assertEquals(false, journeyMap.settings().get("show_beacons"));
+        assertEquals(true, journeyMap.settings().get("show_beacons"));
         assertEquals(false, journeyMap.settings().get("show_map_markers"));
-        assertEquals(IntegrationIds.SIMMC_BATTLE_MAP, config.getBattleMapSourceId());
-        assertTrue(Files.readString(statePath).contains("journeymap-settings-owned-by-plugin-v1"));
-        String migratedConfig = Files.readString(configPath);
-        assertFalse(migratedConfig.contains("showJourneyMapRemotePlayer"));
-        assertFalse(migratedConfig.contains("battleMapMode"));
-        assertTrue(migratedConfig.contains(IntegrationIds.SIMMC_BATTLE_MAP));
+        assertEquals(IntegrationIds.NODEMC_BATTLE_MAP, config.getBattleMapSourceId());
+        assertFalse(Files.readString(statePath).contains("$migrations"));
 
         assertTrue(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_beacons", true));
         manager.shutdown();
+        config.save();
+        String savedConfig = Files.readString(configPath);
+        assertFalse(savedConfig.contains("showJourneyMapRemotePlayer"));
+        assertFalse(savedConfig.contains("battleMapMode"));
+        assertTrue(savedConfig.contains(IntegrationIds.NODEMC_BATTLE_MAP));
         IntegrationPluginManager reloaded = new IntegrationPluginManager(
                 new TestRuntime(temporary), completeRegistry(), Config.load(configPath));
         assertEquals(true, reloaded.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).settings().get("show_beacons"));
@@ -521,6 +530,70 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
+    void javaAndLuaBattleMapSourcesUseTheSameObservationProtocolBridge() throws Exception {
+        String capabilityId = "custom-protocol-battle-map";
+        String pluginId = "custom.protocol-lua";
+        writePlugin(pluginId, List.of(), """
+                tv.register_battle_map_source({
+                  id = "custom-protocol-battle-map",
+                  capture = function()
+                    return {
+                      dimension = "minecraft:overworld",
+                      observedAt = 123456,
+                      coordinateSpace = "absolute_chunk",
+                      mapSize = 0,
+                      anchorRow = 0,
+                      anchorColumn = 0,
+                      cells = {
+                        {x = 12, z = -4, symbol = "A", color = "#112233"},
+                        {x = 13, z = -4, symbol = "B", color = "#445566"}
+                      }
+                    }
+                  end
+                })
+                """, capabilityId);
+
+        IntegrationRegistry luaRegistry = completeRegistry();
+        Config luaConfig = battleMapConfig(temporary.resolve("lua-config.json"), capabilityId);
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new TestRuntime(temporary), luaRegistry, luaConfig);
+        assertEquals(IntegrationImplementationSource.LUA,
+                manager.snapshot(pluginId).capabilities().get(0).implementationSource());
+
+        BattleMapSourceSnapshot luaSnapshot = luaRegistry.activeBattleMapSource(capabilityId)
+                .capture().orElseThrow();
+        IntegrationRegistry javaRegistry = completeRegistry();
+        javaRegistry.registerNative(new IntegrationCapability(
+                capabilityId, IntegrationRole.BATTLE_MAP_SOURCE.id(),
+                IntegrationSupportStatus.AVAILABLE, "", pluginId,
+                IntegrationImplementationSource.JAVA_NATIVE, PluginRuntimeStatus.ACTIVE),
+                new BattleMapSource() {
+                    @Override public String id() { return capabilityId; }
+                    @Override public Optional<BattleMapSourceSnapshot> capture() {
+                        return Optional.of(luaSnapshot);
+                    }
+                });
+        javaRegistry.setPluginRuntime(pluginId, PluginRuntimeStatus.ACTIVE, "");
+
+        ClientWorldSnapshot world = testWorld();
+        RecordingBattleNetwork luaNetwork = new RecordingBattleNetwork(new TestRuntime(temporary));
+        RecordingBattleNetwork javaNetwork = new RecordingBattleNetwork(new TestRuntime(temporary));
+        new BattleMapCoordinator(luaConfig, luaNetwork, game(world), luaRegistry).tick(true);
+        new BattleMapCoordinator(
+                battleMapConfig(temporary.resolve("java-config.json"), capabilityId),
+                javaNetwork, game(world), javaRegistry).tick(true);
+
+        assertNotNull(luaNetwork.observation);
+        assertNotNull(javaNetwork.observation);
+        assertEquals(withoutParseTime(luaNetwork.observation), withoutParseTime(javaNetwork.observation));
+        assertEquals(Set.of(
+                        "mode", "dimension", "mapSize", "anchorRow", "anchorCol",
+                        "snapshotObservedAt", "parsedAt", "candidates", "cells"),
+                luaNetwork.observation.keySet());
+        manager.shutdown();
+    }
+
+    @Test
     void fallbackEntrypointsKeepUnimplementedPlatformMatrixVisible() {
         IntegrationPluginManager manager = new IntegrationPluginManager(
                 new EnvironmentRuntime(temporary, "neoforge", "1.21.8"), completeRegistry(),
@@ -795,6 +868,71 @@ class IntegrationPluginManagerTest {
 
     private static ScoreboardSnapshot.Line scoreboardLine(String text, String color) {
         return new ScoreboardSnapshot.Line(text, List.of(new ScoreboardSnapshot.Run(text, color)));
+    }
+
+    private static Config battleMapConfig(Path path, String sourceId) {
+        Config config = Config.load(path);
+        config.setBattleMapSyncEnabled(true);
+        config.setBattleMapSourceId(sourceId);
+        config.setBattleMapUpdateIntervalTicks(1);
+        return config;
+    }
+
+    private static Map<String, Object> withoutParseTime(Map<String, Object> observation) {
+        Map<String, Object> normalized = new HashMap<>(observation);
+        normalized.remove("parsedAt");
+        return normalized;
+    }
+
+    private static ClientWorldSnapshot testWorld() {
+        UUID playerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        Position3D position = new Position3D(32.0, 64.0, -16.0);
+        return new ClientWorldSnapshot(
+                playerId, "Local", true, "minecraft:overworld", -64,
+                position, position, new Position3D(0, 0, 1),
+                new Position3D(0, 1, 0), List.of(), List.of());
+    }
+
+    private static GameClientBridge game(ClientWorldSnapshot world) {
+        return new GameClientBridge() {
+            @Override public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) {
+                return ClientReportSnapshot.unavailable();
+            }
+            @Override public ClientWorldSnapshot captureWorldSnapshot() { return world; }
+            @Override public ScoreboardSnapshot captureScoreboardSnapshot() {
+                return ScoreboardSnapshot.unavailable();
+            }
+            @Override public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
+                return Optional.empty();
+            }
+            @Override public Optional<Position3D> resolveEntityPosition(
+                    String entityId, String entityName, String dimensionId) {
+                return Optional.empty();
+            }
+            @Override public boolean isEntityDead(String entityId) { return false; }
+            @Override public boolean isMiddleMouseButtonDown() { return false; }
+            @Override public boolean isGameplayInputAvailable() { return true; }
+            @Override public void showActionBar(String message) { }
+        };
+    }
+
+    private static final class RecordingBattleNetwork extends NetworkManager {
+        private Map<String, Object> observation;
+
+        private RecordingBattleNetwork(RuntimeGateway runtime) {
+            super(new HashMap<>(), runtime, noTransport());
+        }
+
+        @Override public boolean isConnected() { return true; }
+
+        @Override
+        public void sendBattleMapObservation(UUID submitPlayerId, Map<String, Object> value) {
+            observation = Map.copyOf(value);
+        }
+
+        private static TransportProcess noTransport() {
+            return (uri, options, listener) -> null;
+        }
     }
 
     private void writeArchivePlugin(String id, String capabilityId, String hotToggle) throws Exception {

@@ -12,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 final class PluginStateStore {
-    private static final String MIGRATIONS_ENTRY = "$migrations";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Type TYPE = new TypeToken<Map<String, Entry>>() { }.getType();
     private final Path path;
@@ -50,17 +49,6 @@ final class PluginStateStore {
 
     synchronized void setSetting(String pluginId, String key, Object value) {
         entries.computeIfAbsent(pluginId, ignored -> new Entry(true, new LinkedHashMap<>())).settings.put(key, value);
-        save();
-    }
-
-    synchronized boolean migrationApplied(String migrationId) {
-        Entry entry = entries.get(MIGRATIONS_ENTRY);
-        return entry != null && Boolean.TRUE.equals(entry.settings.get(migrationId));
-    }
-
-    synchronized void markMigrationApplied(String migrationId) {
-        entries.computeIfAbsent(MIGRATIONS_ENTRY,
-                ignored -> new Entry(false, new LinkedHashMap<>())).settings.put(migrationId, true);
         save();
     }
 

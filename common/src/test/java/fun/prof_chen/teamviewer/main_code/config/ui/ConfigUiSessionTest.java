@@ -58,7 +58,7 @@ class ConfigUiSessionTest {
                 "JourneyMap-owned settings must only be rendered by the plugin detail page");
         assertContains(session, ConfigPageId.NETWORK,
                 ConfigControlId.UPDATE_INTERVAL, ConfigControlId.UPLOAD_ENTITIES,
-                ConfigControlId.BATTLE_MAP_MODE, ConfigControlId.OPEN_PACKET_CAPTURE);
+                ConfigControlId.BATTLE_MAP_SOURCE, ConfigControlId.OPEN_PACKET_CAPTURE);
         assertContains(session, ConfigPageId.WAYPOINT,
                 ConfigControlId.WAYPOINT_TIMEOUT, ConfigControlId.QUICK_MARK_MAX_COUNT,
                 ConfigControlId.MIDDLE_DOUBLE_CLICK_MARK, ConfigControlId.AUTO_CANCEL_ON_ENTITY_DEATH,
@@ -149,8 +149,8 @@ class ConfigUiSessionTest {
         session.activate(ConfigPageId.PLUGIN_DETAIL, ConfigControlId.plugin(plugin.id(), "toggle"));
         assertEquals(Boolean.FALSE, control.lastEnabledValue);
 
-        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_MODE);
-        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_MODE);
+        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
+        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
         assertEquals("custom-ui-map", control.config.getBattleMapSourceId());
     }
 
@@ -160,7 +160,7 @@ class ConfigUiSessionTest {
         config.setBattleMapSourceId("missing-selected-source");
         ConfigUiSession session = new ConfigUiSession(new FakeControl(config));
 
-        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_MODE);
+        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
 
         assertEquals("missing-selected-source", config.getBattleMapSourceId());
     }

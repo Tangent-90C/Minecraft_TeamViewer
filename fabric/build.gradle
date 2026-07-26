@@ -246,14 +246,13 @@ tasks.register("verifyAdapterSdkCompleteness") {
             def entry = new File(root, "java/fun/prof_chen/teamviewer/main_code/core/FabricClientAdapterFactory.java")
             if (!entry.isFile()) throw new GradleException("Missing ${adapter} adapter factory")
             def text = entry.getText("UTF-8")
-            ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>("
+            ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(", "new IntegrationRegistry()"
             ].each { token ->
                 if (!text.contains(token)) throw new GradleException("${adapter} adapter factory missing '${token}'")
             }
             def requiredFiles = [
                     "client/bridge/FabricClientEventBridge.java",
                     "client/bridge/FabricGameClientBridge.java",
-                    "battlemap/FabricBattleMapNativeBridge.java",
                     "render/FabricWorldRenderSink.java",
                     "render/FabricHudRenderSink.java",
                     "screen/ConfigScreen.java"

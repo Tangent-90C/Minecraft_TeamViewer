@@ -131,7 +131,7 @@ public final class ConfigUiSession implements ConfigUiController {
             case "USE_SYSTEM_PROXY" -> toggle(config.isUseSystemProxy(), config::setUseSystemProxy);
             case "PREFER_LOCAL_DATA" -> toggle(config.isPreferLocalDataForRender(), config::setPreferLocalDataForRender);
             case "BATTLE_MAP_SYNC" -> toggle(config.isBattleMapSyncEnabled(), config::setBattleMapSyncEnabled);
-            case "BATTLE_MAP_MODE" -> cycleBattleMapMode();
+            case "BATTLE_MAP_SOURCE" -> cycleBattleMapSource();
             case "BATTLE_MAP_DEBUG" -> toggle(config.isBattleMapDebugEnabled(), config::setBattleMapDebugEnabled);
             case "PACKET_CAPTURE_START" -> startPacketCapture();
             case "PACKET_CAPTURE_STOP" -> stopPacketCapture();
@@ -347,7 +347,7 @@ public final class ConfigUiSession implements ConfigUiController {
         c.add(toggleButton(USE_SYSTEM_PROXY, right, y, column, "screen.mc_teamviewer.config.use_system_proxy", config.isUseSystemProxy()));
         y += 25;
         c.add(toggleButton(BATTLE_MAP_SYNC, left, y, column, "screen.mc_teamviewer.config.battle_map_sync", config.isBattleMapSyncEnabled()));
-        c.add(ConfigControlView.button(BATTLE_MAP_MODE, new UiRect(right, y, column, HEIGHT),
+        c.add(ConfigControlView.button(BATTLE_MAP_SOURCE, new UiRect(right, y, column, HEIGHT),
                 UiText.translatable("screen.mc_teamviewer.config.value",
                         tr("screen.mc_teamviewer.config.battle_map_source"), battleMapSourceLabel()),
                 battleMapSourceTooltip(), true));
@@ -948,7 +948,7 @@ public final class ConfigUiSession implements ConfigUiController {
         return ConfigUiAction.stay();
     }
 
-    private ConfigUiAction cycleBattleMapMode() {
+    private ConfigUiAction cycleBattleMapSource() {
         List<String> sourceIds = control.getIntegrationCapabilities().stream()
                 .filter(capability -> IntegrationRole.BATTLE_MAP_SOURCE.id().equals(capability.role()))
                 .map(IntegrationCapability::id)

@@ -17,8 +17,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-/** Common battle-map sampling, parsing, deduplication, refresh and keepalive state machine. */
+/**
+ * The single protocol bridge for every Java or Lua {@code BattleMapSource}: source selection,
+ * history alignment, projection, deduplication, refresh, keepalive and battle_map_observation output.
+ */
 public final class BattleMapCoordinator {
+    private static final String NODEMC_PROTOCOL_MODE = "nodemc";
+    private static final String SIMMC_PROTOCOL_MODE = "simmc";
     private final Config config;
     private final NetworkManager network;
     private final GameClientBridge game;
@@ -140,10 +145,10 @@ public final class BattleMapCoordinator {
 
     private static String protocolMode(String sourceId) {
         if (fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds.NODEMC_BATTLE_MAP.equals(sourceId)) {
-            return BattleMapMode.NODEMC.id();
+            return NODEMC_PROTOCOL_MODE;
         }
         if (fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds.SIMMC_BATTLE_MAP.equals(sourceId)) {
-            return BattleMapMode.SIMMC.id();
+            return SIMMC_PROTOCOL_MODE;
         }
         return sourceId;
     }

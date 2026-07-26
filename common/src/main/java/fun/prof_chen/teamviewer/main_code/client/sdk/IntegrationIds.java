@@ -21,15 +21,10 @@ public final class IntegrationIds {
     public static final String PLUGIN_SIMMC = "teamviewer.simmc";
     public static final String PLUGIN_EXAMPLE = "teamviewer.example";
 
-    private static final Map<String, String> ALIASES = Map.of(
-            "xaero-world-map-players", XAERO_WORLDMAP,
-            "xaero-minimap-shared-waypoints", XAERO_MINIMAP);
-
     private IntegrationIds() { }
 
     public static String canonicalize(String id) {
-        String normalized = id == null ? "" : id.trim();
-        return ALIASES.getOrDefault(normalized, normalized);
+        return id == null ? "" : id.trim();
     }
 
     public static String pluginIdForCapability(String capabilityId) {

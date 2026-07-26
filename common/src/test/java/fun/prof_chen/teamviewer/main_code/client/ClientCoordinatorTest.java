@@ -91,7 +91,8 @@ class ClientCoordinatorTest {
         MapBackedSharedWaypointRepository repository = new MapBackedSharedWaypointRepository(waypoints);
         RecordingWaypointGateway gateway = new RecordingWaypointGateway();
         SharedWaypointSyncCoordinator waypointCoordinator = new SharedWaypointSyncCoordinator(
-                repository, gateway, List.of(), config, game);
+                repository, gateway, new fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry(),
+                config, game);
         coordinator.configureWaypointSupport(repository, waypointCoordinator);
         coordinator.setEnabled(true);
 

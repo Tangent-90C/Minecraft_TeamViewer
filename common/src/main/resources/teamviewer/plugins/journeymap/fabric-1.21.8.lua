@@ -103,11 +103,11 @@ local function list_local()
 end
 
 -- 3. Capability registration / 能力注册
-tv.register_remote_player_projection({id = "journeymap-players", kind = "JOURNEYMAP_MAP_MARKER",
+tv.register_remote_player_projection({id = "journeymap-players",
   probe = probe, sync = function(players, enabled)
     sync_players(managed_markers, "player-marker:", "marker", players, enabled, settings.show_map_markers)
   end, clear = function() clear(managed_markers) end})
-tv.register_remote_player_projection({id = "journeymap-player-beacons", kind = "JOURNEYMAP_BEACON",
+tv.register_remote_player_projection({id = "journeymap-player-beacons",
   probe = probe, sync = function(players, enabled)
     sync_players(managed_beacons, "player-beacon:", "beacon", players, enabled, settings.show_beacons)
   end, clear = function() clear(managed_beacons) end})

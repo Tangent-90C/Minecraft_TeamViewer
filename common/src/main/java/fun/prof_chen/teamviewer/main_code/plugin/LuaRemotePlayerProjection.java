@@ -9,7 +9,6 @@ import java.util.UUID;
 
 final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     private final String id;
-    private final Kind kind;
     private final LuaPluginRuntime runtime;
     private final LuaValue sync;
     private final LuaValue clear;
@@ -17,9 +16,8 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     private volatile LuaCapabilityProbe.Result lastProbe;
 
     LuaRemotePlayerProjection(
-            String id, Kind kind, LuaPluginRuntime runtime, LuaValue sync, LuaValue clear, LuaValue probe) {
+            String id, LuaPluginRuntime runtime, LuaValue sync, LuaValue clear, LuaValue probe) {
         this.id = id;
-        this.kind = kind;
         this.runtime = runtime;
         this.sync = sync;
         this.clear = clear;
@@ -27,7 +25,6 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     }
 
     @Override public String id() { return id; }
-    @Override public Kind kind() { return kind; }
     @Override public boolean isAvailable() { return supportStatus() == fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus.AVAILABLE; }
     @Override public fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus supportStatus() {
         lastProbe = probe.result();

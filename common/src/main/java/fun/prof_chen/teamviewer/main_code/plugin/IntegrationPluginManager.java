@@ -67,7 +67,6 @@ public final class IntegrationPluginManager {
     private static final String BUILTIN_ROOT = "teamviewer/plugins/";
     private static final String DISABLED_METADATA = "disabled-plugin.json";
     private static final DateTimeFormatter DISABLED_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
-    private static final String JOURNEYMAP_SETTINGS_MIGRATION = "journeymap-settings-owned-by-plugin-v1";
 
     private final RuntimeGateway platform;
     private final IntegrationRegistry integrations;
@@ -366,7 +365,6 @@ public final class IntegrationPluginManager {
                 Descriptor descriptor = new Descriptor(manifest, candidate);
                 descriptor.enabled = stateStore.enabled(manifest);
                 descriptor.settings.putAll(stateStore.settings(manifest));
-                migrateLegacySettings(descriptor);
                 descriptors.put(manifest.id(), descriptor);
                 for (PluginManifest.CapabilityDeclaration capability : manifest.provides()) {
                     integrations.declare(capability.id(), capability.role(), manifest.id(), capability.name(),
@@ -602,10 +600,8 @@ public final class IntegrationPluginManager {
                 LuaTable table = value.checktable();
                 String id = IntegrationIds.canonicalize(table.get("id").checkjstring());
                 PluginManifest.CapabilityDeclaration declaration = declaration(descriptor, id, IntegrationRole.REMOTE_PLAYER);
-                RemotePlayerProjection.Kind kind;
-                try { kind = RemotePlayerProjection.Kind.valueOf(table.get("kind").optjstring("OTHER").toUpperCase(Locale.ROOT)); }
-                catch (Exception ignored) { kind = RemotePlayerProjection.Kind.OTHER; }
-                LuaRemotePlayerProjection projection = new LuaRemotePlayerProjection(id, kind, runtime,
+                // Legacy "kind" is accepted as an ignored table member for API v1 compatibility.
+                LuaRemotePlayerProjection projection = new LuaRemotePlayerProjection(id, runtime,
                         requireFunction(table, "sync"), table.get("clear"), table.get("probe"));
                 integrations.registerPluginImplementation(descriptor.manifest.id(), id, declaration.role(), projection,
                         IntegrationImplementationSource.LUA);
@@ -889,28 +885,6 @@ public final class IntegrationPluginManager {
                 descriptor.runtimeStatus, descriptor.detail, descriptor.candidate.source,
                 descriptor.settings, descriptor.manifest.settings(),
                 integrations.capabilitiesForPlugin(descriptor.manifest.id()), descriptor.disabledStorageId != null);
-    }
-
-    private void migrateLegacySettings(Descriptor descriptor) {
-        if (!IntegrationIds.PLUGIN_JOURNEYMAP.equals(descriptor.manifest.id())
-                || stateStore.migrationApplied(JOURNEYMAP_SETTINGS_MIGRATION)) return;
-        boolean importedLegacyValue = false;
-        Boolean legacyBeacons = config.legacyShowJourneyMapRemotePlayerBeacons();
-        if (legacyBeacons != null && descriptor.settings.containsKey("show_beacons")) {
-            boolean migrated = Boolean.TRUE.equals(descriptor.settings.get("show_beacons")) && legacyBeacons;
-            descriptor.settings.put("show_beacons", migrated);
-            stateStore.setSetting(descriptor.manifest.id(), "show_beacons", migrated);
-            importedLegacyValue = true;
-        }
-        Boolean legacyMarkers = config.legacyShowJourneyMapRemotePlayerMapMarkers();
-        if (legacyMarkers != null && descriptor.settings.containsKey("show_map_markers")) {
-            boolean migrated = Boolean.TRUE.equals(descriptor.settings.get("show_map_markers")) && legacyMarkers;
-            descriptor.settings.put("show_map_markers", migrated);
-            stateStore.setSetting(descriptor.manifest.id(), "show_map_markers", migrated);
-            importedLegacyValue = true;
-        }
-        stateStore.markMigrationApplied(JOURNEYMAP_SETTINGS_MIGRATION);
-        if (importedLegacyValue) config.save();
     }
 
     private static Object normalizeSetting(PluginManifest.SettingDefinition definition, Object rawValue) {

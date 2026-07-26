@@ -72,7 +72,6 @@ end
 
 tv.register_remote_player_projection({
   id = IDS.remote_player,
-  kind = "OTHER",
   probe = ready_probe,
 
   -- players is keyed by UUID. Each value exposes uuid, name, dimension and position(x/y/z).
