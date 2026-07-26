@@ -4,14 +4,22 @@ import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.main_code.config.FabricModVersionProvider;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
+import fun.prof_chen.teamviewer.main_code.plugin.MinecraftClientObjects;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
 import java.nio.file.Path;
 import java.util.UUID;
 
 public final class FabricRuntimeGateway implements RuntimeGateway {
+    private static final MinecraftClientObjects CLIENT_OBJECTS = new MinecraftClientObjects() {
+        @Override public Object blockPosition(int x, int y, int z) { return new BlockPos(x, y, z); }
+        @Override public Object dimensionKey(String dimensionId) {
+            return MinecraftDimensionAdapter.toRegistryKey(dimensionId, World.OVERWORLD);
+        }
+    };
     @Override
     public String getCurrentDimensionId() {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -37,6 +45,21 @@ public final class FabricRuntimeGateway implements RuntimeGateway {
         return FabricLoader.getInstance().getModContainer("minecraft")
                 .map(container -> container.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
+    }
+
+    @Override public String getLoaderId() { return "fabric"; }
+    @Override public boolean isModLoaded(String modId) {
+        return modId != null && FabricLoader.getInstance().isModLoaded(modId);
+    }
+    @Override public String getModVersion(String modId) {
+        return modId == null ? "unknown" : FabricLoader.getInstance().getModContainer(modId)
+                .map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+    }
+    @Override public Object getPluginService(String serviceId) {
+        if (MinecraftClientObjects.SERVICE_ID.equals(serviceId)) return CLIENT_OBJECTS;
+        return "journeymap.client_api".equals(serviceId)
+                ? fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapClientPlugin.clientApiService()
+                : null;
     }
 
     @Override

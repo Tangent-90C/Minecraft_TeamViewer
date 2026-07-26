@@ -15,6 +15,7 @@ dependencies {
     compileOnly "org.slf4j:slf4j-api:${project.slf4j_version}"
     implementation "com.google.protobuf:protobuf-java:${project.protobuf_version}"
     implementation "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+    implementation "org.luaj:luaj-jse:${project.luaj_version}"
     testImplementation platform("org.junit:junit-bom:5.13.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
@@ -62,6 +63,7 @@ sourceSets {
             exclude("fun/prof_chen/teamviewer/main_code/model/RemotePlayerInfo.java")
             exclude("fun/prof_chen/teamviewer/main_code/model/ReportDataSchemas.java")
             exclude("fun/prof_chen/teamviewer/main_code/network/abstraction/RuntimeGateway.java")
+            exclude("fun/prof_chen/teamviewer/main_code/plugin/MinecraftClientObjects.java")
             exclude("fun/prof_chen/teamviewer/main_code/renderbridge/abstraction/**")
             exclude("fun/prof_chen/teamviewer/main_code/renderbridge/model/**")
         }

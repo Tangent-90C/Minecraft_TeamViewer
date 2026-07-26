@@ -23,7 +23,10 @@ import fun.prof_chen.teamviewer.main_code.hud.core.HudPlanner;
 import fun.prof_chen.teamviewer.main_code.hud.model.HudFrame;
 import fun.prof_chen.teamviewer.main_code.hud.model.LocalMarkedState;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCoordinator;
-import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapNativeBridge;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
+import fun.prof_chen.teamviewer.main_code.plugin.IntegrationPluginManager;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
@@ -61,6 +64,8 @@ public final class ClientCoordinator implements ClientControlGateway {
     private LocalMarkedState localMarkedState = LocalMarkedState.inactive();
     private String lastMarkedFingerprint = "";
     private BattleMapCoordinator battleMapCoordinator;
+    private IntegrationPluginManager pluginManager;
+    private IntegrationRegistry integrationRegistry;
 
     public ClientCoordinator(Config config, NetworkManager networkManager, GameClientBridge gameClient) {
         this.config = Objects.requireNonNull(config, "config");
@@ -160,13 +165,87 @@ public final class ClientCoordinator implements ClientControlGateway {
     }
 
     /** Installs the native optional-mod port; NodeMC scoreboard parsing remains entirely in common. */
-    public void configureBattleMapSupport(BattleMapNativeBridge nativeBridge) {
+    public void configureBattleMapSupport(IntegrationRegistry integrations) {
         if (battleMapCoordinator != null) {
             throw new IllegalStateException("Battle-map support is already configured");
         }
-        battleMapCoordinator = new BattleMapCoordinator(config, networkManager, gameClient,
-                Objects.requireNonNull(nativeBridge, "nativeBridge"));
+        integrationRegistry = Objects.requireNonNull(integrations, "integrations");
+        battleMapCoordinator = new BattleMapCoordinator(config, networkManager, gameClient, integrationRegistry);
         networkManager.addConnectionStatusListener(connected -> battleMapCoordinator.markPending());
+    }
+
+    public void configurePluginManager(IntegrationPluginManager pluginManager) {
+        this.pluginManager = Objects.requireNonNull(pluginManager, "pluginManager");
+    }
+
+    public List<PluginSnapshot> getIntegrationPlugins() {
+        return pluginManager == null ? List.of() : pluginManager.snapshots();
+    }
+
+    @Override
+    public List<IntegrationCapability> getIntegrationCapabilities() {
+        return integrationRegistry == null ? List.of() : integrationRegistry.capabilities();
+    }
+
+    public PluginSnapshot getIntegrationPlugin(String pluginId) {
+        return pluginManager == null ? null : pluginManager.snapshot(pluginId);
+    }
+
+    public boolean setIntegrationPluginEnabled(String pluginId, boolean enabled) {
+        return pluginManager != null && pluginManager.setEnabled(pluginId, enabled);
+    }
+
+    public boolean setIntegrationPluginSetting(String pluginId, String key, Object value) {
+        return pluginManager != null && pluginManager.setSetting(pluginId, key, value);
+    }
+
+    public boolean rescanIntegrationPlugins() {
+        return pluginManager != null && pluginManager.rescan();
+    }
+
+    public java.nio.file.Path copyBuiltinIntegrationPlugin(String pluginId) {
+        return pluginManager == null ? null : pluginManager.copyBuiltin(pluginId);
+    }
+
+    public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult copyBuiltinIntegrationPluginResult(String pluginId) {
+        return pluginManager == null
+                ? new fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult(
+                fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult.Code.NOT_FOUND, null,
+                "Plugin manager unavailable")
+                : pluginManager.copyBuiltinResult(pluginId);
+    }
+
+    public List<fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot> getDisabledIntegrationPlugins() {
+        return pluginManager == null ? List.of() : pluginManager.disabledSnapshots();
+    }
+
+    public fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot getDisabledIntegrationPlugin(String storageId) {
+        return pluginManager == null ? null : pluginManager.disabledSnapshot(storageId);
+    }
+
+    public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult uninstallIntegrationPlugin(String pluginId) {
+        return pluginManager == null
+                ? unavailablePluginFileOperation() : pluginManager.uninstall(pluginId);
+    }
+
+    public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult restoreIntegrationPlugin(String storageId) {
+        return pluginManager == null
+                ? unavailablePluginFileOperation() : pluginManager.restore(storageId);
+    }
+
+    public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult deleteDisabledIntegrationPlugin(String storageId) {
+        return pluginManager == null
+                ? unavailablePluginFileOperation() : pluginManager.deleteDisabled(storageId);
+    }
+
+    public boolean openIntegrationPluginDirectory(java.nio.file.Path path) {
+        return pluginManager != null && pluginManager.openDirectory(path);
+    }
+
+    private static fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult unavailablePluginFileOperation() {
+        return new fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult(
+                fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult.Code.NOT_FOUND,
+                null, "Plugin manager unavailable");
     }
 
     public boolean handleQuickMarkAction(boolean tryCancelFirst) {

@@ -2,7 +2,10 @@ package fun.prof_chen.teamviewer.main_code.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapMode;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds;
 import fun.prof_chen.teamviewer.main_code.mapbridge.abstraction.SharedWaypointMapBridgeConfig;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 
@@ -42,8 +45,8 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean uploadSharedWaypoints = false;
     private boolean showSharedWaypoints = true;
     private boolean showOwnSharedWaypointsOnMinimap = true;
-    private boolean showJourneyMapRemotePlayerBeacons = true;
-    private boolean showJourneyMapRemotePlayerMapMarkers = true;
+    private transient Boolean legacyShowJourneyMapRemotePlayerBeacons;
+    private transient Boolean legacyShowJourneyMapRemotePlayerMapMarkers;
     private boolean xrayMarkersAndBoxes = true;
     private boolean showNetworkTrafficHud = false;
     private boolean enableMiddleDoubleClickMark = true;
@@ -63,8 +66,8 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
     private boolean allowInsecureTls = false;
     private boolean preferLocalDataForRender = true;
     private boolean battleMapSyncEnabled = true;
-    private boolean battleMapScoreboardDetectionEnabled = true;
-    private String battleMapMode = BattleMapMode.NODEMC.id();
+    @SerializedName(value = "battleMapSourceId", alternate = {"battleMapMode"})
+    private String battleMapSourceId = IntegrationIds.NODEMC_BATTLE_MAP;
     private int battleMapUpdateIntervalTicks = 10;
     private int battleMapKeepaliveIntervalSeconds = 30;
     private int battleMapCacheRetentionSeconds = 7200;
@@ -77,11 +80,21 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
 
         try {
             String content = Files.readString(configPath);
-            Config config = GSON.fromJson(content, Config.class);
+            JsonObject json = JsonParser.parseString(content).getAsJsonObject();
+            Config config = GSON.fromJson(json, Config.class);
             if (config == null) {
                 return createWithStoragePath(configPath);
             }
             config.storagePath = configPath;
+            if (json.has("showJourneyMapRemotePlayerBeacons")) {
+                config.legacyShowJourneyMapRemotePlayerBeacons =
+                        json.get("showJourneyMapRemotePlayerBeacons").getAsBoolean();
+            }
+            if (json.has("showJourneyMapRemotePlayerMapMarkers")) {
+                config.legacyShowJourneyMapRemotePlayerMapMarkers =
+                        json.get("showJourneyMapRemotePlayerMapMarkers").getAsBoolean();
+            }
+            config.battleMapSourceId = config.getBattleMapSourceId();
             return config;
         } catch (Exception e) {
             System.err.println("Failed to load TeamViewRelay config: " + e.getMessage());
@@ -323,20 +336,12 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
         this.showOwnSharedWaypointsOnMinimap = showOwnSharedWaypointsOnMinimap;
     }
 
-    public boolean isShowJourneyMapRemotePlayerBeacons() {
-        return showJourneyMapRemotePlayerBeacons;
+    public Boolean legacyShowJourneyMapRemotePlayerBeacons() {
+        return legacyShowJourneyMapRemotePlayerBeacons;
     }
 
-    public void setShowJourneyMapRemotePlayerBeacons(boolean showJourneyMapRemotePlayerBeacons) {
-        this.showJourneyMapRemotePlayerBeacons = showJourneyMapRemotePlayerBeacons;
-    }
-
-    public boolean isShowJourneyMapRemotePlayerMapMarkers() {
-        return showJourneyMapRemotePlayerMapMarkers;
-    }
-
-    public void setShowJourneyMapRemotePlayerMapMarkers(boolean showJourneyMapRemotePlayerMapMarkers) {
-        this.showJourneyMapRemotePlayerMapMarkers = showJourneyMapRemotePlayerMapMarkers;
+    public Boolean legacyShowJourneyMapRemotePlayerMapMarkers() {
+        return legacyShowJourneyMapRemotePlayerMapMarkers;
     }
 
     public boolean isXrayMarkersAndBoxes() {
@@ -591,22 +596,20 @@ public class Config implements SharedWaypointMapBridgeConfig, ConfigGateway {
         this.battleMapSyncEnabled = battleMapSyncEnabled;
     }
 
-    public boolean isBattleMapScoreboardDetectionEnabled() {
-        return battleMapScoreboardDetectionEnabled;
+    public String getBattleMapSourceId() {
+        if (battleMapSourceId == null || battleMapSourceId.isBlank()
+                || "nodemc".equalsIgnoreCase(battleMapSourceId)) {
+            return IntegrationIds.NODEMC_BATTLE_MAP;
+        }
+        if ("simmc".equalsIgnoreCase(battleMapSourceId)) {
+            return IntegrationIds.SIMMC_BATTLE_MAP;
+        }
+        return IntegrationIds.canonicalize(battleMapSourceId);
     }
 
-    public void setBattleMapScoreboardDetectionEnabled(boolean battleMapScoreboardDetectionEnabled) {
-        this.battleMapScoreboardDetectionEnabled = battleMapScoreboardDetectionEnabled;
-    }
-
-    public String getBattleMapMode() {
-        return BattleMapMode.fromId(battleMapMode).id();
-    }
-
-    public void setBattleMapMode(String battleMapMode) {
-        BattleMapMode normalized = BattleMapMode.fromId(battleMapMode);
-        this.battleMapMode = normalized.id();
-        this.battleMapScoreboardDetectionEnabled = normalized == BattleMapMode.NODEMC;
+    public void setBattleMapSourceId(String sourceId) {
+        String normalized = IntegrationIds.canonicalize(sourceId);
+        battleMapSourceId = normalized.isBlank() ? IntegrationIds.NODEMC_BATTLE_MAP : normalized;
     }
 
     public int getBattleMapUpdateIntervalTicks() {

@@ -5,6 +5,11 @@ import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProj
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationImplementationSource;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
+import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,23 +17,39 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class RemotePlayerProjectionCoordinator {
-	private final List<RemotePlayerProjection> projections;
+	private final IntegrationRegistry integrations;
 	private final Config config;
 	private final GameClientBridge game;
 
-	public RemotePlayerProjectionCoordinator(List<RemotePlayerProjection> projections, Config config, GameClientBridge game) {
-		this.projections = List.copyOf(projections);
+	public RemotePlayerProjectionCoordinator(IntegrationRegistry integrations, Config config, GameClientBridge game) {
+		this.integrations = integrations;
 		this.config = config;
 		this.game = game;
 	}
 
+	public RemotePlayerProjectionCoordinator(List<RemotePlayerProjection> projections, Config config, GameClientBridge game) {
+		this(registry(projections), config, game);
+	}
+
+	private static IntegrationRegistry registry(List<RemotePlayerProjection> projections) {
+		IntegrationRegistry registry = new IntegrationRegistry();
+		for (RemotePlayerProjection projection : projections) {
+			String pluginId = "test." + projection.id();
+			registry.registerNative(new IntegrationCapability(projection.id(), IntegrationRole.REMOTE_PLAYER.id(),
+					projection.supportStatus(), projection.supportDetail(), pluginId,
+					IntegrationImplementationSource.JAVA_NATIVE, PluginRuntimeStatus.ACTIVE), projection);
+			registry.setPluginRuntime(pluginId, PluginRuntimeStatus.ACTIVE, "");
+		}
+		return registry;
+	}
+
 	public void tick(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
 		Map<UUID, RemotePlayerInfo> filtered = filter(players);
-		for (RemotePlayerProjection projection : projections) {
+		for (RemotePlayerProjection projection : integrations.activeRemotePlayerProjections()) {
 			if (!projection.isAvailable()) {
 				continue;
 			}
-			projection.sync(filtered, enabled && isEnabled(projection.kind()));
+			projection.sync(filtered, enabled);
 		}
 	}
 
@@ -48,16 +69,9 @@ public final class RemotePlayerProjectionCoordinator {
 	}
 
 	public void clear() {
-		for (RemotePlayerProjection projection : projections) {
+		for (RemotePlayerProjection projection : integrations.activeRemotePlayerProjections()) {
 			projection.clear();
 		}
 	}
 
-	private boolean isEnabled(RemotePlayerProjection.Kind kind) {
-		return switch (kind) {
-			case JOURNEYMAP_BEACON -> config.isShowJourneyMapRemotePlayerBeacons();
-			case JOURNEYMAP_MAP_MARKER -> config.isShowJourneyMapRemotePlayerMapMarkers();
-			case XAERO_WORLD_MAP_MARKER, OTHER -> true;
-		};
-	}
 }

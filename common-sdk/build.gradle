@@ -31,6 +31,7 @@ sourceSets {
             include("fun/prof_chen/teamviewer/main_code/model/RemotePlayerInfo.java")
             include("fun/prof_chen/teamviewer/main_code/model/ReportDataSchemas.java")
             include("fun/prof_chen/teamviewer/main_code/network/abstraction/RuntimeGateway.java")
+            include("fun/prof_chen/teamviewer/main_code/plugin/MinecraftClientObjects.java")
             include("fun/prof_chen/teamviewer/main_code/renderbridge/abstraction/**")
             include("fun/prof_chen/teamviewer/main_code/renderbridge/model/**")
         }

@@ -3,8 +3,10 @@ package fun.prof_chen.teamviewer.main_code.network.bridge;
 import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftDimensionAdapter;
 import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
+import fun.prof_chen.teamviewer.main_code.plugin.MinecraftClientObjects;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
@@ -13,6 +15,12 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 public final class NeoForgeRuntimeGateway implements RuntimeGateway {
+    private static final MinecraftClientObjects CLIENT_OBJECTS = new MinecraftClientObjects() {
+        @Override public Object blockPosition(int x, int y, int z) { return new BlockPos(x, y, z); }
+        @Override public Object dimensionKey(String dimensionId) {
+            return MinecraftDimensionAdapter.toResourceKey(dimensionId, Level.OVERWORLD);
+        }
+    };
     @Override
     public String getCurrentDimensionId() {
         Minecraft client = Minecraft.getInstance();
@@ -27,6 +35,15 @@ public final class NeoForgeRuntimeGateway implements RuntimeGateway {
                 .map(container -> container.getModInfo().getVersion().toString()).orElse("unknown");
     }
     @Override public String getMinecraftVersion() { return SharedConstants.getCurrentVersion().name(); }
+    @Override public String getLoaderId() { return "neoforge"; }
+    @Override public boolean isModLoaded(String modId) { return modId != null && ModList.get().isLoaded(modId); }
+    @Override public String getModVersion(String modId) {
+        return modId == null ? "unknown" : ModList.get().getModContainerById(modId)
+                .map(container -> container.getModInfo().getVersion().toString()).orElse("unknown");
+    }
+    @Override public Object getPluginService(String serviceId) {
+        return MinecraftClientObjects.SERVICE_ID.equals(serviceId) ? CLIENT_OBJECTS : null;
+    }
     @Override public String getClientProtocolVersion() { return TeamviewerModMetadata.MetaProtocol.CLIENT_PROTOCOL_VERSION; }
     @Override public String getClientMinCompatibleProtocolVersion() { return TeamviewerModMetadata.MetaProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION; }
     @Override public String getServerProtocolFallbackVersion() { return TeamviewerModMetadata.MetaProtocol.SERVER_PROTOCOL_VERSION_FALLBACK; }

@@ -8,6 +8,11 @@ import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.config.Config;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationImplementationSource;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
+import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 
 import java.util.List;
 import java.util.Map;
@@ -17,7 +22,7 @@ import java.util.UUID;
 public final class SharedWaypointSyncCoordinator {
 	private final SharedWaypointRepository repository;
 	private final WaypointSyncGateway gateway;
-	private final List<SharedWaypointMapAdapter> adapters;
+	private final IntegrationRegistry integrations;
 	private final SharedWaypointMapSyncPolicy mapPolicy;
 	private final WaypointUpdateListener inboundListener = new WaypointUpdateListener() {
 		@Override
@@ -35,13 +40,34 @@ public final class SharedWaypointSyncCoordinator {
 	public SharedWaypointSyncCoordinator(
 			SharedWaypointRepository repository,
 			WaypointSyncGateway gateway,
-			List<SharedWaypointMapAdapter> adapters,
+			IntegrationRegistry integrations,
 			Config config,
 			GameClientBridge game) {
 		this.repository = Objects.requireNonNull(repository, "repository");
 		this.gateway = Objects.requireNonNull(gateway, "gateway");
-		this.adapters = List.copyOf(adapters);
+		this.integrations = Objects.requireNonNull(integrations, "integrations");
 		this.mapPolicy = new SharedWaypointMapSyncPolicy(config, game, gateway);
+	}
+
+	public SharedWaypointSyncCoordinator(
+			SharedWaypointRepository repository,
+			WaypointSyncGateway gateway,
+			List<SharedWaypointMapAdapter> adapters,
+			Config config,
+			GameClientBridge game) {
+		this(repository, gateway, registry(adapters), config, game);
+	}
+
+	private static IntegrationRegistry registry(List<SharedWaypointMapAdapter> adapters) {
+		IntegrationRegistry registry = new IntegrationRegistry();
+		for (SharedWaypointMapAdapter adapter : adapters) {
+			String pluginId = "test." + adapter.id();
+			registry.registerNative(new IntegrationCapability(adapter.id(), IntegrationRole.SHARED_WAYPOINT.id(),
+					adapter.supportStatus(), adapter.supportDetail(), pluginId,
+					IntegrationImplementationSource.JAVA_NATIVE, PluginRuntimeStatus.ACTIVE), adapter);
+			registry.setPluginRuntime(pluginId, PluginRuntimeStatus.ACTIVE, "");
+		}
+		return registry;
 	}
 
 	public void start() {
@@ -54,7 +80,7 @@ public final class SharedWaypointSyncCoordinator {
 
 	public void tick(boolean enabled) {
 		Map<String, SharedWaypointInfo> snapshot = repository.snapshot();
-		mapPolicy.tick(adapters, snapshot, enabled);
+		mapPolicy.tick(integrations.activeSharedWaypointAdapters(), snapshot, enabled);
 	}
 
 	public void upsertLocalWaypoints(UUID submitPlayerId, Map<String, WaypointSyncPayload> payloads) {
@@ -98,11 +124,11 @@ public final class SharedWaypointSyncCoordinator {
 		if (waypointIds == null || waypointIds.isEmpty()) {
 			return;
 		}
-		mapPolicy.deleteRemoteWaypoints(adapters, waypointIds);
+		mapPolicy.deleteRemoteWaypoints(integrations.activeSharedWaypointAdapters(), waypointIds);
 	}
 
 	public void clear() {
 		repository.clear();
-		mapPolicy.clear(adapters);
+		mapPolicy.clear(integrations.activeSharedWaypointAdapters());
 	}
 }

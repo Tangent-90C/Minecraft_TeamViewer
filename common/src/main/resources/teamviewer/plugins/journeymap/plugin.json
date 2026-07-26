@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": "1",
+  "id": "teamviewer.journeymap",
+  "name": "JourneyMap Integration",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "documentation": "README.md",
+  "entrypoints": [
+    {"entry": "fabric-1.21.8.lua", "loaders": ["fabric"], "minecraftVersions": ["1.21.8"], "priority": 10},
+    {"entry": "fabric-26.1.2.lua", "loaders": ["fabric"], "minecraftVersions": ["26.1.2"], "priority": 10},
+    {"entry": "unsupported.lua", "loaders": [], "minecraftVersions": [], "priority": -10}
+  ],
+  "defaultEnabled": true,
+  "hotToggle": "managed",
+  "loaders": [],
+  "minecraftVersions": [],
+  "requiredMods": [],
+  "optionalMods": ["journeymap"],
+  "dependencies": [],
+  "provides": [
+    {"id": "journeymap-players", "role": "remote-player", "name": "JourneyMap Player Markers"},
+    {"id": "journeymap-player-beacons", "role": "remote-player", "name": "JourneyMap Player Beacons"},
+    {"id": "journeymap-shared-waypoints", "role": "shared-waypoint", "name": "JourneyMap Shared Waypoints"}
+  ],
+  "settings": [
+    {"key": "show_beacons", "type": "boolean", "name": "Show remote player beacons", "defaultValue": true, "restartRequired": false},
+    {"key": "show_map_markers", "type": "boolean", "name": "Show remote player map markers", "defaultValue": true, "restartRequired": false}
+  ]
+}

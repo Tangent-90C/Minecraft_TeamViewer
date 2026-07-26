@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": "1",
+  "id": "teamviewer.example",
+  "name": "TeamViewRelay Lua Adapter Example",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "documentation": "README.md",
+  "defaultEnabled": false,
+  "hotToggle": "managed",
+  "loaders": [],
+  "minecraftVersions": [],
+  "requiredMods": [],
+  "optionalMods": ["replace-with-external-mod-id"],
+  "dependencies": [],
+  "provides": [
+    {"id": "teamviewer-example-remote-player", "role": "remote-player", "name": "Example Remote Player Projection"},
+    {"id": "teamviewer-example-shared-waypoint", "role": "shared-waypoint", "name": "Example Shared Waypoint Adapter"},
+    {"id": "teamviewer-example-battle-map", "role": "battle-map-source", "name": "Example Battle Map Source"}
+  ],
+  "settings": [
+    {"key": "enabled_marker", "type": "boolean", "name": "Example boolean", "defaultValue": false, "restartRequired": false},
+    {"key": "max_items", "type": "integer", "name": "Example integer", "defaultValue": 16, "min": 1, "max": 128, "restartRequired": false},
+    {"key": "scale", "type": "number", "name": "Example number", "defaultValue": 1.0, "min": 0.1, "max": 8.0, "restartRequired": false},
+    {"key": "label", "type": "string", "name": "Example string", "defaultValue": "TVR", "restartRequired": false},
+    {"key": "mode", "type": "enum", "name": "Example enum", "defaultValue": "safe", "options": ["safe", "fast"], "restartRequired": false},
+    {"key": "color", "type": "color", "name": "Example color", "defaultValue": "#55FFFF", "restartRequired": false}
+  ]
+}

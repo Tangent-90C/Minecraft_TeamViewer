@@ -43,6 +43,7 @@ dependencies {
     sharedNested "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
     sharedNested "com.google.protobuf:protobuf-java:${project.protobuf_version}"
     sharedNested "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+    sharedNested "org.luaj:luaj-jse:${project.luaj_version}"
 }
 
 // Fabric Loader only exposes nested libraries that carry Fabric metadata. Reuse Loom's
@@ -75,7 +76,7 @@ def sha256 = { File file ->
 def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
     group = "build"
     description = "Generate Fabric and target metadata for the All-in-One container."
-    dependsOn(":common:jar", ":common-sdk:jar", ":fabric:processIncludeJars")
+    dependsOn(":common:jar", ":common-sdk:jar", ":fabric:processIncludeJars", ":fabric:remapAdapterJar")
     inputs.files(adapterFiles)
     inputs.files(processedSharedFiles)
     inputs.file(rootProject.file("gradle/minecraft-versions.properties"))

@@ -16,6 +16,8 @@ import fun.prof_chen.teamviewer.main_code.config.ui.UiRect;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiText;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.UnavailableSharedWaypointMapAdapter;
+import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.UnavailableRemotePlayerProjection;
+import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class AdapterTckTest {
     @Test
@@ -37,7 +40,7 @@ class AdapterTckTest {
         };
         ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
                 "test", runtime(), game(), events, (context, frame) -> { }, (context, frame) -> { },
-                controller -> { }, battleMap(), new MapAdapterBundle(List.of(), List.of()));
+                controller -> { }, battleMap(), completeMaps(List.of()));
 
         AdapterTckReport report = AdapterTck.inspect(adapters, configUi());
 
@@ -54,7 +57,7 @@ class AdapterTckTest {
             public void register(ClientEventHandler<Object, Object> handler) { }
             public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
         };
-        MapAdapterBundle maps = new MapAdapterBundle(List.of(), List.of(
+        MapAdapterBundle maps = completeMaps(List.of(
                 new UnavailableSharedWaypointMapAdapter(
                         "optional-map", IntegrationSupportStatus.FAILED, "initialization failed")));
         ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
@@ -65,6 +68,31 @@ class AdapterTckTest {
 
         assertTrue(report.passed(), report.issues().toString());
         assertTrue(report.toJson().contains("\"status\":\"FAILED\""));
+    }
+
+    @Test
+    void failsWhenAnExpectedCapabilityIsNotRegistered() {
+        ClientEventBridge<Object, Object> events = new ClientEventBridge<>() {
+            public void register(ClientEventHandler<Object, Object> handler) { }
+            public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
+        };
+        MapAdapterBundle missingXaeroWorldMap = new MapAdapterBundle(List.of(
+                unavailable(IntegrationIds.JOURNEYMAP_PLAYERS, RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER),
+                unavailable(IntegrationIds.JOURNEYMAP_BEACONS, RemotePlayerProjection.Kind.JOURNEYMAP_BEACON)),
+                List.of(
+                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.JOURNEYMAP_WAYPOINTS,
+                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed"),
+                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.XAERO_MINIMAP,
+                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed")));
+        ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
+                "test", runtime(), game(), events, (context, frame) -> { }, (context, frame) -> { },
+                controller -> { }, battleMap(), missingXaeroWorldMap);
+
+        AdapterTckReport report = AdapterTck.inspect(adapters, configUi());
+
+        assertFalse(report.passed());
+        assertTrue(report.issues().stream().anyMatch(issue ->
+                issue.contains("missing expected capability " + IntegrationIds.XAERO_WORLDMAP)), report.issues().toString());
     }
 
     private static RuntimeGateway runtime() {
@@ -101,6 +129,26 @@ class AdapterTckTest {
             public String unavailableReason() { return "not installed"; }
             public Optional<fun.prof_chen.teamviewer.main_code.battlemap.NativeBattleMapSnapshot> capture() { return Optional.empty(); }
         };
+    }
+
+    private static MapAdapterBundle completeMaps(List<UnavailableSharedWaypointMapAdapter> extras) {
+        List<fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter> waypoints =
+                new java.util.ArrayList<>(List.of(
+                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.JOURNEYMAP_WAYPOINTS,
+                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed"),
+                        new UnavailableSharedWaypointMapAdapter(IntegrationIds.XAERO_MINIMAP,
+                                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed")));
+        waypoints.addAll(extras);
+        return new MapAdapterBundle(List.of(
+                unavailable(IntegrationIds.JOURNEYMAP_PLAYERS, RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER),
+                unavailable(IntegrationIds.JOURNEYMAP_BEACONS, RemotePlayerProjection.Kind.JOURNEYMAP_BEACON),
+                unavailable(IntegrationIds.XAERO_WORLDMAP, RemotePlayerProjection.Kind.XAERO_WORLD_MAP_MARKER)),
+                waypoints);
+    }
+
+    private static UnavailableRemotePlayerProjection unavailable(String id, RemotePlayerProjection.Kind kind) {
+        return new UnavailableRemotePlayerProjection(id, kind,
+                IntegrationSupportStatus.MOD_NOT_INSTALLED, "not installed");
     }
 
     private static ConfigUiController configUi() {

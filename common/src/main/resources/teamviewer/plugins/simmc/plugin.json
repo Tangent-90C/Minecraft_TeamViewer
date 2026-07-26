@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": "1",
+  "id": "teamviewer.simmc",
+  "name": "SimMC Native Battle Map",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "documentation": "README.md",
+  "entrypoints": [
+    {"entry": "main.lua", "loaders": ["fabric"], "minecraftVersions": ["1.21.8"], "priority": 10},
+    {"entry": "main.lua", "loaders": ["fabric"], "minecraftVersions": ["26.1.2"], "priority": 10},
+    {"entry": "unsupported.lua", "loaders": [], "minecraftVersions": [], "priority": -10}
+  ],
+  "defaultEnabled": true,
+  "hotToggle": "managed",
+  "loaders": [],
+  "minecraftVersions": [],
+  "requiredMods": [],
+  "optionalMods": ["smcmod"],
+  "dependencies": [],
+  "provides": [
+    {"id": "simmc-native-battle-map", "role": "battle-map-source", "name": "SimMC Native Battle Map"}
+  ],
+  "settings": []
+}

@@ -5,5 +5,7 @@ public enum IntegrationSupportStatus {
     AVAILABLE,
     MOD_NOT_INSTALLED,
     UNSUPPORTED_VERSION,
+    NOT_IMPLEMENTED,
+    ENTRYPOINT_NOT_READY,
     FAILED
 }

@@ -19,17 +19,17 @@ final class NeoForgeMapAdapters {
                 List.of(
                         unavailablePlayer("journeymap-players", RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER),
                         unavailablePlayer("journeymap-player-beacons", RemotePlayerProjection.Kind.JOURNEYMAP_BEACON),
-                        unavailablePlayer("xaero-world-map-players", RemotePlayerProjection.Kind.XAERO_WORLD_MAP_MARKER)),
+                        unavailablePlayer("xaero-worldmap", RemotePlayerProjection.Kind.XAERO_WORLD_MAP_MARKER)),
                 List.of(
                         new UnavailableSharedWaypointMapAdapter("journeymap-shared-waypoints",
                                 IntegrationSupportStatus.UNSUPPORTED_VERSION, DETAIL),
-                        new UnavailableSharedWaypointMapAdapter("xaero-minimap-shared-waypoints",
-                                IntegrationSupportStatus.UNSUPPORTED_VERSION, DETAIL)));
+                        new UnavailableSharedWaypointMapAdapter("xaero-minimap",
+                                IntegrationSupportStatus.NOT_IMPLEMENTED, DETAIL)));
     }
 
     private static UnavailableRemotePlayerProjection unavailablePlayer(
             String id, RemotePlayerProjection.Kind kind) {
         return new UnavailableRemotePlayerProjection(
-                id, kind, IntegrationSupportStatus.UNSUPPORTED_VERSION, DETAIL);
+                id, kind, IntegrationSupportStatus.NOT_IMPLEMENTED, DETAIL);
     }
 }

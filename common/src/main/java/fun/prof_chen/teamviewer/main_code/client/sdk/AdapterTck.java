@@ -9,6 +9,8 @@ import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Runtime-safe contract checks shared by every Minecraft adapter. */
 public final class AdapterTck {
@@ -31,8 +33,22 @@ public final class AdapterTck {
         for (ConfigPageId pageId : ConfigPageId.values()) {
             probe("config page " + pageId, issues, () -> validatePage(configUi.page(pageId, 854, 480), pageId));
         }
-        List<IntegrationCapability> integrations = new ArrayList<>(adapters.mapAdapters().capabilities());
-        integrations.add(adapters.battleMapNativeBridge().capability());
+        List<String> integrationIssues = adapters.integrationRegistry().issues();
+        integrationIssues.forEach(issue -> issues.add("integration: " + issue));
+        List<IntegrationCapability> integrations = adapters.integrationRegistry().capabilities();
+        Map<String, IntegrationCapability> byId = integrations.stream()
+                .collect(Collectors.toMap(IntegrationCapability::id, value -> value));
+        IntegrationIds.expectedRoles().forEach((id, role) -> {
+            IntegrationCapability capability = byId.get(id);
+            if (capability == null) {
+                issues.add("integration: missing expected capability " + id);
+            } else if (!role.equals(capability.role())) {
+                issues.add("integration: role mismatch for " + id + ": " + capability.role());
+            } else if (capability.status() != IntegrationSupportStatus.AVAILABLE
+                    && capability.detail().isBlank()) {
+                issues.add("integration: unavailable capability has no detail " + id);
+            }
+        });
         return new AdapterTckReport(
                 adapters.adapterVersion(),
                 adapters.runtimeGateway().getClientProgramVersion(),

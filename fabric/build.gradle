@@ -158,6 +158,9 @@ dependencies {
 
     implementation "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
     include "com.google.protobuf:protobuf-java-util:${project.protobuf_version}"
+
+    implementation "org.luaj:luaj-jse:${project.luaj_version}"
+    include "org.luaj:luaj-jse:${project.luaj_version}"
 }
 
 if (mappingsMode == "none") {
@@ -519,7 +522,7 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             def nested = entryNames.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
             def requiredNestedPrefixes = [
                     "TeamViewRelay-common-", "TeamViewRelay-common-sdk-",
-                    "okhttp-", "okio-jvm-", "kotlin-stdlib-", "protobuf-java-", "protobuf-java-util-"
+                    "okhttp-", "okio-jvm-", "kotlin-stdlib-", "protobuf-java-", "protobuf-java-util-", "luaj-jse-"
             ]
             requiredNestedPrefixes.each { prefix ->
                 def matches = nested.findAll { name ->

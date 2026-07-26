@@ -23,9 +23,19 @@ public record MapAdapterBundle(
     public List<IntegrationCapability> capabilities() {
         List<IntegrationCapability> result = new ArrayList<>();
         remotePlayerProjections.forEach(adapter -> result.add(new IntegrationCapability(
-                adapter.id(), "remote-player", adapter.supportStatus(), adapter.supportDetail())));
+                adapter.id(), "remote-player", adapter.supportStatus(), adapter.supportDetail(),
+                IntegrationIds.pluginIdForCapability(adapter.id()),
+                adapter.supportStatus() == IntegrationSupportStatus.AVAILABLE
+                        ? IntegrationImplementationSource.JAVA_NATIVE
+                        : IntegrationImplementationSource.PLACEHOLDER,
+                PluginRuntimeStatus.DISABLED)));
         sharedWaypointAdapters.forEach(adapter -> result.add(new IntegrationCapability(
-                adapter.id(), "shared-waypoint", adapter.supportStatus(), adapter.supportDetail())));
+                adapter.id(), "shared-waypoint", adapter.supportStatus(), adapter.supportDetail(),
+                IntegrationIds.pluginIdForCapability(adapter.id()),
+                adapter.supportStatus() == IntegrationSupportStatus.AVAILABLE
+                        ? IntegrationImplementationSource.JAVA_NATIVE
+                        : IntegrationImplementationSource.PLACEHOLDER,
+                PluginRuntimeStatus.DISABLED)));
         return List.copyOf(result);
     }
 

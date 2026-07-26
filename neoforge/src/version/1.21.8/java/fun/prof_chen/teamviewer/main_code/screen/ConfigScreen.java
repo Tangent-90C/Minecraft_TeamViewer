@@ -21,7 +21,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 
 /** Minecraft 1.21.8 NeoForge widget host for the common seven-page configuration model. */
@@ -29,7 +29,7 @@ public final class ConfigScreen extends Screen {
     private final Screen parent;
     private final ConfigUiController session;
     private final ConfigPageId pageId;
-    private final Map<ConfigControlId, AbstractWidget> widgets = new EnumMap<>(ConfigControlId.class);
+    private final Map<ConfigControlId, AbstractWidget> widgets = new HashMap<>();
 
     public ConfigScreen(Screen parent) {
         this(parent, ConfigUiSessions.create(), ConfigPageId.ROOT);
@@ -102,6 +102,7 @@ public final class ConfigScreen extends Screen {
         ConfigUiAction action = session.activate(pageId, id);
         switch (action.type()) {
             case STAY -> refreshDynamicControls();
+            case RELOAD_PAGE -> minecraft.setScreen(new ConfigScreen(parent, session, pageId));
             case OPEN_PAGE -> minecraft.setScreen(new ConfigScreen(this, session, action.targetPage()));
             case CLOSE_TO_PARENT -> minecraft.setScreen(parent);
         }
@@ -158,6 +159,12 @@ public final class ConfigScreen extends Screen {
             case WAYPOINT -> "screen.mc_teamviewer.waypoint_config.title";
             case WAYPOINT_SHAPE -> "screen.mc_teamviewer.waypoint_shape_config.title";
             case PACKET_CAPTURE -> "screen.mc_teamviewer.packet_capture.title";
+            case PLUGINS -> "screen.mc_teamviewer.integration_plugins.title";
+            case PLUGIN_DETAIL -> "screen.mc_teamviewer.integration_plugin.title";
+            case PLUGIN_COPY_GUIDE -> "screen.mc_teamviewer.integration_plugin.copy_guide_title";
+            case DISABLED_PLUGINS -> "screen.mc_teamviewer.integration_plugin.disabled_title";
+            case DISABLED_PLUGIN_DETAIL -> "screen.mc_teamviewer.integration_plugin.disabled_detail_title";
+            case PLUGIN_DELETE_CONFIRM -> "screen.mc_teamviewer.integration_plugin.delete_confirm_title";
         });
     }
 

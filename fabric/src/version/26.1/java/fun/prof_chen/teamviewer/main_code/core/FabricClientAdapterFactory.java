@@ -11,11 +11,6 @@ import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProj
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.UnavailableRemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.UnavailableSharedWaypointMapAdapter;
-import fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapRemotePlayerBeaconProjection;
-import fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapRemotePlayerProjection;
-import fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapSharedWaypointAdapter;
-import fun.prof_chen.teamviewer.main_code.mapbridge.provider.xaero.XaeroMinimapSharedWaypointAdapter;
-import fun.prof_chen.teamviewer.main_code.mapbridge.provider.xaero.XaeroWorldMapRemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.network.bridge.FabricRuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.render.FabricHudRenderSink;
 import fun.prof_chen.teamviewer.main_code.render.FabricWorldRenderSink;
@@ -50,23 +45,29 @@ public final class FabricClientAdapterFactory implements ClientAdapterFactory<Le
     private static MapAdapterBundle createMapAdapters() {
         List<RemotePlayerProjection> players = new ArrayList<>();
         List<SharedWaypointMapAdapter> waypoints = new ArrayList<>();
-        players.add(new XaeroWorldMapRemotePlayerProjection());
-        waypoints.add(new XaeroMinimapSharedWaypointAdapter());
-        if (FabricLoader.getInstance().isModLoaded("journeymap")) {
-            players.add(new JourneyMapRemotePlayerProjection());
-            players.add(new JourneyMapRemotePlayerBeaconProjection());
-            waypoints.add(new JourneyMapSharedWaypointAdapter());
-        } else {
-            String detail = "JourneyMap is not installed";
-            players.add(new UnavailableRemotePlayerProjection(
-                    "journeymap-players", RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER,
-                    IntegrationSupportStatus.MOD_NOT_INSTALLED, detail));
-            players.add(new UnavailableRemotePlayerProjection(
-                    "journeymap-player-beacons", RemotePlayerProjection.Kind.JOURNEYMAP_BEACON,
-                    IntegrationSupportStatus.MOD_NOT_INSTALLED, detail));
-            waypoints.add(new UnavailableSharedWaypointMapAdapter(
-                    "journeymap-shared-waypoints", IntegrationSupportStatus.MOD_NOT_INSTALLED, detail));
-        }
+        players.add(unavailableRemote("xaero-worldmap", RemotePlayerProjection.Kind.XAERO_WORLD_MAP_MARKER,
+                "xaeroworldmap"));
+        waypoints.add(unavailableWaypoint("xaero-minimap", "xaerominimap"));
+        players.add(unavailableRemote("journeymap-players", RemotePlayerProjection.Kind.JOURNEYMAP_MAP_MARKER,
+                "journeymap"));
+        players.add(unavailableRemote("journeymap-player-beacons", RemotePlayerProjection.Kind.JOURNEYMAP_BEACON,
+                "journeymap"));
+        waypoints.add(unavailableWaypoint("journeymap-shared-waypoints", "journeymap"));
         return new MapAdapterBundle(players, waypoints);
+    }
+
+    private static RemotePlayerProjection unavailableRemote(
+            String id, RemotePlayerProjection.Kind kind, String modId) {
+        boolean loaded = FabricLoader.getInstance().isModLoaded(modId);
+        return new UnavailableRemotePlayerProjection(id, kind,
+                loaded ? IntegrationSupportStatus.ENTRYPOINT_NOT_READY : IntegrationSupportStatus.MOD_NOT_INSTALLED,
+                loaded ? modId + " Lua adapter has not loaded yet" : modId + " is not installed");
+    }
+
+    private static SharedWaypointMapAdapter unavailableWaypoint(String id, String modId) {
+        boolean loaded = FabricLoader.getInstance().isModLoaded(modId);
+        return new UnavailableSharedWaypointMapAdapter(id,
+                loaded ? IntegrationSupportStatus.ENTRYPOINT_NOT_READY : IntegrationSupportStatus.MOD_NOT_INSTALLED,
+                loaded ? modId + " Lua adapter has not loaded yet" : modId + " is not installed");
     }
 }

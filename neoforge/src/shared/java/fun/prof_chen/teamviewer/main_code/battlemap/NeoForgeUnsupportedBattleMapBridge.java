@@ -28,7 +28,10 @@ public final class NeoForgeUnsupportedBattleMapBridge implements BattleMapNative
 
     @Override
     public IntegrationCapability capability() {
-        return new IntegrationCapability("simmc-native-battle-map", "battle-map-native",
-                IntegrationSupportStatus.UNSUPPORTED_VERSION, DETAIL);
+        return new IntegrationCapability("simmc-native-battle-map", "battle-map-source",
+                IntegrationSupportStatus.NOT_IMPLEMENTED, DETAIL,
+                fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds.PLUGIN_SIMMC,
+                fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationImplementationSource.PLACEHOLDER,
+                fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus.DISABLED);
     }
 }

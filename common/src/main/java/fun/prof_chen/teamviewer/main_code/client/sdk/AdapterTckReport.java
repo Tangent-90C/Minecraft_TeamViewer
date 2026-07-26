@@ -39,9 +39,20 @@ public record AdapterTckReport(
             if (index > 0) json.append(',');
             IntegrationCapability capability = integrations.get(index);
             json.append("{\"id\":\"").append(escape(capability.id()))
+                    .append("\",\"displayName\":\"").append(escape(capability.displayName()))
                     .append("\",\"role\":\"").append(escape(capability.role()))
                     .append("\",\"status\":\"").append(capability.status())
-                    .append("\",\"detail\":\"").append(escape(capability.detail())).append("\"}");
+                    .append("\",\"detail\":\"").append(escape(capability.detail()))
+                    .append("\",\"pluginId\":\"").append(escape(capability.pluginId()))
+                    .append("\",\"implementationSource\":\"").append(capability.implementationSource())
+                    .append("\",\"runtimeStatus\":\"").append(capability.runtimeStatus())
+                    .append("\",\"requiredMods\":[");
+            appendStrings(json, capability.requiredMods());
+            json.append("],\"targetLoaders\":[");
+            appendStrings(json, capability.targetLoaders());
+            json.append("],\"targetVersions\":[");
+            appendStrings(json, capability.targetVersions());
+            json.append("]}");
         }
         return json.append("]\n}\n").toString();
     }
