@@ -102,7 +102,12 @@ class AdapterTckTest {
     private static GameClientBridge game() {
         return new GameClientBridge() {
             public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) { return ClientReportSnapshot.unavailable(); }
-            public ClientWorldSnapshot captureWorldSnapshot() { return ClientWorldSnapshot.unavailable(); }
+            public List<fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot> captureTabPlayerSnapshot() {
+                return List.of();
+            }
+            public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
+                return ClientWorldSnapshot.unavailable();
+            }
             public ScoreboardSnapshot captureScoreboardSnapshot() { return ScoreboardSnapshot.unavailable(); }
             public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) { return Optional.empty(); }
             public Optional<Position3D> resolveEntityPosition(String id, String name, String dimension) { return Optional.empty(); }

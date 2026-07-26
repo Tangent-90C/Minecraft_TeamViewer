@@ -61,8 +61,8 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
         RemotePlayerRepository remoteRepository = new MapBackedRemotePlayerRepository(remotePlayers);
         SharedWaypointRepository waypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
         WaypointSyncGateway waypointGateway = new WaypointSyncGateway(network);
-        RemotePlayerProjectionCoordinator projectionCoordinator = new RemotePlayerProjectionCoordinator(
-                integrations, adapters.gameClientBridge());
+        RemotePlayerProjectionCoordinator projectionCoordinator =
+                new RemotePlayerProjectionCoordinator(integrations);
         waypointCoordinator = new SharedWaypointSyncCoordinator(
                 waypointRepository, waypointGateway, integrations,
                 config, adapters.gameClientBridge());

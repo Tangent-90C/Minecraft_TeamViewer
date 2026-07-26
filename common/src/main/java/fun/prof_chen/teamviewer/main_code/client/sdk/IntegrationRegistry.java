@@ -201,10 +201,10 @@ public final class IntegrationRegistry {
 
     public synchronized BattleMapSource activeBattleMapSource(String id) {
         Entry entry = entries.get(IntegrationIds.canonicalize(id));
-        if (entry != null) refreshSupport(entry);
         if (entry == null || !entry.runtimeAttached
-                || entry.supportStatus != IntegrationSupportStatus.AVAILABLE
                 || !(entry.implementation instanceof BattleMapSource source)) return null;
+        refreshSupport(entry);
+        if (entry.supportStatus != IntegrationSupportStatus.AVAILABLE) return null;
         return source;
     }
 
@@ -230,10 +230,10 @@ public final class IntegrationRegistry {
     private <T> List<T> activeImplementations(IntegrationRole role, Class<T> type) {
         List<T> result = new ArrayList<>();
         for (Entry entry : entries.values()) {
-            refreshSupport(entry);
             if (!entry.role.equals(role.id()) || !entry.runtimeAttached
-                    || entry.supportStatus != IntegrationSupportStatus.AVAILABLE
                     || !type.isInstance(entry.implementation)) continue;
+            refreshSupport(entry);
+            if (entry.supportStatus != IntegrationSupportStatus.AVAILABLE) continue;
             result.add(type.cast(entry.implementation));
         }
         return List.copyOf(result);

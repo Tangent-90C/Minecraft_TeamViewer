@@ -44,14 +44,15 @@ class SharedWaypointMapSyncPolicyTest {
                 30, 70, 40, "minecraft:overworld", 0xFFFF0000, 1L,
                 null, null, null, null, "quick", null, null);
 
-        policy.tick(List.of(adapter), Map.of(remote.waypointId(), remote), true);
+        ClientWorldSnapshot world = new FakeGame().captureWorldSnapshot(false);
+        policy.tick(List.of(adapter), Map.of(remote.waypointId(), remote), true, world);
         assertEquals(1, adapter.upserts.size());
         assertEquals("[TV] Alice: Target", adapter.upserts.get(0).name());
         assertEquals(0, gateway.upsertCount); // first local scan establishes the no-upload baseline
 
         adapter.local = List.of();
         clock.set(4_000L);
-        policy.tick(List.of(adapter), Map.of(), true);
+        policy.tick(List.of(adapter), Map.of(), true, world);
         assertFalse(gateway.deletedIds.isEmpty());
         assertEquals(List.of("remote-waypoint"), adapter.deletedIds);
     }
@@ -85,7 +86,10 @@ class SharedWaypointMapSyncPolicyTest {
 
     private static final class FakeGame implements GameClientBridge {
         public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) { return ClientReportSnapshot.unavailable(); }
-        public ClientWorldSnapshot captureWorldSnapshot() {
+        public List<fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot> captureTabPlayerSnapshot() {
+            return List.of();
+        }
+        public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
             Position3D position = new Position3D(0, 64, 0);
             return new ClientWorldSnapshot(LOCAL, "Local", true, "minecraft:overworld", -64,
                     position, position, new Position3D(0, 0, 1), new Position3D(0, 1, 0), List.of(), List.of());

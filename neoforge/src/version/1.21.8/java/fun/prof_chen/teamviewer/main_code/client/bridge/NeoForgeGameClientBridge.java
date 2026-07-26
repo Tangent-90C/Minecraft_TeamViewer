@@ -51,47 +51,31 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
     public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) {
         Minecraft client = Minecraft.getInstance();
         if (client == null || client.player == null || client.level == null) return ClientReportSnapshot.unavailable();
-        List<PlayerSnapshot> players = new ArrayList<>();
-        for (AbstractClientPlayer player : client.level.players()) {
-            Entity vehicle = player.getVehicle();
-            boolean riding = vehicle != null
-                    && String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT).contains("horse");
-            players.add(new PlayerSnapshot(
-                    player.getUUID(), toPosition(player.position()), toPosition(player.getDeltaMovement()),
-                    MinecraftDimensionAdapter.toDimensionId(player.level().dimension()), player.getName().getString(),
-                    player.getHealth(), player.getMaxHealth(), player.getArmorValue(), riding,
-                    player.getBbWidth(), player.getBbHeight()));
-        }
-        List<EntitySnapshot> entities = new ArrayList<>();
-        if (includeEntities) {
-            for (Entity entity : client.level.entitiesForRendering()) {
-                if (entity == client.player) continue;
-                entities.add(new EntitySnapshot(
-                        entity.getStringUUID(), toPosition(entity.position()), toPosition(entity.getDeltaMovement()),
-                        MinecraftDimensionAdapter.toDimensionId(entity.level().dimension()), entity.getType().toString(),
-                        entity.hasCustomName() ? entity.getDisplayName().getString() : null,
-                        entity.getBbWidth(), entity.getBbHeight()));
-            }
-        }
         return new ClientReportSnapshot(
                 client.player.getUUID(), client.player.isAlive(),
-                MinecraftDimensionAdapter.toDimensionId(client.level.dimension()), players, entities,
-                collectTabPlayers(client));
+                MinecraftDimensionAdapter.toDimensionId(client.level.dimension()),
+                collectPlayers(client), includeEntities ? collectEntities(client) : List.of());
     }
 
     @Override
-    public ClientWorldSnapshot captureWorldSnapshot() {
+    public List<TabPlayerSnapshot> captureTabPlayerSnapshot() {
+        return collectTabPlayers(Minecraft.getInstance());
+    }
+
+    @Override
+    public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
         Minecraft client = Minecraft.getInstance();
         if (client == null || client.player == null || client.level == null) return ClientWorldSnapshot.unavailable();
-        ClientReportSnapshot report = captureReportSnapshot(true);
         Camera camera = client.gameRenderer.getMainCamera();
         Vector3f forward = camera.getLookVector();
         Vector3f up = camera.getUpVector();
         return new ClientWorldSnapshot(
-                report.localPlayerId(), client.player.getName().getString(), report.localPlayerAlive(), report.dimension(),
+                client.player.getUUID(), client.player.getName().getString(), client.player.isAlive(),
+                MinecraftDimensionAdapter.toDimensionId(client.level.dimension()),
                 client.level.getMinY(), toPosition(client.player.position()), toPosition(camera.getPosition()),
                 new Position3D(forward.x(), forward.y(), forward.z()),
-                new Position3D(up.x(), up.y(), up.z()), report.players(), report.entities());
+                new Position3D(up.x(), up.y(), up.z()), collectPlayers(client),
+                includeEntities ? collectEntities(client) : List.of());
     }
 
     @Override
@@ -203,8 +187,9 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
     private static List<TabPlayerSnapshot> collectTabPlayers(Minecraft client) {
         ClientPacketListener connection = client.getConnection();
         if (connection == null) return List.of();
-        List<TabPlayerSnapshot> result = new ArrayList<>();
-        for (PlayerInfo entry : connection.getOnlinePlayers()) {
+        var onlinePlayers = connection.getOnlinePlayers();
+        List<TabPlayerSnapshot> result = new ArrayList<>(onlinePlayers.size());
+        for (PlayerInfo entry : onlinePlayers) {
             if (entry == null || entry.getProfile() == null || entry.getProfile().getName() == null) continue;
             String name = entry.getProfile().getName();
             PlayerTeam team = entry.getTeam();
@@ -215,6 +200,36 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
                     team == null ? null : team.getPlayerPrefix().getString()));
         }
         return result;
+    }
+
+    private static List<PlayerSnapshot> collectPlayers(Minecraft client) {
+        List<PlayerSnapshot> players = new ArrayList<>();
+        for (AbstractClientPlayer player : client.level.players()) {
+            Entity vehicle = player.getVehicle();
+            boolean riding = vehicle != null
+                    && String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT).contains("horse");
+            players.add(new PlayerSnapshot(
+                    player.getUUID(), toPosition(player.position()), toPosition(player.getDeltaMovement()),
+                    MinecraftDimensionAdapter.toDimensionId(player.level().dimension()), player.getName().getString(),
+                    player.getHealth(), player.getMaxHealth(), player.getArmorValue(), riding,
+                    player.getBbWidth(), player.getBbHeight()));
+        }
+        return players;
+    }
+
+    private static List<EntitySnapshot> collectEntities(Minecraft client) {
+        List<EntitySnapshot> entities = new ArrayList<>();
+        for (Entity entity : client.level.entitiesForRendering()) {
+            if (entity == client.player) {
+                continue;
+            }
+            entities.add(new EntitySnapshot(
+                    entity.getStringUUID(), toPosition(entity.position()), toPosition(entity.getDeltaMovement()),
+                    MinecraftDimensionAdapter.toDimensionId(entity.level().dimension()), entity.getType().toString(),
+                    entity.hasCustomName() ? entity.getDisplayName().getString() : null,
+                    entity.getBbWidth(), entity.getBbHeight()));
+        }
+        return entities;
     }
 
     private static Position3D toPosition(Vec3 value) {

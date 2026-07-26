@@ -3,8 +3,6 @@
 package fun.prof_chen.teamviewer.main_code.bridge;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
@@ -45,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * TeamViewRelay 网络层管理器 - 核心网络通信组件
@@ -201,6 +200,10 @@ public class NetworkManager {
 
 	// 单次 keepalive 报文最多携带对象数量
 	private static final int KEEPALIVE_MAX_ITEMS_PER_PACKET = 128;
+	private static final int MAX_MAIN_THREAD_TASKS_PER_TICK = 32;
+	private static final long MAIN_THREAD_TASK_BUDGET_NANOS = 2_000_000L;
+	private static final int MAIN_THREAD_BACKLOG_WARN_THRESHOLD = 40;
+	private static final long MAIN_THREAD_BACKLOG_WARN_INTERVAL_MS = 5_000L;
 
 	// 全局配置网关（由 loader 层注入）
 	private static ConfigGateway configGateway;
@@ -346,6 +349,8 @@ public class NetworkManager {
 	 * - 防止并发修改异常和数据不一致
 	 */
 	private final Queue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
+	private final AtomicInteger pendingMainThreadTaskCount = new AtomicInteger();
+	private volatile long lastMainThreadBacklogWarningAt;
 
 	/**
 	 * 玩家标记状态记录类
@@ -389,13 +394,26 @@ public class NetworkManager {
 	 * 异常处理：捕获并记录任务执行中的错误，防止队列处理中断
 	 */
 	public void pumpMainThreadTasks() {
+		long deadline = System.nanoTime() + MAIN_THREAD_TASK_BUDGET_NANOS;
+		int processed = 0;
 		Runnable task;
-		while ((task = mainThreadTasks.poll()) != null) {
+		while (processed < MAX_MAIN_THREAD_TASKS_PER_TICK
+				&& (processed == 0 || System.nanoTime() < deadline)
+				&& (task = mainThreadTasks.poll()) != null) {
+			pendingMainThreadTaskCount.decrementAndGet();
 			try {
 				task.run();
 			} catch (Exception e) {
 				LOGGER.error("Error while processing queued network task: {}", e.getMessage());
 			}
+			processed++;
+		}
+		int pending = pendingMainThreadTaskCount.get();
+		long now = System.currentTimeMillis();
+		if (pending > MAIN_THREAD_BACKLOG_WARN_THRESHOLD
+				&& now - lastMainThreadBacklogWarningAt >= MAIN_THREAD_BACKLOG_WARN_INTERVAL_MS) {
+			lastMainThreadBacklogWarningAt = now;
+			LOGGER.warn("TeamViewRelay main-thread network backlog: {} tasks pending", pending);
 		}
 	}
 
@@ -411,6 +429,7 @@ public class NetworkManager {
 	 */
 	private void enqueueMainThreadTask(Runnable task) {
 		if (task != null) {
+			pendingMainThreadTaskCount.incrementAndGet();
 			mainThreadTasks.offer(task);
 		}
 	}
@@ -644,12 +663,14 @@ public class NetworkManager {
 		}
 		long now = System.currentTimeMillis();
 
-		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
+		Map<String, Map<String, Object>> currentSnapshot =
+				new HashMap<>(hashMapCapacity(players.size()));
 		for (Map.Entry<UUID, Map<String, Object>> entry : players.entrySet()) {
 			currentSnapshot.put(entry.getKey().toString(), copyValueMap(entry.getValue()));
 		}
 
-		Map<String, Map<String, Object>> upsert = new HashMap<>();
+		Map<String, Map<String, Object>> upsert =
+				new HashMap<>(hashMapCapacity(players.size()));
 		List<String> delete = new ArrayList<>();
 		boolean forceFullRefresh = shouldForcePlayersFullRefresh();
 
@@ -723,12 +744,14 @@ public class NetworkManager {
 		}
 		long now = System.currentTimeMillis();
 
-		Map<String, Map<String, Object>> currentSnapshot = new HashMap<>();
+		Map<String, Map<String, Object>> currentSnapshot =
+				new HashMap<>(hashMapCapacity(entities.size()));
 		for (Map.Entry<String, Map<String, Object>> entry : entities.entrySet()) {
 			currentSnapshot.put(entry.getKey(), copyValueMap(entry.getValue()));
 		}
 
-		Map<String, Map<String, Object>> upsert = new HashMap<>();
+		Map<String, Map<String, Object>> upsert =
+				new HashMap<>(hashMapCapacity(entities.size()));
 		List<String> delete = new ArrayList<>();
 		boolean forceFullRefresh = shouldForceEntitiesFullRefresh();
 
@@ -1043,17 +1066,6 @@ public class NetworkManager {
 		socket.send(payload);
 	}
 
-	private JsonObject createObjectNode(Object packet) {
-		if (packet == null) {
-			return new JsonObject();
-		}
-		JsonElement node = gson.toJsonTree(packet);
-		if (node != null && node.isJsonObject()) {
-			return node.getAsJsonObject();
-		}
-		return new JsonObject();
-	}
-
 	private void handleTransportOpen(long attemptId, String negotiatedExtensions) {
 		// 连接建立事件来自传输线程，这里只投递任务，避免直接跨线程改共享状态。
 		enqueueMainThreadTask(() -> {
@@ -1097,12 +1109,24 @@ public class NetworkManager {
 			return;
 		}
 		captureIncomingBinaryPayload(payload);
+		ProtocolPackets.DecodedInboundMessage decoded;
+		try {
+			decoded = messageCodec.decode(payload);
+			if (decoded == null || decoded.type == null || decoded.type.isBlank()) {
+				LOGGER.warn("Received invalid message envelope");
+				return;
+			}
+		} catch (Exception e) {
+			LOGGER.error("TeamViewRelay Network - Error decoding message, bytes={}: {}",
+					payload.length, e.getMessage(), e);
+			return;
+		}
 		enqueueMainThreadTask(() -> {
 			if (!isCurrentConnectionAttempt(attemptId)) {
 				LOGGER.debug("Ignoring stale queued binary frame for attempt {}", attemptId);
 				return;
 			}
-			processCompleteMessage(attemptId, payload);
+			processDecodedMessage(attemptId, decoded);
 		});
 	}
 
@@ -1142,20 +1166,10 @@ public class NetworkManager {
 	 * 
 	 * 通用处理：统一的错误处理和日志记录。
 	 */
-	private void processCompleteMessage(long attemptId, byte[] message) {
+	private void processDecodedMessage(long attemptId, ProtocolPackets.DecodedInboundMessage decoded) {
 		try {
 			if (!isCurrentConnectionAttempt(attemptId)) {
 				LOGGER.debug("Ignoring stale inbound message for attempt {}", attemptId);
-				return;
-			}
-			if (message == null || message.length == 0) {
-				LOGGER.warn("Received empty message");
-				return;
-			}
-
-			ProtocolPackets.DecodedInboundMessage decoded = messageCodec.decode(message);
-			if (decoded == null || decoded.type == null || decoded.type.isBlank()) {
-				LOGGER.warn("Received invalid message envelope");
 				return;
 			}
 
@@ -1203,9 +1217,9 @@ public class NetworkManager {
 
 		} catch (Exception e) {
 			LOGGER.error(
-				"TeamViewRelay Network - Error processing complete message: {}, bytes={}",
+				"TeamViewRelay Network - Error applying decoded message: {}, type={}",
 				e.getMessage(),
-				message == null ? 0 : message.length,
+				decoded == null ? "unknown" : decoded.type,
 				e
 			);
 		}
@@ -1251,20 +1265,21 @@ public class NetworkManager {
 			return;
 		}
 
-		JsonObject json = createObjectNode(packet);
-
-		if (json.has("players") && json.get("players").isJsonObject()) {
-			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(json.getAsJsonObject("players"), true);
+		Map<String, Object> players = objectMap(packet.players);
+		if (packet.players != null) {
+			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(players, true);
 			reconcileRemotePlayers(latestRemotePlayers);
 		}
 
-		if (json.has("entities") && json.get("entities").isJsonObject()) {
-			replaceEntityCache(json.getAsJsonObject("entities"));
+		Map<String, Object> entities = objectMap(packet.entities);
+		if (packet.entities != null) {
+			replaceEntityCache(entities);
 		}
 
-		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
+		Map<String, Object> waypoints = objectMap(packet.waypoints);
+		if (packet.waypoints != null) {
 			remoteWaypointDataCache.clear();
-			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsNode(json, "waypoints");
+			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsFromObject(waypoints);
 			remoteWaypointCache.clear();
 			remoteWaypointCache.putAll(receivedWaypoints);
 			if (!receivedWaypoints.isEmpty()) {
@@ -1272,13 +1287,15 @@ public class NetworkManager {
 			}
 		}
 
-		if (json.has("battleChunks") && json.get("battleChunks").isJsonObject()) {
+		Map<String, Object> battleChunks = objectMap(packet.battleChunks);
+		if (packet.battleChunks != null) {
 			remoteBattleChunkDataCache.clear();
-			mergeBattleChunksPatchUpsert(json.getAsJsonObject("battleChunks"));
+			mergeBattleChunksPatchUpsert(battleChunks);
 		}
 
-		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
-			replacePlayerMarks(json.getAsJsonObject("playerMarks"));
+		Map<String, Object> playerMarks = objectMap(packet.playerMarks);
+		if (packet.playerMarks != null) {
+			replacePlayerMarks(playerMarks);
 		}
 	}
 
@@ -1339,72 +1356,56 @@ public class NetworkManager {
 			return;
 		}
 
-		JsonObject json = createObjectNode(packet);
-
-		if (json.has("players") && json.get("players").isJsonObject()) {
-			JsonObject playersPatch = json.getAsJsonObject("players");
-
-			if (playersPatch.has("delete") && playersPatch.get("delete").isJsonArray()) {
-				for (JsonElement idElement : playersPatch.getAsJsonArray("delete")) {
-					if (idElement != null && idElement.isJsonPrimitive()) {
-						try {
-							String playerIdRaw = idElement.getAsString();
-							UUID playerId = UUID.fromString(playerIdRaw);
-							remotePlayers.remove(playerId);
-							remotePlayerDataCache.remove(playerId);
-							lastSentPlayersSnapshot.remove(playerIdRaw);
-						} catch (Exception ignored) {
-						}
-					}
+		Map<String, Object> playersPatch = objectMap(packet.players);
+		if (!playersPatch.isEmpty()) {
+			for (Object idValue : objectList(playersPatch.get("delete"))) {
+				try {
+					String playerIdRaw = String.valueOf(idValue);
+					UUID playerId = UUID.fromString(playerIdRaw);
+					remotePlayers.remove(playerId);
+					remotePlayerDataCache.remove(playerId);
+					lastSentPlayersSnapshot.remove(playerIdRaw);
+				} catch (Exception ignored) {
 				}
 			}
-
-			if (playersPatch.has("upsert") && playersPatch.get("upsert").isJsonObject()) {
-				applyPlayerPatchUpserts(playersPatch.getAsJsonObject("upsert"));
+			Map<String, Object> upsert = objectMap(playersPatch.get("upsert"));
+			if (!upsert.isEmpty()) {
+				applyPlayerPatchUpserts(upsert);
 			}
 		}
 
-		if (json.has("entities") && json.get("entities").isJsonObject()) {
-			JsonObject entitiesPatch = json.getAsJsonObject("entities");
-			if (entitiesPatch.has("delete") && entitiesPatch.get("delete").isJsonArray()) {
-				for (JsonElement idElement : entitiesPatch.getAsJsonArray("delete")) {
-					if (idElement != null && idElement.isJsonPrimitive()) {
-						String entityId = idElement.getAsString();
-						if (entityId != null && !entityId.isBlank()) {
-							remoteEntityDataCache.remove(entityId);
-							lastSentEntitiesSnapshot.remove(entityId);
-						}
-					}
+		Map<String, Object> entitiesPatch = objectMap(packet.entities);
+		if (!entitiesPatch.isEmpty()) {
+			for (Object idValue : objectList(entitiesPatch.get("delete"))) {
+				String entityId = idValue == null ? null : String.valueOf(idValue);
+				if (entityId != null && !entityId.isBlank()) {
+					remoteEntityDataCache.remove(entityId);
+					lastSentEntitiesSnapshot.remove(entityId);
 				}
 			}
-
-			if (entitiesPatch.has("upsert") && entitiesPatch.get("upsert").isJsonObject()) {
-				mergeEntityPatchUpsert(entitiesPatch.getAsJsonObject("upsert"));
+			Map<String, Object> upsert = objectMap(entitiesPatch.get("upsert"));
+			if (!upsert.isEmpty()) {
+				mergeEntityPatchUpsert(upsert);
 			}
 		}
 
-		if (json.has("waypoints") && json.get("waypoints").isJsonObject()) {
-			JsonObject waypointPatch = json.getAsJsonObject("waypoints");
-
-			if (waypointPatch.has("delete") && waypointPatch.get("delete").isJsonArray()) {
-				List<String> deleteIds = new ArrayList<>();
-				for (JsonElement idElement : waypointPatch.getAsJsonArray("delete")) {
-					if (idElement != null && idElement.isJsonPrimitive()) {
-						String id = idElement.getAsString();
-						if (id != null && !id.isBlank()) {
-							remoteWaypointCache.remove(id);
-							remoteWaypointDataCache.remove(id);
-							deleteIds.add(id);
-						}
-					}
-				}
-				if (!deleteIds.isEmpty()) {
-					notifyWaypointsDeleted(deleteIds);
+		Map<String, Object> waypointPatch = objectMap(packet.waypoints);
+		if (!waypointPatch.isEmpty()) {
+			List<String> deleteIds = new ArrayList<>();
+			for (Object idValue : objectList(waypointPatch.get("delete"))) {
+				String id = idValue == null ? null : String.valueOf(idValue);
+				if (id != null && !id.isBlank()) {
+					remoteWaypointCache.remove(id);
+					remoteWaypointDataCache.remove(id);
+					deleteIds.add(id);
 				}
 			}
-
-			if (waypointPatch.has("upsert") && waypointPatch.get("upsert").isJsonObject()) {
-				Map<String, SharedWaypointInfo> upserts = parseWaypointsFromObject(waypointPatch.getAsJsonObject("upsert"));
+			if (!deleteIds.isEmpty()) {
+				notifyWaypointsDeleted(deleteIds);
+			}
+			Map<String, Object> upsert = objectMap(waypointPatch.get("upsert"));
+			if (!upsert.isEmpty()) {
+				Map<String, SharedWaypointInfo> upserts = parseWaypointsFromObject(upsert);
 				if (!upserts.isEmpty()) {
 					remoteWaypointCache.putAll(upserts);
 					notifyWaypointsReceived(upserts);
@@ -1412,62 +1413,56 @@ public class NetworkManager {
 			}
 		}
 
-		if (json.has("battleChunks") && json.get("battleChunks").isJsonObject()) {
-			applyBattleChunkPatch(json.getAsJsonObject("battleChunks"));
+		Map<String, Object> battleChunks = objectMap(packet.battleChunks);
+		if (!battleChunks.isEmpty()) {
+			applyBattleChunkPatch(battleChunks);
 		}
 
-		if (json.has("playerMarks") && json.get("playerMarks").isJsonObject()) {
-			JsonObject playerMarksNode = json.getAsJsonObject("playerMarks");
-			if (playerMarksNode.has("upsert") || playerMarksNode.has("delete")) {
-				applyPlayerMarksPatch(playerMarksNode);
+		Map<String, Object> playerMarks = objectMap(packet.playerMarks);
+		if (!playerMarks.isEmpty()) {
+			if (playerMarks.containsKey("upsert") || playerMarks.containsKey("delete")) {
+				applyPlayerMarksPatch(playerMarks);
 			} else {
-				replacePlayerMarks(playerMarksNode);
+				replacePlayerMarks(playerMarks);
 			}
 		}
 	}
 
-	private void replacePlayerMarks(JsonObject marksJson) {
+	private void replacePlayerMarks(Map<String, Object> marks) {
 		remotePlayerMarks.clear();
-		mergePlayerMarkUpserts(marksJson);
+		mergePlayerMarkUpserts(marks);
 	}
 
-	private void applyPlayerMarksPatch(JsonObject patchNode) {
-		if (patchNode.has("delete") && patchNode.get("delete").isJsonArray()) {
-			for (JsonElement idElement : patchNode.getAsJsonArray("delete")) {
-				if (idElement == null || !idElement.isJsonPrimitive()) {
-					continue;
-				}
-				String normalized = normalizePlayerMarkId(idElement.getAsString());
-				if (normalized != null) {
-					remotePlayerMarks.remove(normalized);
-				}
+	private void applyPlayerMarksPatch(Map<String, Object> patch) {
+		for (Object idValue : objectList(patch.get("delete"))) {
+			String normalized = normalizePlayerMarkId(idValue == null ? null : String.valueOf(idValue));
+			if (normalized != null) {
+				remotePlayerMarks.remove(normalized);
 			}
 		}
-
-		if (patchNode.has("upsert") && patchNode.get("upsert").isJsonObject()) {
-			mergePlayerMarkUpserts(patchNode.getAsJsonObject("upsert"));
+		Map<String, Object> upsert = objectMap(patch.get("upsert"));
+		if (!upsert.isEmpty()) {
+			mergePlayerMarkUpserts(upsert);
 		}
 	}
 
-	private void mergePlayerMarkUpserts(JsonObject upsertNode) {
-		for (Map.Entry<String, JsonElement> entry : upsertNode.entrySet()) {
+	private void mergePlayerMarkUpserts(Map<String, Object> upserts) {
+		for (Map.Entry<String, Object> entry : upserts.entrySet()) {
 			try {
-				if (entry.getValue() == null || !entry.getValue().isJsonObject()) {
+				Map<String, Object> mark = extractDataMap(objectMap(entry.getValue()));
+				if (mark.isEmpty()) {
 					continue;
 				}
 				String normalizedId = normalizePlayerMarkId(entry.getKey());
 				if (normalizedId == null) {
 					continue;
 				}
-
-				JsonObject markNode = extractDataNode(entry.getValue().getAsJsonObject());
-				String team = normalizeMarkTeam(getOptionalString(markNode, "team"));
-				Integer color = parseColorValue(markNode.get("color"));
-				String label = getOptionalString(markNode, "label");
+				String team = normalizeMarkTeam(normalizeNullableText(mark.get("team")));
+				Integer color = parseColorValue(mark.get("color"));
+				String label = normalizeNullableText(mark.get("label"));
 				if (label != null && label.isBlank()) {
 					label = null;
 				}
-
 				remotePlayerMarks.put(normalizedId, new PlayerMarkState(team, color, label));
 			} catch (Exception e) {
 				LOGGER.warn("Failed to parse player mark {}: {}", entry.getKey(), e.getMessage());
@@ -1500,34 +1495,32 @@ public class NetworkManager {
 		return "neutral";
 	}
 
-	private Integer parseColorValue(JsonElement element) {
-		if (element == null || element.isJsonNull()) {
+	private Integer parseColorValue(Object value) {
+		if (value == null) {
 			return null;
 		}
 		try {
-			if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
-				return element.getAsInt();
+			if (value instanceof Number number) {
+				return number.intValue();
 			}
-			if (element.isJsonPrimitive()) {
-				String text = element.getAsString();
-				if (text == null || text.isBlank()) {
-					return null;
-				}
-				String normalized = text.trim();
-				if (normalized.startsWith("#")) {
-					String hex = normalized.substring(1);
-					if (hex.length() == 6) {
-						return (0xFF << 24) | Integer.parseInt(hex, 16);
-					}
-					if (hex.length() == 8) {
-						return (int) Long.parseLong(hex, 16);
-					}
-				}
-				if (normalized.startsWith("0x") || normalized.startsWith("0X")) {
-					return (int) Long.parseLong(normalized.substring(2), 16);
-				}
-				return (int) Long.parseLong(normalized, 16);
+			String text = String.valueOf(value);
+			if (text.isBlank()) {
+				return null;
 			}
+			String normalized = text.trim();
+			if (normalized.startsWith("#")) {
+				String hex = normalized.substring(1);
+				if (hex.length() == 6) {
+					return (0xFF << 24) | Integer.parseInt(hex, 16);
+				}
+				if (hex.length() == 8) {
+					return (int) Long.parseLong(hex, 16);
+				}
+			}
+			if (normalized.startsWith("0x") || normalized.startsWith("0X")) {
+				return (int) Long.parseLong(normalized.substring(2), 16);
+			}
+			return (int) Long.parseLong(normalized, 16);
 		} catch (Exception ignored) {
 		}
 		return null;
@@ -2489,7 +2482,8 @@ public class NetworkManager {
 		}
 	}
 
-	private Map<UUID, RemotePlayerInfo> parseRemotePlayers(JsonObject playersJson, boolean replaceCache) {
+	private Map<UUID, RemotePlayerInfo> parseRemotePlayers(
+			Map<String, Object> players, boolean replaceCache) {
 		Map<UUID, RemotePlayerInfo> newRemotePlayers = new HashMap<>();
 		String fallbackDimension = getCurrentDimension();
 
@@ -2497,20 +2491,19 @@ public class NetworkManager {
 			remotePlayerDataCache.clear();
 		}
 
-		for (Map.Entry<String, JsonElement> entry : playersJson.entrySet()) {
+		for (Map.Entry<String, Object> entry : players.entrySet()) {
 			try {
 				String playerIdStr = entry.getKey();
-				if (!entry.getValue().isJsonObject()) {
+				Map<String, Object> actualData = extractDataMap(objectMap(entry.getValue()));
+				if (actualData.isEmpty()) {
 					continue;
 				}
-				JsonObject playerDataNode = entry.getValue().getAsJsonObject();
-				JsonObject actualData = extractDataNode(playerDataNode);
 				UUID playerId = UUID.fromString(playerIdStr);
 				Map<String, Object> mergedData = new HashMap<>();
 				if (!replaceCache && remotePlayerDataCache.containsKey(playerId)) {
 					mergedData.putAll(remotePlayerDataCache.get(playerId));
 				}
-				mergedData.putAll(jsonObjectToValueMap(actualData));
+				mergedData.putAll(actualData);
 
 				RemotePlayerInfo info = buildRemotePlayerInfo(playerId, mergedData, fallbackDimension, playerIdStr);
 				if (info == null) {
@@ -2527,12 +2520,13 @@ public class NetworkManager {
 		return newRemotePlayers;
 	}
 
-	private void applyPlayerPatchUpserts(JsonObject upsertJson) {
+	private void applyPlayerPatchUpserts(Map<String, Object> upserts) {
 		String fallbackDimension = getCurrentDimension();
 
-		for (Map.Entry<String, JsonElement> entry : upsertJson.entrySet()) {
+		for (Map.Entry<String, Object> entry : upserts.entrySet()) {
 			try {
-				if (!entry.getValue().isJsonObject()) {
+				Map<String, Object> data = extractDataMap(objectMap(entry.getValue()));
+				if (data.isEmpty()) {
 					continue;
 				}
 
@@ -2543,8 +2537,7 @@ public class NetworkManager {
 					mergedData.putAll(existing);
 				}
 
-				JsonObject dataNode = extractDataNode(entry.getValue().getAsJsonObject());
-				mergedData.putAll(jsonObjectToValueMap(dataNode));
+				mergedData.putAll(data);
 
 				RemotePlayerInfo info = buildRemotePlayerInfo(playerId, mergedData, fallbackDimension, entry.getKey());
 				if (info == null) {
@@ -2588,30 +2581,6 @@ public class NetworkManager {
 		} catch (Exception e) {
 			return null;
 		}
-	}
-
-	private Map<String, Object> jsonObjectToValueMap(JsonObject jsonObject) {
-		Map<String, Object> values = new HashMap<>();
-		for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-			values.put(entry.getKey(), jsonElementToValue(entry.getValue()));
-		}
-		return values;
-	}
-
-	private Object jsonElementToValue(JsonElement element) {
-		if (element == null || element.isJsonNull()) {
-			return null;
-		}
-		if (element.isJsonPrimitive()) {
-			if (element.getAsJsonPrimitive().isBoolean()) {
-				return element.getAsBoolean();
-			}
-			if (element.getAsJsonPrimitive().isNumber()) {
-				return element.getAsDouble();
-			}
-			return element.getAsString();
-		}
-		return element.toString();
 	}
 
 	private Map<String, Object> computeFieldDelta(Map<String, Object> previous, Map<String, Object> current) {
@@ -2802,68 +2771,38 @@ public class NetworkManager {
 		delete.addAll(deleteSet);
 	}
 
-	private JsonObject extractDataNode(JsonObject node) {
-		if (node.has("data") && node.get("data").isJsonObject()) {
-			return node.getAsJsonObject("data");
-		}
-		return node;
-	}
-
-	private Map<String, SharedWaypointInfo> parseWaypointsNode(JsonObject json, String fieldName) {
-		if (!json.has(fieldName) || !json.get(fieldName).isJsonObject()) {
-			return Map.of();
-		}
-		return parseWaypointsFromObject(json.getAsJsonObject(fieldName));
-	}
-
-	private Map<String, SharedWaypointInfo> parseWaypointsFromObject(JsonObject waypointsJson) {
+	private Map<String, SharedWaypointInfo> parseWaypointsFromObject(Map<String, Object> waypoints) {
 		Map<String, SharedWaypointInfo> result = new HashMap<>();
 
-		for (Map.Entry<String, JsonElement> entry : waypointsJson.entrySet()) {
+		for (Map.Entry<String, Object> entry : waypoints.entrySet()) {
 			try {
 				String waypointId = entry.getKey();
-				if (!entry.getValue().isJsonObject()) {
+				Map<String, Object> data = extractDataMap(objectMap(entry.getValue()));
+				if (data.isEmpty()) {
 					continue;
 				}
 
-				JsonObject node = entry.getValue().getAsJsonObject();
-				JsonObject data = extractDataNode(node);
-				Map<String, Object> rawData = jsonObjectToValueMap(data);
-				remoteWaypointDataCache.put(waypointId, rawData);
+				remoteWaypointDataCache.put(waypointId, new HashMap<>(data));
 
-				if (!data.has("x") || !data.has("y") || !data.has("z")) {
+				if (!data.containsKey("x") || !data.containsKey("y") || !data.containsKey("z")) {
 					continue;
 				}
 
 				UUID ownerId = parseOptionalUuid(data, "ownerId");
 
-				String name = data.has("name") ? data.get("name").getAsString() : "Waypoint";
-				String symbol = data.has("symbol") ? data.get("symbol").getAsString() : "W";
-				String ownerName = data.has("ownerName") ? data.get("ownerName").getAsString() : "Unknown";
-				String dimension = data.has("dimension") ? data.get("dimension").getAsString() : null;
-				int color = data.has("color") ? data.get("color").getAsInt() : 0x55FF55;
-				long createdAt = data.has("createdAt") ? data.get("createdAt").getAsLong() : System.currentTimeMillis();
-				String targetType = data.has("targetType") && !data.get("targetType").isJsonNull()
-						? data.get("targetType").getAsString()
-						: null;
-				String targetEntityId = data.has("targetEntityId") && !data.get("targetEntityId").isJsonNull()
-						? data.get("targetEntityId").getAsString()
-						: null;
-				String targetEntityType = data.has("targetEntityType") && !data.get("targetEntityType").isJsonNull()
-						? data.get("targetEntityType").getAsString()
-						: null;
-				String targetEntityName = data.has("targetEntityName") && !data.get("targetEntityName").isJsonNull()
-						? data.get("targetEntityName").getAsString()
-						: null;
-				String waypointKind = data.has("waypointKind") && !data.get("waypointKind").isJsonNull()
-						? data.get("waypointKind").getAsString()
-						: null;
-				String tacticalType = data.has("tacticalType") && !data.get("tacticalType").isJsonNull()
-						? data.get("tacticalType").getAsString()
-						: null;
-				String sourceType = data.has("sourceType") && !data.get("sourceType").isJsonNull()
-						? data.get("sourceType").getAsString()
-						: null;
+				String name = textOrDefault(data.get("name"), "Waypoint");
+				String symbol = textOrDefault(data.get("symbol"), "W");
+				String ownerName = textOrDefault(data.get("ownerName"), "Unknown");
+				String dimension = normalizeNullableText(data.get("dimension"));
+				int color = intValue(data.get("color"), 0x55FF55);
+				long createdAt = longValue(data.get("createdAt"), System.currentTimeMillis());
+				String targetType = normalizeNullableText(data.get("targetType"));
+				String targetEntityId = normalizeNullableText(data.get("targetEntityId"));
+				String targetEntityType = normalizeNullableText(data.get("targetEntityType"));
+				String targetEntityName = normalizeNullableText(data.get("targetEntityName"));
+				String waypointKind = normalizeNullableText(data.get("waypointKind"));
+				String tacticalType = normalizeNullableText(data.get("tacticalType"));
+				String sourceType = normalizeNullableText(data.get("sourceType"));
 
 				SharedWaypointInfo waypoint = new SharedWaypointInfo(
 						waypointId,
@@ -2871,9 +2810,9 @@ public class NetworkManager {
 						ownerName,
 						name,
 						symbol,
-						data.get("x").getAsInt(),
-						data.get("y").getAsInt(),
-						data.get("z").getAsInt(),
+						intValue(data.get("x"), 0),
+						intValue(data.get("y"), 0),
+						intValue(data.get("z"), 0),
 						dimension,
 						color,
 						createdAt,
@@ -2893,15 +2832,16 @@ public class NetworkManager {
 		return result;
 	}
 
-	private UUID parseOptionalUuid(JsonObject json, String fieldName) {
-		if (json == null || fieldName == null || fieldName.isBlank()) {
+	private UUID parseOptionalUuid(Map<String, Object> data, String fieldName) {
+		if (data == null || fieldName == null || fieldName.isBlank()) {
 			return null;
 		}
-		if (!json.has(fieldName) || json.get(fieldName).isJsonNull()) {
+		Object value = data.get(fieldName);
+		if (value == null) {
 			return null;
 		}
 		try {
-			String raw = json.get(fieldName).getAsString();
+			String raw = String.valueOf(value);
 			if (raw == null || raw.isBlank()) {
 				return null;
 			}
@@ -2973,25 +2913,25 @@ public class NetworkManager {
 		}
 	}
 
-	private void replaceEntityCache(JsonObject entitiesJson) {
+	private void replaceEntityCache(Map<String, Object> entities) {
 		remoteEntityDataCache.clear();
-		mergeEntityPatchUpsert(entitiesJson);
+		mergeEntityPatchUpsert(entities);
 	}
 
-	private void mergeEntityPatchUpsert(JsonObject upsertJson) {
-		for (Map.Entry<String, JsonElement> entry : upsertJson.entrySet()) {
+	private void mergeEntityPatchUpsert(Map<String, Object> upserts) {
+		for (Map.Entry<String, Object> entry : upserts.entrySet()) {
 			try {
-				if (!entry.getValue().isJsonObject()) {
+				Map<String, Object> data = extractDataMap(objectMap(entry.getValue()));
+				if (data.isEmpty()) {
 					continue;
 				}
 				String entityId = entry.getKey();
-				JsonObject dataNode = extractDataNode(entry.getValue().getAsJsonObject());
 				Map<String, Object> merged = new HashMap<>();
 				Map<String, Object> existing = remoteEntityDataCache.get(entityId);
 				if (existing != null) {
 					merged.putAll(existing);
 				}
-				merged.putAll(jsonObjectToValueMap(dataNode));
+				merged.putAll(data);
 				remoteEntityDataCache.put(entityId, merged);
 			} catch (Exception e) {
 				LOGGER.error("TeamViewRelay Network - Error applying entity patch: {}", e.getMessage());
@@ -2999,20 +2939,20 @@ public class NetworkManager {
 		}
 	}
 
-	private void mergeBattleChunksPatchUpsert(JsonObject upsertJson) {
-		for (Map.Entry<String, JsonElement> entry : upsertJson.entrySet()) {
+	private void mergeBattleChunksPatchUpsert(Map<String, Object> upserts) {
+		for (Map.Entry<String, Object> entry : upserts.entrySet()) {
 			try {
-				if (!entry.getValue().isJsonObject()) {
+				Map<String, Object> data = extractDataMap(objectMap(entry.getValue()));
+				if (data.isEmpty()) {
 					continue;
 				}
 				String chunkId = entry.getKey();
-				JsonObject dataNode = extractDataNode(entry.getValue().getAsJsonObject());
 				Map<String, Object> merged = new HashMap<>();
 				Map<String, Object> existing = remoteBattleChunkDataCache.get(chunkId);
 				if (existing != null) {
 					merged.putAll(normalizeBattleChunkCoreData(existing));
 				}
-				merged.putAll(normalizeBattleChunkCoreData(jsonObjectToValueMap(dataNode)));
+				merged.putAll(normalizeBattleChunkCoreData(data));
 				if (!merged.isEmpty()) {
 					remoteBattleChunkDataCache.put(chunkId, merged);
 				}
@@ -3022,25 +2962,24 @@ public class NetworkManager {
 		}
 	}
 
-	private void applyBattleChunkPatch(JsonObject battleChunkPatch) {
+	private void applyBattleChunkPatch(Map<String, Object> battleChunkPatch) {
 		if (battleChunkPatch == null) {
 			return;
 		}
-		if (battleChunkPatch.has("delete") && battleChunkPatch.get("delete").isJsonArray()) {
-			for (JsonElement idElement : battleChunkPatch.getAsJsonArray("delete")) {
-				if (idElement != null && idElement.isJsonPrimitive()) {
-					String chunkId = idElement.getAsString();
-					if (chunkId != null && !chunkId.isBlank()) {
-						remoteBattleChunkDataCache.remove(chunkId);
-					}
-				}
+		for (Object idValue : objectList(battleChunkPatch.get("delete"))) {
+			String chunkId = idValue == null ? null : String.valueOf(idValue);
+			if (chunkId != null && !chunkId.isBlank()) {
+				remoteBattleChunkDataCache.remove(chunkId);
 			}
 		}
-		if (battleChunkPatch.has("upsert") && battleChunkPatch.get("upsert").isJsonObject()) {
-			mergeBattleChunksPatchUpsert(battleChunkPatch.getAsJsonObject("upsert"));
+		Map<String, Object> upsert = objectMap(battleChunkPatch.get("upsert"));
+		if (!upsert.isEmpty()) {
+			mergeBattleChunksPatchUpsert(upsert);
 			return;
 		}
-		mergeBattleChunksPatchUpsert(battleChunkPatch);
+		if (!battleChunkPatch.containsKey("delete")) {
+			mergeBattleChunksPatchUpsert(battleChunkPatch);
+		}
 	}
 
 	private String stateDigest(Map<String, Map<String, Object>> state) {
@@ -3135,26 +3074,65 @@ public class NetworkManager {
 		return text;
 	}
 
-	private String getOptionalString(JsonObject json, String key) {
-		if (!json.has(key) || json.get(key).isJsonNull()) {
-			return "";
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> objectMap(Object value) {
+		return value instanceof Map<?, ?> ? (Map<String, Object>) value : Map.of();
+	}
+
+	@SuppressWarnings("unchecked")
+	private static List<Object> objectList(Object value) {
+		return value instanceof List<?> ? (List<Object>) value : List.of();
+	}
+
+	private static Map<String, Object> extractDataMap(Map<String, Object> node) {
+		if (node.containsKey("data") && node.get("data") instanceof Map<?, ?>) {
+			return objectMap(node.get("data"));
 		}
+		return node;
+	}
+
+	private static String textOrDefault(Object value, String fallback) {
+		String text = normalizeNullableText(value);
+		return text == null ? fallback : text;
+	}
+
+	private static int intValue(Object value, int fallback) {
+		if (value instanceof Number number) return number.intValue();
 		try {
-			return json.get(key).getAsString();
-		} catch (Exception e) {
-			return "";
+			return value == null ? fallback : Integer.parseInt(String.valueOf(value));
+		} catch (Exception ignored) {
+			return fallback;
+		}
+	}
+
+	private static long longValue(Object value, long fallback) {
+		if (value instanceof Number number) return number.longValue();
+		try {
+			return value == null ? fallback : Long.parseLong(String.valueOf(value));
+		} catch (Exception ignored) {
+			return fallback;
 		}
 	}
 
 	private Map<String, Object> copyValueMap(Map<String, Object> source) {
-		Map<String, Object> copy = new HashMap<>();
 		if (source == null) {
-			return copy;
+			return new HashMap<>();
 		}
+		Map<String, Object> copy = new HashMap<>(hashMapCapacity(source.size()));
 		for (Map.Entry<String, Object> entry : source.entrySet()) {
 			copy.put(entry.getKey(), entry.getValue());
 		}
 		return copy;
+	}
+
+	private static int hashMapCapacity(int expectedSize) {
+		if (expectedSize < 3) {
+			return expectedSize + 1;
+		}
+		if (expectedSize < 1 << 30) {
+			return (int) ((float) expectedSize / 0.75F + 1.0F);
+		}
+		return Integer.MAX_VALUE;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -3200,7 +3178,8 @@ public class NetworkManager {
 	}
 
 	private Map<String, Map<String, Object>> buildTabPlayersSnapshot(List<Map<String, Object>> tabPlayers) {
-		Map<String, Map<String, Object>> snapshot = new HashMap<>();
+		Map<String, Map<String, Object>> snapshot =
+				new HashMap<>(hashMapCapacity(tabPlayers.size()));
 		for (Map<String, Object> raw : tabPlayers) {
 			if (raw == null || raw.isEmpty()) {
 				continue;
@@ -3216,7 +3195,7 @@ public class NetworkManager {
 				continue;
 			}
 
-			Map<String, Object> snapshotEntry = new HashMap<>();
+			Map<String, Object> snapshotEntry = new HashMap<>(8);
 			if (playerId != null) {
 				snapshotEntry.put("id", playerId);
 			}
@@ -3252,7 +3231,7 @@ public class NetworkManager {
 		return normalizeNullableText(value);
 	}
 
-	private String normalizeNullableText(Object value) {
+	private static String normalizeNullableText(Object value) {
 		if (value == null) {
 			return null;
 		}

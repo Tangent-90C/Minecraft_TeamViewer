@@ -5,7 +5,7 @@ import java.util.Map;
 
 public record TabPlayerSnapshot(String playerId, String name, String prefixText, String prefixColored) {
     public Map<String, Object> toProtocolMap() {
-        Map<String, Object> node = new HashMap<>();
+        Map<String, Object> node = new HashMap<>(8);
         if (playerId != null && !playerId.isBlank()) {
             node.put("playerUUID", playerId);
         }

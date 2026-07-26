@@ -12,10 +12,7 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCoordinator;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
-import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
-import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
-import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
@@ -578,10 +575,10 @@ class IntegrationPluginManagerTest {
         ClientWorldSnapshot world = testWorld();
         RecordingBattleNetwork luaNetwork = new RecordingBattleNetwork(new TestRuntime(temporary));
         RecordingBattleNetwork javaNetwork = new RecordingBattleNetwork(new TestRuntime(temporary));
-        new BattleMapCoordinator(luaConfig, luaNetwork, game(world), luaRegistry).tick(true);
+        new BattleMapCoordinator(luaConfig, luaNetwork, luaRegistry).tick(true, world);
         new BattleMapCoordinator(
                 battleMapConfig(temporary.resolve("java-config.json"), capabilityId),
-                javaNetwork, game(world), javaRegistry).tick(true);
+                javaNetwork, javaRegistry).tick(true, world);
 
         assertNotNull(luaNetwork.observation);
         assertNotNull(javaNetwork.observation);
@@ -891,29 +888,6 @@ class IntegrationPluginManagerTest {
                 playerId, "Local", true, "minecraft:overworld", -64,
                 position, position, new Position3D(0, 0, 1),
                 new Position3D(0, 1, 0), List.of(), List.of());
-    }
-
-    private static GameClientBridge game(ClientWorldSnapshot world) {
-        return new GameClientBridge() {
-            @Override public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) {
-                return ClientReportSnapshot.unavailable();
-            }
-            @Override public ClientWorldSnapshot captureWorldSnapshot() { return world; }
-            @Override public ScoreboardSnapshot captureScoreboardSnapshot() {
-                return ScoreboardSnapshot.unavailable();
-            }
-            @Override public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) {
-                return Optional.empty();
-            }
-            @Override public Optional<Position3D> resolveEntityPosition(
-                    String entityId, String entityName, String dimensionId) {
-                return Optional.empty();
-            }
-            @Override public boolean isEntityDead(String entityId) { return false; }
-            @Override public boolean isMiddleMouseButtonDown() { return false; }
-            @Override public boolean isGameplayInputAvailable() { return true; }
-            @Override public void showActionBar(String message) { }
-        };
     }
 
     private static final class RecordingBattleNetwork extends NetworkManager {

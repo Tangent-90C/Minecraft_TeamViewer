@@ -2,26 +2,28 @@ package fun.prof_chen.teamviewer.main_code.sync.core;
 
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
-import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
+import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public final class RemotePlayerProjectionCoordinator {
 	private final IntegrationRegistry integrations;
-	private final GameClientBridge game;
 
-	public RemotePlayerProjectionCoordinator(IntegrationRegistry integrations, GameClientBridge game) {
+	public RemotePlayerProjectionCoordinator(IntegrationRegistry integrations) {
 		this.integrations = integrations;
-		this.game = game;
 	}
 
-	public void tick(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
-		Map<UUID, RemotePlayerInfo> filtered = filter(players);
-		for (RemotePlayerProjection projection : integrations.activeRemotePlayerProjections()) {
+	public void tick(RemotePlayerRepository repository, boolean enabled, ClientWorldSnapshot world) {
+		List<RemotePlayerProjection> projections = integrations.activeRemotePlayerProjections();
+		if (projections.isEmpty()) return;
+		Map<UUID, RemotePlayerInfo> players = repository.snapshot();
+		Map<UUID, RemotePlayerInfo> filtered = filter(players, world);
+		for (RemotePlayerProjection projection : projections) {
 			if (!projection.isAvailable()) {
 				continue;
 			}
@@ -29,8 +31,8 @@ public final class RemotePlayerProjectionCoordinator {
 		}
 	}
 
-	private Map<UUID, RemotePlayerInfo> filter(Map<UUID, RemotePlayerInfo> players) {
-		ClientWorldSnapshot world = game.captureWorldSnapshot();
+	private Map<UUID, RemotePlayerInfo> filter(
+			Map<UUID, RemotePlayerInfo> players, ClientWorldSnapshot world) {
 		if (!world.available() || players == null || players.isEmpty()) return Map.of();
 		Map<UUID, RemotePlayerInfo> result = new LinkedHashMap<>();
 		for (Map.Entry<UUID, RemotePlayerInfo> entry : players.entrySet()) {

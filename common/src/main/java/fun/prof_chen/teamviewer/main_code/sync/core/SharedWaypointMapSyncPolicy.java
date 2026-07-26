@@ -45,8 +45,8 @@ final class SharedWaypointMapSyncPolicy {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
-    void tick(List<SharedWaypointMapAdapter> adapters, Map<String, SharedWaypointInfo> remote, boolean enabled) {
-        ClientWorldSnapshot world = game.captureWorldSnapshot();
+    void tick(List<SharedWaypointMapAdapter> adapters, Map<String, SharedWaypointInfo> remote,
+              boolean enabled, ClientWorldSnapshot world) {
         long now = clock.getAsLong();
         for (SharedWaypointMapAdapter adapter : adapters) {
             AdapterState state = states.computeIfAbsent(adapter.id(), ignored -> new AdapterState());

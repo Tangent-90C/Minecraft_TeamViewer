@@ -49,42 +49,23 @@ public final class FabricGameClientBridge implements GameClientBridge {
         if (client.player == null || client.world == null) {
             return ClientReportSnapshot.unavailable();
         }
-        List<PlayerSnapshot> players = new ArrayList<>();
-        for (AbstractClientPlayerEntity player : client.world.getPlayers()) {
-            Entity vehicle = player.getVehicle();
-            boolean riding = vehicle != null
-                    && String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT).contains("horse");
-            players.add(new PlayerSnapshot(
-                    player.getUuid(), toPosition(player.getPos()), toPosition(player.getVelocity()),
-                    player.getWorld().getRegistryKey().getValue().toString(), player.getName().getString(),
-                    player.getHealth(), player.getMaxHealth(), player.getArmor(), riding,
-                    player.getWidth(), player.getHeight()));
-        }
-        List<EntitySnapshot> entities = new ArrayList<>();
-        if (includeEntities) {
-            for (Entity entity : client.world.getEntities()) {
-                if (entity == client.player) {
-                    continue;
-                }
-                entities.add(new EntitySnapshot(
-                        entity.getUuidAsString(), toPosition(entity.getPos()), toPosition(entity.getVelocity()),
-                        entity.getWorld().getRegistryKey().getValue().toString(), entity.getType().toString(),
-                        entity.hasCustomName() ? entity.getDisplayName().getString() : null,
-                        entity.getWidth(), entity.getHeight()));
-            }
-        }
         return new ClientReportSnapshot(
                 client.player.getUuid(), client.player.isAlive(),
-                client.world.getRegistryKey().getValue().toString(), players, entities, collectTabPlayers(client));
+                client.world.getRegistryKey().getValue().toString(),
+                collectPlayers(client), includeEntities ? collectEntities(client) : List.of());
     }
 
     @Override
-    public ClientWorldSnapshot captureWorldSnapshot() {
+    public List<TabPlayerSnapshot> captureTabPlayerSnapshot() {
+        return collectTabPlayers(MinecraftClient.getInstance());
+    }
+
+    @Override
+    public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) {
             return ClientWorldSnapshot.unavailable();
         }
-        ClientReportSnapshot report = captureReportSnapshot(true);
         Vec3d look = client.player.getRotationVec(1.0F).normalize();
         Vec3d right = look.crossProduct(new Vec3d(0, 1, 0));
         if (right.lengthSquared() < 1.0E-6) {
@@ -92,10 +73,11 @@ public final class FabricGameClientBridge implements GameClientBridge {
         }
         Vec3d cameraUp = right.normalize().crossProduct(look).normalize();
         return new ClientWorldSnapshot(
-                report.localPlayerId(), client.player.getName().getString(), report.localPlayerAlive(), report.dimension(),
+                client.player.getUuid(), client.player.getName().getString(), client.player.isAlive(),
+                client.world.getRegistryKey().getValue().toString(),
                 client.world.getBottomY(), toPosition(client.player.getPos()),
                 toPosition(client.gameRenderer.getCamera().getPos()), toPosition(look), toPosition(cameraUp),
-                report.players(), report.entities());
+                collectPlayers(client), includeEntities ? collectEntities(client) : List.of());
     }
 
     @Override
@@ -225,9 +207,10 @@ public final class FabricGameClientBridge implements GameClientBridge {
         if (handler == null) {
             return List.of();
         }
-        List<TabPlayerSnapshot> result = new ArrayList<>();
+        var playerList = handler.getPlayerList();
+        List<TabPlayerSnapshot> result = new ArrayList<>(playerList.size());
         Scoreboard scoreboard = client.world == null ? null : client.world.getScoreboard();
-        for (PlayerListEntry entry : handler.getPlayerList()) {
+        for (PlayerListEntry entry : playerList) {
             if (entry == null || entry.getProfile() == null || entry.getProfile().getName() == null) {
                 continue;
             }
@@ -240,9 +223,39 @@ public final class FabricGameClientBridge implements GameClientBridge {
                     entry.getProfile().getId() == null ? null : entry.getProfile().getId().toString(),
                     profileName,
                     team == null ? null : team.getName(),
-                    team == null ? null : team.getPrefix().toString()));
+                    team == null ? null : team.getPrefix().getString()));
         }
         return result;
+    }
+
+    private static List<PlayerSnapshot> collectPlayers(MinecraftClient client) {
+        List<PlayerSnapshot> players = new ArrayList<>();
+        for (AbstractClientPlayerEntity player : client.world.getPlayers()) {
+            Entity vehicle = player.getVehicle();
+            boolean riding = vehicle != null
+                    && String.valueOf(vehicle.getType()).toLowerCase(Locale.ROOT).contains("horse");
+            players.add(new PlayerSnapshot(
+                    player.getUuid(), toPosition(player.getPos()), toPosition(player.getVelocity()),
+                    player.getWorld().getRegistryKey().getValue().toString(), player.getName().getString(),
+                    player.getHealth(), player.getMaxHealth(), player.getArmor(), riding,
+                    player.getWidth(), player.getHeight()));
+        }
+        return players;
+    }
+
+    private static List<EntitySnapshot> collectEntities(MinecraftClient client) {
+        List<EntitySnapshot> entities = new ArrayList<>();
+        for (Entity entity : client.world.getEntities()) {
+            if (entity == client.player) {
+                continue;
+            }
+            entities.add(new EntitySnapshot(
+                    entity.getUuidAsString(), toPosition(entity.getPos()), toPosition(entity.getVelocity()),
+                    entity.getWorld().getRegistryKey().getValue().toString(), entity.getType().toString(),
+                    entity.hasCustomName() ? entity.getDisplayName().getString() : null,
+                    entity.getWidth(), entity.getHeight()));
+        }
+        return entities;
     }
 
     private static Position3D toPosition(Vec3d position) {

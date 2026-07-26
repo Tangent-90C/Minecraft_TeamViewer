@@ -21,7 +21,12 @@ public final class AdapterTck {
             ConfigUiController configUi) {
         List<String> issues = new ArrayList<>();
         probe("report snapshot", issues, () -> validateReport(adapters.gameClientBridge().captureReportSnapshot(false)));
-        probe("world snapshot", issues, () -> validateWorld(adapters.gameClientBridge().captureWorldSnapshot()));
+        probe("world snapshot", issues, () -> validateWorld(adapters.gameClientBridge().captureWorldSnapshot(false)));
+        probe("tab player snapshot", issues, () -> {
+            if (adapters.gameClientBridge().captureTabPlayerSnapshot() == null) {
+                throw new IllegalStateException("returned null");
+            }
+        });
         probe("scoreboard snapshot", issues, () -> {
             if (adapters.gameClientBridge().captureScoreboardSnapshot() == null) {
                 throw new IllegalStateException("returned null");
@@ -59,7 +64,7 @@ public final class AdapterTck {
 
     private static void validateReport(ClientReportSnapshot snapshot) {
         if (snapshot == null) throw new IllegalStateException("returned null");
-        if (snapshot.players() == null || snapshot.entities() == null || snapshot.tabPlayers() == null) {
+        if (snapshot.players() == null || snapshot.entities() == null) {
             throw new IllegalStateException("returned null collection");
         }
     }

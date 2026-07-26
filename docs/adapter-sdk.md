@@ -19,8 +19,11 @@ compile errors rather than runtime casts.
 - `GameClientBridge` is read on the Minecraft client thread. Coordinates are world block
   coordinates in doubles, velocities are blocks/tick, dimensions are canonical IDs such as
   `minecraft:overworld`, and absent worlds/players return the relevant `unavailable()` snapshot.
-  It must never return `null` collections. Scoreboard lines are already team-decorated and kept
-  in display order; text runs preserve native style colors as a name or `#RRGGBB`.
+  It must never return `null` collections. Report/world snapshots never collect the server Tab
+  list: `captureTabPlayerSnapshot()` is the only Tab boundary and common throttles it to once per
+  second. `captureWorldSnapshot(false)` must not enumerate world entities. Scoreboard lines are
+  already team-decorated and kept in display order; text runs preserve native style colors as a
+  name or `#RRGGBB`.
   Quick-mark targeting must resolve the first visible block/entity at the requested range. Versions
   whose prepared crosshair hit is interaction-limited perform their own native raycast, stop at the
   first block obstruction, and hard-limit traversal with `MARK_TARGET_MAX_DISTANCE`.
@@ -59,6 +62,9 @@ or an `AVAILABLE` capability without a callable implementation does.
 Common owns connection state, reporting clocks, repository cleanup, input state machines,
 waypoint TTL/diff policy, render decisions, HUD text and battle-map upload policy. Version code
 must not import `Config`, `NetworkManager`, protocol messages, repositories or coordinators.
+Common captures one lightweight world snapshot per enabled client tick and shares it across
+coordinators. Render callbacks keep camera data current, but request entity enumeration only when
+an entity-bound waypoint actually needs it.
 
 ## TCK and target builds
 

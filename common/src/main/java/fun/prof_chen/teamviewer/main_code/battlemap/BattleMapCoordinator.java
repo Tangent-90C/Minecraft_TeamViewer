@@ -1,7 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.battlemap;
 
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
-import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSource;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSourceSnapshot;
@@ -26,7 +25,6 @@ public final class BattleMapCoordinator {
     private static final String SIMMC_PROTOCOL_MODE = "simmc";
     private final Config config;
     private final NetworkManager network;
-    private final GameClientBridge game;
     private final IntegrationRegistry integrations;
     private final BattleMapPositionHistory history = new BattleMapPositionHistory(120);
     private int tickCounter;
@@ -35,26 +33,25 @@ public final class BattleMapCoordinator {
     private String lastSemanticHash = "";
     private long lastKeepaliveAt;
 
-    public BattleMapCoordinator(Config config, NetworkManager network, GameClientBridge game, IntegrationRegistry integrations) {
+    public BattleMapCoordinator(Config config, NetworkManager network, IntegrationRegistry integrations) {
         this.config = Objects.requireNonNull(config, "config");
         this.network = Objects.requireNonNull(network, "network");
-        this.game = Objects.requireNonNull(game, "game");
         this.integrations = Objects.requireNonNull(integrations, "integrations");
     }
 
-    public void tick(boolean enabled) {
-        ClientWorldSnapshot world = game.captureWorldSnapshot();
-        history.record(world, System.currentTimeMillis());
-        if (!enabled || !network.isConnected() || !config.isBattleMapSyncEnabled() || !world.available()) return;
+    public void tick(boolean enabled, ClientWorldSnapshot world) {
+        if (!enabled || !network.isConnected() || !config.isBattleMapSyncEnabled()
+                || world == null || !world.available()) return;
         String sourceId = config.getBattleMapSourceId();
+        BattleMapSource source = integrations.activeBattleMapSource(sourceId);
+        if (source == null) return;
+        history.record(world, System.currentTimeMillis());
         if (!Objects.equals(sourceId, activeSourceId)) {
             activeSourceId = sourceId;
             resetObservation();
         }
         if (++tickCounter < Math.max(1, config.getBattleMapUpdateIntervalTicks())) return;
         tickCounter = 0;
-        BattleMapSource source = integrations.activeBattleMapSource(sourceId);
-        if (source == null) return;
         Optional<BattleMapSourceSnapshot> snapshot = source.capture();
         Optional<Observation> observation = snapshot.flatMap(value ->
                 value.coordinateSpace() == BattleMapSourceSnapshot.CoordinateSpace.ABSOLUTE_CHUNK

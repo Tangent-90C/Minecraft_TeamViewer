@@ -17,6 +17,8 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
 import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +36,81 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClientCoordinatorTest {
     @Test
+    void renderSkipsSnapshotsWithoutVisibleConsumersAndRequestsEntitiesOnlyWhenNeeded() {
+        Config config = new Config();
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        UUID localId = UUID.randomUUID();
+        FakeGameClientBridge game = new FakeGameClientBridge(snapshot(localId));
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+        Map<String, SharedWaypointInfo> waypoints = new HashMap<>();
+        MapBackedSharedWaypointRepository waypointRepository = new MapBackedSharedWaypointRepository(waypoints);
+        RecordingWaypointGateway gateway = new RecordingWaypointGateway();
+        fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry integrations =
+                new fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry();
+        SharedWaypointSyncCoordinator waypointCoordinator = new SharedWaypointSyncCoordinator(
+                waypointRepository, gateway, integrations, config, game);
+        coordinator.configureRuntimeSupport(
+                new MapBackedRemotePlayerRepository(new HashMap<>()),
+                waypointRepository, waypointCoordinator, gateway,
+                new RemotePlayerProjectionCoordinator(integrations));
+        coordinator.setEnabled(true);
+
+        coordinator.buildWorldRenderFrame();
+        assertEquals(0, game.worldCaptureCount);
+
+        config.setShowBoxes(true);
+        coordinator.buildWorldRenderFrame();
+        assertEquals(1, game.worldCaptureCount);
+        assertEquals(0, game.worldEntityCaptureCount);
+
+        config.setShowBoxes(false);
+        waypoints.put("entity-waypoint", new SharedWaypointInfo(
+                "entity-waypoint", UUID.randomUUID(), "Remote", "Target", "!",
+                1, 2, 3, "minecraft:overworld", 0xFFFFFFFF, 1L,
+                "entity", UUID.randomUUID().toString(), "minecraft:player", "Target",
+                "quick", null, null));
+        coordinator.buildWorldRenderFrame();
+        assertEquals(2, game.worldCaptureCount);
+        assertEquals(1, game.worldEntityCaptureCount);
+    }
+
+    @Test
+    void samplesLargeTabListAtMostOncePerSecond() {
+        Config config = new Config();
+        config.setUploadEntities(false);
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        network.connected = true;
+        network.negotiatedInterval = 1;
+        UUID localId = UUID.randomUUID();
+        List<TabPlayerSnapshot> tabPlayers = java.util.stream.IntStream.range(0, 800)
+                .mapToObj(index -> new TabPlayerSnapshot(
+                        UUID.nameUUIDFromBytes(("tab-" + index).getBytes()).toString(),
+                        "Player" + index, "team", "[T]"))
+                .toList();
+        FakeGameClientBridge game = new FakeGameClientBridge(snapshot(localId), null, tabPlayers);
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+
+        coordinator.setEnabled(true);
+        for (int tick = 0; tick < 100; tick++) {
+            coordinator.onEndClientTick();
+        }
+
+        assertEquals(100, game.captureCount, "movement report remains independently negotiated");
+        assertEquals(100, game.worldCaptureCount, "tick consumers share one lightweight world snapshot");
+        assertEquals(0, game.worldEntityCaptureCount);
+        assertEquals(5, game.tabCaptureCount, "initial capture plus one capture every 20 ticks");
+        assertEquals(5, network.tabReports.size());
+        assertTrue(network.tabReports.stream().allMatch(value -> value.size() == 800));
+
+        network.connected = false;
+        coordinator.onEndClientTick();
+        network.connected = true;
+        coordinator.onEndClientTick();
+        assertEquals(6, game.tabCaptureCount, "reconnection triggers an immediate fresh Tab snapshot");
+        assertEquals(6, network.tabReports.size());
+    }
+
+    @Test
     void sendsVersionNeutralSnapshotsAtNegotiatedInterval() {
         Config config = new Config();
         config.setUpdateInterval(20);
@@ -48,6 +125,7 @@ class ClientCoordinatorTest {
         coordinator.setEnabled(true);
         coordinator.onEndClientTick();
         assertEquals(0, network.playerReports.size());
+        assertEquals(1, network.tabReports.size());
 
         coordinator.onEndClientTick();
         assertEquals(1, network.playerReports.size());
@@ -56,6 +134,8 @@ class ClientCoordinatorTest {
         assertEquals("minecraft:overworld", network.entityReports.get(0).get("entity-1").get("dimension"));
         assertEquals("local", network.tabReports.get(0).get(0).get("name"));
         assertEquals(1, game.captureCount);
+        assertEquals(2, game.worldCaptureCount);
+        assertEquals(1, game.tabCaptureCount);
     }
 
     @Test
@@ -133,22 +213,33 @@ class ClientCoordinatorTest {
                 true,
                 "minecraft:overworld",
                 List.of(player),
-                List.of(entity),
-                List.of(new TabPlayerSnapshot(localId.toString(), "local", "team", "team")));
+                List.of(entity));
     }
 
     private static final class FakeGameClientBridge implements GameClientBridge {
         private final ClientReportSnapshot snapshot;
         private final EntityTargetSnapshot target;
+        private final List<TabPlayerSnapshot> tabPlayers;
         private int captureCount;
+        private int worldCaptureCount;
+        private int worldEntityCaptureCount;
+        private int tabCaptureCount;
 
         private FakeGameClientBridge(ClientReportSnapshot snapshot) {
-            this(snapshot, null);
+            this(snapshot, null, snapshot.localPlayerId() == null ? List.of() : List.of(
+                    new TabPlayerSnapshot(snapshot.localPlayerId().toString(), "local", "team", "team")));
         }
 
         private FakeGameClientBridge(ClientReportSnapshot snapshot, EntityTargetSnapshot target) {
+            this(snapshot, target, snapshot.localPlayerId() == null ? List.of() : List.of(
+                    new TabPlayerSnapshot(snapshot.localPlayerId().toString(), "local", "team", "team")));
+        }
+
+        private FakeGameClientBridge(
+                ClientReportSnapshot snapshot, EntityTargetSnapshot target, List<TabPlayerSnapshot> tabPlayers) {
             this.snapshot = snapshot;
             this.target = target;
+            this.tabPlayers = List.copyOf(tabPlayers);
         }
 
         @Override
@@ -158,8 +249,21 @@ class ClientCoordinatorTest {
         }
 
         @Override
-        public ClientWorldSnapshot captureWorldSnapshot() {
-            return ClientWorldSnapshot.unavailable();
+        public List<TabPlayerSnapshot> captureTabPlayerSnapshot() {
+            tabCaptureCount++;
+            return tabPlayers;
+        }
+
+        @Override
+        public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
+            worldCaptureCount++;
+            if (includeEntities) worldEntityCaptureCount++;
+            if (snapshot.localPlayerId() == null) return ClientWorldSnapshot.unavailable();
+            Position3D position = new Position3D(1, 2, 3);
+            return new ClientWorldSnapshot(
+                    snapshot.localPlayerId(), "local", snapshot.localPlayerAlive(), snapshot.dimension(), -64,
+                    position, position, new Position3D(0, 0, 1), new Position3D(0, 1, 0),
+                    snapshot.players(), includeEntities ? snapshot.entities() : List.of());
         }
 
         @Override

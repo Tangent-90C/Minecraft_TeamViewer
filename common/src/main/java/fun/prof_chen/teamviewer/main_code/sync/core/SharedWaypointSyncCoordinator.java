@@ -7,6 +7,7 @@ import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
+import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 
@@ -53,9 +54,11 @@ public final class SharedWaypointSyncCoordinator {
 		gateway.removeWaypointUpdateListener(inboundListener);
 	}
 
-	public void tick(boolean enabled) {
+	public void tick(boolean enabled, ClientWorldSnapshot world) {
+		List<SharedWaypointMapAdapter> adapters = integrations.activeSharedWaypointAdapters();
+		if (adapters.isEmpty()) return;
 		Map<String, SharedWaypointInfo> snapshot = repository.snapshot();
-		mapPolicy.tick(integrations.activeSharedWaypointAdapters(), snapshot, enabled);
+		mapPolicy.tick(adapters, snapshot, enabled, world);
 	}
 
 	public void upsertLocalWaypoints(UUID submitPlayerId, Map<String, WaypointSyncPayload> payloads) {

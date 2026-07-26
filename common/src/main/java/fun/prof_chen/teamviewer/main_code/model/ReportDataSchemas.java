@@ -92,7 +92,7 @@ public final class ReportDataSchemas {
             float width,
             float height) {
         public Map<String, Object> toMap() {
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new HashMap<>(32);
             data.put("x", x);
             data.put("y", y);
             data.put("z", z);
@@ -125,7 +125,7 @@ public final class ReportDataSchemas {
             float width,
             float height) {
         public Map<String, Object> toMap() {
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new HashMap<>(16);
             data.put("x", x);
             data.put("y", y);
             data.put("z", z);
@@ -165,7 +165,7 @@ public final class ReportDataSchemas {
             String tacticalType,
             String sourceType) {
         public Map<String, Object> toMap() {
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new HashMap<>(32);
             data.put("x", x);
             data.put("y", y);
             data.put("z", z);

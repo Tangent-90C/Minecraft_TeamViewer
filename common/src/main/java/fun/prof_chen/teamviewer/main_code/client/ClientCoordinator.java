@@ -12,6 +12,7 @@ import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
+import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
@@ -43,6 +44,7 @@ public final class ClientCoordinator implements ClientControlGateway {
     private static final int AUTO_CONNECT_MAX_RETRIES = 2;
     private static final long AUTO_CONNECT_RETRY_DELAY_MS = 10_000L;
     private static final long MARK_DOUBLE_CLICK_MS = 300L;
+    private static final int TAB_REPORT_INTERVAL_TICKS = 20;
     private static final double MARK_CANCEL_BASE_RADIUS = 1.2D;
     private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
     private static final double MARK_CANCEL_MAX_RADIUS = 4.0D;
@@ -52,6 +54,8 @@ public final class ClientCoordinator implements ClientControlGateway {
     private final GameClientBridge gameClient;
     private volatile boolean enabled;
     private int reportTickCounter;
+    private int tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+    private boolean tabConnectionObserved;
     private int entityDeathTickCounter;
     private SharedWaypointRepository waypointRepository;
     private SharedWaypointSyncCoordinator waypointCoordinator;
@@ -75,21 +79,23 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     public void onEndClientTick() {
         networkManager.pumpMainThreadTasks();
-        if (battleMapCoordinator != null) {
-            battleMapCoordinator.tick(enabled);
-        }
         if (!enabled) {
             return;
         }
+        ClientWorldSnapshot tickWorld = gameClient.captureWorldSnapshot(false);
+        if (battleMapCoordinator != null) {
+            battleMapCoordinator.tick(true, tickWorld);
+        }
         sendReportWhenDue();
+        sendTabReportWhenDue(tickWorld);
         cancelWaypointsForDeadEntitiesWhenDue();
         handleMiddleMouseDoubleClick();
-        updateLocalMarkedState();
+        updateLocalMarkedState(tickWorld);
         if (remotePlayerProjectionCoordinator != null && remotePlayerRepository != null) {
-            remotePlayerProjectionCoordinator.tick(remotePlayerRepository.snapshot(), enabled);
+            remotePlayerProjectionCoordinator.tick(remotePlayerRepository, true, tickWorld);
         }
         if (waypointCoordinator != null) {
-            waypointCoordinator.tick(enabled);
+            waypointCoordinator.tick(true, tickWorld);
         }
     }
 
@@ -112,6 +118,8 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     public void resetReportClock() {
         reportTickCounter = 0;
+        tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+        tabConnectionObserved = false;
         entityDeathTickCounter = 0;
     }
 
@@ -170,7 +178,7 @@ public final class ClientCoordinator implements ClientControlGateway {
             throw new IllegalStateException("Battle-map support is already configured");
         }
         integrationRegistry = Objects.requireNonNull(integrations, "integrations");
-        battleMapCoordinator = new BattleMapCoordinator(config, networkManager, gameClient, integrationRegistry);
+        battleMapCoordinator = new BattleMapCoordinator(config, networkManager, integrationRegistry);
         networkManager.addConnectionStatusListener(connected -> battleMapCoordinator.markPending());
     }
 
@@ -256,11 +264,25 @@ public final class ClientCoordinator implements ClientControlGateway {
     }
 
     public WorldRenderFrame buildWorldRenderFrame() {
-        if (worldRenderPlanner == null || remotePlayerRepository == null || waypointRepository == null) {
+        if (!enabled || worldRenderPlanner == null || remotePlayerRepository == null || waypointRepository == null) {
             return WorldRenderFrame.empty();
         }
-        return worldRenderPlanner.plan(enabled, gameClient.captureWorldSnapshot(),
-                remotePlayerRepository.snapshot(), waypointRepository.snapshot());
+        boolean renderPlayers = config.isShowBoxes() || config.isShowLines();
+        boolean renderWaypoints = config.isShowSharedWaypoints();
+        if (!renderPlayers && !renderWaypoints) {
+            return WorldRenderFrame.empty();
+        }
+        Map<String, SharedWaypointInfo> waypoints =
+                renderWaypoints ? waypointRepository.snapshot() : Map.of();
+        renderWaypoints = renderWaypoints && !waypoints.isEmpty();
+        if (!renderPlayers && !renderWaypoints) {
+            return WorldRenderFrame.empty();
+        }
+        boolean includeEntities = renderWaypoints && waypoints.values().stream()
+                .anyMatch(value -> value != null && "entity".equalsIgnoreCase(value.targetType()));
+        Map<UUID, RemotePlayerInfo> players =
+                renderPlayers ? remotePlayerRepository.snapshot() : Map.of();
+        return worldRenderPlanner.plan(true, gameClient.captureWorldSnapshot(includeEntities), players, waypoints);
     }
 
     public HudFrame buildHudFrame() {
@@ -348,14 +370,10 @@ public final class ClientCoordinator implements ClientControlGateway {
         }
 
         UUID submitPlayerId = snapshot.localPlayerId();
-        List<Map<String, Object>> tabPlayers = snapshot.tabPlayers().stream()
-                .map(TabPlayerSnapshot::toProtocolMap)
-                .toList();
         Map<UUID, Map<String, Object>> players = new LinkedHashMap<>();
         for (PlayerSnapshot player : snapshot.players()) {
             players.put(player.id(), player.toProtocolMap());
         }
-        networkManager.sendTabPlayersUpdate(submitPlayerId, tabPlayers);
         networkManager.sendPlayersUpdate(submitPlayerId, players);
 
         if (config.isUploadEntities()) {
@@ -365,6 +383,26 @@ public final class ClientCoordinator implements ClientControlGateway {
             }
             networkManager.sendEntitiesUpdate(submitPlayerId, entities);
         }
+    }
+
+    private void sendTabReportWhenDue(ClientWorldSnapshot world) {
+        if (!networkManager.isConnected()) {
+            tabConnectionObserved = false;
+            return;
+        }
+        if (!tabConnectionObserved) {
+            tabConnectionObserved = true;
+            tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+        }
+        if (world == null || world.localPlayerId() == null
+                || ++tabReportTickCounter < TAB_REPORT_INTERVAL_TICKS) {
+            return;
+        }
+        tabReportTickCounter = 0;
+        List<Map<String, Object>> tabPlayers = gameClient.captureTabPlayerSnapshot().stream()
+                .map(TabPlayerSnapshot::toProtocolMap)
+                .toList();
+        networkManager.sendTabPlayersUpdate(world.localPlayerId(), tabPlayers);
     }
 
     private void handleMiddleMouseDoubleClick() {
@@ -391,7 +429,7 @@ public final class ClientCoordinator implements ClientControlGateway {
                 || !networkManager.isConnected()) {
             return false;
         }
-        ClientWorldSnapshot world = gameClient.captureWorldSnapshot();
+        ClientWorldSnapshot world = gameClient.captureWorldSnapshot(false);
         if (!world.available()) {
             return false;
         }
@@ -428,12 +466,11 @@ public final class ClientCoordinator implements ClientControlGateway {
         return true;
     }
 
-    private void updateLocalMarkedState() {
+    private void updateLocalMarkedState(ClientWorldSnapshot world) {
         if (waypointRepository == null) {
             localMarkedState = LocalMarkedState.inactive();
             return;
         }
-        ClientWorldSnapshot world = gameClient.captureWorldSnapshot();
         if (!world.available()) {
             localMarkedState = LocalMarkedState.inactive();
             lastMarkedFingerprint = "";
