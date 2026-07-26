@@ -58,7 +58,11 @@ class ConfigUiSessionTest {
                 "JourneyMap-owned settings must only be rendered by the plugin detail page");
         assertContains(session, ConfigPageId.NETWORK,
                 ConfigControlId.UPDATE_INTERVAL, ConfigControlId.UPLOAD_ENTITIES,
-                ConfigControlId.BATTLE_MAP_SOURCE, ConfigControlId.OPEN_PACKET_CAPTURE);
+                ConfigControlId.BATTLE_MAP_SOURCE, ConfigControlId.OPEN_PACKET_CAPTURE,
+                ConfigControlId.OPEN_ENTITY_UPLOAD);
+        assertContains(session, ConfigPageId.ENTITY_UPLOAD,
+                ConfigControlId.UPLOAD_ENTITIES, ConfigControlId.ENTITY_REPORT_MODE,
+                ConfigControlId.ENTITY_REPORT_FIXED_INTERVAL, ConfigControlId.OPEN_ENTITY_FILTERS);
         assertContains(session, ConfigPageId.WAYPOINT,
                 ConfigControlId.WAYPOINT_TIMEOUT, ConfigControlId.QUICK_MARK_MAX_COUNT,
                 ConfigControlId.MIDDLE_DOUBLE_CLICK_MARK, ConfigControlId.AUTO_CANCEL_ON_ENTITY_DEATH,
@@ -72,6 +76,24 @@ class ConfigUiSessionTest {
         assertContains(session, ConfigPageId.PACKET_CAPTURE,
                 ConfigControlId.PACKET_CAPTURE_START, ConfigControlId.PACKET_CAPTURE_STOP,
                 ConfigControlId.PACKET_CAPTURE_CURRENT_PATH, ConfigControlId.PACKET_CAPTURE_LAST_PATH);
+    }
+
+    @Test
+    void entityFilterEditorStoresExactCompiledRules() {
+        Config config = new Config();
+        config.setStoragePath(tempDir.resolve("entity-filter.json"));
+        ConfigUiSession session = session(config);
+        ConfigControlId addType = ConfigControlId.entityRule(
+                "add", Config.ENTITY_FILTER_ALLOW_TYPE, "");
+        ConfigUiAction edit = session.activate(ConfigPageId.ENTITY_FILTERS, addType);
+        assertEquals(ConfigPageId.ENTITY_FILTER_EDIT, edit.targetPage());
+        session.setText(ConfigControlId.ENTITY_FILTER_VALUE, " Minecraft:Zombie ");
+        ConfigUiAction saved = session.activate(
+                ConfigPageId.ENTITY_FILTER_EDIT, ConfigControlId.ENTITY_FILTER_SAVE);
+        assertEquals(ConfigPageId.ENTITY_FILTERS, saved.targetPage());
+        assertEquals(List.of("minecraft:zombie"), config.getEntityAllowedTypes());
+        assertTrue(config.getEntityUploadFilter().allows("minecraft:zombie", null));
+        assertFalse(config.getEntityUploadFilter().allows("minecraft:cow", null));
     }
 
     @Test

@@ -4,11 +4,14 @@ import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureTarget;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Boundary for reads and commands that require Minecraft classes.
@@ -26,6 +29,32 @@ public interface GameClientBridge {
     }
 
     ClientReportSnapshot captureReportSnapshot(boolean includeEntities);
+
+    /**
+     * Capture loaded entities into a caller-owned typed target. Official adapters override this to avoid
+     * allocating compatibility snapshots. The fallback preserves source compatibility for third-party adapters.
+     */
+    default void captureEntityFrame(EntityCaptureTarget target, EntityUploadFilter filter) {
+        ClientReportSnapshot snapshot = captureReportSnapshot(true);
+        EntityUploadFilter effectiveFilter = filter == null ? EntityUploadFilter.ALLOW_ALL : filter;
+        target.begin(snapshot.localPlayerId(), snapshot.dimension(), snapshot.entities().size());
+        snapshot.entities().forEach(entity -> {
+            String customName = entity.name();
+            if (!effectiveFilter.allows(entity.type(), customName)) return;
+            UUID id;
+            try {
+                id = UUID.fromString(entity.id());
+            } catch (IllegalArgumentException ignored) {
+                return;
+            }
+            target.accept(
+                    id,
+                    entity.position().x(), entity.position().y(), entity.position().z(),
+                    entity.velocity().x(), entity.velocity().y(), entity.velocity().z(),
+                    entity.type(), customName, entity.width(), entity.height());
+        });
+        target.finish(snapshot.entities().size());
+    }
 
     /** Capture the server player-list independently from movement/world snapshots. */
     List<TabPlayerSnapshot> captureTabPlayerSnapshot();

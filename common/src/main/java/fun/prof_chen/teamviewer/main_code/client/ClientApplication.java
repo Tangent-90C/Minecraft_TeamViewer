@@ -118,6 +118,7 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
     public void onClientStopping() {
         if (!stopped.compareAndSet(false, true)) return;
         coordinator.onLeftPlaySession();
+        coordinator.shutdown();
         pluginManager.shutdown();
         waypointCoordinator.stop();
         ClientServices.clear(coordinator);

@@ -1,11 +1,14 @@
 package fun.prof_chen.teamviewer.main_code.config.ui;
 
 import java.util.Objects;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /** Stable string control key; plugin controls can carry a plugin ID and setting key. */
 public record ConfigControlId(String value) {
     private static final String PLUGIN_PREFIX = "plugin:";
     private static final String SETTING_PREFIX = "setting:";
+    private static final String ENTITY_RULE_PREFIX = "entity-rule:";
 
     public ConfigControlId {
         value = Objects.requireNonNull(value, "value");
@@ -17,6 +20,39 @@ public record ConfigControlId(String value) {
 
     public static ConfigControlId setting(String pluginId, String key) {
         return new ConfigControlId(SETTING_PREFIX + pluginId + ":" + key);
+    }
+
+    public static ConfigControlId entityRule(String action, String kind, String value) {
+        String encoded = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+        return new ConfigControlId(ENTITY_RULE_PREFIX + action + ":" + kind + ":" + encoded);
+    }
+
+    public boolean isEntityRuleAction() { return value.startsWith(ENTITY_RULE_PREFIX); }
+
+    public String entityRuleAction() {
+        if (!isEntityRuleAction()) return "";
+        int separator = value.indexOf(':', ENTITY_RULE_PREFIX.length());
+        return separator < 0 ? "" : value.substring(ENTITY_RULE_PREFIX.length(), separator);
+    }
+
+    public String entityRuleKind() {
+        if (!isEntityRuleAction()) return "";
+        int first = value.indexOf(':', ENTITY_RULE_PREFIX.length());
+        int second = first < 0 ? -1 : value.indexOf(':', first + 1);
+        return second < 0 ? "" : value.substring(first + 1, second);
+    }
+
+    public String entityRuleValue() {
+        if (!isEntityRuleAction()) return "";
+        int first = value.indexOf(':', ENTITY_RULE_PREFIX.length());
+        int second = first < 0 ? -1 : value.indexOf(':', first + 1);
+        if (second < 0 || second + 1 >= value.length()) return "";
+        try {
+            return new String(Base64.getUrlDecoder().decode(value.substring(second + 1)), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ignored) {
+            return "";
+        }
     }
 
     public boolean isPluginAction() { return value.startsWith(PLUGIN_PREFIX); }
@@ -54,6 +90,8 @@ public record ConfigControlId(String value) {
     public static final ConfigControlId OPEN_DISPLAY = fixed("OPEN_DISPLAY");
     public static final ConfigControlId OPEN_NETWORK = fixed("OPEN_NETWORK");
     public static final ConfigControlId OPEN_PLUGINS = fixed("OPEN_PLUGINS");
+    public static final ConfigControlId OPEN_ENTITY_UPLOAD = fixed("OPEN_ENTITY_UPLOAD");
+    public static final ConfigControlId OPEN_ENTITY_FILTERS = fixed("OPEN_ENTITY_FILTERS");
     public static final ConfigControlId SAVE_ROOT = fixed("SAVE_ROOT");
     public static final ConfigControlId AUTO_CONNECT = fixed("AUTO_CONNECT");
     public static final ConfigControlId CONNECT = fixed("CONNECT");
@@ -94,6 +132,14 @@ public record ConfigControlId(String value) {
     public static final ConfigControlId BATTLE_MAP_KEEPALIVE_INTERVAL = fixed("BATTLE_MAP_KEEPALIVE_INTERVAL");
     public static final ConfigControlId BATTLE_MAP_CACHE_RETENTION = fixed("BATTLE_MAP_CACHE_RETENTION");
     public static final ConfigControlId UPLOAD_ENTITIES = fixed("UPLOAD_ENTITIES");
+    public static final ConfigControlId ENTITY_REPORT_MODE = fixed("ENTITY_REPORT_MODE");
+    public static final ConfigControlId ENTITY_REPORT_FIXED_INTERVAL = fixed("ENTITY_REPORT_FIXED_INTERVAL");
+    public static final ConfigControlId ENTITY_FILTER_PREVIOUS = fixed("ENTITY_FILTER_PREVIOUS");
+    public static final ConfigControlId ENTITY_FILTER_NEXT = fixed("ENTITY_FILTER_NEXT");
+    public static final ConfigControlId ENTITY_FILTER_PAGE_STATUS = fixed("ENTITY_FILTER_PAGE_STATUS");
+    public static final ConfigControlId ENTITY_FILTER_EMPTY = fixed("ENTITY_FILTER_EMPTY");
+    public static final ConfigControlId ENTITY_FILTER_VALUE = fixed("ENTITY_FILTER_VALUE");
+    public static final ConfigControlId ENTITY_FILTER_SAVE = fixed("ENTITY_FILTER_SAVE");
     public static final ConfigControlId UPLOAD_SHARED_WAYPOINTS = fixed("UPLOAD_SHARED_WAYPOINTS");
     public static final ConfigControlId USE_SYSTEM_PROXY = fixed("USE_SYSTEM_PROXY");
     public static final ConfigControlId PREFER_LOCAL_DATA = fixed("PREFER_LOCAL_DATA");

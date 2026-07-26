@@ -3,11 +3,17 @@ package fun.prof_chen.teamviewer.main_code.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public class Config implements ConfigGateway {
     public static final String TRACER_START_CROSSHAIR = "crosshair";
@@ -15,11 +21,21 @@ public class Config implements ConfigGateway {
     public static final String WAYPOINT_UI_BEACON = "beacon";
     public static final String WAYPOINT_UI_RING = "ring";
     public static final String WAYPOINT_UI_PIN = "pin";
+    public static final String ENTITY_REPORT_AUTO = "auto";
+    public static final String ENTITY_REPORT_FIXED = "fixed";
+    public static final String ENTITY_FILTER_ALLOW_TYPE = "allow_type";
+    public static final String ENTITY_FILTER_DENY_TYPE = "deny_type";
+    public static final String ENTITY_FILTER_ALLOW_NAME = "allow_name";
+    public static final String ENTITY_FILTER_DENY_NAME = "deny_name";
+    public static final int MAX_ENTITY_FILTER_RULES = 512;
+    public static final int MAX_ENTITY_FILTER_VALUE_LENGTH = 128;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int DEFAULT_FRIENDLY_TEAM_COLOR = 0xFF3B82F6;
     private static final int DEFAULT_NEUTRAL_TEAM_COLOR = 0xFFEAB308;
     private static final int DEFAULT_ENEMY_TEAM_COLOR = 0xFFEF4444;
+    private static final Pattern NAMESPACED_ENTITY_TYPE =
+            Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
 
     private transient Path storagePath;
 
@@ -38,6 +54,14 @@ public class Config implements ConfigGateway {
     private boolean enableCompression = true;
     private int updateInterval = 5;
     private boolean uploadEntities = true;
+    private String entityReportMode = ENTITY_REPORT_AUTO;
+    private int entityReportFixedIntervalTicks = 10;
+    private List<String> entityAllowedTypes = new ArrayList<>();
+    private List<String> entityDeniedTypes = new ArrayList<>();
+    private List<String> entityAllowedNames = new ArrayList<>();
+    private List<String> entityDeniedNames = new ArrayList<>();
+    private transient volatile EntityUploadFilter compiledEntityUploadFilter;
+    private transient long entityUploadSettingsRevision;
     private boolean uploadSharedWaypoints = false;
     private boolean showSharedWaypoints = true;
     private boolean showOwnSharedWaypointsOnMinimap = true;
@@ -294,6 +318,123 @@ public class Config implements ConfigGateway {
 
     public void setUploadEntities(boolean uploadEntities) {
         this.uploadEntities = uploadEntities;
+    }
+
+    public String getEntityReportMode() {
+        return ENTITY_REPORT_FIXED.equalsIgnoreCase(entityReportMode)
+                ? ENTITY_REPORT_FIXED : ENTITY_REPORT_AUTO;
+    }
+
+    public void setEntityReportMode(String entityReportMode) {
+        this.entityReportMode = ENTITY_REPORT_FIXED.equalsIgnoreCase(entityReportMode)
+                ? ENTITY_REPORT_FIXED : ENTITY_REPORT_AUTO;
+    }
+
+    public int getEntityReportFixedIntervalTicks() {
+        return Math.max(1, Math.min(1000, entityReportFixedIntervalTicks));
+    }
+
+    public void setEntityReportFixedIntervalTicks(int ticks) {
+        entityReportFixedIntervalTicks = Math.max(1, Math.min(1000, ticks));
+    }
+
+    public List<String> getEntityAllowedTypes() { return safeRuleList(entityAllowedTypes); }
+    public List<String> getEntityDeniedTypes() { return safeRuleList(entityDeniedTypes); }
+    public List<String> getEntityAllowedNames() { return safeRuleList(entityAllowedNames); }
+    public List<String> getEntityDeniedNames() { return safeRuleList(entityDeniedNames); }
+
+    public synchronized boolean addEntityFilterRule(String kind, String rawValue) {
+        String value = normalizeEntityFilterValue(kind, rawValue);
+        if (value.isEmpty() || entityFilterRuleCount() >= MAX_ENTITY_FILTER_RULES) return false;
+        List<String> target = mutableEntityFilterRules(kind);
+        if (target == null || target.contains(value)) return false;
+        target.add(value);
+        invalidateEntityUploadFilter();
+        return true;
+    }
+
+    public synchronized boolean removeEntityFilterRule(String kind, String rawValue) {
+        List<String> target = mutableEntityFilterRules(kind);
+        if (target == null) return false;
+        String value = normalizeEntityFilterValue(kind, rawValue);
+        boolean removed = target.remove(value);
+        if (removed) invalidateEntityUploadFilter();
+        return removed;
+    }
+
+    public synchronized int entityFilterRuleCount() {
+        return safeRuleList(entityAllowedTypes).size()
+                + safeRuleList(entityDeniedTypes).size()
+                + safeRuleList(entityAllowedNames).size()
+                + safeRuleList(entityDeniedNames).size();
+    }
+
+    public EntityUploadFilter getEntityUploadFilter() {
+        EntityUploadFilter cached = compiledEntityUploadFilter;
+        if (cached != null) return cached;
+        synchronized (this) {
+            if (compiledEntityUploadFilter == null) {
+                int remaining = MAX_ENTITY_FILTER_RULES;
+                Set<String> allowedTypes = limitedRules(entityAllowedTypes, true, remaining);
+                remaining -= allowedTypes.size();
+                Set<String> deniedTypes = limitedRules(entityDeniedTypes, true, remaining);
+                remaining -= deniedTypes.size();
+                Set<String> allowedNames = limitedRules(entityAllowedNames, false, remaining);
+                remaining -= allowedNames.size();
+                Set<String> deniedNames = limitedRules(entityDeniedNames, false, remaining);
+                compiledEntityUploadFilter = new EntityUploadFilter(
+                        allowedTypes, deniedTypes, allowedNames, deniedNames, entityUploadSettingsRevision);
+            }
+            return compiledEntityUploadFilter;
+        }
+    }
+
+    private List<String> mutableEntityFilterRules(String kind) {
+        if (entityAllowedTypes == null) entityAllowedTypes = new ArrayList<>();
+        if (entityDeniedTypes == null) entityDeniedTypes = new ArrayList<>();
+        if (entityAllowedNames == null) entityAllowedNames = new ArrayList<>();
+        if (entityDeniedNames == null) entityDeniedNames = new ArrayList<>();
+        return switch (kind == null ? "" : kind) {
+            case ENTITY_FILTER_ALLOW_TYPE -> entityAllowedTypes;
+            case ENTITY_FILTER_DENY_TYPE -> entityDeniedTypes;
+            case ENTITY_FILTER_ALLOW_NAME -> entityAllowedNames;
+            case ENTITY_FILTER_DENY_NAME -> entityDeniedNames;
+            default -> null;
+        };
+    }
+
+    private static String normalizeEntityFilterValue(String kind, String rawValue) {
+        if (rawValue == null) return "";
+        String value = rawValue.trim();
+        if (value.length() > MAX_ENTITY_FILTER_VALUE_LENGTH) {
+            value = value.substring(0, MAX_ENTITY_FILTER_VALUE_LENGTH);
+        }
+        if (ENTITY_FILTER_ALLOW_TYPE.equals(kind) || ENTITY_FILTER_DENY_TYPE.equals(kind)) {
+            value = EntityUploadFilter.normalizeType(value);
+            if (!NAMESPACED_ENTITY_TYPE.matcher(value).matches()) return "";
+        }
+        return value;
+    }
+
+    private static Set<String> limitedRules(List<String> source, boolean type, int limit) {
+        if (limit <= 0 || source == null || source.isEmpty()) return Set.of();
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        String kind = type ? ENTITY_FILTER_ALLOW_TYPE : ENTITY_FILTER_ALLOW_NAME;
+        for (String raw : source) {
+            String value = normalizeEntityFilterValue(kind, raw);
+            if (!value.isEmpty()) values.add(value);
+            if (values.size() >= limit) break;
+        }
+        return Set.copyOf(values);
+    }
+
+    private static List<String> safeRuleList(List<String> source) {
+        return source == null ? List.of() : List.copyOf(source);
+    }
+
+    private void invalidateEntityUploadFilter() {
+        entityUploadSettingsRevision++;
+        compiledEntityUploadFilter = null;
     }
 
     public boolean isUploadSharedWaypoints() {

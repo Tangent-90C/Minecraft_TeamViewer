@@ -17,6 +17,7 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportOptions;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportTrafficEvent;
 import fun.prof_chen.teamviewer.main_code.network.capture.WebSocketCaptureWriter;
 import fun.prof_chen.teamviewer.main_code.network.protocol.MessageCodec;
+import fun.prof_chen.teamviewer.main_code.network.protocol.EntityPatchView;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolVersionUtil;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolPackets;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtobufMessageCodec;
@@ -29,6 +30,7 @@ import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -274,6 +276,8 @@ public class NetworkManager {
 	// JSON序列化工具 - 用于协议数据的编码解码
 	private final Gson gson = new Gson();
 	private final MessageCodec messageCodec = new ProtobufMessageCodec();
+	private final Object outboundStateLock = new Object();
+	private volatile long outboundEpoch = 1L;
 	private final Object packetDumpLock = new Object();
 	private final Object trafficStatsLock = new Object();
 	private final ArrayDeque<TrafficSample> uploadTrafficSamples = new ArrayDeque<>();
@@ -577,10 +581,13 @@ public class NetworkManager {
 		shouldReconnect = false;
 		resetReconnectPolicy();
 		invalidateConnectionAttempt(attemptId);
-		sendSourceStateClear(localPlayerId);
-		if (socket != null) {
-			socket.close(1000, "Client disconnect");
-			socket = null;
+		synchronized (outboundStateLock) {
+			outboundEpoch++;
+			sendSourceStateClearUnlocked(localPlayerId, SOURCE_STATE_CLEAR_SCOPES);
+			if (socket != null) {
+				socket.close(1000, "Client disconnect");
+				socket = null;
+			}
 		}
 		transportOpen = false;
 		resetNegotiationState();
@@ -841,17 +848,28 @@ public class NetworkManager {
 		}
 	}
 
-	private void sendSourceStateClear(UUID submitPlayerId) {
+	private void sendSourceStateClearUnlocked(UUID submitPlayerId, List<String> scopes) {
 		if (socket == null || !isConnected || submitPlayerId == null) {
 			return;
 		}
 		try {
 			ProtocolPackets.SourceStateClearPacket packet = new ProtocolPackets.SourceStateClearPacket();
 			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
-			packet.scopes = SOURCE_STATE_CLEAR_SCOPES;
-			sendPacket(packet);
+			packet.scopes = scopes;
+			sendPacketUnlocked(packet);
 		} catch (Exception e) {
 			LOGGER.warn("Failed to send source_state_clear before disconnect: {}", e.getMessage());
+		}
+	}
+
+	/**
+	 * Invalidate all captured entity frames before clearing the remote entity scope. The shared lock makes
+	 * the clear and worker-side final epoch check a single total order.
+	 */
+	public void clearTypedEntitySource(UUID submitPlayerId) {
+		synchronized (outboundStateLock) {
+			outboundEpoch++;
+			sendSourceStateClearUnlocked(submitPlayerId, List.of("entities"));
 		}
 	}
 
@@ -1058,12 +1076,80 @@ public class NetworkManager {
 	}
 
 	private void sendPacket(Object packet) {
+		synchronized (outboundStateLock) {
+			sendPacketUnlocked(packet);
+		}
+	}
+
+	private void sendPacketUnlocked(Object packet) {
 		if (socket == null || packet == null) {
 			return;
 		}
 		byte[] payload = messageCodec.encode(packet);
 		captureOutgoingBinaryPayload(payload);
 		socket.send(payload);
+	}
+
+	public long getOutboundEpoch() {
+		return outboundEpoch;
+	}
+
+	/** Direct typed protobuf path used exclusively by the entity worker. */
+	public boolean sendTypedEntitiesPatchIfCurrent(
+			long expectedEpoch,
+			UUID submitPlayerId,
+			EntityPatchView patch
+	) {
+		synchronized (outboundStateLock) {
+			if (expectedEpoch != outboundEpoch || socket == null || !isConnected
+					|| submitPlayerId == null || patch == null) {
+				return false;
+			}
+			byte[] payload = messageCodec.encodeEntityPatch(submitPlayerId, patch);
+			captureOutgoingBinaryPayload(payload);
+			socket.send(payload);
+			return true;
+		}
+	}
+
+	/**
+	 * Entity keepalive is intentionally infrequent. It may allocate UUID strings at the wire boundary,
+	 * but never creates per-field maps and is outside the report hot path.
+	 */
+	public void sendTypedEntityKeepaliveIfNeeded(
+			long expectedEpoch,
+			UUID submitPlayerId,
+			Collection<UUID> entityIds
+	) {
+		synchronized (outboundStateLock) {
+			if (expectedEpoch != outboundEpoch || socket == null || !isConnected || submitPlayerId == null
+					|| entityIds == null || entityIds.isEmpty()) {
+				return;
+			}
+			List<String> batch = new ArrayList<>(KEEPALIVE_MAX_ITEMS_PER_PACKET);
+			for (UUID id : entityIds) {
+				if (id == null) continue;
+				batch.add(id.toString());
+				if (batch.size() >= KEEPALIVE_MAX_ITEMS_PER_PACKET) {
+					sendTypedEntityKeepaliveBatchUnlocked(submitPlayerId, batch);
+					batch = new ArrayList<>(KEEPALIVE_MAX_ITEMS_PER_PACKET);
+				}
+			}
+			if (!batch.isEmpty()) sendTypedEntityKeepaliveBatchUnlocked(submitPlayerId, batch);
+		}
+	}
+
+	public long getEntityKeepaliveIntervalMs() {
+		return Math.max(1_000L, entityKeepaliveIntervalMs);
+	}
+
+	private void sendTypedEntityKeepaliveBatchUnlocked(UUID submitPlayerId, List<String> ids) {
+		ProtocolPackets.StateKeepalivePacket packet = new ProtocolPackets.StateKeepalivePacket();
+		packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
+		packet.players = List.of();
+		packet.entities = ids;
+		packet.battleChunks = List.of();
+		sendPacketUnlocked(packet);
 	}
 
 	private void handleTransportOpen(long attemptId, String negotiatedExtensions) {
@@ -2012,6 +2098,9 @@ public class NetworkManager {
 	private synchronized long beginConnectionAttempt() {
 		connectionAttemptSequence++;
 		activeConnectionAttemptId = connectionAttemptSequence;
+		synchronized (outboundStateLock) {
+			outboundEpoch++;
+		}
 		handshakeSent = false;
 		handshakeCompleted = false;
 		connectionStage = ConnectionStage.CONNECTING;
@@ -3271,6 +3360,19 @@ public class NetworkManager {
 		}
 		Set<String> drained = new HashSet<>(pendingBattleChunkRefreshIds);
 		pendingBattleChunkRefreshIds.clear();
+		return drained;
+	}
+
+	public boolean hasPendingEntityRefreshIds() {
+		return !pendingEntityRefreshIds.isEmpty();
+	}
+
+	public Set<String> drainPendingEntityRefreshIds() {
+		if (pendingEntityRefreshIds.isEmpty()) {
+			return Set.of();
+		}
+		Set<String> drained = new HashSet<>(pendingEntityRefreshIds);
+		pendingEntityRefreshIds.clear();
 		return drained;
 	}
 

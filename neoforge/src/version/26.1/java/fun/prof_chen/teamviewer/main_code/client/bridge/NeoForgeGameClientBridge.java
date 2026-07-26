@@ -6,6 +6,8 @@ import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureTarget;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationClock;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
@@ -24,6 +26,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -37,11 +40,14 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 public final class NeoForgeGameClientBridge implements GameClientBridge {
+    private static final Map<Object, String> ENTITY_TYPE_IDS = new IdentityHashMap<>();
     private static final Comparator<PlayerScoreEntry> SCOREBOARD_ENTRY_COMPARATOR = Comparator
             .comparingInt(PlayerScoreEntry::value)
             .reversed()
@@ -57,6 +63,38 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
                 client.player.getUUID(), client.player.isAlive(),
                 MinecraftDimensionAdapter.toDimensionId(client.level.dimension()),
                 collectPlayers(client), includeEntities ? collectEntities(client) : List.of());
+    }
+
+    @Override
+    public void captureEntityFrame(EntityCaptureTarget target, EntityUploadFilter filter) {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || client.player == null || client.level == null) {
+            target.begin(null, "", 0);
+            target.finish(0);
+            return;
+        }
+        String dimension = MinecraftDimensionAdapter.toDimensionId(client.level.dimension());
+        target.begin(client.player.getUUID(), dimension, 0);
+        int scanned = 0;
+        boolean filterByName = filter.needsNameForDecision();
+        for (Entity entity : client.level.entitiesForRendering()) {
+            if (entity == client.player) continue;
+            scanned++;
+            String type = ENTITY_TYPE_IDS.computeIfAbsent(
+                    entity.getType(), value -> BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
+            boolean hasCustomName = entity.hasCustomName();
+            String customName = filterByName && hasCustomName
+                    ? entity.getCustomName().getString() : null;
+            if (!filter.allowsStableType(type, customName)) continue;
+            if (customName == null && hasCustomName) customName = entity.getCustomName().getString();
+            Vec3 position = entity.position();
+            Vec3 velocity = entity.getDeltaMovement();
+            target.accept(entity.getUUID(),
+                    position.x, position.y, position.z,
+                    velocity.x, velocity.y, velocity.z,
+                    type, customName, entity.getBbWidth(), entity.getBbHeight());
+        }
+        target.finish(scanned);
     }
 
     @Override

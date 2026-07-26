@@ -129,6 +129,54 @@ public final class ProtobufMessageCodec implements MessageCodec {
 	}
 
 	@Override
+	public byte[] encodeEntityPatch(java.util.UUID submitPlayerId, EntityPatchView patch) {
+		if (submitPlayerId == null || patch == null) {
+			throw new IllegalArgumentException("Entity patch requires a submit player and patch");
+		}
+		try {
+			EntityPatchScope.Builder scope = EntityPatchScope.newBuilder();
+			for (int index = 0; index < patch.upsertCount(); index++) {
+				EntityDelta.Builder delta = EntityDelta.newBuilder();
+				int mask = patch.fieldMask(index);
+				if ((mask & EntityPatchView.X) != 0) delta.setX(patch.x(index));
+				if ((mask & EntityPatchView.Y) != 0) delta.setY(patch.y(index));
+				if ((mask & EntityPatchView.Z) != 0) delta.setZ(patch.z(index));
+				if ((mask & EntityPatchView.VX) != 0) delta.setVx(patch.vx(index));
+				if ((mask & EntityPatchView.VY) != 0) delta.setVy(patch.vy(index));
+				if ((mask & EntityPatchView.VZ) != 0) delta.setVz(patch.vz(index));
+				if ((mask & EntityPatchView.DIMENSION) != 0 && patch.dimension(index) != null) {
+					delta.setDimension(patch.dimension(index));
+				}
+				if ((mask & EntityPatchView.TYPE) != 0 && patch.entityType(index) != null) {
+					delta.setEntityType(patch.entityType(index));
+				}
+				if ((mask & EntityPatchView.NAME) != 0 && patch.entityName(index) != null) {
+					delta.setEntityName(patch.entityName(index));
+				}
+				if ((mask & EntityPatchView.WIDTH) != 0) delta.setWidth(patch.width(index));
+				if ((mask & EntityPatchView.HEIGHT) != 0) delta.setHeight(patch.height(index));
+				scope.addUpsert(EntityUpsert.newBuilder()
+						.setId(patch.upsertId(index).toString())
+						.setData(delta.build())
+						.build());
+			}
+			for (int index = 0; index < patch.deleteCount(); index++) {
+				scope.addDelete(patch.deleteId(index).toString());
+			}
+			WireEnvelope envelope = WireEnvelope.newBuilder()
+					.setChannel(WireChannel.WIRE_CHANNEL_PLAYER)
+					.setPlayerReportBundle(PlayerReportBundle.newBuilder()
+							.setSubmitPlayerId(submitPlayerId.toString())
+							.setEntitiesPatch(scope.build())
+							.build())
+					.build();
+			return envelope.toByteArray();
+		} catch (Exception error) {
+			throw new IllegalArgumentException("Failed to encode typed entity patch", error);
+		}
+	}
+
+	@Override
 	public ProtocolPackets.DecodedInboundMessage decode(byte[] payload) {
 		try {
 			WireEnvelope envelope = WireEnvelope.parseFrom(payload);

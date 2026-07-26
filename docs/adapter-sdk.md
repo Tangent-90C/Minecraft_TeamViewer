@@ -21,7 +21,13 @@ compile errors rather than runtime casts.
   `minecraft:overworld`, and absent worlds/players return the relevant `unavailable()` snapshot.
   It must never return `null` collections. Report/world snapshots never collect the server Tab
   list: `captureTabPlayerSnapshot()` is the only Tab boundary and common throttles it to once per
-  second. `captureWorldSnapshot(false)` must not enumerate world entities. Scoreboard lines are
+  second. `captureWorldSnapshot(false)` must not enumerate world entities.
+  Official adapters implement `captureEntityFrame()` as the high-volume entity boundary: walk the
+  native loaded-entity collection once, write UUIDs and primitive fields directly into the supplied
+  `EntityCaptureTarget`, and apply the precompiled exact-match `EntityUploadFilter` before accepting
+  a row. Entity types are stable namespaced registry IDs, not translated display strings.
+  `captureReportSnapshot(true)` remains a compatibility path for external adapters and Lua snapshots;
+  common player reporting always requests `false`. Scoreboard lines are
   already team-decorated and kept in display order; text runs preserve native style colors as a
   name or `#RRGGBB`.
   Quick-mark targeting must resolve the first visible block/entity at the requested range. Versions
@@ -65,6 +71,9 @@ must not import `Config`, `NetworkManager`, protocol messages, repositories or c
 Common captures one lightweight world snapshot per enabled client tick and shares it across
 coordinators. Render callbacks keep camera data current, but request entity enumeration only when
 an entity-bound waypoint actually needs it.
+Entity upload is independently scheduled: the client thread fills a pooled structure-of-arrays frame,
+then a single worker performs typed state comparison and direct protobuf encoding. Adapters must not
+retain the capture target after `captureEntityFrame()` returns.
 
 ## TCK and target builds
 

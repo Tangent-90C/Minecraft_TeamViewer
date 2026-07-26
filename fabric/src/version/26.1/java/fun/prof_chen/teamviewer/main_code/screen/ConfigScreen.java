@@ -165,6 +165,9 @@ public final class ConfigScreen extends Screen {
             case ROOT -> "screen.mc_teamviewer.config.title";
             case DISPLAY -> "screen.mc_teamviewer.display_config.title";
             case NETWORK -> "screen.mc_teamviewer.network_config.title";
+            case ENTITY_UPLOAD -> "screen.mc_teamviewer.entity_upload.title";
+            case ENTITY_FILTERS -> "screen.mc_teamviewer.entity_upload.filters_title";
+            case ENTITY_FILTER_EDIT -> "screen.mc_teamviewer.entity_upload.filter_edit_title";
             case COLOR -> "screen.mc_teamviewer.color_config.title";
             case WAYPOINT -> "screen.mc_teamviewer.waypoint_config.title";
             case WAYPOINT_SHAPE -> "screen.mc_teamviewer.waypoint_shape_config.title";

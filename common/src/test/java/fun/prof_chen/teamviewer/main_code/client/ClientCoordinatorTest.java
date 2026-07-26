@@ -2,6 +2,8 @@ package fun.prof_chen.teamviewer.main_code.client;
 
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureTarget;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
@@ -14,6 +16,7 @@ import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
+import fun.prof_chen.teamviewer.main_code.network.protocol.EntityPatchView;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointUpdateListener;
 import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
@@ -29,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -111,7 +115,7 @@ class ClientCoordinatorTest {
     }
 
     @Test
-    void sendsVersionNeutralSnapshotsAtNegotiatedInterval() {
+    void sendsVersionNeutralSnapshotsAtNegotiatedInterval() throws Exception {
         Config config = new Config();
         config.setUpdateInterval(20);
         config.setUploadEntities(true);
@@ -128,14 +132,38 @@ class ClientCoordinatorTest {
         assertEquals(1, network.tabReports.size());
 
         coordinator.onEndClientTick();
+        for (int attempt = 0; attempt < 100 && network.entityReports.isEmpty(); attempt++) {
+            Thread.sleep(10L);
+        }
         assertEquals(1, network.playerReports.size());
         assertEquals(localId, network.lastSubmitPlayerId);
         assertEquals("local", network.playerReports.get(0).get(localId).get("playerName"));
-        assertEquals("minecraft:overworld", network.entityReports.get(0).get("entity-1").get("dimension"));
+        assertEquals("minecraft:overworld",
+                network.entityReports.get(0).values().iterator().next().get("dimension"));
         assertEquals("local", network.tabReports.get(0).get(0).get("name"));
         assertEquals(1, game.captureCount);
         assertEquals(2, game.worldCaptureCount);
         assertEquals(1, game.tabCaptureCount);
+    }
+
+    @Test
+    void adaptiveEntityCadenceCapsLargeWorldAtOncePerSecond() {
+        Config config = new Config();
+        config.setUploadEntities(true);
+        config.setEntityReportMode(Config.ENTITY_REPORT_AUTO);
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        network.connected = true;
+        network.negotiatedInterval = 2;
+        FakeGameClientBridge game = new FakeGameClientBridge(snapshot(UUID.randomUUID()));
+        game.simulatedEntityCount = 1500;
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+
+        coordinator.setEnabled(true);
+        for (int tick = 0; tick < 100; tick++) coordinator.onEndClientTick();
+
+        assertEquals(5, game.entityFrameCaptureCount,
+                "first capture is immediate, then 1500 loaded entities use a 20-tick interval");
+        coordinator.shutdown();
     }
 
     @Test
@@ -200,7 +228,7 @@ class ClientCoordinatorTest {
                 0.6f,
                 1.8f);
         EntitySnapshot entity = new EntitySnapshot(
-                "entity-1",
+                UUID.nameUUIDFromBytes("entity-1".getBytes()).toString(),
                 new Position3D(4, 5, 6),
                 new Position3D(0, 0, 0),
                 "minecraft:overworld",
@@ -224,6 +252,8 @@ class ClientCoordinatorTest {
         private int worldCaptureCount;
         private int worldEntityCaptureCount;
         private int tabCaptureCount;
+        private int entityFrameCaptureCount;
+        private int simulatedEntityCount = -1;
 
         private FakeGameClientBridge(ClientReportSnapshot snapshot) {
             this(snapshot, null, snapshot.localPlayerId() == null ? List.of() : List.of(
@@ -246,6 +276,21 @@ class ClientCoordinatorTest {
         public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) {
             captureCount++;
             return snapshot;
+        }
+
+        @Override
+        public void captureEntityFrame(EntityCaptureTarget target, EntityUploadFilter filter) {
+            entityFrameCaptureCount++;
+            target.begin(snapshot.localPlayerId(), snapshot.dimension(), 0);
+            for (EntitySnapshot entity : snapshot.entities()) {
+                if (!filter.allows(entity.type(), entity.name())) continue;
+                target.accept(
+                        UUID.fromString(entity.id()),
+                        entity.position().x(), entity.position().y(), entity.position().z(),
+                        entity.velocity().x(), entity.velocity().y(), entity.velocity().z(),
+                        entity.type(), entity.name(), entity.width(), entity.height());
+            }
+            target.finish(simulatedEntityCount >= 0 ? simulatedEntityCount : snapshot.entities().size());
         }
 
         @Override
@@ -326,7 +371,7 @@ class ClientCoordinatorTest {
         private int disconnectCount;
         private UUID lastSubmitPlayerId;
         private final List<Map<UUID, Map<String, Object>>> playerReports = new ArrayList<>();
-        private final List<Map<String, Map<String, Object>>> entityReports = new ArrayList<>();
+        private final List<Map<String, Map<String, Object>>> entityReports = new CopyOnWriteArrayList<>();
         private final List<List<Map<String, Object>>> tabReports = new ArrayList<>();
 
         private RecordingNetworkManager() {
@@ -362,6 +407,35 @@ class ClientCoordinatorTest {
         @Override
         public void sendEntitiesUpdate(UUID submitPlayerId, Map<String, Map<String, Object>> entities) {
             entityReports.add(entities);
+        }
+
+        @Override
+        public boolean sendTypedEntitiesPatchIfCurrent(
+                long expectedEpoch, UUID submitPlayerId, EntityPatchView patch) {
+            Map<String, Map<String, Object>> values = new HashMap<>();
+            for (int index = 0; index < patch.upsertCount(); index++) {
+                Map<String, Object> data = new HashMap<>();
+                int mask = patch.fieldMask(index);
+                if ((mask & EntityPatchView.X) != 0) data.put("x", patch.x(index));
+                if ((mask & EntityPatchView.Y) != 0) data.put("y", patch.y(index));
+                if ((mask & EntityPatchView.Z) != 0) data.put("z", patch.z(index));
+                if ((mask & EntityPatchView.VX) != 0) data.put("vx", patch.vx(index));
+                if ((mask & EntityPatchView.VY) != 0) data.put("vy", patch.vy(index));
+                if ((mask & EntityPatchView.VZ) != 0) data.put("vz", patch.vz(index));
+                if ((mask & EntityPatchView.DIMENSION) != 0) data.put("dimension", patch.dimension(index));
+                if ((mask & EntityPatchView.TYPE) != 0) data.put("entityType", patch.entityType(index));
+                if ((mask & EntityPatchView.NAME) != 0) data.put("entityName", patch.entityName(index));
+                if ((mask & EntityPatchView.WIDTH) != 0) data.put("width", patch.width(index));
+                if ((mask & EntityPatchView.HEIGHT) != 0) data.put("height", patch.height(index));
+                values.put(patch.upsertId(index).toString(), data);
+            }
+            entityReports.add(values);
+            return true;
+        }
+
+        @Override
+        public void sendTypedEntityKeepaliveIfNeeded(
+                long expectedEpoch, UUID submitPlayerId, java.util.Collection<UUID> entityIds) {
         }
 
         @Override

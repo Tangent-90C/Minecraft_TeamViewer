@@ -26,15 +26,19 @@ Adapter 通过 `java.field/java.method` 解析并缓存 `RegionManager.regionMan
 
 ## Data conversion / 数据转换
 
-`capture()` reads the manager's chunk-to-region map. It supports both public `ChunkPos.x/z`
-fields and newer `x()/z()` accessors, converts the RGB integer to `#RRGGBB`, marks core chunks
-with `╫`, and returns `coordinateSpace="absolute_chunk"`. The dimension comes from
-`snapshots.world()`; common normalizes the absolute bounding box and owns network reporting.
+`capture()` reads the manager's chunk-to-region map. Besides readable `ChunkPos.x/z`,
+`x()/z()` and JavaBean getters, it explicitly supports SimMC 1.0.0's production Fabric
+intermediary signature: `net.minecraft.class_1923.field_9181/field_9180`. Fabric does not remap
+class or member names stored in Lua strings. The adapter converts the RGB integer to `#RRGGBB`,
+marks core chunks with `╫`, and returns `coordinateSpace="absolute_chunk"`. The dimension comes
+from `snapshots.world()`; common normalizes the absolute bounding box and owns network reporting.
 
-`capture()` 读取区域管理器的区块映射，同时兼容公开 `ChunkPos.x/z` 字段和新版
-`x()/z()` 方法；颜色整数转为 `#RRGGBB`，核心区块使用 `╫`，并返回
-`coordinateSpace="absolute_chunk"`。维度来自 `snapshots.world()`；绝对边界归一化与网络
-上报由 common 负责。
+`capture()` 读取区域管理器的区块映射。除了可读的 `ChunkPos.x/z`、`x()/z()` 和 JavaBean
+getter，还明确兼容 SimMC 1.0.0 正式 Fabric 包的 intermediary 签名：
+`net.minecraft.class_1923.field_9181/field_9180`。Fabric 不会重映射 Lua 字符串中保存的类名
+或成员名。Adapter 将颜色整数转为 `#RRGGBB`，核心区块使用 `╫`，并返回
+`coordinateSpace="absolute_chunk"`。维度来自 `snapshots.world()`；绝对边界归一化与网络上报
+由 common 负责。
 
 ## Failure and lifecycle / 故障与生命周期
 

@@ -5,6 +5,8 @@ import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageId;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageView;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureFrame;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -25,6 +27,18 @@ public final class AdapterTck {
         probe("tab player snapshot", issues, () -> {
             if (adapters.gameClientBridge().captureTabPlayerSnapshot() == null) {
                 throw new IllegalStateException("returned null");
+            }
+        });
+        probe("typed entity snapshot", issues, () -> {
+            EntityCaptureFrame frame = new EntityCaptureFrame();
+            adapters.gameClientBridge().captureEntityFrame(frame, EntityUploadFilter.ALLOW_ALL);
+            if (!frame.complete()) throw new IllegalStateException("capture did not finish");
+            for (int index = 0; index < frame.size(); index++) {
+                if (frame.id(index) == null) throw new IllegalStateException("entity UUID is null");
+                String type = frame.type(index);
+                if (type == null || type.isBlank() || !type.contains(":")) {
+                    throw new IllegalStateException("entity type is not a stable namespaced ID: " + type);
+                }
             }
         });
         probe("scoreboard snapshot", issues, () -> {

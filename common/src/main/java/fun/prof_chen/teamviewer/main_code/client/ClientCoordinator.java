@@ -5,9 +5,11 @@ import fun.prof_chen.teamviewer.main_code.client.bridge.ClientControlGateway;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
-import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureFrame;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityReportPipeline;
+import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
@@ -35,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -55,6 +58,11 @@ public final class ClientCoordinator implements ClientControlGateway {
     private volatile boolean enabled;
     private int reportTickCounter;
     private int tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+    private int entityReportTickCounter;
+    private int lastScannedEntityCount;
+    private long lastEntityOutboundEpoch = Long.MIN_VALUE;
+    private long lastEntityFilterRevision = Long.MIN_VALUE;
+    private boolean entityUploadWasActive;
     private boolean tabConnectionObserved;
     private int entityDeathTickCounter;
     private SharedWaypointRepository waypointRepository;
@@ -70,11 +78,13 @@ public final class ClientCoordinator implements ClientControlGateway {
     private BattleMapCoordinator battleMapCoordinator;
     private IntegrationPluginManager pluginManager;
     private IntegrationRegistry integrationRegistry;
+    private final EntityReportPipeline entityReportPipeline;
 
     public ClientCoordinator(Config config, NetworkManager networkManager, GameClientBridge gameClient) {
         this.config = Objects.requireNonNull(config, "config");
         this.networkManager = Objects.requireNonNull(networkManager, "networkManager");
         this.gameClient = Objects.requireNonNull(gameClient, "gameClient");
+        this.entityReportPipeline = new EntityReportPipeline(networkManager);
     }
 
     public void onEndClientTick() {
@@ -87,6 +97,7 @@ public final class ClientCoordinator implements ClientControlGateway {
             battleMapCoordinator.tick(true, tickWorld);
         }
         sendReportWhenDue();
+        sendEntityReportWhenDue(tickWorld);
         sendTabReportWhenDue(tickWorld);
         cancelWaypointsForDeadEntitiesWhenDue();
         handleMiddleMouseDoubleClick();
@@ -121,6 +132,12 @@ public final class ClientCoordinator implements ClientControlGateway {
         tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
         tabConnectionObserved = false;
         entityDeathTickCounter = 0;
+        entityReportTickCounter = 0;
+        lastScannedEntityCount = 0;
+        lastEntityOutboundEpoch = Long.MIN_VALUE;
+        lastEntityFilterRevision = Long.MIN_VALUE;
+        entityUploadWasActive = false;
+        entityReportPipeline.discardPending();
     }
 
     private void cancelWaypointsForDeadEntitiesWhenDue() {
@@ -364,7 +381,7 @@ public final class ClientCoordinator implements ClientControlGateway {
         }
         reportTickCounter = 0;
 
-        ClientReportSnapshot snapshot = gameClient.captureReportSnapshot(config.isUploadEntities());
+        ClientReportSnapshot snapshot = gameClient.captureReportSnapshot(false);
         if (snapshot.localPlayerId() == null || !snapshot.localPlayerAlive()) {
             return;
         }
@@ -376,13 +393,67 @@ public final class ClientCoordinator implements ClientControlGateway {
         }
         networkManager.sendPlayersUpdate(submitPlayerId, players);
 
-        if (config.isUploadEntities()) {
-            Map<String, Map<String, Object>> entities = new LinkedHashMap<>();
-            for (EntitySnapshot entity : snapshot.entities()) {
-                entities.put(entity.id(), entity.toProtocolMap());
-            }
-            networkManager.sendEntitiesUpdate(submitPlayerId, entities);
+    }
+
+    private void sendEntityReportWhenDue(ClientWorldSnapshot world) {
+        if (!networkManager.isConnected() || world == null || world.localPlayerId() == null) {
+            entityUploadWasActive = false;
+            entityReportPipeline.discardPending();
+            return;
         }
+        if (!config.isUploadEntities()) {
+            long disabledEpoch = networkManager.getOutboundEpoch();
+            if (entityUploadWasActive || disabledEpoch != lastEntityOutboundEpoch) {
+                entityReportPipeline.discardPending();
+                networkManager.clearTypedEntitySource(world.localPlayerId());
+                lastEntityOutboundEpoch = networkManager.getOutboundEpoch();
+            }
+            entityUploadWasActive = false;
+            entityReportTickCounter = 0;
+            return;
+        }
+
+        EntityUploadFilter filter = config.getEntityUploadFilter();
+        long epoch = networkManager.getOutboundEpoch();
+        boolean activated = !entityUploadWasActive;
+        boolean connectionChanged = epoch != lastEntityOutboundEpoch;
+        boolean filterChanged = filter.revision() != lastEntityFilterRevision;
+        boolean refreshRequested = networkManager.hasPendingEntityRefreshIds();
+        entityUploadWasActive = true;
+        entityReportTickCounter++;
+        int interval = entityReportInterval();
+        if (!activated && !connectionChanged && !filterChanged && !refreshRequested
+                && entityReportTickCounter < interval) {
+            return;
+        }
+
+        EntityCaptureFrame frame = entityReportPipeline.acquire();
+        if (frame == null) {
+            return;
+        }
+        gameClient.captureEntityFrame(frame, filter);
+        if (!frame.complete() || frame.submitPlayerId() == null) {
+            entityReportPipeline.submit(frame);
+            return;
+        }
+        Set<String> refreshIds = refreshRequested
+                ? networkManager.drainPendingEntityRefreshIds() : Set.of();
+        frame.prepareSubmission(epoch, filter.revision(), refreshIds);
+        lastScannedEntityCount = frame.scannedEntityCount();
+        lastEntityOutboundEpoch = epoch;
+        lastEntityFilterRevision = filter.revision();
+        entityReportTickCounter = 0;
+        entityReportPipeline.submit(frame);
+    }
+
+    private int entityReportInterval() {
+        int negotiated = Math.max(1, networkManager.getNegotiatedReportIntervalTicks());
+        if (Config.ENTITY_REPORT_FIXED.equals(config.getEntityReportMode())) {
+            return Math.max(negotiated, config.getEntityReportFixedIntervalTicks());
+        }
+        if (lastScannedEntityCount > 1024) return Math.max(negotiated, 20);
+        if (lastScannedEntityCount > 256) return Math.max(negotiated, 10);
+        return negotiated;
     }
 
     private void sendTabReportWhenDue(ClientWorldSnapshot world) {
@@ -565,6 +636,7 @@ public final class ClientCoordinator implements ClientControlGateway {
     }
 
     private void clearRuntimeState() {
+        entityReportPipeline.discardPending();
         if (remotePlayerRepository != null) remotePlayerRepository.clear();
         if (waypointRepository != null) waypointRepository.clear();
         if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.clear();
@@ -575,5 +647,9 @@ public final class ClientCoordinator implements ClientControlGateway {
         lastMarkedFingerprint = "";
         middlePressedLastTick = false;
         lastMiddleClickAt = 0L;
+    }
+
+    public void shutdown() {
+        entityReportPipeline.close();
     }
 }

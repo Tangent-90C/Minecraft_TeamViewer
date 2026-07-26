@@ -49,6 +49,9 @@ public final class ConfigUiSession implements ConfigUiController {
     private boolean openDirectoryFailed;
     private int pluginListPage;
     private int disabledPluginListPage;
+    private int entityFilterListPage;
+    private String editingEntityFilterKind = Config.ENTITY_FILTER_ALLOW_TYPE;
+    private String editingEntityFilterOriginalValue = "";
 
     public ConfigUiSession(ClientControlGateway control) {
         this.control = Objects.requireNonNull(control, "control");
@@ -62,6 +65,9 @@ public final class ConfigUiSession implements ConfigUiController {
             case ROOT -> rootPage(width, height);
             case DISPLAY -> displayPage(width, height);
             case NETWORK -> networkPage(width, height);
+            case ENTITY_UPLOAD -> entityUploadPage(width, height);
+            case ENTITY_FILTERS -> entityFiltersPage(width, height);
+            case ENTITY_FILTER_EDIT -> entityFilterEditPage(width, height);
             case COLOR -> colorPage(width, height);
             case WAYPOINT -> waypointPage(width, height);
             case WAYPOINT_SHAPE -> waypointShapePage(width, height);
@@ -93,12 +99,15 @@ public final class ConfigUiSession implements ConfigUiController {
         if (id == null) {
             return ConfigUiAction.stay();
         }
+        if (id.isEntityRuleAction()) return activateEntityRuleAction(id);
         if (id.isPluginAction()) return activatePluginAction(id);
         if (id.isPluginSetting()) return activatePluginSetting(id);
         return switch (id.value()) {
             case "OPEN_DISPLAY" -> ConfigUiAction.open(ConfigPageId.DISPLAY);
             case "OPEN_NETWORK" -> ConfigUiAction.open(ConfigPageId.NETWORK);
             case "OPEN_PLUGINS" -> ConfigUiAction.open(ConfigPageId.PLUGINS);
+            case "OPEN_ENTITY_UPLOAD" -> ConfigUiAction.open(ConfigPageId.ENTITY_UPLOAD);
+            case "OPEN_ENTITY_FILTERS" -> ConfigUiAction.open(ConfigPageId.ENTITY_FILTERS);
             case "OPEN_COLOR" -> ConfigUiAction.open(ConfigPageId.COLOR);
             case "OPEN_WAYPOINT" -> ConfigUiAction.open(ConfigPageId.WAYPOINT);
             case "OPEN_WAYPOINT_SHAPE" -> ConfigUiAction.open(ConfigPageId.WAYPOINT_SHAPE);
@@ -127,6 +136,21 @@ public final class ConfigUiSession implements ConfigUiController {
             case "ENABLE_LONG_TERM_WAYPOINT" -> toggle(config.isEnableLongTermWaypoint(), config::setEnableLongTermWaypoint);
             case "WAYPOINT_UI_STYLE" -> cycleWaypointStyle();
             case "UPLOAD_ENTITIES" -> toggle(config.isUploadEntities(), config::setUploadEntities);
+            case "ENTITY_REPORT_MODE" -> {
+                config.setEntityReportMode(Config.ENTITY_REPORT_AUTO.equals(config.getEntityReportMode())
+                        ? Config.ENTITY_REPORT_FIXED : Config.ENTITY_REPORT_AUTO);
+                config.save();
+                yield ConfigUiAction.stay();
+            }
+            case "ENTITY_FILTER_PREVIOUS" -> {
+                entityFilterListPage = Math.max(0, entityFilterListPage - 1);
+                yield ConfigUiAction.reload();
+            }
+            case "ENTITY_FILTER_NEXT" -> {
+                entityFilterListPage++;
+                yield ConfigUiAction.reload();
+            }
+            case "ENTITY_FILTER_SAVE" -> saveEntityFilterRule();
             case "UPLOAD_SHARED_WAYPOINTS" -> toggle(config.isUploadSharedWaypoints(), config::setUploadSharedWaypoints);
             case "USE_SYSTEM_PROXY" -> toggle(config.isUseSystemProxy(), config::setUseSystemProxy);
             case "PREFER_LOCAL_DATA" -> toggle(config.isPreferLocalDataForRender(), config::setPreferLocalDataForRender);
@@ -229,6 +253,8 @@ public final class ConfigUiSession implements ConfigUiController {
         textValues.put(TAMPERMONKEY_BEAM_WIDTH, String.valueOf(config.getTampermonkeyBeamWidth()));
         textValues.put(TAMPERMONKEY_BEAM_HEIGHT, String.valueOf(config.getTampermonkeyBeamHeight()));
         textValues.put(UPDATE_INTERVAL, String.valueOf(config.getUpdateInterval()));
+        textValues.put(ENTITY_REPORT_FIXED_INTERVAL, String.valueOf(config.getEntityReportFixedIntervalTicks()));
+        textValues.put(ENTITY_FILTER_VALUE, "");
         textValues.put(BATTLE_MAP_UPDATE_INTERVAL, String.valueOf(config.getBattleMapUpdateIntervalTicks()));
         textValues.put(BATTLE_MAP_KEEPALIVE_INTERVAL, String.valueOf(config.getBattleMapKeepaliveIntervalSeconds()));
         textValues.put(BATTLE_MAP_CACHE_RETENTION, String.valueOf(config.getBattleMapCacheRetentionSeconds()));
@@ -357,8 +383,122 @@ public final class ConfigUiSession implements ConfigUiController {
                 tr("screen.mc_teamviewer.config.packet_capture_page").append(
                         control.getNetworkManager().isPacketDumpCaptureActive() ? " [RUN]" : " [IDLE]"), null, true));
         y += 25;
+        c.add(button(OPEN_ENTITY_UPLOAD, left, y, column * 2 + 8,
+                "screen.mc_teamviewer.config.entity_upload_settings", null));
+        y += 25;
         c.add(button(BACK, left, y, column * 2 + 8, "screen.mc_teamviewer.config.back", null));
         return new ConfigPageView(ConfigPageId.NETWORK, tr("screen.mc_teamviewer.network_config.title"), start - 30, c);
+    }
+
+    private ConfigPageView entityUploadPage(int width, int height) {
+        int x = (width - 346) / 2;
+        int right = x + 176;
+        int y = Math.max(48, (height - 180) / 2);
+        List<ConfigControlView> controls = new ArrayList<>();
+        controls.add(toggleButton(UPLOAD_ENTITIES, x, y, 170,
+                "screen.mc_teamviewer.config.upload_entities", config.isUploadEntities()));
+        String modeKey = Config.ENTITY_REPORT_FIXED.equals(config.getEntityReportMode())
+                ? "screen.mc_teamviewer.entity_upload.mode.fixed"
+                : "screen.mc_teamviewer.entity_upload.mode.auto";
+        controls.add(ConfigControlView.button(ENTITY_REPORT_MODE, new UiRect(right, y, 170, HEIGHT),
+                UiText.translatable("screen.mc_teamviewer.config.value",
+                        tr("screen.mc_teamviewer.entity_upload.mode"), tr(modeKey)),
+                tr("screen.mc_teamviewer.entity_upload.mode.tooltip"), true));
+        y += 34;
+        controls.add(field(ENTITY_REPORT_FIXED_INTERVAL, x, y, 170,
+                "screen.mc_teamviewer.entity_upload.fixed_interval",
+                "screen.mc_teamviewer.entity_upload.fixed_interval_hint",
+                "screen.mc_teamviewer.entity_upload.fixed_interval.tooltip", 4));
+        controls.add(button(OPEN_ENTITY_FILTERS, right, y, 170,
+                "screen.mc_teamviewer.entity_upload.filters", null));
+        y += 42;
+        controls.add(ConfigControlView.text(ENTITY_FILTER_PAGE_STATUS, new UiRect(x, y, 346, HEIGHT),
+                UiText.translatable("screen.mc_teamviewer.entity_upload.filter_count",
+                        UiText.literal(String.valueOf(config.entityFilterRuleCount()))),
+                null, 0xAAAAAA, true, ConfigControlView.TextAlignment.CENTER));
+        y += 28;
+        controls.add(button(BACK, x, y, 346, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.ENTITY_UPLOAD,
+                tr("screen.mc_teamviewer.entity_upload.title"), 24, controls);
+    }
+
+    private ConfigPageView entityFiltersPage(int width, int height) {
+        int x = (width - 430) / 2;
+        int y = 42;
+        int pageSize = Math.max(4, Math.min(8, (height - 180) / 24));
+        List<EntityFilterRow> rows = entityFilterRows();
+        int pages = Math.max(1, (rows.size() + pageSize - 1) / pageSize);
+        entityFilterListPage = Math.min(entityFilterListPage, pages - 1);
+        int from = entityFilterListPage * pageSize;
+        int to = Math.min(rows.size(), from + pageSize);
+        List<ConfigControlView> controls = new ArrayList<>();
+        for (int index = from; index < to; index++) {
+            EntityFilterRow row = rows.get(index);
+            controls.add(ConfigControlView.button(
+                    ConfigControlId.entityRule("open", row.kind(), row.value()),
+                    new UiRect(x, y, 350, HEIGHT),
+                    UiText.translatable("screen.mc_teamviewer.entity_upload.filter_row",
+                            tr(entityFilterKindKey(row.kind())), UiText.literal(row.value())),
+                    null, true));
+            controls.add(ConfigControlView.button(
+                    ConfigControlId.entityRule("delete", row.kind(), row.value()),
+                    new UiRect(x + 360, y, 70, HEIGHT),
+                    tr("screen.mc_teamviewer.entity_upload.delete_rule"), null, true));
+            y += 24;
+        }
+        if (rows.isEmpty()) {
+            controls.add(ConfigControlView.text(ENTITY_FILTER_EMPTY, new UiRect(x, y, 430, HEIGHT),
+                    tr("screen.mc_teamviewer.entity_upload.filters_empty"), null,
+                    0xAAAAAA, true, ConfigControlView.TextAlignment.CENTER));
+            y += 28;
+        }
+        controls.add(ConfigControlView.button(ENTITY_FILTER_PREVIOUS, new UiRect(x, y, 100, HEIGHT),
+                tr("screen.mc_teamviewer.integration_plugin.previous"), null, entityFilterListPage > 0));
+        controls.add(ConfigControlView.text(ENTITY_FILTER_PAGE_STATUS, new UiRect(x + 110, y, 210, HEIGHT),
+                UiText.translatable("screen.mc_teamviewer.integration_plugin.page",
+                        UiText.literal(String.valueOf(entityFilterListPage + 1)),
+                        UiText.literal(String.valueOf(pages))),
+                null, 0xFFFFFF, true, ConfigControlView.TextAlignment.CENTER));
+        controls.add(ConfigControlView.button(ENTITY_FILTER_NEXT, new UiRect(x + 330, y, 100, HEIGHT),
+                tr("screen.mc_teamviewer.integration_plugin.next"), null, entityFilterListPage + 1 < pages));
+        y += 28;
+        String[] kinds = {
+                Config.ENTITY_FILTER_ALLOW_TYPE, Config.ENTITY_FILTER_DENY_TYPE,
+                Config.ENTITY_FILTER_ALLOW_NAME, Config.ENTITY_FILTER_DENY_NAME
+        };
+        for (int index = 0; index < kinds.length; index++) {
+            controls.add(ConfigControlView.button(
+                    ConfigControlId.entityRule("add", kinds[index], ""),
+                    new UiRect(x + (index % 2) * 217, y + (index / 2) * 24, 213, HEIGHT),
+                    tr(entityFilterAddKey(kinds[index])), null,
+                    config.entityFilterRuleCount() < Config.MAX_ENTITY_FILTER_RULES));
+        }
+        y += 52;
+        controls.add(button(BACK, x, y, 430, "screen.mc_teamviewer.config.back", null));
+        return new ConfigPageView(ConfigPageId.ENTITY_FILTERS,
+                tr("screen.mc_teamviewer.entity_upload.filters_title"), 20, controls);
+    }
+
+    private ConfigPageView entityFilterEditPage(int width, int height) {
+        int x = (width - 360) / 2;
+        int y = Math.max(70, (height - 130) / 2);
+        List<ConfigControlView> controls = new ArrayList<>();
+        controls.add(ConfigControlView.text(ENTITY_FILTER_PAGE_STATUS, new UiRect(x, y, 360, HEIGHT),
+                tr(entityFilterKindKey(editingEntityFilterKind)), null, 0xFFFFFF,
+                true, ConfigControlView.TextAlignment.CENTER));
+        y += 34;
+        controls.add(field(ENTITY_FILTER_VALUE, x, y, 360,
+                "screen.mc_teamviewer.entity_upload.rule_value",
+                entityFilterIsType(editingEntityFilterKind)
+                        ? "screen.mc_teamviewer.entity_upload.type_hint"
+                        : "screen.mc_teamviewer.entity_upload.name_hint",
+                null, Config.MAX_ENTITY_FILTER_VALUE_LENGTH));
+        y += 38;
+        controls.add(button(ENTITY_FILTER_SAVE, x, y, 176,
+                "screen.mc_teamviewer.entity_upload.save_rule", null));
+        controls.add(button(BACK, x + 184, y, 176, "screen.mc_teamviewer.config.cancel", null));
+        return new ConfigPageView(ConfigPageId.ENTITY_FILTER_EDIT,
+                tr("screen.mc_teamviewer.entity_upload.filter_edit_title"), 24, controls);
     }
 
     private ConfigPageView waypointPage(int width, int height) {
@@ -752,6 +892,7 @@ public final class ConfigUiSession implements ConfigUiController {
         switch (page) {
             case DISPLAY -> applyDisplayFields();
             case NETWORK -> applyNetworkFields();
+            case ENTITY_UPLOAD -> applyEntityUploadFields();
             case COLOR -> applyColorFields();
             case WAYPOINT -> applyWaypointFields();
             case WAYPOINT_SHAPE -> applyWaypointShapeFields();
@@ -875,6 +1016,63 @@ public final class ConfigUiSession implements ConfigUiController {
             int retention = Integer.parseInt(value(BATTLE_MAP_CACHE_RETENTION).trim());
             if (retention > 0) config.setBattleMapCacheRetentionSeconds(retention);
         } catch (NumberFormatException ignored) { }
+    }
+
+    private void applyEntityUploadFields() {
+        try {
+            String value = value(ENTITY_REPORT_FIXED_INTERVAL).trim();
+            if (!value.isEmpty()) config.setEntityReportFixedIntervalTicks(Integer.parseInt(value));
+            config.save();
+        } catch (NumberFormatException ignored) { }
+    }
+
+    private ConfigUiAction activateEntityRuleAction(ConfigControlId id) {
+        String action = id.entityRuleAction();
+        if ("delete".equals(action)) {
+            if (config.removeEntityFilterRule(id.entityRuleKind(), id.entityRuleValue())) config.save();
+            return ConfigUiAction.reload();
+        }
+        if ("add".equals(action) || "open".equals(action)) {
+            editingEntityFilterKind = id.entityRuleKind();
+            editingEntityFilterOriginalValue = "open".equals(action) ? id.entityRuleValue() : "";
+            textValues.put(ENTITY_FILTER_VALUE, editingEntityFilterOriginalValue);
+            return ConfigUiAction.open(ConfigPageId.ENTITY_FILTER_EDIT);
+        }
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction saveEntityFilterRule() {
+        String value = value(ENTITY_FILTER_VALUE);
+        if (!editingEntityFilterOriginalValue.isEmpty()) {
+            config.removeEntityFilterRule(editingEntityFilterKind, editingEntityFilterOriginalValue);
+        }
+        boolean saved = config.addEntityFilterRule(editingEntityFilterKind, value);
+        if (!saved && !editingEntityFilterOriginalValue.isEmpty()) {
+            config.addEntityFilterRule(editingEntityFilterKind, editingEntityFilterOriginalValue);
+        }
+        config.save();
+        return saved ? ConfigUiAction.open(ConfigPageId.ENTITY_FILTERS) : ConfigUiAction.stay();
+    }
+
+    private List<EntityFilterRow> entityFilterRows() {
+        List<EntityFilterRow> rows = new ArrayList<>();
+        config.getEntityAllowedTypes().forEach(value -> rows.add(new EntityFilterRow(Config.ENTITY_FILTER_ALLOW_TYPE, value)));
+        config.getEntityDeniedTypes().forEach(value -> rows.add(new EntityFilterRow(Config.ENTITY_FILTER_DENY_TYPE, value)));
+        config.getEntityAllowedNames().forEach(value -> rows.add(new EntityFilterRow(Config.ENTITY_FILTER_ALLOW_NAME, value)));
+        config.getEntityDeniedNames().forEach(value -> rows.add(new EntityFilterRow(Config.ENTITY_FILTER_DENY_NAME, value)));
+        return rows;
+    }
+
+    private static boolean entityFilterIsType(String kind) {
+        return Config.ENTITY_FILTER_ALLOW_TYPE.equals(kind) || Config.ENTITY_FILTER_DENY_TYPE.equals(kind);
+    }
+
+    private static String entityFilterKindKey(String kind) {
+        return "screen.mc_teamviewer.entity_upload.filter_kind." + kind;
+    }
+
+    private static String entityFilterAddKey(String kind) {
+        return "screen.mc_teamviewer.entity_upload.add_" + kind;
     }
 
     private void applyColorFields() {
@@ -1181,4 +1379,6 @@ public final class ConfigUiSession implements ConfigUiController {
     private interface BooleanSetter {
         void set(boolean value);
     }
+
+    private record EntityFilterRow(String kind, String value) { }
 }

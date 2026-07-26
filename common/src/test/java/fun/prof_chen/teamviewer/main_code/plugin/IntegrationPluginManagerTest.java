@@ -651,6 +651,8 @@ class IntegrationPluginManagerTest {
                 new com.simmc.mod.region.Region(0x12ABEF, true));
         managerObject.put(new com.simmc.mod.region.TestChunkPos(13, -4),
                 new com.simmc.mod.region.Region(0x010203, false));
+        managerObject.put(new net.minecraft.class_1923(-27, 31),
+                new com.simmc.mod.region.Region(0xFEDCBA, false));
         com.simmc.mod.region.RegionManager.regionManager = managerObject;
         PluginHostAccess host = new PluginHostAccess(
                 () -> new TestWorld("minecraft:overworld"), null, null, null);
@@ -664,9 +666,11 @@ class IntegrationPluginManagerTest {
         BattleMapSourceSnapshot snapshot = registry.activeBattleMapSource(IntegrationIds.SIMMC_BATTLE_MAP)
                 .capture().orElseThrow();
         assertEquals(BattleMapSourceSnapshot.CoordinateSpace.ABSOLUTE_CHUNK, snapshot.coordinateSpace());
-        assertEquals(2, snapshot.cells().size());
+        assertEquals(3, snapshot.cells().size());
         assertTrue(snapshot.cells().stream().anyMatch(cell -> cell.chunkX() == 12 && cell.chunkZ() == -4
                 && "#12ABEF".equals(cell.colorRaw()) && "╫".equals(cell.symbol())));
+        assertTrue(snapshot.cells().stream().anyMatch(cell -> cell.chunkX() == -27 && cell.chunkZ() == 31
+                && "#FEDCBA".equals(cell.colorRaw()) && "".equals(cell.symbol())));
         pluginManager.shutdown();
         com.simmc.mod.region.RegionManager.regionManager = null;
     }
