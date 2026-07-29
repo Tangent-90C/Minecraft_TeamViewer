@@ -13,4 +13,9 @@ public final class WaypointFactory {
         value.setPersistent(persistent);
         return value;
     }
+
+    public static Waypoint createWaypoint(
+            String modId, BlockPos position, String name, World.Key dimension, boolean persistent) {
+        return createClientWaypoint(modId, position, name, dimension, persistent);
+    }
 }

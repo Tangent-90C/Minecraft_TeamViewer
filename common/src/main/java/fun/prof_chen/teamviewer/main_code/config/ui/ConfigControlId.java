@@ -154,6 +154,10 @@ public record ConfigControlId(String value) {
     public static final ConfigControlId PACKET_CAPTURE_START = fixed("PACKET_CAPTURE_START");
     public static final ConfigControlId PACKET_CAPTURE_STOP = fixed("PACKET_CAPTURE_STOP");
     public static final ConfigControlId PLUGIN_RESCAN = fixed("PLUGIN_RESCAN");
+    public static final ConfigControlId PLUGIN_TAB_INSTALLED = fixed("PLUGIN_TAB_INSTALLED");
+    public static final ConfigControlId PLUGIN_TAB_DISABLED = fixed("PLUGIN_TAB_DISABLED");
+    public static final ConfigControlId PLUGIN_COMPACT_BACK = fixed("PLUGIN_COMPACT_BACK");
+    public static final ConfigControlId PLUGIN_DIALOG_CLOSE = fixed("PLUGIN_DIALOG_CLOSE");
     public static final ConfigControlId PLUGIN_PREVIOUS = fixed("PLUGIN_PREVIOUS");
     public static final ConfigControlId PLUGIN_NEXT = fixed("PLUGIN_NEXT");
     public static final ConfigControlId PLUGIN_PAGE_STATUS = fixed("PLUGIN_PAGE_STATUS");

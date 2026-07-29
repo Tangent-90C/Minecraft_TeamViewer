@@ -150,6 +150,7 @@ def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
             }
             [
                     minecraft: versionManifest.getProperty("${target}.minecraft_target_version"),
+                    minecraftRange: versionManifest.getProperty("${target}.fabric_minecraft_version_range"),
                     adapter: versionManifest.getProperty("${target}.minecraft_adapter_version"),
                     internalAdapterVersion: adapterMod.version,
                     gameJavaVersion: versionManifest.getProperty("${target}.game_java_version").toInteger(),
@@ -255,7 +256,7 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
                             adapterZip.getInputStream(adapterZip.getEntry("fabric.mod.json")))
                     if (adapterMod.id != "team-view-relay-adapter"
                             || adapterMod.version != target.internalAdapterVersion
-                            || adapterMod.depends?.minecraft != target.minecraft
+                            || adapterMod.depends?.minecraft != target.minecraftRange
                             || adapterMod.depends?.java != ">=${target.adapterJavaRelease}") {
                         throw new GradleException("Invalid nested adapter metadata for ${target.minecraft}")
                     }

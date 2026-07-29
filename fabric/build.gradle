@@ -26,6 +26,7 @@ def profileProperty = { String name ->
     value
 }
 def minecraftTargetVersion = profileProperty("minecraft_target_version")
+def fabricMinecraftVersionRange = profileProperty("fabric_minecraft_version_range")
 def minecraftAdapterVersion = profileProperty("minecraft_adapter_version")
 def targetJavaVersion = profileProperty("adapter_java_release").toInteger()
 def gameJavaVersion = profileProperty("game_java_version").toInteger()
@@ -36,8 +37,12 @@ def fabricApiModId = profileProperty("fabric_api_mod_id")
 def mappingsMode = profileProperty("mappings_mode")
 def modmenuVersion = profileProperty("modmenu_version")
 def journeyMapDependency = profileProperty("journeymap_dependency")
-def journeyMapApiJar = layout.buildDirectory.file(
-        "generated/journeymap-api/META-INF/jars/journeymap-api-fabric-2.0.0-26.1.jar")
+def journeyMapApiNestedPath = mappingsMode == "none"
+        ? profileProperty("journeymap_api_nested_path")
+        : null
+def journeyMapApiJar = mappingsMode == "none"
+        ? layout.buildDirectory.file("generated/journeymap-api/${journeyMapApiNestedPath}")
+        : null
 
 apply plugin: mappingsMode == "yarn" ? "fabric-loom" : "net.fabricmc.fabric-loom"
 
@@ -172,7 +177,7 @@ if (mappingsMode == "none") {
     }
     tasks.register("extractJourneyMapApi", Copy) {
         from({ zipTree(configurations.journeyMapApiBundle.singleFile) }) {
-            include "META-INF/jars/journeymap-api-fabric-2.0.0-26.1.jar"
+            include journeyMapApiNestedPath
         }
         into layout.buildDirectory.dir("generated/journeymap-api")
     }
@@ -183,7 +188,7 @@ if (mappingsMode == "none") {
 
 processResources {
     inputs.property "version", project.version
-    inputs.property "minecraft_version", minecraftTargetVersion
+    inputs.property "minecraft_version", fabricMinecraftVersionRange
     inputs.property "loader_version", loaderVersion
     inputs.property "fabric_api_mod_id", fabricApiModId
     inputs.property "java_version", gameJavaVersion
@@ -191,7 +196,7 @@ processResources {
 
     filesMatching("fabric.mod.json") {
         expand "version": project.version,
-                "minecraft_version": minecraftTargetVersion,
+                "minecraft_version": fabricMinecraftVersionRange,
                 "loader_version": loaderVersion,
                 "fabric_api_mod_id": fabricApiModId,
                 "java_version": gameJavaVersion
@@ -378,7 +383,7 @@ def generateAdapterMetadata = tasks.register("generateAdapterMetadata") {
                 environment: "client",
                 depends: [
                         fabricloader: ">=${loaderVersion}",
-                        minecraft: minecraftTargetVersion,
+                        minecraft: fabricMinecraftVersionRange,
                         java: ">=${targetJavaVersion}",
                         (fabricApiModId): "*"
                 ],
@@ -514,7 +519,7 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             if (descriptorEntry == null) throw new GradleException("Standalone is missing fabric.mod.json")
             def descriptor = new groovy.json.JsonSlurper().parse(zip.getInputStream(descriptorEntry))
             if (descriptor.id != "team-view-relay"
-                    || descriptor.depends?.minecraft != minecraftTargetVersion
+                    || descriptor.depends?.minecraft != fabricMinecraftVersionRange
                     || descriptor.depends?.java != ">=${gameJavaVersion}") {
                 throw new GradleException("Standalone metadata does not match target ${minecraftTargetVersion}")
             }

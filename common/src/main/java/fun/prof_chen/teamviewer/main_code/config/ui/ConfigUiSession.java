@@ -35,6 +35,7 @@ public final class ConfigUiSession implements ConfigUiController {
 
     private final ClientControlGateway control;
     private final Config config;
+    private final PluginManagerUiController pluginManager;
     private final Map<ConfigControlId, String> textValues = new HashMap<>();
     private String originalUrl;
     private String originalRoomCode;
@@ -56,8 +57,14 @@ public final class ConfigUiSession implements ConfigUiController {
     public ConfigUiSession(ClientControlGateway control) {
         this.control = Objects.requireNonNull(control, "control");
         this.config = Objects.requireNonNull(control.getConfig(), "config");
+        this.pluginManager = new PluginManagerUiSession(control);
         captureRootBaseline();
         initializeTextValues();
+    }
+
+    @Override
+    public PluginManagerUiController pluginManager() {
+        return pluginManager;
     }
 
     public ConfigPageView page(ConfigPageId pageId, int width, int height) {

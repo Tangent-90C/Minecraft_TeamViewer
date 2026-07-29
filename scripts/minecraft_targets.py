@@ -16,6 +16,9 @@ MANIFEST = ROOT / "gradle" / "minecraft-versions.properties"
 GRADLE_PROPERTIES = ROOT / "gradle.properties"
 REQUIRED_PROFILE_KEYS = (
     "minecraft_target_version",
+    "fabric_minecraft_version_range",
+    "neoforge_minecraft_version_range",
+    "neoforge_version_range",
     "minecraft_adapter_version",
     "game_java_version",
     "adapter_java_release",

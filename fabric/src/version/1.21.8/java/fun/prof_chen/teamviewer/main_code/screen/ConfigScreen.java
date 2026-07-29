@@ -119,7 +119,9 @@ public final class ConfigScreen extends Screen {
         switch (action.type()) {
             case STAY -> refreshDynamicControls();
             case RELOAD_PAGE -> MinecraftClient.getInstance().setScreen(new ConfigScreen(parent, session, pageId));
-            case OPEN_PAGE -> MinecraftClient.getInstance().setScreen(new ConfigScreen(this, session, action.targetPage()));
+            case OPEN_PAGE -> MinecraftClient.getInstance().setScreen(action.targetPage() == ConfigPageId.PLUGINS
+                    ? new PluginManagerScreen(this, session.pluginManager())
+                    : new ConfigScreen(this, session, action.targetPage()));
             case CLOSE_TO_PARENT -> MinecraftClient.getInstance().setScreen(parent);
         }
     }

@@ -11,8 +11,10 @@ Java 17 common SDK/runtime, one target adapter and all required nested libraries
 itself and must not expose the internal adapter Mod ID.
 
 The Fabric All-in-One Jar contains the same bootstrap/common/library payload once and one remapped slim
-adapter per target under `META-INF/jars`. Slim adapters are internal build artifacts only. Never
-publish them or make standalone depend on a separately installed adapter Jar.
+adapter per target under `META-INF/jars`. A slim adapter may declare a cross-compiled and verified
+Minecraft compatibility range; its target ID remains the version it was built against. Slim
+adapters are internal build artifacts only. Never publish them or make standalone depend on a
+separately installed adapter Jar.
 
 ## Ownership
 
@@ -49,8 +51,8 @@ and must not be introduced only to satisfy a "latest" version check.
 Loom compiles/remaps each target exactly once. `remapAdapterJar` extracts version classes,
 `ClientAdapterFactory` service metadata and target Mixin resources from that production output.
 Standalone keeps the production adapter flattened with shared nested libraries. All-in-One keeps
-each slim adapter isolated as a nested Mod candidate with ID `team-view-relay-adapter` and exact
-Minecraft/Java/Loader/Fabric API constraints.
+each slim adapter isolated as a nested Mod candidate with ID `team-view-relay-adapter` and verified
+Minecraft plus Java/Loader/Fabric API constraints.
 
 Shared common and third-party nested Jars use Loom's `processIncludeJars` output so each carries
 Fabric Loader metadata. The `universal` project does not apply Loom and never recompiles/remaps an
@@ -70,8 +72,9 @@ common business behavior.
 
 ## Required checks
 
-Run `task build`. It must leave exactly five Loader-labelled Jars in `build-artifacts`: two Fabric
-standalone, Fabric All-in-One and two NeoForge standalone. Legacy filenames without `Fabric` or
+Run `task build`. It must leave one Fabric and one NeoForge standalone per manifest target, plus
+one Fabric All-in-One Jar, in `build-artifacts`. With the current three targets this is seven
+Loader-labelled Jars. Legacy filenames without `Fabric` or
 `NeoForge` are forbidden. Fabric adapter hashes and target data in `META-INF/teamviewer/targets.json` must match
 the nested bytes. Shared libraries occur once, root/shared bytecode is Java 17-compatible, each
 adapter has exactly one Factory provider and non-empty Mixin configuration, and no slim adapter

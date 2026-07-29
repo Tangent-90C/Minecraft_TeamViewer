@@ -1,5 +1,5 @@
--- JourneyMap 1.21.8 service → Lua Adapter → common capability contracts.
--- JourneyMap 1.21.8 入口服务 → Lua Adapter → common 能力契约。
+-- JourneyMap 1.21.6-1.21.8 service → Lua Adapter → common capability contracts.
+-- JourneyMap 1.21.6-1.21.8 入口服务 → Lua Adapter → common 能力契约。
 
 local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil

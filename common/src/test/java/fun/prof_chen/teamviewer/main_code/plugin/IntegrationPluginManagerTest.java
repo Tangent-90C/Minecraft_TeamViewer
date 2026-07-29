@@ -628,20 +628,29 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
-    void knownFabric2612EntrypointsLoadAsLuaAdapters() {
-        IntegrationPluginManager manager = new IntegrationPluginManager(
-                new EnvironmentRuntime(temporary, "fabric", "26.1.2"), completeRegistry(),
-                Config.load(temporary.resolve("config.json")));
+    void widenedFabricEntrypointsLoadOnlyVerifiedAdapters() {
+        for (String version : List.of("1.21.6", "1.21.7", "26.1", "26.1.1", "26.1.2", "26.2")) {
+            IntegrationPluginManager manager = new IntegrationPluginManager(
+                    new EnvironmentRuntime(temporary, "fabric", version), completeRegistry(),
+                    Config.load(temporary.resolve("config-" + version + ".json")));
 
-        for (String pluginId : List.of(
-                IntegrationIds.PLUGIN_JOURNEYMAP, IntegrationIds.PLUGIN_XAERO,
-                IntegrationIds.PLUGIN_SIMMC, IntegrationIds.PLUGIN_NODEMC)) {
-            PluginSnapshot snapshot = manager.snapshot(pluginId);
-            assertEquals(PluginRuntimeStatus.ACTIVE, snapshot.runtimeStatus(), pluginId + ": " + snapshot.detail());
-            assertTrue(snapshot.capabilities().stream().allMatch(value ->
-                    value.implementationSource() == IntegrationImplementationSource.LUA), pluginId);
+            for (String pluginId : List.of(
+                    IntegrationIds.PLUGIN_JOURNEYMAP, IntegrationIds.PLUGIN_XAERO,
+                    IntegrationIds.PLUGIN_NODEMC)) {
+                PluginSnapshot snapshot = manager.snapshot(pluginId);
+                assertEquals(PluginRuntimeStatus.ACTIVE, snapshot.runtimeStatus(),
+                        version + " " + pluginId + ": " + snapshot.detail());
+                assertTrue(snapshot.capabilities().stream().allMatch(value ->
+                        value.implementationSource() == IntegrationImplementationSource.LUA),
+                        version + " " + pluginId);
+            }
+            PluginSnapshot simmc = manager.snapshot(IntegrationIds.PLUGIN_SIMMC);
+            assertEquals(PluginRuntimeStatus.ACTIVE, simmc.runtimeStatus(), version);
+            assertTrue(simmc.capabilities().stream().allMatch(value ->
+                    value.status() == IntegrationSupportStatus.UNSUPPORTED_VERSION
+                            && !value.detail().isBlank()), version);
+            manager.shutdown();
         }
-        manager.shutdown();
     }
 
     @Test
@@ -723,6 +732,31 @@ class IntegrationPluginManagerTest {
 
         pluginManager.shutdown();
         assertEquals(1, api.waypoints().size(), "disable must leave the user's local waypoint alone");
+    }
+
+    @Test
+    void journeyMap262UsesRenamedWaypointFactory() {
+        JourneyMapApiStub api = new JourneyMapApiStub();
+        UUID localId = UUID.randomUUID();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(localId, "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager pluginManager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.2", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("config.json")), host);
+
+        UUID remoteId = UUID.randomUUID();
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.sync(Map.of(remoteId,
+                        new RemotePlayerInfo(remoteId, new Position3D(4.5, 70, -8.5),
+                                "minecraft:overworld", "26.2 Remote")), true));
+
+        assertEquals(2, api.waypoints().size());
+        assertTrue(pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        pluginManager.shutdown();
     }
 
     @Test

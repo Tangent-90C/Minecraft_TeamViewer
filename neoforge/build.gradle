@@ -20,8 +20,10 @@ def profile = { String key ->
     value
 }
 def minecraftVersion = profile("minecraft_target_version")
+def minecraftVersionRange = profile("neoforge_minecraft_version_range")
 def adapterVersion = profile("neoforge_adapter_version")
 def neoForgeVersion = profile("neoforge_version")
+def neoForgeVersionRange = profile("neoforge_version_range")
 def targetJavaRelease = profile("adapter_java_release").toInteger()
 // FML requires the metadata version to start with a digit. Keep the public
 // artifact version unchanged while stripping the display-only leading "v".
@@ -95,15 +97,15 @@ dependencies {
 
 processResources {
     inputs.property("mod_version", neoForgeModVersion)
-    inputs.property("minecraft_version", minecraftVersion)
-    inputs.property("neoforge_version", neoForgeVersion)
+    inputs.property("minecraft_version", minecraftVersionRange)
+    inputs.property("neoforge_version", neoForgeVersionRange)
     inputs.property("java_version", targetJavaRelease)
     filteringCharset = "UTF-8"
     filesMatching("META-INF/neoforge.mods.toml") {
         expand(
                 mod_version: neoForgeModVersion,
-                minecraft_version: minecraftVersion,
-                neoforge_version: neoForgeVersion,
+                minecraft_version: minecraftVersionRange,
+                neoforge_version: neoForgeVersionRange,
                 java_version: targetJavaRelease)
     }
     from(rootProject.file("fabric/src/main/resources")) {
@@ -255,8 +257,8 @@ def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
             }
             def descriptor = zip.getInputStream(zip.getEntry("META-INF/neoforge.mods.toml")).getText("UTF-8")
             ["modId=\"team_view_relay\"", "version=\"${neoForgeModVersion}\"",
-             "versionRange=\"[${minecraftVersion}]\"",
-             "versionRange=\"[${neoForgeVersion},)\"", "[features.team_view_relay]",
+             "versionRange=\"${minecraftVersionRange}\"",
+             "versionRange=\"${neoForgeVersionRange}\"", "[features.team_view_relay]",
              "javaVersion=\"[${targetJavaRelease},)\""].each { token ->
                 if (!descriptor.contains(token)) throw new GradleException("NeoForge descriptor missing ${token}")
             }

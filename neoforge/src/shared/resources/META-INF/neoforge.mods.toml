@@ -18,14 +18,14 @@ displayTest="IGNORE_ALL_VERSION"
 [[dependencies.team_view_relay]]
 modId="neoforge"
 type="required"
-versionRange="[${neoforge_version},)"
+versionRange="${neoforge_version}"
 ordering="NONE"
 side="CLIENT"
 
 [[dependencies.team_view_relay]]
 modId="minecraft"
 type="required"
-versionRange="[${minecraft_version}]"
+versionRange="${minecraft_version}"
 ordering="NONE"
 side="CLIENT"
 

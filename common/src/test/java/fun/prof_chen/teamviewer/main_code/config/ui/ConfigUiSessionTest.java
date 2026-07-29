@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.EnumSet;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigUiSessionTest {
@@ -251,6 +253,187 @@ class ConfigUiSessionTest {
         assertEquals(disabled.storageId(), control.deletedStorageId);
     }
 
+    @Test
+    void pluginManagerUsesDenseWideAndCompactLayoutsWithToggleOnlyInTheList() {
+        PluginSnapshot plugin = pluginWithSettings("custom.dense");
+        PluginManagerUiController manager = new ConfigUiSession(
+                new FakeControl(new Config(), plugin)).pluginManager();
+
+        PluginManagerView wide = manager.view(854, 480);
+        assertFalse(wide.compact());
+        assertFalse(wide.compactDetail());
+        assertTrue(wide.listBounds().x() + wide.listBounds().width() <= wide.detailBounds().x());
+        assertTrue(wide.detailBounds().x() + wide.detailBounds().width()
+                <= wide.frame().x() + wide.frame().width());
+        assertEquals(1, wide.items().size());
+        assertTrue(wide.items().get(0).toggleVisible());
+        assertTrue(wide.detail().actions().stream()
+                .noneMatch(action -> "toggle".equals(action.id().pluginAction())));
+        List<ConfigControlId> actionIds = new ArrayList<>(List.of(
+                wide.installedTab().id(), wide.disabledTab().id(),
+                wide.rescanAction().id(), wide.closeAction().id()));
+        wide.items().forEach(item -> {
+            actionIds.add(item.selectId());
+            if (item.toggleId() != null) actionIds.add(item.toggleId());
+        });
+        wide.detail().settings().forEach(setting -> actionIds.add(setting.id()));
+        wide.detail().actions().forEach(action -> actionIds.add(action.id()));
+        assertEquals(actionIds.size(), Set.copyOf(actionIds).size());
+
+        PluginManagerView compactList = manager.view(640, 360);
+        assertTrue(compactList.compact());
+        assertFalse(compactList.compactDetail());
+        manager.activate(compactList.items().get(0).selectId());
+        PluginManagerView compactDetail = manager.view(640, 360);
+        assertTrue(compactDetail.compactDetail());
+        assertNotNull(compactDetail.detail().compactBack());
+        int firstLineY = compactDetail.detail().lines().get(0).bounds().y();
+        manager.scrollDetail(24);
+        int scrolledLineY = manager.view(640, 360).detail().lines().get(0).bounds().y();
+        assertTrue(scrolledLineY < firstLineY,
+                () -> "detail did not scroll: " + firstLineY + " -> " + scrolledLineY);
+        manager.activate(ConfigControlId.PLUGIN_COMPACT_BACK);
+        assertFalse(manager.view(640, 360).compactDetail());
+    }
+
+    @Test
+    void pluginManagerCommitsTextOnNavigationAndAppliesBooleanAndEnumImmediately() {
+        PluginSnapshot plugin = pluginWithSettings("custom.settings");
+        FakeControl control = new FakeControl(new Config(), plugin);
+        PluginManagerUiController manager = new ConfigUiSession(control).pluginManager();
+        manager.view(854, 480);
+
+        manager.activate(ConfigControlId.setting(plugin.id(), "visible"));
+        manager.activate(ConfigControlId.setting(plugin.id(), "mode"));
+        assertEquals(false, control.changedSettings.get("visible"));
+        assertEquals("compact", control.changedSettings.get("mode"));
+
+        manager.setText(ConfigControlId.setting(plugin.id(), "limit"), "27");
+        manager.setText(ConfigControlId.setting(plugin.id(), "color"), "#42c6d7");
+        manager.activate(ConfigControlId.PLUGIN_TAB_DISABLED);
+        assertEquals("27", control.changedSettings.get("limit"));
+        assertEquals("#42c6d7", control.changedSettings.get("color"));
+    }
+
+    @Test
+    void pluginManagerKeepsSelectionAndPerTabScrollThenFallsBackAfterRescan() {
+        List<PluginSnapshot> plugins = new ArrayList<>();
+        for (int index = 0; index < 10; index++) plugins.add(plugin("custom." + index, false));
+        FakeControl control = new FakeControl(new Config(), plugins);
+        PluginManagerUiController manager = new ConfigUiSession(control).pluginManager();
+        manager.view(854, 260);
+        manager.moveSelection(9);
+        PluginManagerView scrolled = manager.view(854, 260);
+        assertEquals("custom.9", scrolled.items().stream().filter(PluginManagerView.ListItemView::selected)
+                .findFirst().orElseThrow().selectId().pluginId());
+        String firstVisible = scrolled.items().get(0).selectId().pluginId();
+
+        manager.activate(ConfigControlId.PLUGIN_TAB_DISABLED);
+        manager.activate(ConfigControlId.PLUGIN_TAB_INSTALLED);
+        PluginManagerView restored = manager.view(854, 260);
+        assertEquals(firstVisible, restored.items().get(0).selectId().pluginId());
+        assertEquals("custom.9", restored.items().stream().filter(PluginManagerView.ListItemView::selected)
+                .findFirst().orElseThrow().selectId().pluginId());
+
+        control.plugins = new ArrayList<>(plugins.subList(0, 9));
+        manager.activate(ConfigControlId.PLUGIN_RESCAN);
+        PluginManagerView fallback = manager.view(854, 260);
+        assertEquals("custom.0", fallback.items().get(0).selectId().pluginId());
+        assertTrue(fallback.items().get(0).selected());
+    }
+
+    @Test
+    void pluginManagerMapsEveryRuntimeStateAndUsesModalDisabledPluginFlow() {
+        for (PluginRuntimeStatus status : PluginRuntimeStatus.values()) {
+            PluginSnapshot plugin = new PluginSnapshot(
+                    "state." + status.name().toLowerCase(), status.name(), "1", false, true, true,
+                    status, "", tempDir.resolve(status.name()), Map.of(), List.of(), List.of(), false);
+            PluginManagerView view = new ConfigUiSession(
+                    new FakeControl(new Config(), plugin)).pluginManager().view(854, 480);
+            PluginManagerView.ListItemView item = view.items().get(0);
+            boolean available = status == PluginRuntimeStatus.ACTIVE
+                    || status == PluginRuntimeStatus.DISABLED;
+            assertEquals(available, item.toggleActive(), status.name());
+            assertEquals(expectedStatusColor(status), item.statusColor(), status.name());
+        }
+
+        PluginSnapshot custom = plugin("custom.modal", false);
+        DisabledPluginSnapshot disabled = new DisabledPluginSnapshot(
+                "custom.modal-disabled", custom.id(), custom.name(), custom.version(),
+                "custom.modal", false, 1L, tempDir.resolve("disabled/custom.modal"));
+        FakeControl control = new FakeControl(new Config(), custom);
+        control.disabledPlugins = List.of(disabled);
+        PluginManagerUiController manager = new ConfigUiSession(control).pluginManager();
+        manager.activate(ConfigControlId.PLUGIN_TAB_DISABLED);
+        PluginManagerView disabledView = manager.view(854, 480);
+        assertEquals(3, disabledView.detail().actions().size());
+        manager.activate(ConfigControlId.plugin(disabled.storageId(), "disabled-open-dir"));
+        assertEquals(disabled.storagePath(), control.openedPath);
+        manager.activate(ConfigControlId.plugin(disabled.storageId(), "disabled-restore"));
+        assertEquals(disabled.storageId(), control.restoredStorageId);
+        manager.activate(ConfigControlId.plugin(disabled.storageId(), "disabled-delete"));
+        PluginManagerView confirm = manager.view(854, 480);
+        assertEquals(PluginManagerView.DialogKind.DELETE_CONFIRM, confirm.dialog().kind());
+        manager.activate(ConfigControlId.plugin(disabled.storageId(), "disabled-delete-confirm"));
+        assertEquals(disabled.storageId(), control.deletedStorageId);
+        assertNotNull(manager.view(854, 480).message());
+    }
+
+    @Test
+    void pluginManagerShowsCopyGuideAndNonBlockingFailureFeedback() {
+        PluginSnapshot builtIn = plugin("teamviewer.copy-test", true);
+        FakeControl successControl = new FakeControl(new Config(), builtIn);
+        successControl.copyPath = tempDir.resolve("plugins/copy-test.custom");
+        PluginManagerUiController success = new ConfigUiSession(successControl).pluginManager();
+        success.view(854, 480);
+        success.activate(ConfigControlId.plugin(builtIn.id(), "copy"));
+        assertEquals(PluginManagerView.DialogKind.COPY_GUIDE,
+                success.view(854, 480).dialog().kind());
+
+        FakeControl failureControl = new FakeControl(new Config(), builtIn);
+        PluginManagerUiController failure = new ConfigUiSession(failureControl).pluginManager();
+        failure.view(854, 480);
+        failure.activate(ConfigControlId.plugin(builtIn.id(), "copy"));
+        PluginManagerView failed = failure.view(854, 480);
+        assertNotNull(failed.message());
+        assertEquals(null, failed.dialog());
+    }
+
+    private PluginSnapshot pluginWithSettings(String id) {
+        List<PluginManifest.SettingDefinition> settings = List.of(
+                new PluginManifest.SettingDefinition(
+                        "visible", "boolean", "Visible", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition(
+                        "mode", "enum", "Mode", "full", null, null,
+                        List.of("full", "compact"), false),
+                new PluginManifest.SettingDefinition(
+                        "limit", "integer", "Limit", 10, 0.0, 100.0, List.of(), false),
+                new PluginManifest.SettingDefinition(
+                        "color", "color", "Color", "#ffffff", null, null, List.of(), false));
+        return new PluginSnapshot(
+                id, "A very long plugin name used to exercise clipping", "2026.7.29",
+                false, true, true, PluginRuntimeStatus.ACTIVE, "diagnostic detail",
+                tempDir.resolve(id), Map.of(
+                "visible", true, "mode", "full", "limit", 10, "color", "#ffffff"),
+                settings, List.of(
+                new IntegrationCapability(
+                        id + ".map", "battle-map-source", IntegrationSupportStatus.AVAILABLE, "",
+                        id, IntegrationImplementationSource.LUA, PluginRuntimeStatus.ACTIVE),
+                new IntegrationCapability(
+                        id + ".waypoint", "shared-waypoint-consumer",
+                        IntegrationSupportStatus.MOD_NOT_INSTALLED, "Missing optional dependency",
+                        id, IntegrationImplementationSource.LUA, PluginRuntimeStatus.ACTIVE)));
+    }
+
+    private static int expectedStatusColor(PluginRuntimeStatus status) {
+        return switch (status) {
+            case ACTIVE -> PluginManagerView.SUCCESS;
+            case DISABLED -> PluginManagerView.MUTED;
+            case PENDING_RESTART -> PluginManagerView.WARNING;
+            case INCOMPATIBLE, LOAD_FAILED, SUSPENDED -> PluginManagerView.ERROR;
+        };
+    }
+
     private PluginSnapshot plugin(String id, boolean builtIn) {
         return new PluginSnapshot(id, id + " name", "1.0.0", builtIn, true, true,
                 PluginRuntimeStatus.ACTIVE, "", builtIn ? null : tempDir.resolve(id), Map.of(),
@@ -276,23 +459,28 @@ class ConfigUiSessionTest {
         private final Config config;
         private final NetworkManager network = new NetworkManager(
                 new HashMap<UUID, RemotePlayerInfo>(), runtime(), (uri, options, listener) -> null);
-        private final PluginSnapshot plugin;
+        private List<PluginSnapshot> plugins;
         private final Map<String, Object> changedSettings = new HashMap<>();
         private List<DisabledPluginSnapshot> disabledPlugins = List.of();
         private Path copyPath;
         private Path openedPath;
         private String uninstalledPluginId;
+        private String restoredStorageId;
         private String deletedStorageId;
         private boolean enabled;
         private Boolean lastEnabledValue;
 
         private FakeControl(Config config) {
-            this(config, null);
+            this(config, List.of());
         }
 
         private FakeControl(Config config, PluginSnapshot plugin) {
+            this(config, plugin == null ? List.of() : List.of(plugin));
+        }
+
+        private FakeControl(Config config, List<PluginSnapshot> plugins) {
             this.config = config;
-            this.plugin = plugin;
+            this.plugins = new ArrayList<>(plugins);
         }
 
         public Config getConfig() { return config; }
@@ -301,9 +489,9 @@ class ConfigUiSessionTest {
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public void reconnect() { }
         public void showActionBar(String message) { }
-        public List<PluginSnapshot> getIntegrationPlugins() { return plugin == null ? List.of() : List.of(plugin); }
+        public List<PluginSnapshot> getIntegrationPlugins() { return List.copyOf(plugins); }
         public PluginSnapshot getIntegrationPlugin(String pluginId) {
-            return plugin != null && plugin.id().equals(pluginId) ? plugin : null;
+            return plugins.stream().filter(value -> value.id().equals(pluginId)).findFirst().orElse(null);
         }
         public boolean setIntegrationPluginEnabled(String pluginId, boolean enabled) {
             lastEnabledValue = enabled;
@@ -328,6 +516,7 @@ class ConfigUiSessionTest {
             return PluginFileOperationResult.success(tempDirPath(pluginId));
         }
         public PluginFileOperationResult restoreIntegrationPlugin(String storageId) {
+            restoredStorageId = storageId;
             return PluginFileOperationResult.success(tempDirPath(storageId));
         }
         public PluginFileOperationResult deleteDisabledIntegrationPlugin(String storageId) {

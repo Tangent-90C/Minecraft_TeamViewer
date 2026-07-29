@@ -12,6 +12,7 @@ import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationClock;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftDimensionAdapter;
+import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftClientUiCompat;
 import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftPositionAdapter;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import net.minecraft.client.Minecraft;
@@ -108,7 +109,7 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
         if (client == null || client.player == null || client.level == null) {
             return ClientWorldSnapshot.unavailable();
         }
-        Camera camera = client.gameRenderer.getMainCamera();
+        Camera camera = MinecraftClientUiCompat.mainCamera(client);
         org.joml.Vector3fc forward = camera.forwardVector();
         org.joml.Vector3fc up = camera.upVector();
         return new ClientWorldSnapshot(
@@ -238,14 +239,14 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
     @Override
     public boolean isGameplayInputAvailable() {
         Minecraft client = Minecraft.getInstance();
-        return client != null && client.screen == null;
+        return client != null && MinecraftClientUiCompat.currentScreen(client) == null;
     }
 
     @Override
     public void showActionBar(String message) {
         Minecraft client = Minecraft.getInstance();
         if (client != null && client.player != null) {
-            client.gui.setOverlayMessage(Component.literal(message), false);
+            MinecraftClientUiCompat.showActionBar(client, Component.literal(message));
         }
     }
 

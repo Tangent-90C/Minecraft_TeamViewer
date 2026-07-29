@@ -53,7 +53,7 @@
    某插件，但禁止用 `null` 或虚假的完整声明掩盖状态。模组未安装时必须先装配 SDK no-op 端口，禁止在
    能力探测、tick 或清理路径中加载该模组的 API 类。
 6. 业务行为、页面控件、HUD 文本和渲染决策需要变化时，先修改 common 及其测试；版本层只补必要的 API 映射。
-7. 两个版本必须走同一条 `ClientApplication` / `ClientCoordinator` 执行路径。禁止为了修复单一版本而复制一份业务逻辑。
+7. 所有目标版本必须走同一条 `ClientApplication` / `ClientCoordinator` 执行路径。禁止为了修复单一版本而复制一份业务逻辑。
 8. common、common-sdk 和 bootstrap 固定为 Java 17；adapter 使用 manifest 的 `adapter_java_release`。
    低于 Java 17 的目标必须先设计 legacy runtime，禁止强迫旧版玩家使用高版本 JRE 绕过兼容边界。
 9. standalone 必须保持完整可安装；slim adapter 只能作为构建中间件。All-in-One 中版本类必须保留在各自
@@ -80,5 +80,6 @@
 - 不得通过跳过上述任务、删除失败检查或使用旧构建目录来获得“成功”产物。
 
 默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；单版本调试使用
-`task build-1.21.8` 或 `task build-26.1.2`。
-正式产物只有各版本 standalone 和 `TeamViewRelay-all-<mod_version>.jar`；`build/adapter-artifacts` 不得发布。
+`task build-1.21.8`、`task build-26.1.2` 或 `task build-26.2`。
+正式产物只有各版本 standalone 和 `TeamViewRelay-Fabric-all-<mod_version>.jar`；
+`build/adapter-artifacts` 不得发布。

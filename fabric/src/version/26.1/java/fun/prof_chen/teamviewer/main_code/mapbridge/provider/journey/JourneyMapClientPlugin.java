@@ -2,11 +2,11 @@ package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
 import journeymap.api.v2.client.IClientAPI;
 import journeymap.api.v2.client.IClientPlugin;
-import journeymap.api.v2.client.JourneyMapPlugin;
+import journeymap.api.v2.common.JourneyMapPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** JourneyMap 6 entrypoint; bridge registration is intentionally API-only on 26.1. */
+/** JourneyMap 6 entrypoint; bridge registration is intentionally API-only on 26.1-26.2. */
 @JourneyMapPlugin(apiVersion = "2.0.0")
 public final class JourneyMapClientPlugin implements IClientPlugin {
     private static final String TEAMVIEWER_MOD_ID = "teamviewer";
@@ -21,7 +21,7 @@ public final class JourneyMapClientPlugin implements IClientPlugin {
     @Override
     public void initialize(IClientAPI api) {
         clientApi = api;
-        LOGGER.info("JourneyMap 26.1 client plugin initialized");
+        LOGGER.info("JourneyMap 26.x client plugin initialized");
     }
 
     /** Dynamic service queried by Lua; null is the normal pre-initialize state. */

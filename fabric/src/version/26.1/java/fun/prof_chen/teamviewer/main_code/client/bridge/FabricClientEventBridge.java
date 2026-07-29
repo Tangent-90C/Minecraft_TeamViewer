@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
+import fun.prof_chen.teamviewer.main_code.bridge.MinecraftClientUiCompat;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -40,7 +41,7 @@ public final class FabricClientEventBridge implements ClientEventBridge<LevelRen
             while (toggle.consumeClick()) handler.onToggleRequested();
             while (config.consumeClick()) handler.onConfigRequested();
             while (mark.consumeClick()) {
-                if (client.screen == null) handler.onQuickMarkRequested();
+                if (MinecraftClientUiCompat.currentScreen(client) == null) handler.onQuickMarkRequested();
             }
         });
         ClientPlayConnectionEvents.JOIN.register((networkHandler, sender, client) -> {

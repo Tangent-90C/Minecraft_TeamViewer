@@ -124,3 +124,8 @@ classpath. Loader entrypoints may initialize an event-bus holder and call `Clien
 they must not own client state or business timing. Built-in fallback Lua entrypoints register
 NeoForge JourneyMap, Xaero and SimMC capabilities as `NOT_IMPLEMENTED`, so reports stay honest
 without platform-side fake adapters.
+
+The `1.21.8` Fabric adapter is cross-compiled for Minecraft 1.21.6–1.21.8. The `26.1` source family
+is compiled into the 26.1.2 and 26.2 artifacts; cached compatibility access isolates the client UI,
+camera and HUD API changes introduced by 26.2. Do not widen metadata beyond these ranges without
+cross-compiling the adapter and checking optional-Mod entrypoints against the real target APIs.

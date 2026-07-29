@@ -1,5 +1,5 @@
--- JourneyMap 26.1.2 service → Lua Adapter → common capability contracts.
--- JourneyMap 26.1.2 入口服务 → Lua Adapter → common 能力契约。
+-- JourneyMap 26.1-26.2 service → Lua Adapter → common capability contracts.
+-- JourneyMap 26.1-26.2 入口服务 → Lua Adapter → common 能力契约。
 
 local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil
@@ -47,8 +47,21 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color, presentat
   if state == nil then
     local position = client_objects:blockPosition(x, y, z)
     local native_dimension = dimension(dimension_id)
-    local object = handles.WaypointFactory:createClientWaypoint(
-        JM_MOD_ID, position, name, native_dimension, false)
+    -- JourneyMap 26.2 removed createClientWaypoint while keeping createWaypoint with the
+    -- same arguments. Select by the Minecraft/API family so the 26.1 artifact remains
+    -- binary-compatible with every 26.1 patch and the dedicated 26.2 artifact uses its API.
+    --
+    -- JourneyMap 26.2 删除了 createClientWaypoint，但保留了参数相同的 createWaypoint。
+    -- 按 Minecraft/API 系列选择方法，使 26.1 产物覆盖全部 26.1 补丁版本，并让
+    -- 26.2 专用产物调用其真实 API。
+    local object
+    if environment.minecraft_version() == "26.2" then
+      object = handles.WaypointFactory:createWaypoint(
+          JM_MOD_ID, position, name, native_dimension, false)
+    else
+      object = handles.WaypointFactory:createClientWaypoint(
+          JM_MOD_ID, position, name, native_dimension, false)
+    end
     if object == nil then return end
     object:setPersistent(false); object:setEnabled(true); object:setColor(color)
     if presentation == "marker" then

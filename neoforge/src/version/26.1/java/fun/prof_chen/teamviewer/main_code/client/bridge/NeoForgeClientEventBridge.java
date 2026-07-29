@@ -5,6 +5,7 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
 import fun.prof_chen.teamviewer.neoforge.NeoForgeClientContext;
+import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftClientUiCompat;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -67,7 +68,9 @@ public final class NeoForgeClientEventBridge
         while (toggle.consumeClick()) handler.onToggleRequested();
         while (config.consumeClick()) handler.onConfigRequested();
         while (mark.consumeClick()) {
-            if (Minecraft.getInstance().screen == null) handler.onQuickMarkRequested();
+            if (MinecraftClientUiCompat.currentScreen(Minecraft.getInstance()) == null) {
+                handler.onQuickMarkRequested();
+            }
         }
     }
 

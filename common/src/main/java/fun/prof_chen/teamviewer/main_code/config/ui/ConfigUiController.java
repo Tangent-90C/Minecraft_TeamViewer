@@ -7,4 +7,9 @@ public interface ConfigUiController {
     void setChecked(ConfigControlId id, boolean checked);
     ConfigUiAction activate(ConfigPageId currentPage, ConfigControlId id);
     ConfigUiAction close(ConfigPageId pageId);
+
+    /** Dense plugin manager owned by the common UI state machine. */
+    default PluginManagerUiController pluginManager() {
+        throw new IllegalStateException("Plugin manager UI is unavailable");
+    }
 }

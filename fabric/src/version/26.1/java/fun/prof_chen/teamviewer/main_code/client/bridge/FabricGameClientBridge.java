@@ -11,6 +11,7 @@ import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapObservationClock;
 import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftDimensionAdapter;
+import fun.prof_chen.teamviewer.main_code.bridge.MinecraftClientUiCompat;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftPositionAdapter;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import net.minecraft.client.Minecraft;
@@ -107,7 +108,7 @@ public final class FabricGameClientBridge implements GameClientBridge {
         if (client.player == null || client.level == null) {
             return ClientWorldSnapshot.unavailable();
         }
-        Camera camera = client.gameRenderer.getMainCamera();
+        Camera camera = MinecraftClientUiCompat.mainCamera(client);
         org.joml.Vector3fc forward = camera.forwardVector();
         org.joml.Vector3fc up = camera.upVector();
         return new ClientWorldSnapshot(
@@ -229,14 +230,14 @@ public final class FabricGameClientBridge implements GameClientBridge {
 
     @Override
     public boolean isGameplayInputAvailable() {
-        return Minecraft.getInstance().screen == null;
+        return MinecraftClientUiCompat.currentScreen(Minecraft.getInstance()) == null;
     }
 
     @Override
     public void showActionBar(String message) {
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
-            client.gui.setOverlayMessage(Component.literal(message), false);
+            MinecraftClientUiCompat.showActionBar(client, Component.literal(message));
         }
     }
 

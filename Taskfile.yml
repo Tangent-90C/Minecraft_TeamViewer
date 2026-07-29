@@ -17,7 +17,7 @@ tasks:
       - '{{.GRADLE}} clean'
 
   build:
-    desc: Build two Fabric standalone, Fabric All-in-One and two NeoForge standalone Jars
+    desc: Build all Fabric and NeoForge targets plus the Fabric All-in-One Jar
     cmds:
       - |
           set -eu
@@ -66,6 +66,12 @@ tasks:
     cmds:
       - task: build-target
         vars: { TARGET: '26.1.2' }
+
+  build-26.2:
+    desc: Build Minecraft 26.2 with Java 25 and collect its jar
+    cmds:
+      - task: build-target
+        vars: { TARGET: '26.2' }
 
   package-all:
     desc: Assemble and collect the Fabric-only All-in-One Jar from every staged Fabric adapter

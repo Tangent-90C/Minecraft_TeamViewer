@@ -1,6 +1,17 @@
 # TeamViewRelay Mod
 
-TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。当前支持 **Minecraft 1.21.8** 和 **Minecraft 26.1.2** 的 Fabric 与 NeoForge 版本。
+TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。
+当前实际验证的运行范围如下：
+
+| 安装产物 | Loader | 可运行的 Minecraft 版本 |
+| --- | --- | --- |
+| `Fabric-1.21.8` | Fabric | `1.21.6`–`1.21.8` |
+| `NeoForge-1.21.8` | NeoForge | `1.21.8` |
+| `Fabric/NeoForge-26.1.2` | 对应 Loader | `26.1`–`26.1.2` |
+| `Fabric/NeoForge-26.2` | 对应 Loader | `26.2` |
+
+`26.2` 存在客户端 UI、相机和 JourneyMap API 变更，因此使用专用产物；不要把
+`26.1.2` 产物强行放到 `26.2`。
 
 整套系统通常由以下组件配合使用：
 
@@ -39,25 +50,30 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 ## 安装 / 运行
 
-1.21.8 版本至少需要：
+1.21 系列产物至少需要：
 
-- Minecraft `1.21.8`
+- Fabric：Minecraft `1.21.6`–`1.21.8`
+- NeoForge：Minecraft `1.21.8`
 - Java `21`
 - Fabric Loader `0.17.2`
-- Fabric API `0.131.0+1.21.8`
+- 与当前 Minecraft 版本匹配的 Fabric API
 - 本项目 Mod Jar
 
-26.1.2 版本至少需要：
+26.1 系列产物至少需要：
 
-- Minecraft `26.1.2`
+- Minecraft `26.1`–`26.1.2`
 - Java `25`
 - Fabric Loader `0.19.3`
-- Fabric API `0.155.2+26.1.2`
+- 与当前 Minecraft 版本匹配的 Fabric API
 - 文件名含 `26.1.2` 的本项目 Mod Jar
 
-NeoForge 版本分别要求 NeoForge `21.8.54`（Minecraft 1.21.8）或 `26.1.2.86`
-（Minecraft 26.1.2）。首轮 NeoForge 的 JourneyMap、Xaero、SimMC 原生联动会明确报告
-`UNSUPPORTED_VERSION`，核心连接、同步、HUD、世界渲染、配置与 NodeMC 功能不因此缩水。
+26.2 产物需要 Minecraft `26.2`、Java `25`、Fabric Loader `0.19.3` 与匹配的 Fabric API，
+或 NeoForge `26.2.0.32-beta` 及更新的 26.2 版本。
+
+NeoForge 版本分别要求 NeoForge `21.8.54`（Minecraft 1.21.8）、26.1 系列 NeoForge
+（Minecraft 26.1–26.1.2）或 `26.2.0.32-beta` 及更新的 26.2 版本。NeoForge 的
+JourneyMap、Xaero、SimMC 原生联动会明确报告 `NOT_IMPLEMENTED`，核心连接、同步、HUD、
+世界渲染、配置与 NodeMC 功能不因此缩水。
 
 推荐安装：
 
@@ -72,13 +88,14 @@ NeoForge 版本分别要求 NeoForge `21.8.54`（Minecraft 1.21.8）或 `26.1.2.
 ./gradlew build
 ```
 
-该命令保持原行为，默认构建 1.21.8。构建 26.1.2 时，Gradle 本身也必须运行在 Java 25 上：
+该命令保持原行为，默认构建 1.21.8。构建 26.x 时，Gradle 本身也必须运行在 Java 25 上：
 
 ```bash
 JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
+JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.2 build
 ```
 
-使用 Task 构建全部五个正式产物（需要对应的两个 JDK）：
+使用 Task 构建全部七个正式产物（需要对应的两个 JDK）：
 
 ```bash
 JAVA21_HOME=/path/to/jdk-21 JAVA25_HOME=/path/to/jdk-25 task build
@@ -88,9 +105,11 @@ JAVA21_HOME=/path/to/jdk-21 JAVA25_HOME=/path/to/jdk-25 task build
 
 - `TeamViewRelay-Fabric-1.21.8-<mod_version>.jar`
 - `TeamViewRelay-Fabric-26.1.2-<mod_version>.jar`
+- `TeamViewRelay-Fabric-26.2-<mod_version>.jar`
 - `TeamViewRelay-Fabric-all-<mod_version>.jar`
 - `TeamViewRelay-NeoForge-1.21.8-<mod_version>.jar`
 - `TeamViewRelay-NeoForge-26.1.2-<mod_version>.jar`
+- `TeamViewRelay-NeoForge-26.2-<mod_version>.jar`
 
 独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
 仅供打包使用，不是玩家可安装产物。
@@ -178,6 +197,7 @@ Loader 公开 Mod ID 分别为：Fabric `team-view-relay`、NeoForge `team_view_
 ```bash
 ./gradlew build
 JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
+JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.2 build
 ./gradlew runClient
 ```
 
@@ -188,10 +208,10 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 - `client-bootstrap/src/main/java`：Java 17 Loader 中立启动编排和 Adapter TCK
 - `fabric-bootstrap/src/main/java`：Java 17 Fabric Loader 薄入口
 - `fabric/src/shared`：确实跨 Minecraft 版本稳定的 adapter 胶水
-- `fabric/src/version/1.21.8`：Minecraft 1.21.8 API 适配
-- `fabric/src/version/26.1`：Minecraft 26.1.2 API 适配
+- `fabric/src/version/1.21.8`：Minecraft 1.21.6–1.21.8 API 适配
+- `fabric/src/version/26.1`：Minecraft 26.1–26.2 API 适配（26.2 使用专用依赖与元数据）
 - `neoforge/src/shared`：NeoForge 薄入口及稳定事件总线胶水
-- `neoforge/src/version/1.21.8` / `26.1`：NeoForge Minecraft API 适配
+- `neoforge/src/version/1.21.8` / `26.1`：NeoForge Minecraft API 适配；后者覆盖 26.1–26.2
 - `universal`：All-in-One 元数据、组装和产物守卫
 
 具体版本代码只能实现 Common Adapter SDK，不得复制业务逻辑。完整边界与打包约束见
@@ -203,7 +223,8 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
 
 当前版本基线：
 
-- Minecraft：`1.21.8` / `26.1.2`
+- Minecraft：Fabric `1.21.6`–`1.21.8`、Fabric/NeoForge `26.1`–`26.2`；
+  NeoForge 1.21 系列仅 `1.21.8`
 - Mod：`v0.4.14-proto0.6.2`
 - 协议版本：`0.6.2`
 - 最低兼容协议版本：`0.6.1`

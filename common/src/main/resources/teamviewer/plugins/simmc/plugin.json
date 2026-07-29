@@ -8,7 +8,6 @@
   "documentation": "README.md",
   "entrypoints": [
     {"entry": "main.lua", "loaders": ["fabric"], "minecraftVersions": ["1.21.8"], "priority": 10},
-    {"entry": "main.lua", "loaders": ["fabric"], "minecraftVersions": ["26.1.2"], "priority": 10},
     {"entry": "unsupported.lua", "loaders": [], "minecraftVersions": [], "priority": -10}
   ],
   "defaultEnabled": true,

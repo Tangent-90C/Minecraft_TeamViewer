@@ -2,13 +2,15 @@
 
 ## Entrypoints and Mod probe / 入口与 Mod 探测
 
-`plugin.json` selects `main.lua` for known Fabric targets and `unsupported.lua` as the explicit
-fallback. On a known Fabric target, `probe()` first checks `mods.is_loaded("smcmod")`; a missing
+`plugin.json` selects `main.lua` only for the verified Minecraft 1.21.8 Fabric release and uses
+`unsupported.lua` as the explicit fallback. On that target, `probe()` first checks
+`mods.is_loaded("smcmod")`; a missing
 Mod reports `MOD_NOT_INSTALLED`. Unknown Fabric versions report `UNSUPPORTED_VERSION`, while a
 platform with no implementation reports `NOT_IMPLEMENTED` instead of losing the capability.
 
-`plugin.json` 为已知 Fabric 目标选择 `main.lua`，并以 `unsupported.lua` 作为明确后备入口。
-已知 Fabric 目标先由 `probe()` 检查 `mods.is_loaded("smcmod")`；缺失 Mod 登记为
+`plugin.json` 只为已验证的 Minecraft 1.21.8 Fabric 版本选择 `main.lua`，并以
+`unsupported.lua` 作为明确后备入口。该目标先由 `probe()` 检查
+`mods.is_loaded("smcmod")`；缺失 Mod 登记为
 `MOD_NOT_INSTALLED`。未知 Fabric 版本登记 `UNSUPPORTED_VERSION`，尚未实现的平台登记
 `NOT_IMPLEMENTED`，能力不会消失。
 

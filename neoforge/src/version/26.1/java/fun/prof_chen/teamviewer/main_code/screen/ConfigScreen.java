@@ -10,6 +10,7 @@ import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSessions;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiRect;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiText;
+import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftClientUiCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -102,9 +103,13 @@ public final class ConfigScreen extends Screen {
         ConfigUiAction action = session.activate(pageId, id);
         switch (action.type()) {
             case STAY -> refreshDynamicControls();
-            case RELOAD_PAGE -> minecraft.setScreen(new ConfigScreen(parent, session, pageId));
-            case OPEN_PAGE -> minecraft.setScreen(new ConfigScreen(this, session, action.targetPage()));
-            case CLOSE_TO_PARENT -> minecraft.setScreen(parent);
+            case RELOAD_PAGE -> MinecraftClientUiCompat.setScreen(
+                    minecraft, new ConfigScreen(parent, session, pageId));
+            case OPEN_PAGE -> MinecraftClientUiCompat.setScreen(minecraft,
+                    action.targetPage() == ConfigPageId.PLUGINS
+                            ? new PluginManagerScreen(this, session.pluginManager())
+                            : new ConfigScreen(this, session, action.targetPage()));
+            case CLOSE_TO_PARENT -> MinecraftClientUiCompat.setScreen(minecraft, parent);
         }
     }
 
@@ -153,7 +158,7 @@ public final class ConfigScreen extends Screen {
     @Override
     public void onClose() {
         session.close(pageId);
-        minecraft.setScreen(parent);
+        MinecraftClientUiCompat.setScreen(minecraft, parent);
     }
 
     private static boolean contains(UiRect rect, int x, int y) {
