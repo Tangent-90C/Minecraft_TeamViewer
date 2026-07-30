@@ -7,21 +7,22 @@ def versionManifest = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     versionManifest.load(it)
 }
-def defaultTarget = versionManifest.getProperty("default_target")
-def minecraftTarget = providers.gradleProperty("mc_target").getOrElse(defaultTarget)
-def supportedTargets = versionManifest.getProperty("neoforge_supported_targets")
+def defaultTarget = versionManifest.getProperty("default_neoforge_target")
+def supportedTargets = versionManifest.getProperty("neoforge_modern_targets")
         .split(",").collect { it.trim() }
-if (!supportedTargets.contains(minecraftTarget)) {
-    throw new GradleException("Unsupported NeoForge mc_target '${minecraftTarget}'; supported: ${supportedTargets}")
-}
+// The legacy and modern modules share the public -Pneoforge_target selector.
+// Ignore a target owned by the sibling module while Gradle configures the
+// complete multi-project graph.
+def requestedTarget = providers.gradleProperty("neoforge_target").getOrElse(defaultTarget)
+def minecraftTarget = supportedTargets.contains(requestedTarget) ? requestedTarget : defaultTarget
 def profile = { String key ->
-    def value = versionManifest.getProperty("${minecraftTarget}.${key}")
+    def value = versionManifest.getProperty("neoforge.${minecraftTarget}.${key}")
     if (value == null || value.isBlank()) throw new GradleException("Missing ${minecraftTarget}.${key}")
     value
 }
 def minecraftVersion = profile("minecraft_target_version")
-def minecraftVersionRange = profile("neoforge_minecraft_version_range")
-def adapterVersion = profile("neoforge_adapter_version")
+def minecraftVersionRange = profile("minecraft_version_range")
+def adapterVersion = profile("adapter_version")
 def neoForgeVersion = profile("neoforge_version")
 def neoForgeVersionRange = profile("neoforge_version_range")
 def targetJavaRelease = profile("adapter_java_release").toInteger()
@@ -163,7 +164,8 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
                 "network/bridge/NeoForgeRuntimeGateway.java",
                 "render/NeoForgeWorldRenderSink.java",
                 "render/NeoForgeHudRenderSink.java",
-                "screen/ConfigScreen.java"
+                "screen/ConfigScreen.java",
+                "screen/PluginManagerScreen.java"
         ]
         required.each { relative ->
             if (!new File(javaRoot, relative).isFile()) {
@@ -238,7 +240,7 @@ def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
     inputs.file(tasks.named("jar").flatMap { it.archiveFile })
     doLast {
         def artifact = tasks.named("jar").get().archiveFile.get().asFile
-        def expectedName = profile("neoforge_standalone_artifact").replace("{mod_version}", project.version.toString())
+        def expectedName = profile("standalone_artifact").replace("{mod_version}", project.version.toString())
         if (artifact.name != expectedName) {
             throw new GradleException("NeoForge artifact name ${artifact.name} != ${expectedName}")
         }

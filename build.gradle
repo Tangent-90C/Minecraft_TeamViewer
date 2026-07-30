@@ -41,6 +41,37 @@ tasks.named("clean") {
             ":fabric:clean", ":neoforge:clean", ":universal:clean")
 }
 
+def legacyRuntimeDir = layout.projectDirectory.dir("neoforge-legacy/runtime-libs")
+
+tasks.register("prepareLegacyNeoForgeRuntime", Sync) {
+    group = "build"
+    description = "Generate the Java 17 common runtime consumed by the independent legacy NeoForge build."
+    dependsOn(":common:neoForgeRuntimeJar", ":client-bootstrap:jar")
+    into(legacyRuntimeDir)
+    from(project(":common").tasks.named("neoForgeRuntimeJar").flatMap { it.archiveFile }) {
+        rename { "common-runtime.jar" }
+    }
+    from(project(":client-bootstrap").tasks.named("jar").flatMap { it.archiveFile }) {
+        rename { "client-bootstrap.jar" }
+    }
+}
+
+tasks.register("buildLegacyNeoForge", Exec) {
+    group = "build"
+    description = "Build one legacy NeoForge target in its Gradle 8 isolation boundary."
+    dependsOn(tasks.named("prepareLegacyNeoForgeRuntime"))
+    workingDir(file("neoforge-legacy"))
+    def selected = providers.gradleProperty("neoforge_target").getOrElse("1.20.2")
+    commandLine("./gradlew", "build", "-Pneoforge_target=${selected}")
+}
+
+tasks.register("cleanLegacyNeoForge", Exec) {
+    group = "build"
+    description = "Clean the isolated legacy NeoForge build."
+    workingDir(file("neoforge-legacy"))
+    commandLine("./gradlew", "clean")
+}
+
 ["runClient", "runclient"].each { taskName ->
     tasks.register(taskName) {
         group = "fabric"

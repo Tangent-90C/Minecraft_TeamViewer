@@ -3,13 +3,15 @@ pluginManagement {
     file("gradle/minecraft-versions.properties").withInputStream {
         versionProperties.load(it)
     }
-    def defaultTarget = versionProperties.getProperty("default_target")
-    def selectedTarget = providers.gradleProperty("mc_target").getOrElse(defaultTarget)
-    def supportedTargets = versionProperties.getProperty("supported_targets")
+    def defaultTarget = versionProperties.getProperty("default_fabric_target")
+    def selectedTarget = providers.gradleProperty("fabric_target")
+            .getOrElse(defaultTarget)
+    def supportedTargets = versionProperties.getProperty("fabric_targets")
             .split(",")
             .collect { it.trim() }
     if (!supportedTargets.contains(selectedTarget)) {
-        throw new GradleException("Unsupported mc_target '${selectedTarget}'. Supported targets: ${supportedTargets.join(', ')}")
+        throw new GradleException(
+                "Unsupported Fabric target '${selectedTarget}'. Supported targets: ${supportedTargets.join(', ')}")
     }
 
     repositories {
@@ -25,8 +27,8 @@ pluginManagement {
     }
 
     plugins {
-        id 'fabric-loom' version versionProperties.getProperty("${selectedTarget}.loom_version")
-        id 'net.fabricmc.fabric-loom' version versionProperties.getProperty("${selectedTarget}.loom_version")
+        id 'fabric-loom' version versionProperties.getProperty("fabric.${selectedTarget}.loom_version")
+        id 'net.fabricmc.fabric-loom' version versionProperties.getProperty("fabric.${selectedTarget}.loom_version")
         id 'net.neoforged.moddev' version versionProperties.getProperty('neoforge_moddev_version')
     }
 }

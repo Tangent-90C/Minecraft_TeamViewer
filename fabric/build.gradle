@@ -10,37 +10,56 @@ def minecraftVersionProperties = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     minecraftVersionProperties.load(it)
 }
-def defaultMinecraftTarget = minecraftVersionProperties.getProperty("default_target")
-def minecraftTarget = providers.gradleProperty("mc_target").getOrElse(defaultMinecraftTarget)
-def supportedMinecraftTargets = minecraftVersionProperties.getProperty("supported_targets")
+def defaultMinecraftTarget = minecraftVersionProperties.getProperty("default_fabric_target")
+def minecraftTarget = providers.gradleProperty("fabric_target")
+        .getOrElse(defaultMinecraftTarget)
+def supportedMinecraftTargets = minecraftVersionProperties.getProperty("fabric_targets")
         .split(",")
         .collect { it.trim() }
 if (!supportedMinecraftTargets.contains(minecraftTarget)) {
     throw new GradleException("Unsupported mc_target '${minecraftTarget}'. Supported targets: ${supportedMinecraftTargets.join(', ')}")
 }
 def profileProperty = { String name ->
-    def value = minecraftVersionProperties.getProperty("${minecraftTarget}.${name}")
+    def value = minecraftVersionProperties.getProperty("fabric.${minecraftTarget}.${name}")
     if (value == null || value.isBlank()) {
         throw new GradleException("Missing ${name} for Minecraft target ${minecraftTarget}")
     }
     value
 }
-def minecraftTargetVersion = profileProperty("minecraft_target_version")
-def fabricMinecraftVersionRange = profileProperty("fabric_minecraft_version_range")
-def minecraftAdapterVersion = profileProperty("minecraft_adapter_version")
+def familyMinecraftVersion = profileProperty("minecraft_target_version")
+def minecraftTargetVersion = providers.gradleProperty("fabric_runtime_version")
+        .getOrElse(familyMinecraftVersion)
+def supportedRuntimeVersions = minecraftVersionProperties.getProperty("official_releases")
+        .split(",").collect { it.trim() }
+if (!supportedRuntimeVersions.contains(minecraftTargetVersion)) {
+    throw new GradleException("Unsupported Fabric runtime '${minecraftTargetVersion}'")
+}
+def runtimeOwner = minecraftVersionProperties.getProperty("fabric_runtime.${minecraftTargetVersion}.owner")
+if (runtimeOwner != minecraftTarget) {
+    throw new GradleException(
+            "Fabric runtime ${minecraftTargetVersion} belongs to ${runtimeOwner}, not ${minecraftTarget}")
+}
+def runtimeProperty = { String name ->
+    minecraftVersionProperties.getProperty("fabric_runtime.${minecraftTargetVersion}.${name}")
+}
+def fabricMinecraftVersionRange = profileProperty("minecraft_version_range")
+def minecraftAdapterVersion = profileProperty("adapter_version")
 def targetJavaVersion = profileProperty("adapter_java_release").toInteger()
 def gameJavaVersion = profileProperty("game_java_version").toInteger()
 def sharedJavaVersion = minecraftVersionProperties.getProperty("shared_java_release").toInteger()
 def loaderVersion = profileProperty("loader_version")
-def fabricApiVersion = profileProperty("fabric_api_version")
+def fabricApiVersion = runtimeProperty("fabric_api_version") ?: profileProperty("fabric_api_version")
 def fabricApiModId = profileProperty("fabric_api_mod_id")
-def mappingsMode = profileProperty("mappings_mode")
+def mappingsMode = runtimeProperty("mappings_mode") ?: profileProperty("mappings_mode")
+def yarnMappings = runtimeProperty("yarn_mappings") ?: minecraftVersionProperties.getProperty(
+        "fabric.${minecraftTarget}.yarn_mappings")
 def modmenuVersion = profileProperty("modmenu_version")
 def journeyMapDependency = profileProperty("journeymap_dependency")
-def journeyMapApiNestedPath = mappingsMode == "none"
-        ? profileProperty("journeymap_api_nested_path")
-        : null
-def journeyMapApiJar = mappingsMode == "none"
+def journeyMapTestDependency = minecraftVersionProperties.getProperty(
+        "fabric.${minecraftTarget}.journeymap_test_dependency")
+def journeyMapApiNestedPath = minecraftVersionProperties.getProperty(
+        "fabric.${minecraftTarget}.journeymap_api_nested_path")
+def journeyMapApiJar = journeyMapApiNestedPath != null
         ? layout.buildDirectory.file("generated/journeymap-api/${journeyMapApiNestedPath}")
         : null
 
@@ -50,7 +69,9 @@ base {
     archivesName = "${project.archives_base_name}-Fabric-${minecraftTargetVersion}"
 }
 
-if (minecraftTarget != defaultMinecraftTarget) {
+if (minecraftTargetVersion != familyMinecraftVersion) {
+    layout.buildDirectory = file("build/${minecraftTarget}/runtime/${minecraftTargetVersion}")
+} else if (minecraftTarget != defaultMinecraftTarget) {
     layout.buildDirectory = file("build/${minecraftTarget}")
 }
 
@@ -123,23 +144,42 @@ configurations.configureEach {
 dependencies {
     minecraft "com.mojang:minecraft:${minecraftTargetVersion}"
     if (mappingsMode == "yarn") {
-        mappings "net.fabricmc:yarn:${profileProperty('yarn_mappings')}:v2"
+        if (yarnMappings == null || yarnMappings.isBlank()) {
+            throw new GradleException("Missing Yarn mappings for exact runtime ${minecraftTargetVersion}")
+        }
+        mappings "net.fabricmc:yarn:${yarnMappings}:v2"
     } else if (mappingsMode != "none") {
         throw new GradleException("Unsupported mappings mode '${mappingsMode}' for ${minecraftTarget}")
     }
     if (mappingsMode == "yarn") {
         modImplementation "net.fabricmc:fabric-loader:${loaderVersion}"
         modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
-        modCompileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
-        modLocalRuntime "com.terraformersmc:modmenu:${modmenuVersion}"
-        modCompileOnly journeyMapDependency
+        modCompileOnly("com.terraformersmc:modmenu:${modmenuVersion}") {
+            transitive = false
+        }
+        modLocalRuntime("com.terraformersmc:modmenu:${modmenuVersion}") {
+            transitive = false
+        }
+        modCompileOnly(journeyMapDependency) {
+            transitive = false
+        }
+        if (journeyMapTestDependency != null) {
+            modLocalRuntime(journeyMapTestDependency) {
+                transitive = false
+            }
+        }
+        if (journeyMapApiJar != null) {
+            modCompileOnly files(journeyMapApiJar)
+        }
     } else {
         implementation "net.fabricmc:fabric-loader:${loaderVersion}"
         implementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
         compileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
         runtimeOnly "com.terraformersmc:modmenu:${modmenuVersion}"
         compileOnly journeyMapDependency
-        compileOnly files(journeyMapApiJar)
+        if (journeyMapApiJar != null) {
+            compileOnly files(journeyMapApiJar)
+        }
     }
 
     implementation project(":common")
@@ -168,12 +208,14 @@ dependencies {
     include "org.luaj:luaj-jse:${project.luaj_version}"
 }
 
-if (mappingsMode == "none") {
+if (journeyMapApiNestedPath != null) {
     configurations {
         journeyMapApiBundle
     }
     dependencies {
-        journeyMapApiBundle journeyMapDependency
+        journeyMapApiBundle(journeyMapDependency) {
+            transitive = false
+        }
     }
     tasks.register("extractJourneyMapApi", Copy) {
         from({ zipTree(configurations.journeyMapApiBundle.singleFile) }) {
@@ -260,7 +302,8 @@ tasks.register("verifyAdapterSdkCompleteness") {
                     "client/bridge/FabricGameClientBridge.java",
                     "render/FabricWorldRenderSink.java",
                     "render/FabricHudRenderSink.java",
-                    "screen/ConfigScreen.java"
+                    "screen/ConfigScreen.java",
+                    "screen/PluginManagerScreen.java"
             ]
             requiredFiles.each { relative ->
                 if (!new File(root, "java/fun/prof_chen/teamviewer/main_code/${relative}").isFile()) {
@@ -296,7 +339,7 @@ def compileVersionAdapterAgainstSdk = tasks.register("compileVersionAdapterAgain
     group = "verification"
     description = "Compile Minecraft adapter sources without the common runtime on their classpath."
     dependsOn(project(":common-sdk").tasks.named("classes"))
-    if (mappingsMode == "none") {
+    if (journeyMapApiNestedPath != null) {
         dependsOn(tasks.named("extractJourneyMapApi"))
     }
     source(fileTree("src/version/${minecraftAdapterVersion}/java") { include "**/*.java" })

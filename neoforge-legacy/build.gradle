@@ -1,0 +1,204 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.gradle.userdev'
+}
+
+def repositoryRoot = file("..")
+def projectProperties = new Properties()
+file("../gradle.properties").withInputStream {
+    projectProperties.load(it)
+}
+def versionManifest = new Properties()
+file("../gradle/minecraft-versions.properties").withInputStream {
+    versionManifest.load(it)
+}
+group = projectProperties.getProperty("maven_group")
+version = projectProperties.getProperty("mod_version")
+
+repositories {
+    maven {
+        name = "NeoForged"
+        url = "https://maven.neoforged.net/releases"
+    }
+    mavenCentral()
+}
+
+def supportedTargets = versionManifest.getProperty("neoforge_legacy_targets")
+        .split(",").collect { it.trim() }
+def minecraftTarget = providers.gradleProperty("neoforge_target").getOrElse(supportedTargets.first())
+if (!supportedTargets.contains(minecraftTarget)) {
+    throw new GradleException(
+            "Unsupported legacy NeoForge target '${minecraftTarget}'; supported: ${supportedTargets}")
+}
+def profile = { String key ->
+    def value = versionManifest.getProperty("neoforge.${minecraftTarget}.${key}")
+    if (value == null || value.isBlank()) {
+        throw new GradleException("Missing neoforge.${minecraftTarget}.${key}")
+    }
+    value
+}
+def minecraftVersion = profile("minecraft_target_version")
+def minecraftVersionRange = profile("minecraft_version_range")
+def neoForgeVersion = profile("neoforge_version")
+def neoForgeVersionRange = profile("neoforge_version_range")
+def adapterVersion = profile("adapter_version")
+def targetJavaRelease = profile("adapter_java_release").toInteger()
+def neoForgeModVersion = project.version.toString().replaceFirst(/^v(?=\d)/, "")
+
+base {
+    archivesName = "${projectProperties.getProperty('archives_base_name')}-NeoForge-${minecraftVersion}"
+}
+layout.buildDirectory = file("build/${minecraftTarget}")
+
+sourceSets {
+    main {
+        java.srcDirs = ["src/shared/java", "src/version/${adapterVersion}/java"]
+        resources.srcDirs = ["src/shared/resources", "src/version/${adapterVersion}/resources"]
+    }
+}
+
+dependencies {
+    implementation "net.neoforged:neoforge:${neoForgeVersion}"
+    implementation files("runtime-libs/common-runtime.jar", "runtime-libs/client-bootstrap.jar")
+    implementation "com.google.code.gson:gson:${projectProperties.getProperty('gson_version')}"
+    implementation "com.squareup.okhttp3:okhttp:${projectProperties.getProperty('okhttp_version')}"
+    implementation "com.squareup.okio:okio-jvm:${projectProperties.getProperty('okio_version')}"
+    implementation "com.google.protobuf:protobuf-java:${projectProperties.getProperty('protobuf_version')}"
+    implementation "com.google.protobuf:protobuf-java-util:${projectProperties.getProperty('protobuf_version')}"
+    implementation "org.luaj:luaj-jse:${projectProperties.getProperty('luaj_version')}"
+    compileOnly "org.slf4j:slf4j-api:${projectProperties.getProperty('slf4j_version')}"
+
+    jarJar "com.squareup.okhttp3:okhttp:${projectProperties.getProperty('okhttp_version')}"
+    jarJar "com.squareup.okio:okio-jvm:${projectProperties.getProperty('okio_version')}"
+    jarJar "org.jetbrains.kotlin:kotlin-stdlib:${projectProperties.getProperty('kotlin_version')}"
+    jarJar "com.google.protobuf:protobuf-java:${projectProperties.getProperty('protobuf_version')}"
+    jarJar "com.google.protobuf:protobuf-java-util:${projectProperties.getProperty('protobuf_version')}"
+    jarJar "org.luaj:luaj-jse:${projectProperties.getProperty('luaj_version')}"
+}
+
+jarJar.enable()
+
+runs {
+    configureEach {
+        modSource sourceSets.main
+        systemProperty "teamviewer.adapterTck.strict", "true"
+    }
+    client {
+        workingDirectory project.file("run/${minecraftVersion}")
+    }
+}
+
+processResources {
+    inputs.property("mod_version", neoForgeModVersion)
+    inputs.property("minecraft_version", minecraftVersionRange)
+    inputs.property("neoforge_version", neoForgeVersionRange)
+    inputs.property("java_version", targetJavaRelease)
+    filteringCharset = "UTF-8"
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand(
+                mod_version: neoForgeModVersion,
+                minecraft_version: minecraftVersionRange,
+                neoforge_version: neoForgeVersionRange,
+                java_version: targetJavaRelease)
+    }
+    from(file("../fabric/src/main/resources")) {
+        include "assets/**"
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(targetJavaRelease)
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(targetJavaRelease)
+    withSourcesJar()
+}
+
+def verifyLegacyAdapterCompleteness = tasks.register("verifyLegacyAdapterCompleteness") {
+    group = "verification"
+    inputs.files(fileTree("src/version/${adapterVersion}"), fileTree("src/shared"))
+    doLast {
+        def javaRoot = file("src/version/${adapterVersion}/java/fun/prof_chen/teamviewer/main_code")
+        [
+                "core/NeoForgeClientAdapterFactory.java",
+                "client/bridge/NeoForgeClientEventBridge.java",
+                "client/bridge/NeoForgeGameClientBridge.java",
+                "network/bridge/NeoForgeRuntimeGateway.java",
+                "render/NeoForgeWorldRenderSink.java",
+                "render/NeoForgeHudRenderSink.java",
+                "screen/ConfigScreen.java",
+                "screen/PluginManagerScreen.java"
+        ].each { relative ->
+            if (!new File(javaRoot, relative).isFile()) {
+                throw new GradleException("${minecraftVersion} legacy NeoForge adapter missing ${relative}")
+            }
+        }
+        def service = file("src/version/${adapterVersion}/resources/META-INF/services/" +
+                "fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory")
+        if (!service.isFile() || service.readLines().findAll { !it.trim().isEmpty() }.size() != 1) {
+            throw new GradleException("${minecraftVersion} must declare exactly one adapter provider")
+        }
+    }
+}
+
+tasks.named("compileJava") {
+    dependsOn(verifyLegacyAdapterCompleteness)
+}
+
+jar {
+    archiveClassifier = "slim"
+    ["runtime-libs/common-runtime.jar", "runtime-libs/client-bootstrap.jar"].each { runtimeJar ->
+        if (!file(runtimeJar).isFile()) {
+            throw new GradleException(
+                    "Missing ${runtimeJar}; run ../gradlew prepareLegacyNeoForgeRuntime first")
+        }
+        from(zipTree(runtimeJar))
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(file("../LICENSE.txt")) {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+tasks.named("jarJar") {
+    archiveClassifier = ""
+}
+
+tasks.register("verifyLegacyStandalone") {
+    group = "verification"
+    dependsOn(tasks.named("jarJar"))
+    doLast {
+        def archive = tasks.named("jarJar").get().archiveFile.get().asFile
+        def expectedName = profile("standalone_artifact")
+                .replace("{mod_version}", project.version.toString())
+        if (archive.name != expectedName) {
+            throw new GradleException("${archive.name} != expected ${expectedName}")
+        }
+        def entries = new java.util.zip.ZipFile(archive)
+        try {
+            def names = entries.entries().collect { it.name } as Set
+            [
+                    "META-INF/neoforge.mods.toml",
+                    "META-INF/jarjar/metadata.json",
+                    "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
+                    "fun/prof_chen/teamviewer/client/bootstrap/ClientBootstrap.class"
+            ].each { required ->
+                if (!names.contains(required)) {
+                    throw new GradleException("${archive.name} is missing ${required}")
+                }
+            }
+            def nestedRuntimeCount = names.count { it.startsWith("META-INF/jarjar/") && it.endsWith(".jar") }
+            if (nestedRuntimeCount != 6) {
+                throw new GradleException("${archive.name} has ${nestedRuntimeCount} nested runtimes; expected 6")
+            }
+        } finally {
+            entries.close()
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(tasks.named("verifyLegacyStandalone"))
+}

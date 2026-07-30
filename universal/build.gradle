@@ -6,10 +6,10 @@ def versionManifest = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     versionManifest.load(it)
 }
-def supportedTargets = versionManifest.getProperty("supported_targets").split(",").collect { it.trim() }
+def supportedTargets = versionManifest.getProperty("fabric_targets").split(",").collect { it.trim() }
 def sharedJavaRelease = versionManifest.getProperty("shared_java_release").toInteger()
 def minimumLoaderVersion = supportedTargets.collect {
-    versionManifest.getProperty("${it}.loader_version")
+    versionManifest.getProperty("fabric.${it}.loader_version")
 }.min { left, right ->
     def leftParts = left.tokenize('.').collect { it.toInteger() }
     def rightParts = right.tokenize('.').collect { it.toInteger() }
@@ -23,7 +23,7 @@ def minimumLoaderVersion = supportedTargets.collect {
 
 def adapterDirectory = rootProject.layout.buildDirectory.dir("adapter-artifacts")
 def adapterFiles = supportedTargets.collect { target ->
-    def adapterName = versionManifest.getProperty("${target}.slim_adapter_artifact")
+    def adapterName = versionManifest.getProperty("fabric.${target}.slim_adapter_artifact")
     adapterDirectory.map { it.file(adapterName).asFile }
 }
 
@@ -49,9 +49,10 @@ dependencies {
 // Fabric Loader only exposes nested libraries that carry Fabric metadata. Reuse Loom's
 // processIncludeJars output so the universal container has the same loadable common and
 // third-party jars as a standalone artifact, without applying Loom to this project.
-def packagingTarget = providers.gradleProperty("mc_target").getOrElse(
-        versionManifest.getProperty("default_target"))
-def processedSharedDirectory = packagingTarget == versionManifest.getProperty("default_target")
+def packagingTarget = providers.gradleProperty("fabric_target")
+        .orElse(providers.gradleProperty("mc_target"))
+        .getOrElse(versionManifest.getProperty("default_fabric_target"))
+def processedSharedDirectory = packagingTarget == versionManifest.getProperty("default_fabric_target")
         ? rootProject.file("fabric/build/processIncludeJars")
         : rootProject.file("fabric/build/${packagingTarget}/processIncludeJars")
 def processedSharedFiles = providers.provider {
@@ -149,15 +150,16 @@ def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
                 adapterZip.close()
             }
             [
-                    minecraft: versionManifest.getProperty("${target}.minecraft_target_version"),
-                    minecraftRange: versionManifest.getProperty("${target}.fabric_minecraft_version_range"),
-                    adapter: versionManifest.getProperty("${target}.minecraft_adapter_version"),
+                    minecraft: versionManifest.getProperty("fabric.${target}.minecraft_target_version"),
+                    minecraftRange: versionManifest.getProperty("fabric.${target}.minecraft_version_range"),
+                    covers: versionManifest.getProperty("fabric.${target}.covers").split(",").collect { it.trim() },
+                    adapter: versionManifest.getProperty("fabric.${target}.adapter_version"),
                     internalAdapterVersion: adapterMod.version,
-                    gameJavaVersion: versionManifest.getProperty("${target}.game_java_version").toInteger(),
-                    adapterJavaRelease: versionManifest.getProperty("${target}.adapter_java_release").toInteger(),
-                    loader: versionManifest.getProperty("${target}.loader_version"),
-                    fabricApiModId: versionManifest.getProperty("${target}.fabric_api_mod_id"),
-                    fabricApi: versionManifest.getProperty("${target}.fabric_api_version"),
+                    gameJavaVersion: versionManifest.getProperty("fabric.${target}.game_java_version").toInteger(),
+                    adapterJavaRelease: versionManifest.getProperty("fabric.${target}.adapter_java_release").toInteger(),
+                    loader: versionManifest.getProperty("fabric.${target}.loader_version"),
+                    fabricApiModId: versionManifest.getProperty("fabric.${target}.fabric_api_mod_id"),
+                    fabricApi: versionManifest.getProperty("fabric.${target}.fabric_api_version"),
                     file: "META-INF/jars/${adapterFile.name}",
                     size: adapterFile.length(),
                     sha256: sha256(adapterFile)
@@ -228,7 +230,7 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
             def targetInfo = new groovy.json.JsonSlurper().parse(
                     zip.getInputStream(zip.getEntry("META-INF/teamviewer/targets.json")))
             if ((targetInfo.targets*.minecraft as Set) != supportedTargets.collect {
-                versionManifest.getProperty("${it}.minecraft_target_version")
+                versionManifest.getProperty("fabric.${it}.minecraft_target_version")
             } as Set) {
                 throw new GradleException("Universal target metadata does not match target manifest")
             }

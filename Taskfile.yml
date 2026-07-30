@@ -17,7 +17,7 @@ tasks:
       - '{{.GRADLE}} clean'
 
   build:
-    desc: Build all Fabric and NeoForge targets plus the Fabric All-in-One Jar
+    desc: Build every release artifact and compile-check all 31 exact Fabric Minecraft releases
     cmds:
       - |
           set -eu
@@ -26,7 +26,8 @@ tasks:
             echo "Building Fabric Minecraft $target"
             task build-target TARGET="$target"
           done
-          for target in $(python3 scripts/minecraft_targets.py list); do
+          task check-all-fabric-runtimes
+          for target in $(python3 scripts/minecraft_targets.py list-neoforge); do
             echo "Building NeoForge Minecraft $target"
             task build-neoforge-target TARGET="$target"
           done
@@ -41,19 +42,52 @@ tasks:
       - 'python3 scripts/minecraft_targets.py validate "{{.TARGET}}"'
       - |
           java_home="$(python3 scripts/minecraft_targets.py java-home "{{.TARGET}}")"
-          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :fabric:build
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -Pfabric_target="{{.TARGET}}" :fabric:build
           python3 scripts/minecraft_targets.py collect "{{.TARGET}}"
+
+  check-fabric-runtime:
+    desc: 'Compile one exact official Minecraft release with its owning Fabric family'
+    requires:
+      vars: [RUNTIME]
+    cmds:
+      - 'python3 scripts/minecraft_targets.py validate-runtime "{{.RUNTIME}}"'
+      - |
+          family="$(python3 scripts/minecraft_targets.py fabric-owner "{{.RUNTIME}}")"
+          java_home="$(python3 scripts/minecraft_targets.py java-home "$family")"
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
+            -Pfabric_target="$family" -Pfabric_runtime_version="{{.RUNTIME}}" \
+            :fabric:compileClientJava
+
+  check-all-fabric-runtimes:
+    desc: Compile-check every exact official Minecraft release through its Fabric owner
+    cmds:
+      - |
+          set -eu
+          for runtime in $(python3 scripts/minecraft_targets.py list-official); do
+            echo "Checking exact Fabric Minecraft $runtime"
+            task check-fabric-runtime RUNTIME="$runtime"
+          done
 
   build-neoforge-target:
     desc: 'Build one NeoForge target (usage: task build-neoforge-target TARGET=1.21.8)'
     requires:
       vars: [TARGET]
     cmds:
-      - 'python3 scripts/minecraft_targets.py validate "{{.TARGET}}"'
+      - 'python3 scripts/minecraft_targets.py validate --loader neoforge "{{.TARGET}}"'
       - |
-          java_home="$(python3 scripts/minecraft_targets.py java-home "{{.TARGET}}")"
-          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -Pmc_target="{{.TARGET}}" :neoforge:build
-          python3 scripts/minecraft_targets.py collect-neoforge "{{.TARGET}}"
+          java_home="$(python3 scripts/minecraft_targets.py java-home --loader neoforge "{{.TARGET}}")"
+          kind="$(python3 scripts/minecraft_targets.py get --loader neoforge "{{.TARGET}}" build_kind)"
+          if [ "$kind" = "legacy" ]; then
+            root_target="$(python3 scripts/minecraft_targets.py default-target)"
+            root_java_home="$(python3 scripts/minecraft_targets.py java-home "$root_target")"
+            JAVA_HOME="$root_java_home" {{.GRADLE}} --no-daemon --configure-on-demand prepareLegacyNeoForgeRuntime
+            JAVA_HOME="$java_home" neoforge-legacy/gradlew --no-daemon \
+              -p neoforge-legacy -Pneoforge_target="{{.TARGET}}" build
+          else
+            JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
+              -Pneoforge_target="{{.TARGET}}" :neoforge:build
+          fi
+          python3 scripts/minecraft_targets.py collect --loader neoforge "{{.TARGET}}"
 
   build-1.21.8:
     desc: Build Minecraft 1.21.8 (Java 21 bytecode) and collect its jar

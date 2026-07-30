@@ -38,3 +38,4 @@ forge/bin/
 **/__pycache__
 
 build-artifacts/
+neoforge-legacy/runtime-libs/

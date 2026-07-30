@@ -88,28 +88,39 @@ JourneyMap、Xaero、SimMC 原生联动会明确报告 `NOT_IMPLEMENTED`，核�
 ./gradlew build
 ```
 
-该命令保持原行为，默认构建 1.21.8。构建 26.x 时，Gradle 本身也必须运行在 Java 25 上：
+该命令保持原行为，默认构建 Fabric 1.21.8。构建单个其他 Fabric 家族时使用
+`fabric_target`；26.x 的 Gradle 本身也必须运行在 Java 25 上：
 
 ```bash
-JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
-JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.2 build
+JAVA_HOME=/path/to/jdk-25 ./gradlew -Pfabric_target=26.1.2 :fabric:build
+JAVA_HOME=/path/to/jdk-25 ./gradlew -Pfabric_target=26.2 :fabric:build
 ```
 
-使用 Task 构建全部七个正式产物（需要对应的两个 JDK）：
+使用 Task 一键完成全矩阵构建：
 
 ```bash
-JAVA21_HOME=/path/to/jdk-21 JAVA25_HOME=/path/to/jdk-25 task build
+task build
 ```
 
-`build-artifacts` 最终包含：
+该任务会构建 17 个 Fabric 发布家族、逐个解析并编译检查从 1.18 到 26.2 的全部
+31 个正式 Minecraft 版本、构建 13 个 NeoForge 发布目标、组装 Fabric All-in-One，
+最后按版本清单校验发布文件。1.21.9 因 Fabric 世界渲染 API 的实际断档而从原
+1.21.9–1.21.10 家族中拆为独立产物。
 
-- `TeamViewRelay-Fabric-1.21.8-<mod_version>.jar`
-- `TeamViewRelay-Fabric-26.1.2-<mod_version>.jar`
-- `TeamViewRelay-Fabric-26.2-<mod_version>.jar`
-- `TeamViewRelay-Fabric-all-<mod_version>.jar`
-- `TeamViewRelay-NeoForge-1.21.8-<mod_version>.jar`
-- `TeamViewRelay-NeoForge-26.1.2-<mod_version>.jar`
-- `TeamViewRelay-NeoForge-26.2-<mod_version>.jar`
+本机需要 JDK 17、21、25。任务会优先读取 `JAVA17_HOME`、`JAVA21_HOME`、
+`JAVA25_HOME`，也会自动检查当前 `JAVA_HOME` 和常见系统 JDK 目录。例如：
+
+```bash
+JAVA17_HOME=/path/to/jdk-17 \
+JAVA21_HOME=/path/to/jdk-21 \
+JAVA25_HOME=/path/to/jdk-25 \
+task build
+```
+
+`build-artifacts` 最终包含 31 个可发布 Jar：17 个
+`TeamViewRelay-Fabric-<family>-<mod_version>.jar`、13 个
+`TeamViewRelay-NeoForge-<target>-<mod_version>.jar`，以及
+`TeamViewRelay-Fabric-all-<mod_version>.jar`。
 
 独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
 仅供打包使用，不是玩家可安装产物。
