@@ -56,7 +56,7 @@ jobs:
       packaging-java: ${{ steps.targets.outputs.packaging-java }}
       full-fabric-matrix: ${{ steps.targets.outputs.full-fabric-matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Test target manifest tooling
         shell: bash
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
@@ -76,17 +76,20 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
       - name: Set up Buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-action@v1
+        with:
+          version: '1.50.0'
+          setup_only: true
       - name: Resolve Buf binary
         shell: bash
         run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
       - name: Set up shared Java ${{ needs.manifest.outputs.shared-java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '${{ needs.manifest.outputs.shared-java }}'
           distribution: temurin
@@ -105,23 +108,26 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.manifest.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
       - name: Set up Buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-action@v1
+        with:
+          version: '1.50.0'
+          setup_only: true
       - name: Resolve Buf binary
         shell: bash
         run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
       - name: Set up Gradle Java ${{ matrix.java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '${{ matrix.java }}'
           distribution: temurin
           cache: gradle
       - name: Setup Task
-        uses: arduino/setup-task@v2
+        uses: go-task/setup-task@v2
       - name: Build ${{ matrix.loader }} Minecraft ${{ matrix.minecraft }}
         shell: bash
         run: |
@@ -131,14 +137,14 @@ jobs:
             task build-neoforge-target TARGET="${{ matrix.minecraft }}"
           fi
       - name: Upload standalone Jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: team-view-relay-standalone-${{ matrix.loader }}-${{ matrix.minecraft }}
           path: build-artifacts/*.jar
           if-no-files-found: error
       - name: Upload internal slim adapter
         if: matrix.loader == 'fabric'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: team-view-relay-adapter-fabric-${{ matrix.minecraft }}
           path: build/adapter-artifacts/*.jar
@@ -154,23 +160,26 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.manifest.outputs.full-fabric-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
       - name: Set up Buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-action@v1
+        with:
+          version: '1.50.0'
+          setup_only: true
       - name: Resolve Buf binary
         shell: bash
         run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
       - name: Set up Gradle Java ${{ matrix.java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '${{ matrix.java }}'
           distribution: temurin
           cache: gradle
       - name: Setup Task
-        uses: arduino/setup-task@v2
+        uses: go-task/setup-task@v2
       - name: Compile exact Fabric runtime ${{ matrix.release }}
         run: task check-fabric-runtime RUNTIME="${{ matrix.release }}"
 
@@ -180,29 +189,32 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
       - name: Set up Buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-action@v1
+        with:
+          version: '1.50.0'
+          setup_only: true
       - name: Resolve Buf binary
         shell: bash
         run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
       - name: Set up universal packaging Java ${{ needs.manifest.outputs.packaging-java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '${{ needs.manifest.outputs.packaging-java }}'
           distribution: temurin
           cache: gradle
       - name: Download standalone Jars
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: team-view-relay-standalone-*
           path: build-artifacts
           merge-multiple: true
       - name: Download slim adapters
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: team-view-relay-adapter-*
           path: build/adapter-artifacts
@@ -214,7 +226,7 @@ jobs:
           python3 scripts/minecraft_targets.py collect-universal
           python3 scripts/minecraft_targets.py verify-release-set
       - name: Upload official release Jars
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: team-view-relay-all-release-jars
           path: build-artifacts/*.jar
