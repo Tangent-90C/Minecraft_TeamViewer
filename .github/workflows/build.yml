@@ -94,7 +94,7 @@ jobs:
       - name: Test Java 17 shared runtime and bootstrap
         shell: bash
         # Avoid configuring Fabric Loom, whose Gradle plugin itself requires Java 21.
-        run: ./gradlew --no-daemon --configure-on-demand :common:test :common-sdk:build :client-bootstrap:build :fabric-bootstrap:build
+        run: ./gradlew --no-daemon --configure-on-demand :common:test :common:legacyGsonTest :common-sdk:build :client-bootstrap:build :fabric-bootstrap:build
 
   target-build:
     runs-on: ubuntu-latest

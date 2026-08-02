@@ -776,6 +776,24 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             if (nested.any { it.substring("META-INF/jars/".length()).startsWith("jackson-") }) {
                 throw new GradleException("Standalone must not duplicate Minecraft's Jackson modules")
             }
+            if (nested.any { it.substring("META-INF/jars/".length()).startsWith("gson-") }
+                    || entries.any { it.startsWith("com/google/gson/") }) {
+                throw new GradleException("Standalone must use Minecraft's Gson instead of bundling an unrelocated copy")
+            }
+            nested.each { nestedName ->
+                def nestedZip = new java.util.zip.ZipInputStream(zip.getInputStream(zip.getEntry(nestedName)))
+                try {
+                    java.util.zip.ZipEntry nestedEntry
+                    while ((nestedEntry = nestedZip.nextEntry) != null) {
+                        if (nestedEntry.name.startsWith("com/google/gson/")) {
+                            throw new GradleException(
+                                    "Standalone nested Jar ${nestedName} contains unrelocated Gson classes")
+                        }
+                    }
+                } finally {
+                    nestedZip.close()
+                }
+            }
             if (!entries.contains("fun/prof_chen/teamviewer/client/TeamviewerClient.class")) {
                 throw new GradleException("Standalone is missing the shared Java 17 bootstrap entrypoint")
             }

@@ -62,7 +62,10 @@ import java.lang.reflect.Proxy;
 /** Discovers, validates and executes trusted local Lua integration plugins. */
 public final class IntegrationPluginManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(IntegrationPluginManager.class);
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson GSON = new GsonBuilder()
+            .registerTypeAdapterFactory(new LegacyRecordTypeAdapterFactory())
+            .setPrettyPrinting()
+            .create();
     private static final List<String> BUILTIN_NAMES = List.of("nodemc", "simmc", "xaero", "journeymap", "example");
     private static final String BUILTIN_ROOT = "teamviewer/plugins/";
     private static final String DISABLED_METADATA = "disabled-plugin.json";

@@ -227,6 +227,24 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
             if (entries.any { it.startsWith("META-INF/jars/jackson-") }) {
                 throw new GradleException("Universal Jar must not duplicate Minecraft's Jackson modules")
             }
+            if (entries.any { it.startsWith("META-INF/jars/gson-") }
+                    || entries.any { it.startsWith("com/google/gson/") }) {
+                throw new GradleException("Universal Jar must use Minecraft's Gson instead of bundling an unrelocated copy")
+            }
+            entries.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }.each { nestedName ->
+                def nestedZip = new java.util.zip.ZipInputStream(zip.getInputStream(zip.getEntry(nestedName)))
+                try {
+                    java.util.zip.ZipEntry nestedEntry
+                    while ((nestedEntry = nestedZip.nextEntry) != null) {
+                        if (nestedEntry.name.startsWith("com/google/gson/")) {
+                            throw new GradleException(
+                                    "Universal nested Jar ${nestedName} contains unrelocated Gson classes")
+                        }
+                    }
+                } finally {
+                    nestedZip.close()
+                }
+            }
             def rootMod = new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry("fabric.mod.json")))
             if (rootMod.id != "team-view-relay" || rootMod.depends?.get("team-view-relay-adapter") != "*") {
                 throw new GradleException("Invalid universal root Fabric metadata")

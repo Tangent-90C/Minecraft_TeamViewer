@@ -118,6 +118,24 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
+configurations {
+    legacyGsonTestRuntimeClasspath {
+        canBeConsumed = false
+        canBeResolved = true
+        extendsFrom(testRuntimeClasspath)
+        resolutionStrategy.force "com.google.code.gson:gson:${project.gson_compat_version}"
+    }
+}
+
+def legacyGsonTest = tasks.register("legacyGsonTest", Test) {
+    group = "verification"
+    description = "Run common tests with the Gson version supplied by Minecraft 1.18.2."
+    dependsOn(tasks.named("testClasses"))
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.output + sourceSets.main.output + configurations.legacyGsonTestRuntimeClasspath
+    shouldRunAfter(tasks.named("test"))
+}
+
 // NeoForge loads every JarJar dependency as a named JPMS module. common-sdk
 // and common intentionally keep a compile-time boundary while sharing domain
 // packages, so they must be one runtime module in NeoForge production jars.
@@ -182,7 +200,7 @@ tasks.register("verifyPlatformBoundary") {
 }
 
 tasks.named("check") {
-    dependsOn(tasks.named("verifyPlatformBoundary"))
+    dependsOn(tasks.named("verifyPlatformBoundary"), legacyGsonTest)
 }
 
 java {
