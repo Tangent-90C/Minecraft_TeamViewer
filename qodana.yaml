@@ -47,4 +47,3 @@ projectJDK: "21" #(Applied in CI/CD pipeline)
 #Qodana supports other languages, for example, Python, JavaScript, TypeScript, Go, C#, PHP
 #For all supported languages see https://www.jetbrains.com/help/qodana/linters.html
 linter: jetbrains/qodana-jvm-community:2026.2.0
-projectJDK: "25"
