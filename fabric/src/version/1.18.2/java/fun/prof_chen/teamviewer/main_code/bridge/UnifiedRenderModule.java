@@ -31,8 +31,10 @@ public class UnifiedRenderModule implements RenderBridge {
 	// 线条宽度常量
 	private static final float DEFAULT_LINE_WIDTH = 2.5F;
 	private static final float TRACER_LINE_WIDTH = 1.0F;
+	private static final Map<Double, RenderLayer> DEBUG_LINE_LAYER_CACHE = new ConcurrentHashMap<>();
 	private static final Map<Double, RenderLayer> NO_DEPTH_DEBUG_LINE_LAYER_CACHE = new ConcurrentHashMap<>();
-	private static volatile RenderLayer NO_DEPTH_DEBUG_QUAD_LAYER;
+	private static final RenderLayer DEBUG_QUAD_LAYER = createDebugQuadLayer(true);
+	private static final RenderLayer NO_DEPTH_DEBUG_QUAD_LAYER = createDebugQuadLayer(false);
 
 	/**
 	 * 绘制方框轮廓
@@ -45,15 +47,19 @@ public class UnifiedRenderModule implements RenderBridge {
 	 */
 	@Override
 	public void drawOutlinedBox(RenderContextHandle context, AxisAlignedBox3D box, int color, boolean depthTest) {
-		MatrixStack matrices = requireMatrixStack(context);
+		// WorldRenderEvents.LAST already installs the camera rotation in RenderSystem's
+		// global ModelView matrix.  The sink has also made coordinates camera-relative,
+		// so applying context.matrixStack() here would rotate every vertex a second time.
+		requireMatrixStack(context);
+		MatrixStack matrices = new MatrixStack();
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.getBuffer();
-		buffer.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
+		buffer.begin(VertexFormat.DrawMode.LINES, VertexFormats.LINES);
 		
 		drawOutlinedBox(matrices, buffer, box, color);
 		
 		// 使用 RenderLayer 绘制缓冲区
-		getDebugLineStripLayer(DEFAULT_LINE_WIDTH, depthTest).draw(buffer, 0, 0, 0);
+		getLineLayer(DEFAULT_LINE_WIDTH, depthTest).draw(buffer, 0, 0, 0);
 	}
 	
 	/**
@@ -65,15 +71,6 @@ public class UnifiedRenderModule implements RenderBridge {
 	 * @param color    颜色值（ARGB格式）
 	 */
 	private static void drawOutlinedBox(MatrixStack matrices, BufferBuilder buffer, AxisAlignedBox3D box, int color) {
-		float x1 = (float) box.minX();
-		float y1 = (float) box.minY();
-		float z1 = (float) box.minZ();
-		float x2 = (float) box.maxX();
-		float y2 = (float) box.maxY();
-		float z2 = (float) box.maxZ();
-		
-		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
-		
 		// 提取ARGB颜色分量
 		float a = ((color >> 24) & 0xFF) / 255.0f;
 		float r = ((color >> 16) & 0xFF) / 255.0f;
@@ -87,45 +84,10 @@ public class UnifiedRenderModule implements RenderBridge {
 		
 		RenderSystem.lineWidth(DEFAULT_LINE_WIDTH);
 		
-		// 绘制立方体的12条边
-		// ===== 底面 =====
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
-		
-		// ===== 顶面 =====
-		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a).next();
-		
-		// ===== 垂直边 =====
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
-		
-		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a).next();
+		WorldRenderer.drawBox(matrices, buffer,
+				box.minX(), box.minY(), box.minZ(),
+				box.maxX(), box.maxY(), box.maxZ(),
+				r, g, b, a);
 	}
 	
 	/**
@@ -138,10 +100,22 @@ public class UnifiedRenderModule implements RenderBridge {
 	 */
 	@Override
 	public void drawLine(RenderContextHandle context, Position3D start, Position3D end, int color, boolean depthTest) {
-		MatrixStack matrices = requireMatrixStack(context);
+		float normalX = (float) (end.x() - start.x());
+		float normalY = (float) (end.y() - start.y());
+		float normalZ = (float) (end.z() - start.z());
+		float length = (float) Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+		if (length <= 1.0E-6F) {
+			return;
+		}
+		normalX /= length;
+		normalY /= length;
+		normalZ /= length;
+
+		requireMatrixStack(context);
+		MatrixStack matrices = new MatrixStack();
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.getBuffer();
-		buffer.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
+		buffer.begin(VertexFormat.DrawMode.LINES, VertexFormats.LINES);
 		
 		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
 		
@@ -156,11 +130,12 @@ public class UnifiedRenderModule implements RenderBridge {
 			a = 1.0f;
 		}
 		
-		buffer.vertex(matrix4f, (float) start.x(), (float) start.y(), (float) start.z()).color(r, g, b, a).next();
-		buffer.vertex(matrix4f, (float) end.x(), (float) end.y(), (float) end.z()).color(r, g, b, a).next();
+		RenderSystem.lineWidth(TRACER_LINE_WIDTH);
+		buffer.vertex(matrix4f, (float) start.x(), (float) start.y(), (float) start.z()).color(r, g, b, a).normal(normalX, normalY, normalZ).next();
+		buffer.vertex(matrix4f, (float) end.x(), (float) end.y(), (float) end.z()).color(r, g, b, a).normal(normalX, normalY, normalZ).next();
 		
 		// 绘制缓冲区
-		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer, 0, 0, 0);
+		getLineLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer, 0, 0, 0);
 	}
 	
 	/**
@@ -183,7 +158,8 @@ public class UnifiedRenderModule implements RenderBridge {
 			return;
 		}
 
-		MatrixStack matrices = requireMatrixStack(context);
+		requireMatrixStack(context);
+		MatrixStack matrices = new MatrixStack();
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.getBuffer();
 		buffer.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
@@ -218,7 +194,8 @@ public class UnifiedRenderModule implements RenderBridge {
 			return;
 		}
 
-		MatrixStack matrices = requireMatrixStack(context);
+		requireMatrixStack(context);
+		MatrixStack matrices = new MatrixStack();
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder buffer = tessellator.getBuffer();
 		buffer.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
@@ -270,48 +247,64 @@ public class UnifiedRenderModule implements RenderBridge {
 		buffer.vertex(matrix4f, x4, y4, z4).color(r, g, b, a).next();
 	}
 
-	private static RenderLayer getDebugLineStripLayer(double lineWidth, boolean depthTest) {
-		if (depthTest) {
-			return RenderLayer.getLineStrip();
-		}
-		return NO_DEPTH_DEBUG_LINE_LAYER_CACHE.computeIfAbsent(lineWidth, width -> {
-			RenderLayer baseLayer = RenderLayer.getLineStrip();
-			return createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_line_strip_" + sanitizeLineWidth(width));
-		});
+	private static RenderLayer getLineLayer(double lineWidth, boolean depthTest) {
+		Map<Double, RenderLayer> cache = depthTest ? DEBUG_LINE_LAYER_CACHE : NO_DEPTH_DEBUG_LINE_LAYER_CACHE;
+		return cache.computeIfAbsent(lineWidth, width -> createLineLayer(width, depthTest));
 	}
 
-	private static RenderLayer getDebugQuadLayer(boolean depthTest) {
-		if (depthTest) {
-			return RenderLayer.getLightning();
-		}
-		RenderLayer cachedLayer = NO_DEPTH_DEBUG_QUAD_LAYER;
-		if (cachedLayer != null) {
-			return cachedLayer;
-		}
-		synchronized (UnifiedRenderModule.class) {
-			if (NO_DEPTH_DEBUG_QUAD_LAYER == null) {
-				RenderLayer baseLayer = RenderLayer.getLightning();
-				NO_DEPTH_DEBUG_QUAD_LAYER = createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_quads");
-			}
-			return NO_DEPTH_DEBUG_QUAD_LAYER;
-		}
-	}
-
-	private static RenderLayer createNoDepthLayer(RenderLayer baseLayer, String newLayerName) {
+	private static RenderLayer createLineLayer(double lineWidth, boolean depthTest) {
 		return new RenderLayer(
-				newLayerName,
-				baseLayer.getVertexFormat(),
-				baseLayer.getDrawMode(),
-				baseLayer.getExpectedBufferSize(),
-				baseLayer.hasCrumbling(),
+				(depthTest ? "teamviewer_lines_" : "teamviewer_no_depth_lines_") + sanitizeLineWidth(lineWidth),
+				VertexFormats.LINES,
+				VertexFormat.DrawMode.LINES,
+				256,
+				false,
 				false,
 				() -> {
-					baseLayer.startDrawing();
-					RenderSystem.disableDepthTest();
+					RenderSystem.enableBlend();
+					RenderSystem.defaultBlendFunc();
+					RenderSystem.disableCull();
+					RenderSystem.lineWidth((float) lineWidth);
+					RenderSystem.setShader(GameRenderer::getRenderTypeLinesShader);
+					if (depthTest) {
+						RenderSystem.enableDepthTest();
+					} else {
+						RenderSystem.disableDepthTest();
+					}
 				},
 				() -> {
 					RenderSystem.enableDepthTest();
-					baseLayer.endDrawing();
+					RenderSystem.enableCull();
+					RenderSystem.disableBlend();
+				}) {
+		};
+	}
+
+	private static RenderLayer getDebugQuadLayer(boolean depthTest) {
+		return depthTest ? DEBUG_QUAD_LAYER : NO_DEPTH_DEBUG_QUAD_LAYER;
+	}
+
+	private static RenderLayer createDebugQuadLayer(boolean depthTest) {
+		return new RenderLayer(
+				depthTest ? "teamviewer_debug_quads" : "teamviewer_no_depth_debug_quads",
+				VertexFormats.POSITION_COLOR,
+				VertexFormat.DrawMode.QUADS,
+				256,
+				false,
+				true,
+				() -> {
+					RenderSystem.enableBlend();
+					RenderSystem.defaultBlendFunc();
+					RenderSystem.setShader(GameRenderer::getPositionColorShader);
+					if (depthTest) {
+						RenderSystem.enableDepthTest();
+					} else {
+						RenderSystem.disableDepthTest();
+					}
+				},
+				() -> {
+					RenderSystem.enableDepthTest();
+					RenderSystem.disableBlend();
 				}) {
 		};
 	}

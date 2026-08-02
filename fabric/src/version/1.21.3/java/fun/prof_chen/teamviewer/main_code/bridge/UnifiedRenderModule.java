@@ -47,12 +47,12 @@ public class UnifiedRenderModule implements RenderBridge {
 	public void drawOutlinedBox(RenderContextHandle context, AxisAlignedBox3D box, int color, boolean depthTest) {
 		MatrixStack matrices = requireMatrixStack(context);
 		Tessellator tessellator = Tessellator.getInstance();
-		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
+		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 		
 		drawOutlinedBox(matrices, buffer, box, color);
 		
 		// 使用 RenderLayer 绘制缓冲区
-		getDebugLineStripLayer(DEFAULT_LINE_WIDTH, depthTest).draw(buffer.end());
+		getDebugLineLayer(DEFAULT_LINE_WIDTH, depthTest).draw(buffer.end());
 	}
 	
 	/**
@@ -139,7 +139,7 @@ public class UnifiedRenderModule implements RenderBridge {
 	public void drawLine(RenderContextHandle context, Position3D start, Position3D end, int color, boolean depthTest) {
 		MatrixStack matrices = requireMatrixStack(context);
 		Tessellator tessellator = Tessellator.getInstance();
-		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINE_STRIP, VertexFormats.POSITION_COLOR);
+		BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 		
 		Matrix4f matrix4f = matrices.peek().getPositionMatrix();
 		
@@ -158,7 +158,7 @@ public class UnifiedRenderModule implements RenderBridge {
 		buffer.vertex(matrix4f, (float) end.x(), (float) end.y(), (float) end.z()).color(r, g, b, a);
 		
 		// 绘制缓冲区
-		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
+		getDebugLineLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer.end());
 	}
 	
 	/**
@@ -266,13 +266,15 @@ public class UnifiedRenderModule implements RenderBridge {
 		buffer.vertex(matrix4f, x4, y4, z4).color(r, g, b, a);
 	}
 
-	private static RenderLayer getDebugLineStripLayer(double lineWidth, boolean depthTest) {
+	private static RenderLayer getDebugLineLayer(double lineWidth, boolean depthTest) {
+		// Minecraft exposes this position-color debug pipeline under the line-strip name;
+		// the BufferBuilder DEBUG_LINES mode above still owns the independent-line topology.
 		if (depthTest) {
 			return RenderLayer.getDebugLineStrip(lineWidth);
 		}
 		return NO_DEPTH_DEBUG_LINE_LAYER_CACHE.computeIfAbsent(lineWidth, width -> {
 			RenderLayer baseLayer = RenderLayer.getDebugLineStrip(width);
-			return createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_line_strip_" + sanitizeLineWidth(width));
+			return createNoDepthLayer(baseLayer, "teamviewer_no_depth_debug_lines_" + sanitizeLineWidth(width));
 		});
 	}
 

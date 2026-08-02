@@ -494,6 +494,39 @@ tasks.register("verifyAdapterSdkCompleteness") {
                             "${adapter} legacy BufferBuilder vertices must be finalized with next()")
                 }
             }
+            if (["1.18.2", "1.19.2", "1.19.4"].contains(adapter)) {
+                def renderModule = new File(root,
+                        "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
+                def renderText = renderModule.getText("UTF-8")
+                if (renderText.count("VertexFormat.DrawMode.LINES, VertexFormats.LINES") != 2 ||
+                        !renderText.contains("WorldRenderer.drawBox(matrices, buffer") ||
+                        renderText.count("normal(normalX") != 2 ||
+                        renderText.count("MatrixStack matrices = new MatrixStack();") != 4 ||
+                        renderText.contains("MatrixStack matrices = requireMatrixStack(context);") ||
+                        !renderText.contains("createLineLayer(width, depthTest)") ||
+                        !renderText.contains("RenderSystem.setShader(GameRenderer::getRenderTypeLines") ||
+                        !renderText.contains("createDebugQuadLayer(true)") ||
+                        !renderText.contains("RenderSystem.setShader(GameRenderer::getPositionColor") ||
+                        renderText.contains("RenderLayer.getLines()") ||
+                        renderText.contains("RenderLayer.getLineStrip()") ||
+                        renderText.contains("RenderLayer.getLightning()") ||
+                        renderText.contains("VertexFormat.DrawMode.DEBUG_LINE_STRIP")) {
+                    throw new GradleException(
+                            "${adapter} renderer must use camera-relative vertices, complete LINES normals, and main-target position-color quads")
+                }
+            }
+            if (["1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4",
+                 "1.21.5", "1.21.8", "1.21.9", "1.21.10"].contains(adapter)) {
+                def renderModule = new File(root,
+                        "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
+                def renderText = renderModule.getText("UTF-8")
+                if (renderText.count("VertexFormat.DrawMode.DEBUG_LINES") != 2 ||
+                        !renderText.contains("RenderLayer.getDebugLineStrip") ||
+                        renderText.contains("VertexFormat.DrawMode.DEBUG_LINE_STRIP")) {
+                    throw new GradleException(
+                            "${adapter} debug position-color pipeline must render independent DEBUG_LINES")
+                }
+            }
             def gameBridge = new File(root,
                     "java/fun/prof_chen/teamviewer/main_code/client/bridge/FabricGameClientBridge.java")
             def gameBridgeText = gameBridge.getText("UTF-8")
