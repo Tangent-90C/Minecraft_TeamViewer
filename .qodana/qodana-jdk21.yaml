@@ -1,0 +1,13 @@
+version: "1.0"
+
+profile:
+  name: qodana.starter
+
+# Gradle and Fabric Loom run on JDK 21. Java 17 targets still use --release 17
+# from the imported Gradle model.
+projectJDK: "21"
+
+rootJavaProjects:
+  - "./"
+
+linter: qodana-jvm-community

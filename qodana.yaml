@@ -25,6 +25,11 @@ profile:
 
 projectJDK: "25" #(Applied in CI/CD pipeline)
 
+# The default configuration analyzes the root Gradle project. CI selects the
+# Java 25 representative target explicitly using Gradle project properties.
+rootJavaProjects:
+  - "./"
+
 #Execute shell command before Qodana execution (Applied in CI/CD pipeline)
 #bootstrap: sh ./prepare-qodana.sh
 
