@@ -25,15 +25,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: 'Qodana Scan'
-        uses: JetBrains/qodana-action@v2025.3
+        uses: JetBrains/qodana-action@v2026.2.0
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
           # When pr-mode is set to true, Qodana analyzes only the files that have been changed
           pr-mode: false
           # Bust stale IDE/Gradle import caches after the repository layout changed.
-          primary-cache-key: qodana-2025.3-root-layout-v2-${{ github.ref }}-${{ github.sha }}
-          additional-cache-key: qodana-2025.3-root-layout-v2-${{ github.ref }}
+          primary-cache-key: qodana-2026.2.0-root-layout-v2-${{ github.ref }}-${{ github.sha }}
+          additional-cache-key: qodana-2026.2.0-root-layout-v2-${{ github.ref }}
           use-caches: true
           post-pr-comment: true
           use-annotations: true
