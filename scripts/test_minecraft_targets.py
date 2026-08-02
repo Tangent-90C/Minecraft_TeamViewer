@@ -4,7 +4,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
-from unittest import mock
+import unittest.mock
 
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -35,7 +35,7 @@ class MinecraftTargetsTest(unittest.TestCase):
         matrix = minecraft_targets.load_manifest()
         with tempfile.TemporaryDirectory() as temp_dir:
             java_home = self._fake_jdk(pathlib.Path(temp_dir), 25)
-            with mock.patch.dict(
+            with unittest.mock.patch.dict(
                 minecraft_targets.os.environ,
                 {"JAVA_HOME_25_X64": str(java_home)},
                 clear=True,
@@ -51,7 +51,7 @@ class MinecraftTargetsTest(unittest.TestCase):
             root = pathlib.Path(temp_dir)
             preferred = self._fake_jdk(root / "preferred", 25)
             setup_java = self._fake_jdk(root / "setup-java", 25)
-            with mock.patch.dict(
+            with unittest.mock.patch.dict(
                 minecraft_targets.os.environ,
                 {
                     "JAVA25_HOME": str(preferred),
@@ -68,7 +68,7 @@ class MinecraftTargetsTest(unittest.TestCase):
         matrix = minecraft_targets.load_manifest()
         with tempfile.TemporaryDirectory() as temp_dir:
             wrong_java = self._fake_jdk(pathlib.Path(temp_dir), 21)
-            with mock.patch.object(
+            with unittest.mock.patch.object(
                 minecraft_targets,
                 "java_home_candidates",
                 return_value=(wrong_java,),

@@ -1,7 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.client;
 
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
-import fun.prof_chen.teamviewer.main_code.bridge.WaypointSyncGateway;
+import fun.prof_chen.teamviewer.main_code.bridge.NetworkWaypointSyncGateway;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterBundle;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
@@ -60,7 +60,7 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
 
         RemotePlayerRepository remoteRepository = new MapBackedRemotePlayerRepository(remotePlayers);
         SharedWaypointRepository waypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
-        WaypointSyncGateway waypointGateway = new WaypointSyncGateway(network);
+        NetworkWaypointSyncGateway waypointGateway = new NetworkWaypointSyncGateway(network);
         RemotePlayerProjectionCoordinator projectionCoordinator =
                 new RemotePlayerProjectionCoordinator(integrations);
         waypointCoordinator = new SharedWaypointSyncCoordinator(

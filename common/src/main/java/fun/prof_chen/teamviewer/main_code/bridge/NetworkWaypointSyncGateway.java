@@ -12,11 +12,11 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class WaypointSyncGateway implements fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway {
+public final class NetworkWaypointSyncGateway implements fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway {
 	private final NetworkManager delegate;
 	private final Map<WaypointUpdateListener, NetworkManager.WaypointUpdateListener> listenerMap = new ConcurrentHashMap<>();
 
-	public WaypointSyncGateway(NetworkManager delegate) {
+	public NetworkWaypointSyncGateway(NetworkManager delegate) {
 		this.delegate = Objects.requireNonNull(delegate, "delegate");
 	}
 

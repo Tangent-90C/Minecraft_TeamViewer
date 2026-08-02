@@ -434,7 +434,7 @@ public class NetworkManager {
 	private void enqueueMainThreadTask(Runnable task) {
 		if (task != null) {
 			pendingMainThreadTaskCount.incrementAndGet();
-			mainThreadTasks.offer(task);
+			mainThreadTasks.add(task);
 		}
 	}
 
@@ -1254,6 +1254,7 @@ public class NetworkManager {
 	 */
 	private void processDecodedMessage(long attemptId, ProtocolPackets.DecodedInboundMessage decoded) {
 		try {
+			Objects.requireNonNull(decoded, "decoded");
 			if (!isCurrentConnectionAttempt(attemptId)) {
 				LOGGER.debug("Ignoring stale inbound message for attempt {}", attemptId);
 				return;
