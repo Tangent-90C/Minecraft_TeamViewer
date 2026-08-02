@@ -15,11 +15,50 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NetworkManagerTabDiffTest {
+    @Test
+    void finiteReconnectBudgetIsClaimedAtomically() throws Exception {
+        AtomicInteger remaining = new AtomicInteger(10);
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Integer>> claims = new ArrayList<>();
+        try {
+            for (int index = 0; index < 100; index++) {
+                claims.add(executor.submit(() -> {
+                    start.await();
+                    return NetworkManager.claimReconnectAttempt(remaining);
+                }));
+            }
+            start.countDown();
+            long accepted = 0L;
+            for (Future<Integer> claim : claims) {
+                if (claim.get() > 0) accepted++;
+            }
+            assertEquals(10L, accepted);
+            assertEquals(0, remaining.get());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void unlimitedReconnectBudgetIsNeverConsumed() {
+        AtomicInteger remaining = new AtomicInteger(-1);
+        for (int index = 0; index < 100; index++) {
+            assertEquals(-1, NetworkManager.claimReconnectAttempt(remaining));
+        }
+        assertEquals(-1, remaining.get());
+    }
+
     @Test
     void decodedInboundMapsApplyWithoutJsonRoundTrip() throws Exception {
         Map<UUID, RemotePlayerInfo> remotePlayers = new HashMap<>();

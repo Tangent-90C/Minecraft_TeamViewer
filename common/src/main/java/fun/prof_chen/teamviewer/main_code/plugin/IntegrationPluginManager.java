@@ -168,7 +168,10 @@ public final class IntegrationPluginManager {
             }
         }
         for (String id : scanned.keySet()) {
-            if (!descriptors.containsKey(id)) changed = true;
+            if (!descriptors.containsKey(id)) {
+                changed = true;
+                break;
+            }
         }
         return changed;
     }

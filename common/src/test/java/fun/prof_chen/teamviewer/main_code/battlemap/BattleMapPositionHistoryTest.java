@@ -11,6 +11,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class BattleMapPositionHistoryTest {
     @Test
+    void returnsNoCandidateWithoutSamples() {
+        BattleMapPositionHistory history = new BattleMapPositionHistory(10);
+        assertEquals(List.of(), history.select(System.currentTimeMillis(), "minecraft:overworld"));
+    }
+
+    @Test
+    void rejectsLatestSampleWhenObservationIsTooFarInTheFuture() {
+        BattleMapPositionHistory history = new BattleMapPositionHistory(10);
+        long now = System.currentTimeMillis();
+        history.record(world(15.9, 15.9), now);
+        assertEquals(List.of(), history.select(now + 7_000L, "minecraft:overworld"));
+    }
+
+    @Test
     void preservesBoundaryCandidatesAroundObservedPacketTime() {
         BattleMapPositionHistory history = new BattleMapPositionHistory(10);
         long now = System.currentTimeMillis();

@@ -9,7 +9,7 @@ import java.util.Objects;
 
 public record WaypointSyncPayload(SharedWaypointInfo waypoint, Map<String, Object> protocolData) {
 	public WaypointSyncPayload {
-		waypoint = Objects.requireNonNull(waypoint, "waypoint");
+		Objects.requireNonNull(waypoint, "waypoint");
 		if (protocolData == null || protocolData.isEmpty()) {
 			protocolData = Map.of();
 		} else {

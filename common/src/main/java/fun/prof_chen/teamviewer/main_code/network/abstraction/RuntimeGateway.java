@@ -40,8 +40,8 @@ public interface RuntimeGateway {
             if (contextLoader != null && contextLoader != platformLoader) {
                 try {
                     return Class.forName(binaryName, false, contextLoader);
-                } catch (ClassNotFoundException ignored) {
-                    first.addSuppressed(ignored);
+                } catch (ClassNotFoundException contextFailure) {
+                    first.addSuppressed(contextFailure);
                 }
             }
             throw first;

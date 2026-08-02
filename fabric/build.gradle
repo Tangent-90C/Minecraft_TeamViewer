@@ -229,6 +229,8 @@ dependencies {
     implementation "com.squareup.okio:okio-jvm:${project.okio_version}"
     include "com.squareup.okio:okio-jvm:${project.okio_version}"
 
+    // This Java-only project pins the stdlib bundled for OkHttp/Okio; there is no Kotlin Gradle plugin version.
+    //noinspection DifferentStdlibGradleVersion
     implementation "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
     include "org.jetbrains.kotlin:kotlin-stdlib:${project.kotlin_version}"
 

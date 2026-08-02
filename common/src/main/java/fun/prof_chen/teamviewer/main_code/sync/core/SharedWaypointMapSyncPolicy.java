@@ -74,7 +74,9 @@ final class SharedWaypointMapSyncPolicy {
         for (SharedWaypointMapAdapter adapter : adapters) {
             adapter.deleteWaypoints(ids);
             AdapterState state = states.get(adapter.id());
-            if (state != null) state.renderedRemoteIds.removeAll(ids);
+            if (state != null) {
+                for (String id : ids) state.renderedRemoteIds.remove(id);
+            }
         }
     }
 
@@ -93,6 +95,8 @@ final class SharedWaypointMapSyncPolicy {
         }
         Map<String, SharedWaypointInfo> current = new LinkedHashMap<>();
         for (NativeMapWaypointSnapshot value : nativeValues == null ? List.<NativeMapWaypointSnapshot>of() : nativeValues) {
+            // Third-party and Lua adapters are extension boundaries and may return malformed list elements.
+            //noinspection ConstantValue
             if (value == null || value.name() == null || value.name().isBlank()) continue;
             String dimension = value.dimension() == null || value.dimension().isBlank() ? world.dimension() : value.dimension();
             String seed = adapter.id() + "|" + world.localPlayerId() + "|" + dimension + "|" + value.name()

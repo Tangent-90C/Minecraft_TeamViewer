@@ -41,7 +41,7 @@ public record IntegrationCapability(
     public IntegrationCapability {
         id = IntegrationIds.canonicalize(Objects.requireNonNull(id, "id"));
         role = Objects.requireNonNull(role, "role").trim();
-        status = Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(status, "status");
         detail = detail == null ? "" : detail;
         pluginId = Objects.requireNonNullElse(pluginId, IntegrationIds.pluginIdForCapability(id));
         implementationSource = Objects.requireNonNullElse(implementationSource,

@@ -25,13 +25,17 @@ profile:
 
 projectJDK: "25" #(Applied in CI/CD pipeline)
 
+# Run on the prepared GitHub runner so Gradle, Buf, Loom and ModDev share the
+# same filesystem paths with the analyzer.
+withinDocker: false
+
 # The default configuration analyzes the root Gradle project. CI selects the
 # Java 25 representative target explicitly using Gradle project properties.
 rootJavaProjects:
   - "./"
 
-#Execute shell command before Qodana execution (Applied in CI/CD pipeline)
-#bootstrap: sh ./prepare-qodana.sh
+# Resolve and compile every source set before IntelliJ imports the project.
+bootstrap: sh ./scripts/prepare_qodana.sh modern
 
 #Install IDE plugins before Qodana execution (Applied in CI/CD pipeline)
 #plugins:

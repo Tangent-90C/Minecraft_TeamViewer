@@ -39,7 +39,7 @@ public final class BattleMapPositionHistory {
         if (before == null) before = latest;
         if (before == null) return List.of();
         if (observedAt - before.capturedAt() > MAX_ALIGNMENT_AGE_MS) {
-            if (latest == null || Math.abs(latest.capturedAt() - observedAt) > MAX_SAMPLE_AGE_MS) return List.of();
+            if (Math.abs(latest.capturedAt() - observedAt) > MAX_SAMPLE_AGE_MS) return List.of();
             return List.of(candidate(latest, "history_primary"));
         }
         List<Candidate> result = new ArrayList<>();

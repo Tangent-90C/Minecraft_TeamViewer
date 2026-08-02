@@ -164,23 +164,24 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
     inputs.files(fileTree("src/version/${adapterVersion}"), fileTree("src/shared"))
     doLast {
         def root = file("src/version/${adapterVersion}")
-        def javaRoot = new File(root, "java/fun/prof_chen/teamviewer/main_code")
+        def javaRoot = new File(root, "java")
         def required = [
-                "core/NeoForgeClientAdapterFactory.java",
-                "client/bridge/NeoForgeClientEventBridge.java",
-                "client/bridge/NeoForgeGameClientBridge.java",
-                "network/bridge/NeoForgeRuntimeGateway.java",
-                "render/NeoForgeWorldRenderSink.java",
-                "render/NeoForgeHudRenderSink.java",
-                "screen/ConfigScreen.java",
-                "screen/PluginManagerScreen.java"
+                "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java",
+                "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeClientEventBridge.java",
+                "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java",
+                "fun/prof_chen/teamviewer/main_code/network/bridge/NeoForgeRuntimeGateway.java",
+                "fun/prof_chen/teamviewer/main_code/render/NeoForgeWorldRenderSink.java",
+                "fun/prof_chen/teamviewer/main_code/render/NeoForgeHudRenderSink.java",
+                "fun/prof_chen/teamviewer/main_code/screen/ConfigScreen.java",
+                "fun/prof_chen/teamviewer/main_code/screen/PluginManagerScreen.java"
         ]
         required.each { relative ->
             if (!new File(javaRoot, relative).isFile()) {
                 throw new GradleException("${minecraftVersion} NeoForge adapter missing required port ${relative}")
             }
         }
-        def factory = new File(javaRoot, "core/NeoForgeClientAdapterFactory.java")
+        def factory = new File(javaRoot,
+                "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java")
         def factoryText = factory.getText("UTF-8")
         ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(",
          "new IntegrationRegistry()"].each { token ->
@@ -194,7 +195,8 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
                     "NeoForge ${adapterVersion} factory reports '${actual}', expected '${expectedAdapterId}'")
         }
         if (factory.readLines().size() > 100) throw new GradleException("NeoForge factory must remain thin")
-        def gameBridge = new File(javaRoot, "client/bridge/NeoForgeGameClientBridge.java").getText("UTF-8")
+        def gameBridge = new File(javaRoot,
+                "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java").getText("UTF-8")
         if (!gameBridge.contains("normalizeMarkTargetDistance(maxDistance)") || gameBridge.contains("crosshairTarget")) {
             throw new GradleException("NeoForge raycast must use the shared 512-block distance bound")
         }

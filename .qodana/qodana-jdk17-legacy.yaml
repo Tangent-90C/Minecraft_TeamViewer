@@ -7,7 +7,11 @@ profile:
 # toolchain. Runtime JARs are prepared by the workflow before project import.
 projectJDK: "17"
 
+withinDocker: false
+
 rootJavaProjects:
   - "./neoforge-legacy"
+
+bootstrap: sh ./scripts/prepare_qodana.sh legacy
 
 linter: qodana-jvm-community

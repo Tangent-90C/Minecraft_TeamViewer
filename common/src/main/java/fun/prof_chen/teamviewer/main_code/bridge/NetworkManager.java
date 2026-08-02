@@ -228,9 +228,6 @@ public class NetworkManager {
 	// 远程战局区块缓存 - 存储服务端裁决后的战局区块数据
 	private final Map<String, Map<String, Object>> remoteBattleChunkDataCache = new HashMap<>();
 	
-	// 远程路标对象缓存 - 存储解析后的SharedWaypointInfo对象
-	private final Map<String, SharedWaypointInfo> remoteWaypointCache = new HashMap<>();
-	
 	// 玩家标记状态缓存 - 存储玩家的队伍归属和颜色标记
 	private final Map<String, PlayerMarkState> remotePlayerMarks = new HashMap<>();
 	
@@ -267,7 +264,7 @@ public class NetworkManager {
 	// 重连意愿标志 - 控制是否应该尝试重连
 	private volatile boolean shouldReconnect = false;
 	private volatile int maxReconnectAttempts = UNLIMITED_RECONNECT_ATTEMPTS;
-	private volatile int reconnectAttemptsRemaining = UNLIMITED_RECONNECT_ATTEMPTS;
+	private final AtomicInteger reconnectAttemptsRemaining = new AtomicInteger(UNLIMITED_RECONNECT_ATTEMPTS);
 	private volatile long reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS;
 	
 	// 版本不兼容导致的重连抑制标志
@@ -468,7 +465,7 @@ public class NetworkManager {
 		shouldReconnect = true;
 		reconnectSuppressedForVersionMismatch = false;
 		this.maxReconnectAttempts = normalizeReconnectAttempts(maxReconnectAttempts);
-		reconnectAttemptsRemaining = this.maxReconnectAttempts;
+		reconnectAttemptsRemaining.set(this.maxReconnectAttempts);
 		this.reconnectDelayMs = normalizeReconnectDelayMs(reconnectDelayMs);
 		doConnectAttempt();
 	}
@@ -547,13 +544,11 @@ public class NetworkManager {
 		if (!shouldReconnect) {
 			return;
 		}
-		if (reconnectAttemptsRemaining == 0) {
+		int remainingBeforeSchedule = claimReconnectAttempt(reconnectAttemptsRemaining);
+		if (remainingBeforeSchedule == 0) {
 			shouldReconnect = false;
 			LOGGER.info("Reconnect retry budget exhausted; stopping automatic reconnects");
 			return;
-		}
-		if (reconnectAttemptsRemaining > 0) {
-			reconnectAttemptsRemaining--;
 		}
 		try {
 			reconnectExecutor.schedule(this::doConnectAttempt, reconnectDelayMs, TimeUnit.MILLISECONDS);
@@ -1163,7 +1158,7 @@ public class NetworkManager {
 			isConnected = false;
 			connectionStage = ConnectionStage.WS_CONNECTED_HANDSHAKING;
 			lastConnectionError = "";
-			reconnectAttemptsRemaining = maxReconnectAttempts;
+			reconnectAttemptsRemaining.set(maxReconnectAttempts);
 			resetNegotiationState();
 			resetTrafficStats();
 			clearLocalOutboundSnapshots();
@@ -1367,8 +1362,6 @@ public class NetworkManager {
 		if (packet.waypoints != null) {
 			remoteWaypointDataCache.clear();
 			Map<String, SharedWaypointInfo> receivedWaypoints = parseWaypointsFromObject(waypoints);
-			remoteWaypointCache.clear();
-			remoteWaypointCache.putAll(receivedWaypoints);
 			if (!receivedWaypoints.isEmpty()) {
 				notifyWaypointsReceived(receivedWaypoints);
 			}
@@ -1482,7 +1475,6 @@ public class NetworkManager {
 			for (Object idValue : objectList(waypointPatch.get("delete"))) {
 				String id = idValue == null ? null : String.valueOf(idValue);
 				if (id != null && !id.isBlank()) {
-					remoteWaypointCache.remove(id);
 					remoteWaypointDataCache.remove(id);
 					deleteIds.add(id);
 				}
@@ -1494,7 +1486,6 @@ public class NetworkManager {
 			if (!upsert.isEmpty()) {
 				Map<String, SharedWaypointInfo> upserts = parseWaypointsFromObject(upsert);
 				if (!upserts.isEmpty()) {
-					remoteWaypointCache.putAll(upserts);
 					notifyWaypointsReceived(upserts);
 				}
 			}
@@ -1967,16 +1958,17 @@ public class NetworkManager {
 			closePacketDumpWriterQuietly();
 			return null;
 		}
-		return ensurePacketDumpWriter();
+		ensurePacketDumpWriter();
+		return packetDumpWriter;
 	}
 
-	private WebSocketCaptureWriter ensurePacketDumpWriter() {
+	private void ensurePacketDumpWriter() {
 		if (runtimeGateway == null || configGateway == null || !packetDumpActive || !isConnected) {
-			return null;
+			return;
 		}
 		synchronized (packetDumpLock) {
 			if (packetDumpWriter != null) {
-				return packetDumpWriter;
+				return;
 			}
 			try {
 				packetDumpWriter = WebSocketCaptureWriter.open(
@@ -1986,11 +1978,9 @@ public class NetworkManager {
 						currentNegotiatedExtensions);
 				packetDumpCurrentPath = String.valueOf(packetDumpWriter.getOutputPath());
 				LOGGER.info("WebSocket packet dump started: {}", packetDumpWriter.getOutputPath());
-				return packetDumpWriter;
 			} catch (Exception e) {
 				LOGGER.warn("Failed to open WebSocket packet dump writer: {}", e.getMessage());
 				packetDumpWriter = null;
-				return null;
 			}
 		}
 	}
@@ -2134,8 +2124,12 @@ public class NetworkManager {
 
 	private void resetReconnectPolicy() {
 		maxReconnectAttempts = UNLIMITED_RECONNECT_ATTEMPTS;
-		reconnectAttemptsRemaining = UNLIMITED_RECONNECT_ATTEMPTS;
+		reconnectAttemptsRemaining.set(UNLIMITED_RECONNECT_ATTEMPTS);
 		reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS;
+	}
+
+	static int claimReconnectAttempt(AtomicInteger remainingAttempts) {
+		return remainingAttempts.getAndUpdate(value -> value > 0 ? value - 1 : value);
 	}
 
 	public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) {
@@ -3089,7 +3083,7 @@ public class NetworkManager {
 			return "null";
 		}
 		if (value instanceof Boolean boolValue) {
-			return boolValue ? "true" : "false";
+			return boolValue.toString();
 		}
 		if (value instanceof Number numberValue) {
 			return canonicalNumber(numberValue);
@@ -3193,11 +3187,7 @@ public class NetworkManager {
 		if (source == null) {
 			return new HashMap<>();
 		}
-		Map<String, Object> copy = new HashMap<>(hashMapCapacity(source.size()));
-		for (Map.Entry<String, Object> entry : source.entrySet()) {
-			copy.put(entry.getKey(), entry.getValue());
-		}
-		return copy;
+		return new HashMap<>(source);
 	}
 
 	private static int hashMapCapacity(int expectedSize) {
@@ -3375,7 +3365,6 @@ public class NetworkManager {
 		remoteEntityDataCache.clear();
 		remoteWaypointDataCache.clear();
 		remoteBattleChunkDataCache.clear();
-		remoteWaypointCache.clear();
 		remotePlayerMarks.clear();
 	}
 }

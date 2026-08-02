@@ -27,27 +27,39 @@ jobs:
           - id: java17-fabric
             label: Java 17 / Fabric 1.20.4
             config: .qodana/qodana-jdk21.yaml
-            qodana_args: -e ORG_GRADLE_PROJECT_fabric_target=1.20.4 -e ORG_GRADLE_PROJECT_neoforge_target=1.21.8
+            analysis_java: '21'
+            fabric_target: 1.20.4
+            neoforge_target: 1.21.8
             prepare_legacy: false
             post_pr_comment: false
           - id: java17-neoforge
             label: Java 17 / NeoForge 1.20.4
             config: .qodana/qodana-jdk17-legacy.yaml
-            qodana_args: -e ORG_GRADLE_PROJECT_neoforge_target=1.20.4
+            analysis_java: '17'
+            fabric_target: 1.21.8
+            neoforge_target: 1.20.4
             prepare_legacy: true
             post_pr_comment: false
           - id: java21
             label: Java 21 / Minecraft 1.21.11
             config: .qodana/qodana-jdk21.yaml
-            qodana_args: -e ORG_GRADLE_PROJECT_fabric_target=1.21.11 -e ORG_GRADLE_PROJECT_neoforge_target=1.21.11
+            analysis_java: '21'
+            fabric_target: 1.21.11
+            neoforge_target: 1.21.11
             prepare_legacy: false
             post_pr_comment: false
           - id: java25
             label: Java 25 / Minecraft 26.2
             config: qodana.yaml
-            qodana_args: -e ORG_GRADLE_PROJECT_fabric_target=26.2 -e ORG_GRADLE_PROJECT_neoforge_target=26.2
+            analysis_java: '25'
+            fabric_target: 26.2
+            neoforge_target: 26.2
             prepare_legacy: false
             post_pr_comment: true
+
+    env:
+      ORG_GRADLE_PROJECT_fabric_target: ${{ matrix.fabric_target }}
+      ORG_GRADLE_PROJECT_neoforge_target: ${{ matrix.neoforge_target }}
 
     permissions:
       contents: read
@@ -62,17 +74,19 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Buf for legacy runtime
-        if: matrix.prepare_legacy
+      - name: Set up Buf
         uses: bufbuild/buf-action@v1
         with:
           version: '1.50.0'
           setup_only: true
 
       - name: Resolve Buf binary
-        if: matrix.prepare_legacy
         shell: bash
-        run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
+        run: |
+          buf_path="$(command -v buf)"
+          test -n "$buf_path"
+          echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
+          "$buf_path" --version
 
       - name: Set up Java 21 for legacy runtime
         if: matrix.prepare_legacy
@@ -87,16 +101,23 @@ jobs:
         shell: bash
         run: ./gradlew --no-daemon prepareLegacyNeoForgeRuntime
 
+      - name: Set up analysis Java ${{ matrix.analysis_java }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ matrix.analysis_java }}
+          distribution: temurin
+          cache: gradle
+
       - name: Qodana Scan
         uses: JetBrains/qodana-action@v2026.2.0
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
-          args: --config ${{ matrix.config }} ${{ matrix.qodana_args }}
+          args: --config ${{ matrix.config }}
           pr-mode: ${{ github.event_name == 'pull_request' }}
           use-caches: true
-          primary-cache-key: qodana-2026.2-${{ matrix.id }}-${{ github.ref }}-${{ github.sha }}
-          additional-cache-key: qodana-2026.2-${{ matrix.id }}-${{ github.ref }}
+          primary-cache-key: qodana-2026.2-native-v1-${{ matrix.id }}-${{ github.ref }}-${{ github.sha }}
+          additional-cache-key: qodana-2026.2-native-v1-${{ matrix.id }}-${{ github.ref }}
           post-pr-comment: ${{ matrix.post_pr_comment }}
           use-annotations: true
           upload-result: true

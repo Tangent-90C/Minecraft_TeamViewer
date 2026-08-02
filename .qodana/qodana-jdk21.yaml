@@ -7,7 +7,11 @@ profile:
 # from the imported Gradle model.
 projectJDK: "21"
 
+withinDocker: false
+
 rootJavaProjects:
   - "./"
+
+bootstrap: sh ./scripts/prepare_qodana.sh modern
 
 linter: qodana-jvm-community
