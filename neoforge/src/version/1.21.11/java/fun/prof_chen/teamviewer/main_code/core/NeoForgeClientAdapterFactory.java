@@ -13,7 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
 
-/** Minecraft 1.21.8 NeoForge SDK adapter factory. */
+/** Minecraft 1.21.11 NeoForge SDK adapter factory. */
 public final class NeoForgeClientAdapterFactory
         implements ClientAdapterFactory<ExtractLevelRenderStateEvent, GuiGraphics> {
     @Override

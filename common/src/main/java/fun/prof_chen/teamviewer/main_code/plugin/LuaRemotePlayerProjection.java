@@ -21,7 +21,7 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
         this.runtime = runtime;
         this.sync = sync;
         this.clear = clear;
-        this.probe = new LuaCapabilityProbe(runtime, probe);
+        this.probe = new LuaCapabilityProbe(id, runtime, probe);
     }
 
     @Override public String id() { return id; }
@@ -37,12 +37,13 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
 
     @Override
     public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
-        runtime.invoke(sync, LuaValueConverters.toLua(players), LuaValue.valueOf(enabled));
+        runtime.invoke("remote.sync." + id, sync,
+                LuaValueConverters.toLua(players), LuaValue.valueOf(enabled));
     }
 
     @Override
     public void clear() {
-        if (clear != null && clear.isfunction()) runtime.invoke(clear);
+        if (clear != null && clear.isfunction()) runtime.invoke("remote.clear." + id, clear);
         else RemotePlayerProjection.super.clear();
     }
 }

@@ -13,13 +13,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
-/** Minecraft 1.21.8 NeoForge SDK adapter factory. */
+/** Minecraft 1.21.1 NeoForge SDK adapter factory. */
 public final class NeoForgeClientAdapterFactory
         implements ClientAdapterFactory<RenderLevelStageEvent, GuiGraphics> {
     @Override
     public ClientAdapterBundle<RenderLevelStageEvent, GuiGraphics> create() {
         return new ClientAdapterBundle<>(
-                "neoforge-1.21.8",
+                "neoforge-1.21.1",
                 new NeoForgeRuntimeGateway(),
                 new NeoForgeGameClientBridge(),
                 new NeoForgeClientEventBridge(),

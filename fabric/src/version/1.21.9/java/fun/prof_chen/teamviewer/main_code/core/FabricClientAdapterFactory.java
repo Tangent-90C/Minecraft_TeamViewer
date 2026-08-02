@@ -13,7 +13,7 @@ import fun.prof_chen.teamviewer.main_code.screen.ConfigScreen;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 
-/** Minecraft 1.21.8 native adapter factory. */
+/** Minecraft 1.21.9 source adapter factory. */
 public final class FabricClientAdapterFactory implements ClientAdapterFactory<FabricWorldRenderContext, DrawContext> {
     @Override
     public ClientAdapterBundle<FabricWorldRenderContext, DrawContext> create() {

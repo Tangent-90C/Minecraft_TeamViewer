@@ -10,6 +10,7 @@ import fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -172,7 +173,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
     }
 
     private DetailView installedDetail(UiRect bounds, boolean compact, PluginSnapshot plugin) {
-        for (PluginManifest.SettingDefinition definition : plugin.settingDefinitions()) {
+        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
             ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
             textValues.putIfAbsent(id, String.valueOf(plugin.settings().getOrDefault(definition.key(), "")));
         }
@@ -181,9 +182,9 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
                 + (plugin.capabilities().isEmpty() ? 0 : 18)
                 + plugin.capabilities().size() * 28
                 + (plugin.capabilities().isEmpty() ? 0 : 8)
-                + (plugin.settingDefinitions().isEmpty() ? 0 : 18)
-                + plugin.settingDefinitions().stream().mapToInt(this::settingHeight).sum()
-                + (plugin.settingDefinitions().isEmpty() ? 0 : 8)
+                + (plugin.visibleSettingDefinitions().isEmpty() ? 0 : 18)
+                + plugin.visibleSettingDefinitions().stream().mapToInt(this::settingHeight).sum()
+                + (plugin.visibleSettingDefinitions().isEmpty() ? 0 : 8)
                 + 30;
         detailScrollMaximum = Math.max(0, contentHeight - content.height());
         detailScroll = clamp(detailScroll, 0, detailScrollMaximum);
@@ -203,8 +204,8 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         }
         if (!lines.isEmpty()) y += 8;
         List<SettingView> settings = new ArrayList<>();
-        if (!plugin.settingDefinitions().isEmpty()) y += 18;
-        for (PluginManifest.SettingDefinition definition : plugin.settingDefinitions()) {
+        if (!plugin.visibleSettingDefinitions().isEmpty()) y += 18;
+        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
             ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
             Object raw = plugin.settings().get(definition.key());
             SettingKind kind = switch (definition.type()) {
@@ -213,11 +214,13 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
                 default -> SettingKind.TEXT;
             };
             int height = settingHeight(definition);
+            PluginSettingState state = plugin.settingState(definition.key());
             settings.add(new SettingView(id, new UiRect(x, y, width, height - 2),
                     settingName(plugin, definition),
                     kind == SettingKind.ENUM ? UiText.literal(String.valueOf(raw)) : null,
-                    null, kind, textValues.getOrDefault(id, String.valueOf(raw == null ? "" : raw)),
-                    256, Boolean.TRUE.equals(raw), true));
+                    settingTooltip(plugin, definition, state), kind,
+                    textValues.getOrDefault(id, String.valueOf(raw == null ? "" : raw)),
+                    256, Boolean.TRUE.equals(raw), state.enabled()));
             y += height;
         }
         if (!settings.isEmpty()) y += 8;
@@ -461,7 +464,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         if (plugin == null) return ConfigUiAction.stay();
         PluginManifest.SettingDefinition definition = plugin.settingDefinitions().stream()
                 .filter(value -> value.key().equals(id.settingKey())).findFirst().orElse(null);
-        if (definition == null) return ConfigUiAction.stay();
+        if (definition == null || !settingInteractive(plugin, definition.key())) return ConfigUiAction.stay();
         if ("boolean".equals(definition.type())) {
             boolean current = Boolean.TRUE.equals(plugin.settings().get(definition.key()));
             control.setIntegrationPluginSetting(plugin.id(), definition.key(), !current);
@@ -517,8 +520,9 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
     public void commitTextSettings() {
         PluginSnapshot plugin = selectedPlugin();
         if (plugin == null) return;
-        for (PluginManifest.SettingDefinition definition : plugin.settingDefinitions()) {
+        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
             if ("boolean".equals(definition.type()) || "enum".equals(definition.type())) continue;
+            if (!plugin.settingState(definition.key()).enabled()) continue;
             ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
             if (textValues.containsKey(id)) {
                 control.setIntegrationPluginSetting(plugin.id(), definition.key(), textValues.get(id));
@@ -606,7 +610,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
 
     private void initializeTextValues(PluginSnapshot plugin) {
         if (plugin == null) return;
-        for (PluginManifest.SettingDefinition definition : plugin.settingDefinitions()) {
+        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
             if ("boolean".equals(definition.type()) || "enum".equals(definition.type())) continue;
             ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
             textValues.put(id, String.valueOf(plugin.settings().getOrDefault(definition.key(), "")));
@@ -690,6 +694,9 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             if ("show_map_markers".equals(setting.key())) {
                 return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_markers");
             }
+            if ("show_remote_players".equals(setting.key())) {
+                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players");
+            }
         }
         if (IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id())) {
             return tr("screen.mc_teamviewer.integration_plugin.setting.example_" + setting.key());
@@ -700,6 +707,21 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
     private static UiText runtimeStatusText(PluginRuntimeStatus status) {
         return tr("screen.mc_teamviewer.integration_plugin.runtime."
                 + status.name().toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean settingInteractive(PluginSnapshot plugin, String key) {
+        if (plugin == null) return false;
+        PluginSettingState state = plugin.settingState(key);
+        return state.visible() && state.enabled();
+    }
+
+    private static UiText settingTooltip(
+            PluginSnapshot plugin, PluginManifest.SettingDefinition setting, PluginSettingState state) {
+        if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())
+                && "show_remote_players".equals(setting.key())) {
+            return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players.tooltip");
+        }
+        return state.detail().isBlank() ? null : UiText.literal(state.detail());
     }
 
     private static UiText supportStatusText(IntegrationSupportStatus status) {

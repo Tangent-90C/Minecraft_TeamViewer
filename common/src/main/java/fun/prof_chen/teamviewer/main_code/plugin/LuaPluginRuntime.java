@@ -5,6 +5,8 @@ import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
 import org.slf4j.Logger;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
@@ -16,7 +18,7 @@ final class LuaPluginRuntime {
     private LuaValue onDisable = LuaValue.NIL;
     private LuaValue onEnable = LuaValue.NIL;
     private LuaValue onSettingsChanged = LuaValue.NIL;
-    private int consecutiveFailures;
+    private final Map<String, Integer> consecutiveFailures = new HashMap<>();
     private boolean suspended;
 
     LuaPluginRuntime(String pluginId, Globals globals, Logger logger, BiConsumer<String, String> suspension) {
@@ -42,19 +44,21 @@ final class LuaPluginRuntime {
         onSettingsChanged = callback == null ? LuaValue.NIL : callback;
     }
 
-    LuaValue invoke(LuaValue function, LuaValue... arguments) {
+    LuaValue invoke(String callbackId, LuaValue function, LuaValue... arguments) {
         if (suspended || function == null || !function.isfunction()) return LuaValue.NIL;
+        String normalizedCallbackId = callbackId == null || callbackId.isBlank() ? "callback" : callbackId;
         try {
             Varargs result = function.invoke(LuaValue.varargsOf(arguments));
-            consecutiveFailures = 0;
+            consecutiveFailures.remove(normalizedCallbackId);
             return result.arg1();
         } catch (Throwable error) {
-            consecutiveFailures++;
+            int failures = consecutiveFailures.merge(normalizedCallbackId, 1, Integer::sum);
             String detail = error.getClass().getSimpleName() + ": " + String.valueOf(error.getMessage());
-            logger.error("Lua integration plugin {} callback failed ({}/3): {}", pluginId, consecutiveFailures, detail);
-            if (consecutiveFailures >= 3) {
+            logger.error("Lua integration plugin {} callback {} failed ({}/3): {}",
+                    pluginId, normalizedCallbackId, failures, detail);
+            if (failures >= 3) {
                 suspended = true;
-                suspension.accept(pluginId, detail);
+                suspension.accept(pluginId, normalizedCallbackId + ": " + detail);
             }
             return LuaValue.NIL;
         }
@@ -72,10 +76,11 @@ final class LuaPluginRuntime {
     }
 
     void enable() {
-        invoke(onEnable);
+        invoke("lifecycle.enable", onEnable);
     }
 
     void settingsChanged(String key, Object value) {
-        invoke(onSettingsChanged, LuaValue.valueOf(key), LuaValueConverters.toLua(value));
+        invoke("lifecycle.settings_changed", onSettingsChanged,
+                LuaValue.valueOf(key), LuaValueConverters.toLua(value));
     }
 }

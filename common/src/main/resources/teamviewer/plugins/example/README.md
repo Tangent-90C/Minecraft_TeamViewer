@@ -140,6 +140,14 @@ After three consecutive uncaught callback errors the host suspends it.
 managed 插件才能即时启停。连续三次未捕获回调错误后宿主会暂停插件。
 若外部 API 只能注册、不能反注册回调，应把 `hotToggle` 声明为 `restart`。
 
+An adapter may call `tv.configure_setting({key, visible, enabled, detail})` for a setting declared
+in its manifest. This changes only the runtime UI state; persisted values remain independent.
+Plugins that do not call it retain the compatible default: every declared setting is visible and enabled.
+
+Adapter 可对清单中已声明的设置调用
+`tv.configure_setting({key, visible, enabled, detail})`。它只改变运行时 UI 状态，不会覆盖已保存的值。
+未调用的第三方插件保持向后兼容：所有声明设置均可见、可编辑。
+
 `main.lua` registers three no-op adapters. Enabling this example returns empty collections or
 `nil`, creates no map object, reads no external data and uploads nothing. Replace its IDs and
 no-op bodies only in a copied package.

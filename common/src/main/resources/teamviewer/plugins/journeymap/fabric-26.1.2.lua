@@ -1,10 +1,18 @@
--- JourneyMap 26.1-26.2 service → Lua Adapter → common capability contracts.
--- JourneyMap 26.1-26.2 入口服务 → Lua Adapter → common 能力契约。
+-- JourneyMap API v2 with per-waypoint presentation controls.
+-- 支持逐路标显示控制的 JourneyMap API v2。
 
 local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil
 local managed_markers, managed_beacons, managed_waypoints = {}, {}, {}
 local client_objects = services.get("minecraft.client_objects")
+
+local function configure_settings(available)
+  tv.configure_setting({key = "show_remote_players", visible = false, enabled = false})
+  tv.configure_setting({key = "show_map_markers", visible = available, enabled = available})
+  tv.configure_setting({key = "show_beacons", visible = available, enabled = available})
+end
+
+configure_settings(mods.is_loaded(MOD_ID))
 
 -- 1. Version-specific handles and dynamic service / 版本句柄与动态服务
 local function initialize()
@@ -25,7 +33,10 @@ local function api() return services.get("journeymap.client_api") end
 local function probe()
   if not mods.is_loaded(MOD_ID) then return {status = "MOD_NOT_INSTALLED", detail = "journeymap is not installed"} end
   if client_objects == nil then return {status = "FAILED", detail = "minecraft.client_objects service is unavailable"} end
-  if not initialize() then return {status = "UNSUPPORTED_VERSION", detail = handle_error} end
+  if not initialize() then
+    configure_settings(false)
+    return {status = "UNSUPPORTED_VERSION", detail = handle_error}
+  end
   if api() == nil then return {status = "ENTRYPOINT_NOT_READY", detail = "JourneyMap IClientAPI is not initialized"} end
   return {status = "AVAILABLE", detail = ""}
 end
@@ -48,12 +59,10 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color, presentat
     local position = client_objects:blockPosition(x, y, z)
     local native_dimension = dimension(dimension_id)
     -- JourneyMap 26.2 removed createClientWaypoint while keeping createWaypoint with the
-    -- same arguments. Select by the Minecraft/API family so the 26.1 artifact remains
-    -- binary-compatible with every 26.1 patch and the dedicated 26.2 artifact uses its API.
+    -- same arguments. All other full-control API v2 families expose createClientWaypoint.
     --
     -- JourneyMap 26.2 删除了 createClientWaypoint，但保留了参数相同的 createWaypoint。
-    -- 按 Minecraft/API 系列选择方法，使 26.1 产物覆盖全部 26.1 补丁版本，并让
-    -- 26.2 专用产物调用其真实 API。
+    -- 除 26.2 外的完整控制 API v2 系列都提供 createClientWaypoint。
     local object
     if environment.minecraft_version() == "26.2" then
       object = handles.WaypointFactory:createWaypoint(

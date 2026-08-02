@@ -117,10 +117,13 @@ JAVA25_HOME=/path/to/jdk-25 \
 task build
 ```
 
-`build-artifacts` 最终包含 31 个可发布 Jar：17 个
-`TeamViewRelay-Fabric-<family>-<mod_version>.jar`、13 个
-`TeamViewRelay-NeoForge-<target>-<mod_version>.jar`，以及
-`TeamViewRelay-Fabric-all-<mod_version>.jar`。
+`build-artifacts` 最终包含 31 个可发布 Jar，文件名直接写明 Loader 和 Minecraft
+支持范围：
+
+- Fabric 多版本家族：`TeamViewRelay-Fabric-MC1.18-to-1.18.2-<mod_version>.jar`
+- Fabric 单版本家族：`TeamViewRelay-Fabric-MC1.20.2-<mod_version>.jar`
+- NeoForge 单版本目标：`TeamViewRelay-NeoForge-MC1.20.2-<mod_version>.jar`
+- Fabric 全版本包：`TeamViewRelay-Fabric-MC1.18-to-26.2-All-in-One-<mod_version>.jar`
 
 独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
 仅供打包使用，不是玩家可安装产物。

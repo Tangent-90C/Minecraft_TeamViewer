@@ -1,5 +1,5 @@
--- JourneyMap API v2 without per-waypoint presentation controls.
--- 不支持逐路标显示控制的 JourneyMap API v2。
+-- JourneyMap API 1.x displayable waypoint adapter.
+-- JourneyMap API 1.x Displayable 路标适配器。
 
 local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil
@@ -15,12 +15,11 @@ end
 
 configure_settings(mods.is_loaded(MOD_ID))
 
--- 1. Version-specific handles and dynamic service / 版本句柄与动态服务
 local function initialize()
   if handles ~= nil or handle_error ~= nil then return handles ~= nil end
   local ok, value = pcall(function()
     return {
-      WaypointFactory = java.type("journeymap.api.v2.common.waypoint.WaypointFactory"),
+      Waypoint = java.type("journeymap.client.api.display.Waypoint"),
       iterableIterator = java.method("java.lang.Iterable", "iterator"),
       iteratorHasNext = java.method("java.util.Iterator", "hasNext"),
       iteratorNext = java.method("java.util.Iterator", "next")
@@ -31,26 +30,27 @@ local function initialize()
 end
 
 local function api() return services.get("journeymap.client_api") end
+
 local function probe()
   if not mods.is_loaded(MOD_ID) then
     return {status = "MOD_NOT_INSTALLED", detail = "journeymap is not installed"}
   end
-  if client_objects == nil then return {status = "FAILED", detail = "minecraft.client_objects service is unavailable"} end
+  if client_objects == nil then
+    return {status = "FAILED", detail = "minecraft.client_objects service is unavailable"}
+  end
   if not initialize() then
     configure_settings(false)
     return {status = "UNSUPPORTED_VERSION", detail = handle_error}
   end
-  if api() == nil then return {status = "ENTRYPOINT_NOT_READY", detail = "JourneyMap IClientAPI is not initialized"} end
+  if api() == nil then
+    return {status = "ENTRYPOINT_NOT_READY", detail = "JourneyMap IClientAPI is not initialized"}
+  end
   return {status = "AVAILABLE", detail = ""}
-end
-
-local function dimension(id)
-  return client_objects:dimensionKey(id)
 end
 
 local function remove(managed, id)
   local value = managed[id]
-  if value ~= nil and api() ~= nil then pcall(function() api():removeWaypoint(JM_MOD_ID, value.object) end) end
+  if value ~= nil and api() ~= nil then pcall(function() api():remove(value.object) end) end
   managed[id] = nil
 end
 
@@ -59,41 +59,44 @@ local function clear(managed)
   for _, id in ipairs(ids) do remove(managed, id) end
 end
 
--- 2. Common object -> JourneyMap object / common 对象 -> JourneyMap 对象
 local function upsert(managed, id, name, x, y, z, dimension_id, color)
   local client = api(); if client == nil then return end
   local state = managed[id]
-  if state ~= nil and state.name ~= name then remove(managed, id); state = nil end
+  if state ~= nil and (state.name ~= name or state.dimension ~= dimension_id) then
+    remove(managed, id); state = nil
+  end
+  local position = client_objects:blockPosition(x, y, z)
   if state == nil then
-    local position = client_objects:blockPosition(x, y, z)
-    local native_dimension = dimension(dimension_id)
-    local object = handles.WaypointFactory:createClientWaypoint(
-        JM_MOD_ID, position, name, native_dimension, false)
+    local object = java["new"]("journeymap.client.api.display.Waypoint",
+        JM_MOD_ID, id, name, client_objects:dimensionKey(dimension_id), position)
     if object == nil then return end
     object:setPersistent(false); object:setEnabled(true); object:setColor(color)
-    client:addWaypoint(JM_MOD_ID, object)
-    state = {object = object, name = name}; managed[id] = state
+    client:show(object)
+    state = {object = object, name = name, dimension = dimension_id}; managed[id] = state
+  else
+    state.object:setPosition(dimension_id, position)
+    state.object:setColor(color); state.object:setEnabled(true); state.object:setDirty()
   end
-  state.object:setPos(x, y, z); state.object:setColor(color); state.object:setEnabled(true)
 end
 
 local function sync_players(players, enabled)
-  local managed = managed_players
-  local prefix = "player:"
-  local setting_enabled = settings.show_remote_players
-  if not enabled or not setting_enabled or probe().status ~= "AVAILABLE" then clear(managed); return end
+  if not enabled or not settings.show_remote_players or probe().status ~= "AVAILABLE" then
+    clear(managed_players); return
+  end
   local world, active = snapshots.world(), {}
   for _, player in pairs(players or {}) do
     if player.position ~= nil and player.uuid ~= world.localPlayerId
         and (player.dimension == nil or player.dimension == "" or player.dimension == world.dimension) then
-      local id = prefix .. player.uuid; active[id] = true
-      upsert(managed, id, "[TV] " .. (player.name or "Player"),
+      local id = "player:" .. player.uuid; active[id] = true
+      upsert(managed_players, id, "[TV] " .. (player.name or "Player"),
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
           world.dimension, 0xFF5555)
     end
   end
-  local stale = {}; for id, _ in pairs(managed) do if not active[id] then table.insert(stale, id) end end
-  for _, id in ipairs(stale) do remove(managed, id) end
+  local stale = {}; for id, _ in pairs(managed_players) do
+    if not active[id] then table.insert(stale, id) end
+  end
+  for _, id in ipairs(stale) do remove(managed_players, id) end
 end
 
 local function list_local()
@@ -103,32 +106,26 @@ local function list_local()
   while handles.iteratorHasNext:invoke(iterator, nil) == true do
     local value = handles.iteratorNext:invoke(iterator, nil)
     if value ~= nil and tostring(value:getModId()) ~= JM_MOD_ID then
-      local pos, name = value:getBlockPos(), tostring(value:getName() or "Waypoint")
+      local pos, name = value:getPosition(), tostring(value:getName() or "Waypoint")
       table.insert(result, {nativeId = tostring(value:getGuid()), name = name,
         symbol = string.sub(name, 1, 1), x = pos:getX(), y = pos:getY(), z = pos:getZ(),
-        dimension = tostring(value:getPrimaryDimension() or ""), color = value:getColor()})
+        dimension = tostring(value:getDimension() or ""), color = tonumber(value:getColor()) or 0xFFFFFF})
     end
   end
   return result
 end
 
--- 3. Capability registration / 能力注册
-tv.register_remote_player_projection({id = "journeymap-players",
-  probe = probe, sync = function(players, enabled)
-    sync_players(players, enabled)
-  end, clear = function() clear(managed_players) end})
-tv.register_remote_player_projection({id = "journeymap-player-beacons",
-  probe = probe, sync = function(players, enabled)
-    -- The API family has no per-waypoint presentation controls. The players capability owns
-    -- the single native waypoint; this compatibility capability intentionally performs no work.
-  end, clear = function() end})
+tv.register_remote_player_projection({id = "journeymap-players", probe = probe,
+  sync = sync_players, clear = function() clear(managed_players) end})
+tv.register_remote_player_projection({id = "journeymap-player-beacons", probe = probe,
+  sync = function(players, enabled) end, clear = function() end})
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe,
   list_local = list_local,
   upsert_remote = function(command) upsert(managed_waypoints, command.waypointId, command.name,
       command.x, command.y, command.z, command.dimension, command.color) end,
   delete_remote = function(id) remove(managed_waypoints, id) end,
   clear_remote = function() clear(managed_waypoints) end})
--- 4. Lifecycle cleanup / 生命周期清理
+
 tv.on_enable(function() initialize() end)
 tv.on_disable(function() clear(managed_players); clear(managed_waypoints) end)
 tv.on_settings_changed(function(key, value)

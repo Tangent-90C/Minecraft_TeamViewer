@@ -13,6 +13,7 @@ import fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -98,7 +99,10 @@ public final class ConfigUiSession implements ConfigUiController {
         if (ALLOW_INSECURE_TLS.equals(id)) {
             allowInsecureTls = checked;
         } else if (id != null && id.isPluginSetting()) {
-            control.setIntegrationPluginSetting(id.pluginId(), id.settingKey(), checked);
+            PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
+            if (settingInteractive(plugin, id.settingKey())) {
+                control.setIntegrationPluginSetting(id.pluginId(), id.settingKey(), checked);
+            }
         }
     }
 
@@ -704,22 +708,24 @@ public final class ConfigUiSession implements ConfigUiController {
             y += 16;
         }
         y += 4;
-        for (PluginManifest.SettingDefinition definition : plugin.settingDefinitions()) {
+        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
             ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
             Object value = plugin.settings().get(definition.key());
             UiText settingName = settingName(plugin, definition);
+            PluginSettingState state = plugin.settingState(definition.key());
+            UiText tooltip = settingTooltip(plugin, definition, state);
             if ("boolean".equals(definition.type())) {
                 controls.add(ConfigControlView.checkbox(id, new UiRect(x, y, 430, HEIGHT),
-                        settingName, null, Boolean.TRUE.equals(value)));
+                        settingName, tooltip, Boolean.TRUE.equals(value), state.enabled()));
             } else if ("enum".equals(definition.type())) {
                 controls.add(ConfigControlView.button(id, new UiRect(x, y, 430, HEIGHT),
                         t("screen.mc_teamviewer.config.value", settingName, UiText.literal(String.valueOf(value))),
-                        null, true));
+                        tooltip, state.enabled()));
             } else {
                 textValues.putIfAbsent(id, String.valueOf(value == null ? "" : value));
                 controls.add(ConfigControlView.textField(id, new UiRect(x, y, 430, HEIGHT),
                         new UiRect(x, y - LABEL_SPACING, 430, LABEL_HEIGHT), settingName,
-                        null, null, value(id), 256));
+                        null, tooltip, value(id), 256, state.enabled()));
             }
             y += "boolean".equals(definition.type()) || "enum".equals(definition.type()) ? 25 : 34;
         }
@@ -911,8 +917,9 @@ public final class ConfigUiSession implements ConfigUiController {
     private void applyPluginFields() {
         PluginSnapshot plugin = selectedPluginId == null ? null : control.getIntegrationPlugin(selectedPluginId);
         if (plugin == null) return;
-        for (PluginManifest.SettingDefinition definition : plugin.settingDefinitions()) {
+        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
             if ("boolean".equals(definition.type()) || "enum".equals(definition.type())) continue;
+            if (!plugin.settingState(definition.key()).enabled()) continue;
             ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
             control.setIntegrationPluginSetting(plugin.id(), definition.key(), value(id));
         }
@@ -983,7 +990,8 @@ public final class ConfigUiSession implements ConfigUiController {
         if (plugin == null) return ConfigUiAction.stay();
         PluginManifest.SettingDefinition definition = plugin.settingDefinitions().stream()
                 .filter(value -> value.key().equals(id.settingKey())).findFirst().orElse(null);
-        if (definition == null || !"enum".equals(definition.type())) return ConfigUiAction.stay();
+        if (definition == null || !"enum".equals(definition.type())
+                || !settingInteractive(plugin, definition.key())) return ConfigUiAction.stay();
         String current = String.valueOf(plugin.settings().get(definition.key()));
         int index = definition.options().indexOf(current);
         String next = definition.options().get((index + 1 + definition.options().size()) % definition.options().size());
@@ -1267,6 +1275,9 @@ public final class ConfigUiSession implements ConfigUiController {
             if ("show_map_markers".equals(setting.key())) {
                 return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_markers");
             }
+            if ("show_remote_players".equals(setting.key())) {
+                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players");
+            }
         }
         if (IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id())) {
             return tr("screen.mc_teamviewer.integration_plugin.setting.example_" + setting.key());
@@ -1294,6 +1305,21 @@ public final class ConfigUiSession implements ConfigUiController {
         if (plugin.detail().isBlank()) return null;
         return t("screen.mc_teamviewer.integration_plugin.technical_detail",
                 runtimeStatusText(plugin.runtimeStatus()), UiText.literal(plugin.detail()));
+    }
+
+    private static boolean settingInteractive(PluginSnapshot plugin, String key) {
+        if (plugin == null) return false;
+        PluginSettingState state = plugin.settingState(key);
+        return state.visible() && state.enabled();
+    }
+
+    private static UiText settingTooltip(
+            PluginSnapshot plugin, PluginManifest.SettingDefinition setting, PluginSettingState state) {
+        if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())
+                && "show_remote_players".equals(setting.key())) {
+            return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players.tooltip");
+        }
+        return state.detail().isBlank() ? null : UiText.literal(state.detail());
     }
 
     private static UiText capabilityDiagnostic(IntegrationCapability capability) {

@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Complete Minecraft 1.21.8 Fabric event and input adapter. */
+/** Complete Minecraft 1.21.5 Fabric event and input adapter. */
 public final class FabricClientEventBridge implements ClientEventBridge<WorldRenderContext, DrawContext> {
     private final AtomicBoolean registered = new AtomicBoolean();
 
@@ -49,7 +49,7 @@ public final class FabricClientEventBridge implements ClientEventBridge<WorldRen
         });
         ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> handler.onLeftPlaySession());
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> handler.onClientStopping());
-        WorldRenderEvents.AFTER_ENTITIES.register(handler::onWorldRender);
+        WorldRenderEvents.LAST.register(handler::onWorldRender);
         HudRenderCallback.EVENT.register((context, tickDelta) -> handler.onHudRender(context));
     }
 

@@ -4,6 +4,7 @@ import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.bridge.ClientControlGateway;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationImplementationSource;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 import fun.prof_chen.teamviewer.main_code.config.Config;
@@ -12,6 +13,7 @@ import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
 import fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult;
 import org.junit.jupiter.api.Test;
@@ -176,6 +178,55 @@ class ConfigUiSessionTest {
         session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
         session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
         assertEquals("custom-ui-map", control.config.getBattleMapSourceId());
+    }
+
+    @Test
+    void journeyMapMergedSettingsAreIdenticalAndSafeInBothLayouts() {
+        List<PluginManifest.SettingDefinition> definitions = List.of(
+                new PluginManifest.SettingDefinition("show_remote_players", "boolean",
+                        "Show remote players", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition("show_map_markers", "boolean",
+                        "Show map markers", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition("show_beacons", "boolean",
+                        "Show beacons", true, null, null, List.of(), false));
+        PluginSnapshot plugin = new PluginSnapshot(
+                IntegrationIds.PLUGIN_JOURNEYMAP, "JourneyMap", "1.1.0", true, true, true,
+                PluginRuntimeStatus.ACTIVE, "", null,
+                Map.of("show_remote_players", true, "show_map_markers", true, "show_beacons", true),
+                definitions, Map.of(
+                        "show_remote_players", new PluginSettingState(true, true,
+                                "Map and world visibility follow JourneyMap's global waypoint settings"),
+                        "show_map_markers", new PluginSettingState(false, false, ""),
+                        "show_beacons", new PluginSettingState(false, false, "")), List.of());
+        FakeControl control = new FakeControl(new Config(), plugin);
+        ConfigUiSession session = new ConfigUiSession(control);
+        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(plugin.id(), "open"));
+
+        ConfigControlId combined = ConfigControlId.setting(plugin.id(), "show_remote_players");
+        ConfigControlId marker = ConfigControlId.setting(plugin.id(), "show_map_markers");
+        ConfigControlId beacon = ConfigControlId.setting(plugin.id(), "show_beacons");
+        Set<ConfigControlId> detailIds = session.page(ConfigPageId.PLUGIN_DETAIL, 854, 480).controls()
+                .stream().map(ConfigControlView::id).collect(Collectors.toSet());
+        assertTrue(detailIds.contains(combined));
+        assertFalse(detailIds.contains(marker));
+        assertFalse(detailIds.contains(beacon));
+        session.setChecked(marker, false);
+        session.activate(ConfigPageId.PLUGIN_DETAIL, beacon);
+        assertFalse(control.changedSettings.containsKey("show_map_markers"));
+        assertFalse(control.changedSettings.containsKey("show_beacons"));
+
+        PluginManagerUiController manager = session.pluginManager();
+        PluginManagerView wide = manager.view(854, 480);
+        assertEquals(List.of(combined), wide.detail().settings().stream()
+                .map(PluginManagerView.SettingView::id).toList());
+        manager.activate(marker);
+        assertFalse(control.changedSettings.containsKey("show_map_markers"));
+
+        PluginManagerView compactList = manager.view(640, 360);
+        manager.activate(compactList.items().get(0).selectId());
+        PluginManagerView compactDetail = manager.view(640, 360);
+        assertEquals(List.of(combined), compactDetail.detail().settings().stream()
+                .map(PluginManagerView.SettingView::id).toList());
     }
 
     @Test

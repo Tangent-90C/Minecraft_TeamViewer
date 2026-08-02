@@ -22,6 +22,10 @@ end
 
 -- Read-only host APIs / 只读宿主 API。This function is documentation and is never called.
 local function inspect_host_api()
+  -- Optional dynamic UI state for a manifest-declared setting. Omitting this call keeps it
+  -- visible and enabled. / 可选的动态 UI 状态；不调用时默认可见、可编辑。
+  tv.configure_setting({key = "enabled_marker", visible = true, enabled = true,
+      detail = "Example runtime setting state"})
   local loader = environment.loader_id()
   local minecraft = environment.minecraft_version()
   local mod_version = environment.mod_version("replace-with-external-mod-id")

@@ -7,6 +7,7 @@ rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     versionManifest.load(it)
 }
 def supportedTargets = versionManifest.getProperty("fabric_targets").split(",").collect { it.trim() }
+def officialReleases = versionManifest.getProperty("official_releases").split(",").collect { it.trim() }
 def sharedJavaRelease = versionManifest.getProperty("shared_java_release").toInteger()
 def minimumLoaderVersion = supportedTargets.collect {
     versionManifest.getProperty("fabric.${it}.loader_version")
@@ -180,7 +181,10 @@ def packageUniversalJar = tasks.register("packageUniversalJar", Jar) {
     group = "build"
     description = "Assemble the official TeamViewRelay All-in-One Jar."
     dependsOn(generateUniversalMetadata, ":fabric-bootstrap:classes", ":client-bootstrap:classes")
-    archiveFileName.set("${project.archives_base_name}-Fabric-all-${project.version}.jar")
+    archiveFileName.set(
+            "${project.archives_base_name}-Fabric-" +
+            "MC${officialReleases.first()}-to-${officialReleases.last()}-All-in-One-${project.version}.jar"
+    )
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
     duplicatesStrategy = DuplicatesStrategy.FAIL
 

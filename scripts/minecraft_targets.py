@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "gradle" / "minecraft-versions.properties"
+MAP_MANIFEST = ROOT / "gradle" / "map-mod-versions.properties"
 GRADLE_PROPERTIES = ROOT / "gradle.properties"
 
 FABRIC_PROFILE_KEYS = (
@@ -51,6 +52,7 @@ NEOFORGE_PROFILE_KEYS = (
 @dataclass(frozen=True)
 class Matrix:
     properties: dict[str, str]
+    map_properties: dict[str, str]
     official: tuple[str, ...]
     fabric: tuple[str, ...]
     neoforge: tuple[str, ...]
@@ -140,8 +142,21 @@ def validate_artifact_name(properties: dict[str, str], loader: str, target: str)
     target_profile = profile(properties, loader, target)
     base_name = gradle_property("archives_base_name")
     label = "Fabric" if loader == "fabric" else "NeoForge"
+    if loader == "fabric":
+        covered_releases = tuple(
+            release.strip()
+            for release in target_profile["covers"].split(",")
+            if release.strip()
+        )
+        support_range = (
+            covered_releases[0]
+            if len(covered_releases) == 1
+            else f"{covered_releases[0]}-to-{covered_releases[-1]}"
+        )
+    else:
+        support_range = target_profile["minecraft_target_version"]
     expected = (
-        f"{base_name}-{label}-{target_profile['minecraft_target_version']}-"
+        f"{base_name}-{label}-MC{support_range}-"
         "{mod_version}.jar"
     )
     if target_profile["standalone_artifact"] != expected:
@@ -153,6 +168,7 @@ def validate_artifact_name(properties: dict[str, str], loader: str, target: str)
 
 def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
     properties = read_properties(MANIFEST)
+    map_properties = read_properties(MAP_MANIFEST)
     official = csv_property(properties, "official_releases")
     fabric = csv_property(properties, "fabric_targets")
     neoforge = csv_property(properties, "neoforge_targets")
@@ -225,6 +241,8 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
             "fabric_adapter_families must equal the ordered unique Fabric adapter_version values"
         )
 
+    validate_map_matrix(official, map_properties)
+
     if set(neoforge_modern) & set(neoforge_legacy):
         raise SystemExit("NeoForge modern and legacy targets overlap")
     if tuple(target for target in neoforge if target in set(neoforge_legacy)) != neoforge_legacy:
@@ -264,7 +282,60 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
             "neoforge_adapter_families must equal the ordered unique NeoForge adapter_version values"
         )
 
-    return Matrix(properties, official, fabric, neoforge, neoforge_modern, neoforge_legacy)
+    return Matrix(properties, map_properties, official, fabric, neoforge, neoforge_modern, neoforge_legacy)
+
+
+def validate_map_matrix(official: tuple[str, ...], properties: dict[str, str]) -> None:
+    expected_keys = {f"map.{release}.{plugin}" for release in official
+                     for plugin in ("journeymap", "xaero")}
+    actual_keys = set(properties)
+    if actual_keys != expected_keys:
+        raise SystemExit(
+            f"Map plugin matrix keys mismatch: missing={sorted(expected_keys - actual_keys)}, "
+            f"unexpected={sorted(actual_keys - expected_keys)}"
+        )
+    journey_entries = {
+        "api-v1-merged": "fabric-api-v1.lua",
+        "api-v2-merged": "fabric-1.21.8.lua",
+        "api-v2-full": "fabric-26.1.2.lua",
+        "unsupported": "unsupported.lua",
+    }
+    xaero_entries = {
+        "module-session": "main.lua",
+        "legacy-session": "legacy-1.19.3.lua",
+        "unsupported": "unsupported.lua",
+    }
+    manifests = {
+        "journeymap": (journey_entries, ROOT / "common/src/main/resources/teamviewer/plugins/journeymap/plugin.json"),
+        "xaero": (xaero_entries, ROOT / "common/src/main/resources/teamviewer/plugins/xaero/plugin.json"),
+    }
+    for plugin, (families, manifest_path) in manifests.items():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        routes: dict[str, str] = {}
+        for entrypoint in manifest.get("entrypoints", []):
+            if "fabric" not in entrypoint.get("loaders", []):
+                continue
+            for release in entrypoint.get("minecraftVersions", []):
+                if release in routes:
+                    raise SystemExit(f"{plugin} has overlapping Fabric routes for {release}")
+                routes[release] = entrypoint["entry"]
+        for release in official:
+            parts = properties[f"map.{release}.{plugin}"].split("|")
+            family = parts[0]
+            if family not in families:
+                raise SystemExit(f"Unknown {plugin} API family for {release}: {family}")
+            expected_length = 1 if family == "unsupported" else (2 if plugin == "journeymap" else 3)
+            if len(parts) != expected_length:
+                raise SystemExit(f"Invalid {plugin} artifact declaration for {release}: {parts}")
+            for artifact in parts[1:]:
+                if not artifact.startswith("maven.modrinth:"):
+                    raise SystemExit(f"{plugin} {release} must pin an official Modrinth Maven artifact")
+            actual_entry = routes.get(release, "unsupported.lua")
+            if actual_entry != families[family]:
+                raise SystemExit(
+                    f"{plugin} {release} matrix family {family} expects {families[family]}, "
+                    f"manifest selects {actual_entry}"
+                )
 
 
 def require_target(matrix: Matrix, loader: str, target: str) -> None:
@@ -315,11 +386,16 @@ def collect_artifact(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
     return destination
 
 
-def collect_universal() -> pathlib.Path:
-    artifact_name = (
-        f"{gradle_property('archives_base_name')}-Fabric-all-"
+def universal_artifact_name(matrix: Matrix) -> str:
+    return (
+        f"{gradle_property('archives_base_name')}-Fabric-"
+        f"MC{matrix.official[0]}-to-{matrix.official[-1]}-All-in-One-"
         f"{gradle_property('mod_version')}.jar"
     )
+
+
+def collect_universal(matrix: Matrix) -> pathlib.Path:
+    artifact_name = universal_artifact_name(matrix)
     source = ROOT / "universal" / "build" / "libs" / artifact_name
     if not source.is_file():
         raise SystemExit(f"Expected universal artifact not found: {source}")
@@ -354,7 +430,7 @@ def verify_release_set(matrix: Matrix) -> list[pathlib.Path]:
         )
         for target in matrix.neoforge
     )
-    expected.add(f"{gradle_property('archives_base_name')}-Fabric-all-{mod_version}.jar")
+    expected.add(universal_artifact_name(matrix))
     artifact_dir = ROOT / "build-artifacts"
     actual = {path.name for path in artifact_dir.glob("*.jar")} if artifact_dir.is_dir() else set()
     if actual != expected:
@@ -510,7 +586,7 @@ def main() -> None:
     elif args.command == "prepare-build":
         prepare_build()
     elif args.command == "collect-universal":
-        artifact = collect_universal()
+        artifact = collect_universal(matrix)
         print(f"Created {artifact.relative_to(ROOT)}")
     elif args.command == "verify-release-set":
         for artifact in verify_release_set(matrix):

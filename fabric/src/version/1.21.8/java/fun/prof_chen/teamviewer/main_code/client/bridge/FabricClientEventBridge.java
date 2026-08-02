@@ -49,7 +49,7 @@ public final class FabricClientEventBridge implements ClientEventBridge<WorldRen
         });
         ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> handler.onLeftPlaySession());
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> handler.onClientStopping());
-        WorldRenderEvents.AFTER_ENTITIES.register(handler::onWorldRender);
+        WorldRenderEvents.LAST.register(handler::onWorldRender);
         HudRenderCallback.EVENT.register((context, tickDelta) -> handler.onHudRender(context));
     }
 

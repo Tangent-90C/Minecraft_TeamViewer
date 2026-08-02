@@ -90,43 +90,43 @@ public class UnifiedRenderModule implements RenderBridge {
 		
 		// 绘制立方体的12条边
 		// ===== 底面 =====
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
 		
 		// ===== 顶面 =====
-		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a).next();
 		
 		// ===== 垂直边 =====
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x1, y2, z1).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y1, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y2, z1).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x2, y1, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
 		
-		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y1, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x1, y2, z2).color(r, g, b, a).next();
 	}
 	
 	/**
@@ -157,8 +157,8 @@ public class UnifiedRenderModule implements RenderBridge {
 			a = 1.0f;
 		}
 		
-		buffer.vertex(matrix4f, (float) start.x(), (float) start.y(), (float) start.z()).color(r, g, b, a);
-		buffer.vertex(matrix4f, (float) end.x(), (float) end.y(), (float) end.z()).color(r, g, b, a);
+		buffer.vertex(matrix4f, (float) start.x(), (float) start.y(), (float) start.z()).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, (float) end.x(), (float) end.y(), (float) end.z()).color(r, g, b, a).next();
 		
 		// 绘制缓冲区
 		getDebugLineStripLayer(TRACER_LINE_WIDTH, depthTest).draw(buffer, VertexSorter.BY_DISTANCE);
@@ -265,10 +265,10 @@ public class UnifiedRenderModule implements RenderBridge {
 								 float g,
 								 float b,
 								 float a) {
-		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a);
-		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a);
-		buffer.vertex(matrix4f, x3, y3, z3).color(r, g, b, a);
-		buffer.vertex(matrix4f, x4, y4, z4).color(r, g, b, a);
+		buffer.vertex(matrix4f, x1, y1, z1).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x2, y2, z2).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x3, y3, z3).color(r, g, b, a).next();
+		buffer.vertex(matrix4f, x4, y4, z4).color(r, g, b, a).next();
 	}
 
 	private static RenderLayer getDebugLineStripLayer(double lineWidth, boolean depthTest) {

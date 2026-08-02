@@ -9,15 +9,17 @@ import java.util.Locale;
 final class LuaCapabilityProbe {
     private final LuaPluginRuntime runtime;
     private final LuaValue callback;
+    private final String callbackId;
 
-    LuaCapabilityProbe(LuaPluginRuntime runtime, LuaValue callback) {
+    LuaCapabilityProbe(String capabilityId, LuaPluginRuntime runtime, LuaValue callback) {
         this.runtime = runtime;
         this.callback = callback == null ? LuaValue.NIL : callback;
+        this.callbackId = "probe." + capabilityId;
     }
 
     Result result() {
         if (!callback.isfunction()) return new Result(IntegrationSupportStatus.AVAILABLE, "");
-        LuaValue value = runtime.invoke(callback);
+        LuaValue value = runtime.invoke(callbackId, callback);
         if (!value.istable()) {
             return new Result(IntegrationSupportStatus.FAILED, "Lua capability probe returned no status table");
         }

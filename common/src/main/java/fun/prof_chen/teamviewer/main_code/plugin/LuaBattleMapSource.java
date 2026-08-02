@@ -20,7 +20,7 @@ final class LuaBattleMapSource implements BattleMapSource {
         this.id = id;
         this.runtime = runtime;
         this.capture = capture;
-        this.probe = new LuaCapabilityProbe(runtime, probe);
+        this.probe = new LuaCapabilityProbe(id, runtime, probe);
     }
 
     @Override public String id() { return id; }
@@ -35,7 +35,7 @@ final class LuaBattleMapSource implements BattleMapSource {
 
     @Override
     public Optional<BattleMapSourceSnapshot> capture() {
-        LuaValue value = runtime.invoke(capture);
+        LuaValue value = runtime.invoke("battle.capture." + id, capture);
         if (!value.istable()) return Optional.empty();
         List<BattleMapSourceSnapshot.Cell> cells = new ArrayList<>();
         LuaValue cellValues = value.get("cells");

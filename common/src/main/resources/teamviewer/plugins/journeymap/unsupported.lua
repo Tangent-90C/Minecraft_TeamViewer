@@ -1,3 +1,6 @@
+for _, key in ipairs({"show_remote_players", "show_map_markers", "show_beacons"}) do
+  tv.configure_setting({key = key, visible = false, enabled = false})
+end
 for _, id in ipairs({"journeymap-players", "journeymap-player-beacons", "journeymap-shared-waypoints"}) do
   tv.register_unavailable_capability({id = id,
     status = environment.loader_id() == "fabric" and "UNSUPPORTED_VERSION" or "NOT_IMPLEMENTED",

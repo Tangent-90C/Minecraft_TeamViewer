@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 final class PluginStateStore {
@@ -49,6 +50,23 @@ final class PluginStateStore {
 
     synchronized void setSetting(String pluginId, String key, Object value) {
         entries.computeIfAbsent(pluginId, ignored -> new Entry(true, new LinkedHashMap<>())).settings.put(key, value);
+        save();
+    }
+
+    synchronized void migrateBooleanOr(
+            String pluginId, String targetKey, List<String> sourceKeys, boolean defaultValue) {
+        Entry entry = entries.computeIfAbsent(pluginId,
+                ignored -> new Entry(true, new LinkedHashMap<>()));
+        if (entry.settings.containsKey(targetKey)) return;
+        boolean found = false;
+        boolean result = false;
+        for (String sourceKey : sourceKeys) {
+            if (!entry.settings.containsKey(sourceKey)) continue;
+            found = true;
+            Object raw = entry.settings.get(sourceKey);
+            result |= raw instanceof Boolean value ? value : Boolean.parseBoolean(String.valueOf(raw));
+        }
+        entry.settings.put(targetKey, found ? result : defaultValue);
         save();
     }
 

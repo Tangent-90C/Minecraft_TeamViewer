@@ -20,6 +20,7 @@ public record PluginSnapshot(
         Path source,
         Map<String, Object> settings,
         List<PluginManifest.SettingDefinition> settingDefinitions,
+        Map<String, PluginSettingState> settingStates,
         List<IntegrationCapability> capabilities,
         boolean pendingRemoval) {
     public PluginSnapshot(
@@ -28,12 +29,40 @@ public record PluginSnapshot(
             List<PluginManifest.SettingDefinition> settingDefinitions,
             List<IntegrationCapability> capabilities) {
         this(id, name, version, builtIn, enabled, hotToggle, runtimeStatus, detail, source,
-                settings, settingDefinitions, capabilities, false);
+                settings, settingDefinitions, Map.of(), capabilities, false);
+    }
+
+    public PluginSnapshot(
+            String id, String name, String version, boolean builtIn, boolean enabled, boolean hotToggle,
+            PluginRuntimeStatus runtimeStatus, String detail, Path source, Map<String, Object> settings,
+            List<PluginManifest.SettingDefinition> settingDefinitions,
+            List<IntegrationCapability> capabilities, boolean pendingRemoval) {
+        this(id, name, version, builtIn, enabled, hotToggle, runtimeStatus, detail, source,
+                settings, settingDefinitions, Map.of(), capabilities, pendingRemoval);
+    }
+
+    public PluginSnapshot(
+            String id, String name, String version, boolean builtIn, boolean enabled, boolean hotToggle,
+            PluginRuntimeStatus runtimeStatus, String detail, Path source, Map<String, Object> settings,
+            List<PluginManifest.SettingDefinition> settingDefinitions,
+            Map<String, PluginSettingState> settingStates,
+            List<IntegrationCapability> capabilities) {
+        this(id, name, version, builtIn, enabled, hotToggle, runtimeStatus, detail, source,
+                settings, settingDefinitions, settingStates, capabilities, false);
     }
 
     public PluginSnapshot {
         settings = Map.copyOf(settings == null ? Map.of() : settings);
         settingDefinitions = List.copyOf(settingDefinitions == null ? List.of() : settingDefinitions);
+        settingStates = Map.copyOf(settingStates == null ? Map.of() : settingStates);
         capabilities = List.copyOf(capabilities == null ? List.of() : capabilities);
+    }
+
+    public PluginSettingState settingState(String key) {
+        return settingStates.getOrDefault(key, PluginSettingState.defaults());
+    }
+
+    public List<PluginManifest.SettingDefinition> visibleSettingDefinitions() {
+        return settingDefinitions.stream().filter(value -> settingState(value.key()).visible()).toList();
     }
 }

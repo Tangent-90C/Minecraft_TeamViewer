@@ -9,7 +9,7 @@ public final class WaypointFactory {
 
     public static Waypoint createClientWaypoint(
             String modId, BlockPos position, String name, World.Key dimension, boolean persistent) {
-        Waypoint value = new Waypoint(modId, position, name, dimension.toString());
+        Waypoint value = new FullWaypoint(modId, position, name, dimension.toString());
         value.setPersistent(persistent);
         return value;
     }

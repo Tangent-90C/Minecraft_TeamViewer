@@ -14,13 +14,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
-/** Minecraft 26.1-26.2 NeoForge SDK adapter factory. */
+/** Minecraft 26.1 NeoForge SDK adapter factory. */
 public final class NeoForgeClientAdapterFactory
         implements ClientAdapterFactory<RenderLevelStageEvent, GuiGraphicsExtractor> {
     @Override
     public ClientAdapterBundle<RenderLevelStageEvent, GuiGraphicsExtractor> create() {
         return new ClientAdapterBundle<>(
-                "neoforge-26.1-26.2",
+                "neoforge-26.1",
                 new NeoForgeRuntimeGateway(),
                 new NeoForgeGameClientBridge(),
                 new NeoForgeClientEventBridge(),

@@ -22,8 +22,14 @@ public record ConfigControlView(
     public static ConfigControlView textField(
             ConfigControlId id, UiRect bounds, UiRect labelBounds, UiText label, UiText hint,
             UiText tooltip, String value, int maxLength) {
+        return textField(id, bounds, labelBounds, label, hint, tooltip, value, maxLength, true);
+    }
+
+    public static ConfigControlView textField(
+            ConfigControlId id, UiRect bounds, UiRect labelBounds, UiText label, UiText hint,
+            UiText tooltip, String value, int maxLength, boolean active) {
         return new ConfigControlView(id, ConfigControlKind.TEXT_FIELD, bounds, labelBounds, label, hint,
-                tooltip, value, maxLength, false, true, true, 0xFFFFFF, TextAlignment.LEFT);
+                tooltip, value, maxLength, false, active, true, 0xFFFFFF, TextAlignment.LEFT);
     }
 
     public static ConfigControlView button(
@@ -34,8 +40,14 @@ public record ConfigControlView(
 
     public static ConfigControlView checkbox(
             ConfigControlId id, UiRect bounds, UiText label, UiText tooltip, boolean checked) {
+        return checkbox(id, bounds, label, tooltip, checked, true);
+    }
+
+    public static ConfigControlView checkbox(
+            ConfigControlId id, UiRect bounds, UiText label, UiText tooltip,
+            boolean checked, boolean active) {
         return new ConfigControlView(id, ConfigControlKind.CHECKBOX, bounds, null, label, null, tooltip,
-                null, 0, checked, true, true, 0xFFFFFF, TextAlignment.LEFT);
+                null, 0, checked, active, true, 0xFFFFFF, TextAlignment.LEFT);
     }
 
     public static ConfigControlView text(

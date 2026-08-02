@@ -5,12 +5,14 @@
 The manifest declares `xaero-worldmap` (`remote-player`) and `xaero-minimap`
 (`shared-waypoint`) separately. Their probes independently check `xaeroworldmap` and
 `xaerominimap`, so installing only one Mod yields one working capability and one explicit
-`MOD_NOT_INSTALLED` record. Known Fabric versions use `main.lua`; unknown Fabric versions and
+`MOD_NOT_INSTALLED` record. Pinned module-session artifacts use `main.lua`; the old
+`getWaypointsManager/getCurrentSet/getList` shape uses `legacy-1.19.3.lua`. Unknown Fabric versions and
 unimplemented platforms use the status-registering fallback.
 
 清单分别声明 `xaero-worldmap`（`remote-player`）和 `xaero-minimap`（`shared-waypoint`）。
 两个 probe 独立检查 `xaeroworldmap` 与 `xaerominimap`，因此只安装一个 Mod 时，一个能力
-正常工作，另一个明确登记 `MOD_NOT_INSTALLED`。已知 Fabric 版本使用 `main.lua`；未知
+正常工作，另一个明确登记 `MOD_NOT_INSTALLED`。固定的 module-session 工件使用 `main.lua`；
+旧版 `getWaypointsManager/getCurrentSet/getList` 结构使用 `legacy-1.19.3.lua`；未知
 Fabric 版本与未实现平台使用只登记状态的后备入口。
 
 ## World Map tracker / 世界地图玩家追踪

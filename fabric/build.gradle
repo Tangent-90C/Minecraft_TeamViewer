@@ -10,6 +10,10 @@ def minecraftVersionProperties = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     minecraftVersionProperties.load(it)
 }
+def mapModVersionProperties = new Properties()
+rootProject.file("gradle/map-mod-versions.properties").withInputStream {
+    mapModVersionProperties.load(it)
+}
 def defaultMinecraftTarget = minecraftVersionProperties.getProperty("default_fabric_target")
 def minecraftTarget = providers.gradleProperty("fabric_target")
         .getOrElse(defaultMinecraftTarget)
@@ -55,18 +59,38 @@ def yarnMappings = runtimeProperty("yarn_mappings") ?: minecraftVersionPropertie
         "fabric.${minecraftTarget}.yarn_mappings")
 def modmenuVersion = profileProperty("modmenu_version")
 def journeyMapDependency = profileProperty("journeymap_dependency")
-def journeyMapTestDependency = minecraftVersionProperties.getProperty(
-        "fabric.${minecraftTarget}.journeymap_test_dependency")
+def parseMapDeclaration = { String plugin ->
+    def value = mapModVersionProperties.getProperty("map.${minecraftTargetVersion}.${plugin}")
+    if (value == null || value.isBlank()) {
+        throw new GradleException("Missing exact ${plugin} declaration for Minecraft ${minecraftTargetVersion}")
+    }
+    value.split(/\|/).toList()
+}
+def journeyMapDeclaration = parseMapDeclaration("journeymap")
+def xaeroDeclaration = parseMapDeclaration("xaero")
+def journeyMapApiFamily = journeyMapDeclaration[0]
+def journeyMapTestDependency = journeyMapDeclaration.size() > 1 ? journeyMapDeclaration[1] : null
+def xaeroApiFamily = xaeroDeclaration[0]
+def xaeroMinimapTestDependency = xaeroDeclaration.size() > 1 ? xaeroDeclaration[1] : null
+def xaeroWorldMapTestDependency = xaeroDeclaration.size() > 2 ? xaeroDeclaration[2] : null
 def journeyMapApiNestedPath = minecraftVersionProperties.getProperty(
         "fabric.${minecraftTarget}.journeymap_api_nested_path")
 def journeyMapApiJar = journeyMapApiNestedPath != null
         ? layout.buildDirectory.file("generated/journeymap-api/${journeyMapApiNestedPath}")
         : null
+def standaloneArtifactSuffix = "-{mod_version}.jar"
+def standaloneArtifact = profileProperty("standalone_artifact")
+if (!standaloneArtifact.endsWith(standaloneArtifactSuffix)) {
+    throw new GradleException(
+            "Fabric standalone_artifact must end with ${standaloneArtifactSuffix}: ${standaloneArtifact}")
+}
+def standaloneArchivesName = standaloneArtifact.substring(
+        0, standaloneArtifact.length() - standaloneArtifactSuffix.length())
 
 apply plugin: mappingsMode == "yarn" ? "fabric-loom" : "net.fabricmc.fabric-loom"
 
 base {
-    archivesName = "${project.archives_base_name}-Fabric-${minecraftTargetVersion}"
+    archivesName = standaloneArchivesName
 }
 
 if (minecraftTargetVersion != familyMinecraftVersion) {
@@ -141,6 +165,10 @@ configurations.configureEach {
     }
 }
 
+configurations {
+    mapPluginContracts
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${minecraftTargetVersion}"
     if (mappingsMode == "yarn") {
@@ -168,6 +196,9 @@ dependencies {
                 transitive = false
             }
         }
+        [xaeroMinimapTestDependency, xaeroWorldMapTestDependency].findAll { it != null }.each { dependency ->
+            modLocalRuntime(dependency) { transitive = false }
+        }
         if (journeyMapApiJar != null) {
             modCompileOnly files(journeyMapApiJar)
         }
@@ -177,6 +208,9 @@ dependencies {
         compileOnly "com.terraformersmc:modmenu:${modmenuVersion}"
         runtimeOnly "com.terraformersmc:modmenu:${modmenuVersion}"
         compileOnly journeyMapDependency
+        if (journeyMapTestDependency != null) runtimeOnly journeyMapTestDependency
+        if (xaeroMinimapTestDependency != null) runtimeOnly xaeroMinimapTestDependency
+        if (xaeroWorldMapTestDependency != null) runtimeOnly xaeroWorldMapTestDependency
         if (journeyMapApiJar != null) {
             compileOnly files(journeyMapApiJar)
         }
@@ -206,6 +240,128 @@ dependencies {
 
     implementation "org.luaj:luaj-jse:${project.luaj_version}"
     include "org.luaj:luaj-jse:${project.luaj_version}"
+
+    if (journeyMapTestDependency != null) {
+        mapPluginContracts(journeyMapTestDependency) { transitive = false }
+    }
+    if (xaeroMinimapTestDependency != null) {
+        mapPluginContracts(xaeroMinimapTestDependency) { transitive = false }
+    }
+    if (xaeroWorldMapTestDependency != null) {
+        mapPluginContracts(xaeroWorldMapTestDependency) { transitive = false }
+    }
+}
+
+def verifyMapPluginContracts = tasks.register("verifyMapPluginContracts") {
+    group = "verification"
+    description = "Resolve fixed official map Mods and verify the exact API family signatures."
+    inputs.property("minecraftVersion", minecraftTargetVersion)
+    inputs.property("journeyMapApiFamily", journeyMapApiFamily)
+    inputs.property("xaeroApiFamily", xaeroApiFamily)
+    if (journeyMapTestDependency != null || xaeroMinimapTestDependency != null
+            || xaeroWorldMapTestDependency != null) {
+        inputs.files(configurations.mapPluginContracts)
+    }
+
+    doLast {
+        def artifacts = configurations.mapPluginContracts.resolvedConfiguration.resolvedArtifacts
+                .collectEntries { [(it.moduleVersion.id.name): it.file] }
+        def classBytes = { File outerJar, String path ->
+            def outer = new java.util.zip.ZipFile(outerJar)
+            try {
+                def direct = outer.getEntry(path)
+                if (direct != null) return outer.getInputStream(direct).bytes
+                def nestedEntries = outer.entries().findAll {
+                    it.name.startsWith("META-INF/jars/") && it.name.endsWith(".jar")
+                }
+                for (def nested : nestedEntries) {
+                    def input = new java.util.zip.ZipInputStream(outer.getInputStream(nested))
+                    try {
+                        for (def entry = input.nextEntry; entry != null; entry = input.nextEntry) {
+                            if (entry.name == path) return input.bytes
+                        }
+                    } finally {
+                        input.close()
+                    }
+                }
+                return null
+            } finally {
+                outer.close()
+            }
+        }
+        def requireClass = { File jar, String path ->
+            def bytes = classBytes(jar, path)
+            if (bytes == null) throw new GradleException("${jar.name} is missing ${path}")
+            new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+        }
+        def requireTokens = { String source, String label, List<String> tokens ->
+            def missing = tokens.findAll { !source.contains(it) }
+            if (!missing.isEmpty()) throw new GradleException("${label} is missing API tokens ${missing}")
+        }
+
+        if (journeyMapApiFamily != "unsupported") {
+            def jar = artifacts["journeymap"]
+            if (jar == null) throw new GradleException("JourneyMap contract artifact did not resolve")
+            if (journeyMapApiFamily == "api-v1-merged") {
+                requireTokens(requireClass(jar, "journeymap/client/api/IClientAPI.class"),
+                        "JourneyMap ${minecraftTargetVersion} IClientAPI",
+                        ["getAllWaypoints", "show", "remove"])
+                requireTokens(requireClass(jar, "journeymap/client/api/display/Waypoint.class"),
+                        "JourneyMap ${minecraftTargetVersion} Waypoint",
+                        ["setPosition", "getPosition", "setPersistent", "setEnabled"])
+                requireTokens(requireClass(jar, "journeymap/client/api/model/WaypointBase.class"),
+                        "JourneyMap ${minecraftTargetVersion} WaypointBase", ["setColor"])
+            } else {
+                def waypoint = requireClass(jar, "journeymap/api/v2/common/waypoint/Waypoint.class")
+                def factory = requireClass(jar, "journeymap/api/v2/common/waypoint/WaypointFactory.class")
+                requireTokens(requireClass(jar, "journeymap/api/v2/client/IClientAPI.class"),
+                        "JourneyMap ${minecraftTargetVersion} IClientAPI",
+                        ["getAllWaypoints", "addWaypoint", "removeWaypoint"])
+                requireTokens(waypoint, "JourneyMap ${minecraftTargetVersion} Waypoint",
+                        ["getPrimaryDimension", "getBlockPos", "setPos", "setColor"])
+                if (journeyMapApiFamily == "api-v2-full") {
+                    requireTokens(waypoint, "JourneyMap ${minecraftTargetVersion} full Waypoint",
+                            ["setShowBeacon", "setShowOnMap", "setShowInWorld"])
+                } else if (["setShowBeacon", "setShowOnMap", "setShowInWorld"].any { waypoint.contains(it) }) {
+                    throw new GradleException("JourneyMap ${minecraftTargetVersion} merged family unexpectedly has presentation controls")
+                }
+                requireTokens(factory, "JourneyMap ${minecraftTargetVersion} WaypointFactory",
+                        [minecraftTargetVersion == "26.2" ? "createWaypoint" : "createClientWaypoint"])
+            }
+        }
+
+        if (xaeroApiFamily != "unsupported") {
+            def minimap = artifacts["xaeros-minimap"]
+            def worldMap = artifacts["xaeros-world-map"]
+            if (minimap == null || worldMap == null) {
+                throw new GradleException("Both Xaero contract artifacts must resolve")
+            }
+            requireTokens(requireClass(worldMap, "xaero/map/radar/tracker/system/IPlayerTrackerSystem.class"),
+                    "Xaero World Map ${minecraftTargetVersion} tracker", ["getReader", "getTrackedPlayerIterator"])
+            requireTokens(requireClass(worldMap, "xaero/map/radar/tracker/system/ITrackedPlayerReader.class"),
+                    "Xaero World Map ${minecraftTargetVersion} reader", ["getId", "getX", "getY", "getZ", "getDimension"])
+            requireTokens(requireClass(worldMap, "xaero/map/radar/tracker/system/PlayerTrackerSystemManager.class"),
+                    "Xaero World Map ${minecraftTargetVersion} manager", ["register"])
+            requireTokens(requireClass(minimap, "xaero/common/minimap/waypoints/Waypoint.class"),
+                    "Xaero Minimap ${minecraftTargetVersion} Waypoint",
+                    ["getX", "getY", "getZ", "getName", "getSymbol", "getColor"])
+            if (xaeroApiFamily == "legacy-session") {
+                requireTokens(requireClass(minimap, "xaero/common/XaeroMinimapSession.class"),
+                        "Xaero Minimap ${minecraftTargetVersion} session", ["getWaypointsManager"])
+                requireTokens(requireClass(minimap, "xaero/common/minimap/waypoints/WaypointWorld.class"),
+                        "Xaero Minimap ${minecraftTargetVersion} world", ["getCurrentSet"])
+                requireTokens(requireClass(minimap, "xaero/common/minimap/waypoints/WaypointSet.class"),
+                        "Xaero Minimap ${minecraftTargetVersion} set", ["getList"])
+            } else {
+                requireTokens(requireClass(minimap, "xaero/common/minimap/MinimapProcessor.class"),
+                        "Xaero Minimap ${minecraftTargetVersion} processor", ["getSession"])
+                requireTokens(requireClass(minimap, "xaero/hud/minimap/world/MinimapWorld.class"),
+                        "Xaero Minimap ${minecraftTargetVersion} world", ["getCurrentWaypointSet"])
+                requireTokens(requireClass(minimap, "xaero/hud/minimap/waypoint/set/WaypointSet.class"),
+                        "Xaero Minimap ${minecraftTargetVersion} set", ["getWaypoints", "add", "remove"])
+            }
+        }
+    }
 }
 
 if (journeyMapApiNestedPath != null) {
@@ -297,6 +453,12 @@ tasks.register("verifyAdapterSdkCompleteness") {
             ].each { token ->
                 if (!text.contains(token)) throw new GradleException("${adapter} adapter factory missing '${token}'")
             }
+            def adapterIdMatcher = text =~ /new ClientAdapterBundle<>\(\s*"([^"]+)"/
+            if (!adapterIdMatcher.find() || adapterIdMatcher.group(1) != adapter) {
+                def actual = adapterIdMatcher.find(0) ? adapterIdMatcher.group(1) : "<missing>"
+                throw new GradleException(
+                        "${adapter} adapter factory reports '${actual}', expected source adapter id '${adapter}'")
+            }
             def requiredFiles = [
                     "client/bridge/FabricClientEventBridge.java",
                     "client/bridge/FabricGameClientBridge.java",
@@ -308,6 +470,28 @@ tasks.register("verifyAdapterSdkCompleteness") {
             requiredFiles.each { relative ->
                 if (!new File(root, "java/fun/prof_chen/teamviewer/main_code/${relative}").isFile()) {
                     throw new GradleException("${adapter} adapter missing required port ${relative}")
+                }
+            }
+            if (["1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6",
+                 "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.8"].contains(adapter)) {
+                def eventBridge = new File(root,
+                        "java/fun/prof_chen/teamviewer/main_code/client/bridge/FabricClientEventBridge.java")
+                def eventBridgeText = eventBridge.getText("UTF-8")
+                if (!eventBridgeText.contains("WorldRenderEvents.LAST.register(handler::onWorldRender)") ||
+                        eventBridgeText.contains("WorldRenderEvents.AFTER_ENTITIES.register(handler::onWorldRender)")) {
+                    throw new GradleException(
+                            "${adapter} immediate renderer must run in WorldRenderEvents.LAST")
+                }
+            }
+            if (["1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6"].contains(adapter)) {
+                def renderModule = new File(root,
+                        "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
+                def incompleteVertices = renderModule.readLines().findAll { line ->
+                    line.contains("buffer.vertex(") && !line.contains(".next();")
+                }
+                if (!incompleteVertices.isEmpty()) {
+                    throw new GradleException(
+                            "${adapter} legacy BufferBuilder vertices must be finalized with next()")
                 }
             }
             def gameBridge = new File(root,
@@ -391,7 +575,7 @@ def verifyNoCommonClassShadowing = tasks.register("verifyNoCommonClassShadowing"
 }
 
 tasks.named("check") {
-    dependsOn(verifyNoCommonClassShadowing)
+    dependsOn(verifyNoCommonClassShadowing, verifyMapPluginContracts)
 }
 
 def adapterArtifactDirectory = rootProject.layout.buildDirectory.dir("adapter-artifacts")

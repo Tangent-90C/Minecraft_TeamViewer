@@ -44,9 +44,17 @@ def neoForgeVersionRange = profile("neoforge_version_range")
 def adapterVersion = profile("adapter_version")
 def targetJavaRelease = profile("adapter_java_release").toInteger()
 def neoForgeModVersion = project.version.toString().replaceFirst(/^v(?=\d)/, "")
+def standaloneArtifactSuffix = "-{mod_version}.jar"
+def standaloneArtifact = profile("standalone_artifact")
+if (!standaloneArtifact.endsWith(standaloneArtifactSuffix)) {
+    throw new GradleException(
+            "NeoForge standalone_artifact must end with ${standaloneArtifactSuffix}: ${standaloneArtifact}")
+}
+def standaloneArchivesName = standaloneArtifact.substring(
+        0, standaloneArtifact.length() - standaloneArtifactSuffix.length())
 
 base {
-    archivesName = "${projectProperties.getProperty('archives_base_name')}-NeoForge-${minecraftVersion}"
+    archivesName = standaloneArchivesName
 }
 layout.buildDirectory = file("build/${minecraftTarget}")
 
@@ -134,6 +142,15 @@ def verifyLegacyAdapterCompleteness = tasks.register("verifyLegacyAdapterComplet
             if (!new File(javaRoot, relative).isFile()) {
                 throw new GradleException("${minecraftVersion} legacy NeoForge adapter missing ${relative}")
             }
+        }
+        def factory = new File(javaRoot, "core/NeoForgeClientAdapterFactory.java")
+        def factoryText = factory.getText("UTF-8")
+        def adapterIdMatcher = factoryText =~ /new ClientAdapterBundle<>\(\s*"([^"]+)"/
+        def expectedAdapterId = "neoforge-${adapterVersion}"
+        if (!adapterIdMatcher.find() || adapterIdMatcher.group(1) != expectedAdapterId) {
+            def actual = adapterIdMatcher.find(0) ? adapterIdMatcher.group(1) : "<missing>"
+            throw new GradleException(
+                    "Legacy NeoForge ${adapterVersion} factory reports '${actual}', expected '${expectedAdapterId}'")
         }
         def service = file("src/version/${adapterVersion}/resources/META-INF/services/" +
                 "fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory")

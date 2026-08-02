@@ -13,12 +13,12 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.math.MatrixStack;
 
-/** Minecraft 1.21.8 native adapter factory. */
+/** Minecraft 1.18.2 source adapter factory. */
 public final class FabricClientAdapterFactory implements ClientAdapterFactory<WorldRenderContext, MatrixStack> {
     @Override
     public ClientAdapterBundle<WorldRenderContext, MatrixStack> create() {
         return new ClientAdapterBundle<>(
-                "1.21.8",
+                "1.18.2",
                 new FabricRuntimeGateway(),
                 new FabricGameClientBridge(),
                 new FabricClientEventBridge(),

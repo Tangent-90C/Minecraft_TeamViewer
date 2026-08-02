@@ -2803,7 +2803,7 @@ public class NetworkManager {
 		pendingBattleChunkRefreshIds.addAll(battleChunks);
 
 		if (!players.isEmpty() || !entities.isEmpty() || !battleChunks.isEmpty()) {
-			LOGGER.info(
+			LOGGER.debug(
 					"Received refresh_req: players={}, entities={}, battleChunks={}",
 					players.size(),
 					entities.size(),

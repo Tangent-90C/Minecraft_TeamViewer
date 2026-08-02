@@ -132,6 +132,9 @@ public final class IntegrationPluginManager {
         PluginManifest.SettingDefinition definition = descriptor.manifest.settings().stream()
                 .filter(value -> value.key().equals(key)).findFirst().orElse(null);
         if (definition == null) return false;
+        PluginSettingState settingState = descriptor.settingStates.getOrDefault(
+                key, PluginSettingState.defaults());
+        if (!settingState.visible() || !settingState.enabled()) return false;
         Object value = normalizeSetting(definition, rawValue);
         descriptor.settings.put(key, value);
         stateStore.setSetting(pluginId, key, value);
@@ -364,6 +367,10 @@ public final class IntegrationPluginManager {
                 PluginManifest manifest = GSON.fromJson(candidate.manifestJson, PluginManifest.class).normalized();
                 Descriptor descriptor = new Descriptor(manifest, candidate);
                 descriptor.enabled = stateStore.enabled(manifest);
+                if (candidate.builtIn && IntegrationIds.PLUGIN_JOURNEYMAP.equals(manifest.id())) {
+                    stateStore.migrateBooleanOr(manifest.id(), "show_remote_players",
+                            List.of("show_map_markers", "show_beacons"), true);
+                }
                 descriptor.settings.putAll(stateStore.settings(manifest));
                 descriptors.put(manifest.id(), descriptor);
                 for (PluginManifest.CapabilityDeclaration capability : manifest.provides()) {
@@ -533,6 +540,7 @@ public final class IntegrationPluginManager {
         try {
             LuaPluginRuntime runtime = createRuntime(descriptor);
             descriptor.registered.clear();
+            descriptor.settingStates.clear();
             runtime.globals().load(descriptor.candidate.script(), "@" + descriptor.manifest.id()
                     + "/" + descriptor.candidate.entryPath).call();
             Set<String> expected = descriptor.manifest.provides().stream()
@@ -640,6 +648,22 @@ public final class IntegrationPluginManager {
         tv.set("on_enable", callbackSetter(runtime::setOnEnable));
         tv.set("on_disable", callbackSetter(runtime::setOnDisable));
         tv.set("on_settings_changed", callbackSetter(runtime::setOnSettingsChanged));
+        tv.set("configure_setting", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                LuaTable table = value.checktable();
+                String key = table.get("key").checkjstring();
+                boolean declared = descriptor.manifest.settings().stream()
+                        .anyMatch(setting -> setting.key().equals(key));
+                if (!declared) {
+                    throw new IllegalArgumentException("Plugin configured undeclared setting: " + key);
+                }
+                descriptor.settingStates.put(key, new PluginSettingState(
+                        table.get("visible").optboolean(true),
+                        table.get("enabled").optboolean(true),
+                        table.get("detail").optjstring("")));
+                return LuaValue.TRUE;
+            }
+        });
         tv.set("log", logTable(descriptor.manifest.id()));
         globals.set("tv", tv);
         globals.set("settings", LuaValueConverters.settings(descriptor.settings));
@@ -667,7 +691,7 @@ public final class IntegrationPluginManager {
                 String id = value.checkjstring();
                 Object service = hostAccess.service(id);
                 if (service == null) service = platform.getPluginService(id);
-                return LuaValueConverters.toLua(service);
+                return service == null ? LuaValue.NIL : CoerceJavaToLua.coerce(service);
             }
         });
         globals.set("services", services);
@@ -883,7 +907,7 @@ public final class IntegrationPluginManager {
         return new PluginSnapshot(descriptor.manifest.id(), descriptor.manifest.name(), descriptor.manifest.version(),
                 descriptor.candidate.builtIn, descriptor.enabled, descriptor.manifest.managedHotToggle(),
                 descriptor.runtimeStatus, descriptor.detail, descriptor.candidate.source,
-                descriptor.settings, descriptor.manifest.settings(),
+                descriptor.settings, descriptor.manifest.settings(), descriptor.settingStates,
                 integrations.capabilitiesForPlugin(descriptor.manifest.id()), descriptor.disabledStorageId != null);
     }
 
@@ -1172,6 +1196,7 @@ public final class IntegrationPluginManager {
         private final PluginManifest manifest;
         private final Candidate candidate;
         private final Map<String, Object> settings = new LinkedHashMap<>();
+        private final Map<String, PluginSettingState> settingStates = new LinkedHashMap<>();
         private final Set<String> registered = new LinkedHashSet<>();
         private boolean enabled;
         private PluginRuntimeStatus runtimeStatus = PluginRuntimeStatus.DISABLED;

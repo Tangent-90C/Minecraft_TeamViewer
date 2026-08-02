@@ -221,6 +221,8 @@
   "screen.mc_teamviewer.integration_plugin.setting.example_color": "Example Color",
   "screen.mc_teamviewer.integration_plugin.setting.journeymap_show_beacons": "Show Remote Player World Beacons",
   "screen.mc_teamviewer.integration_plugin.setting.journeymap_show_markers": "Show Remote Player Map Markers",
+  "screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players": "Show Remote Player Waypoints",
+  "screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players.tooltip": "This JourneyMap API cannot separate map markers from world beacons. Their visibility is controlled by JourneyMap's global waypoint settings.",
   "screen.mc_teamviewer.integration_plugin.manager.title": "Integration Plugins",
   "screen.mc_teamviewer.integration_plugin.manager.installed": "Installed %s",
   "screen.mc_teamviewer.integration_plugin.manager.disabled": "Uninstalled %s",

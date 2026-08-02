@@ -56,7 +56,7 @@ tasks:
           java_home="$(python3 scripts/minecraft_targets.py java-home "$family")"
           JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
             -Pfabric_target="$family" -Pfabric_runtime_version="{{.RUNTIME}}" \
-            :fabric:compileClientJava
+            :fabric:compileClientJava :fabric:verifyMapPluginContracts
 
   check-all-fabric-runtimes:
     desc: Compile-check every exact official Minecraft release through its Fabric owner

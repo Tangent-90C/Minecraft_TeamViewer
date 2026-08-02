@@ -208,10 +208,12 @@ class IntegrationPluginManagerTest {
         PluginSnapshot journeyMap = manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
         assertEquals(true, journeyMap.settings().get("show_beacons"));
         assertEquals(false, journeyMap.settings().get("show_map_markers"));
+        assertEquals(true, journeyMap.settings().get("show_remote_players"));
         assertEquals(IntegrationIds.NODEMC_BATTLE_MAP, config.getBattleMapSourceId());
         assertFalse(Files.readString(statePath).contains("$migrations"));
 
-        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_beacons", true));
+        assertFalse(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_beacons", false),
+                "hidden family-specific settings must not be writable through the UI-facing API");
         manager.shutdown();
         config.save();
         String savedConfig = Files.readString(configPath);
@@ -444,6 +446,30 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
+    void successfulProbeDoesNotResetAnotherCallbacksFailureCount() throws Exception {
+        writePlugin("custom.callback-isolation", List.of(), """
+                tv.register_battle_map_source({
+                  id="custom-isolated-map",
+                  probe=function() return {status="AVAILABLE", detail="ready"} end,
+                  capture=function() error("isolated capture failure") end
+                })
+                """, "custom-isolated-map");
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new TestRuntime(temporary), registry, Config.load(temporary.resolve("config.json")));
+        BattleMapSource source = registry.activeBattleMapSource("custom-isolated-map");
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            assertTrue(source.capture().isEmpty());
+            manager.snapshot("custom.callback-isolation");
+        }
+        assertEquals(PluginRuntimeStatus.SUSPENDED,
+                manager.snapshot("custom.callback-isolation").runtimeStatus());
+        assertNull(registry.activeBattleMapSource("custom-isolated-map"));
+        manager.shutdown();
+    }
+
+    @Test
     void missingDeclaredResourceKeepsManifestCapabilitiesVisibleAsFailed() throws Exception {
         Path plugin = temporary.resolve("team-view-relay/plugins/custom.missing-resource");
         Files.createDirectories(plugin);
@@ -472,13 +498,14 @@ class IntegrationPluginManagerTest {
                 new TestRuntime(temporary), completeRegistry(), Config.load(temporary.resolve("config.json")));
         Path copied = manager.copyBuiltin(IntegrationIds.PLUGIN_JOURNEYMAP);
         assertNotNull(copied);
-        for (String file : List.of("main.lua", "fabric-1.21.8.lua", "fabric-26.1.2.lua",
+        for (String file : List.of("main.lua", "fabric-api-v1.lua", "fabric-1.21.8.lua", "fabric-26.1.2.lua",
                 "unsupported.lua", "README.md")) {
             assertTrue(Files.isRegularFile(copied.resolve(file)), "missing copied " + file);
         }
         String manifest = Files.readString(copied.resolve("plugin.json"));
         assertTrue(manifest.contains("teamviewer.journeymap.custom"));
-        for (String file : List.of("main.lua", "fabric-1.21.8.lua", "fabric-26.1.2.lua", "unsupported.lua")) {
+        for (String file : List.of("main.lua", "fabric-api-v1.lua", "fabric-1.21.8.lua",
+                "fabric-26.1.2.lua", "unsupported.lua")) {
             String script = Files.readString(copied.resolve(file));
             assertFalse(script.contains("\"journeymap-players\""), file);
             assertTrue(script.contains("journeymap-players.custom"), file);
@@ -696,7 +723,10 @@ class IntegrationPluginManagerTest {
                 new EnvironmentRuntime(temporary, "fabric", "1.21.8", Set.of("journeymap")),
                 registry, Config.load(temporary.resolve("config.json")), host);
 
-        assertTrue(pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+        PluginSnapshot pendingJourneyMap = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
+        assertEquals(List.of("show_remote_players"), pendingJourneyMap.visibleSettingDefinitions().stream()
+                .map(PluginManifest.SettingDefinition::key).toList());
+        assertTrue(pendingJourneyMap.capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.ENTRYPOINT_NOT_READY));
         JourneyMapApiStub api = new JourneyMapApiStub();
         service.set(api);
@@ -710,9 +740,8 @@ class IntegrationPluginManagerTest {
         registry.activeRemotePlayerProjections().stream()
                 .filter(value -> value.id().startsWith("journeymap-"))
                 .forEach(value -> value.sync(players, true));
-        assertEquals(2, api.waypoints().size());
-        assertTrue(api.waypoints().stream().anyMatch(value -> value.showOnMap() && !value.showBeacon()));
-        assertTrue(api.waypoints().stream().anyMatch(value -> value.showBeacon() && !value.showOnMap()));
+        assertEquals(1, api.waypoints().size(),
+                "the merged API family must project each player to one native waypoint");
 
         SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
                 .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
@@ -735,6 +764,55 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
+    void journeyMapEnumServiceRemainsCallableUserdata() {
+        EnumJourneyMapApiStub api = EnumJourneyMapApiStub.INSTANCE;
+        api.reset();
+        api.addWaypoint("other-mod", new journeymap.api.v2.common.waypoint.Waypoint(
+                "other-mod", new net.minecraft.util.math.BlockPos(2, 70, 5),
+                "Enum local", "minecraft:overworld"));
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(UUID.randomUUID(), "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager pluginManager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "1.21.8", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("enum-config.json")), host);
+
+        SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
+                .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
+                .findFirst().orElseThrow();
+        assertEquals("Enum local", adapter.listLocalWaypoints().get(0).name(),
+                "services.get() must not stringify enum singleton services");
+        pluginManager.shutdown();
+        api.reset();
+    }
+
+    @Test
+    void journeyMapV1UsesOneDisplayableWaypointAndCleansUp() {
+        JourneyMapV1ApiStub api = new JourneyMapV1ApiStub();
+        UUID localId = UUID.randomUUID();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(localId, "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "1.20.1", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("v1-config.json")), host);
+
+        UUID remoteId = UUID.randomUUID();
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.sync(Map.of(remoteId,
+                        new RemotePlayerInfo(remoteId, new Position3D(8, 70, -4),
+                                "minecraft:overworld", "V1 Remote")), true));
+        assertEquals(1, api.waypoints().size());
+        assertEquals(List.of("show_remote_players"), manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP)
+                .visibleSettingDefinitions().stream().map(PluginManifest.SettingDefinition::key).toList());
+        manager.shutdown();
+        assertTrue(api.waypoints().isEmpty());
+    }
+
+    @Test
     void journeyMap262UsesRenamedWaypointFactory() {
         JourneyMapApiStub api = new JourneyMapApiStub();
         UUID localId = UUID.randomUUID();
@@ -754,9 +832,39 @@ class IntegrationPluginManagerTest {
                                 "minecraft:overworld", "26.2 Remote")), true));
 
         assertEquals(2, api.waypoints().size());
-        assertTrue(pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+        PluginSnapshot snapshot = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
+        assertEquals(Set.of("show_map_markers", "show_beacons"), snapshot.visibleSettingDefinitions().stream()
+                .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
+        assertTrue(snapshot.capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
         pluginManager.shutdown();
+    }
+
+    @Test
+    void exactFabricMapPluginRoutesMatchOfficialArtifactMatrix() {
+        List<String> releases = List.of(
+                "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4",
+                "1.20", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.5", "1.20.6",
+                "1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5", "1.21.6",
+                "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11",
+                "26.1", "26.1.1", "26.1.2", "26.2");
+        Set<String> journeyUnsupported = Set.of("1.18", "1.18.1", "1.21.2");
+        Set<String> xaeroUnsupported = Set.of("1.18", "1.18.1", "1.19", "1.21.2");
+
+        for (String release : releases) {
+            IntegrationPluginManager manager = new IntegrationPluginManager(
+                    new EnvironmentRuntime(temporary, "fabric", release), completeRegistry(),
+                    Config.load(temporary.resolve("matrix-" + release + ".json")));
+            IntegrationSupportStatus journeyExpected = journeyUnsupported.contains(release)
+                    ? IntegrationSupportStatus.UNSUPPORTED_VERSION : IntegrationSupportStatus.MOD_NOT_INSTALLED;
+            IntegrationSupportStatus xaeroExpected = xaeroUnsupported.contains(release)
+                    ? IntegrationSupportStatus.UNSUPPORTED_VERSION : IntegrationSupportStatus.MOD_NOT_INSTALLED;
+            assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                    .allMatch(value -> value.status() == journeyExpected), "JourneyMap " + release);
+            assertTrue(manager.snapshot(IntegrationIds.PLUGIN_XAERO).capabilities().stream()
+                    .allMatch(value -> value.status() == xaeroExpected), "Xaero " + release);
+            manager.shutdown();
+        }
     }
 
     @Test

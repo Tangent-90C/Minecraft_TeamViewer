@@ -81,5 +81,6 @@
 
 默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；单版本调试使用
 `task build-1.21.8`、`task build-26.1.2` 或 `task build-26.2`。
-正式产物只有各版本 standalone 和 `TeamViewRelay-Fabric-all-<mod_version>.jar`；
+正式产物只有各版本 standalone 和
+`TeamViewRelay-Fabric-MC1.18-to-26.2-All-in-One-<mod_version>.jar`；
 `build/adapter-artifacts` 不得发布。

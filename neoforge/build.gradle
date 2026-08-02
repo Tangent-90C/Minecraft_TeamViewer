@@ -26,6 +26,14 @@ def adapterVersion = profile("adapter_version")
 def neoForgeVersion = profile("neoforge_version")
 def neoForgeVersionRange = profile("neoforge_version_range")
 def targetJavaRelease = profile("adapter_java_release").toInteger()
+def standaloneArtifactSuffix = "-{mod_version}.jar"
+def standaloneArtifact = profile("standalone_artifact")
+if (!standaloneArtifact.endsWith(standaloneArtifactSuffix)) {
+    throw new GradleException(
+            "NeoForge standalone_artifact must end with ${standaloneArtifactSuffix}: ${standaloneArtifact}")
+}
+def standaloneArchivesName = standaloneArtifact.substring(
+        0, standaloneArtifact.length() - standaloneArtifactSuffix.length())
 // FML requires the metadata version to start with a digit. Keep the public
 // artifact version unchanged while stripping the display-only leading "v".
 def neoForgeModVersion = project.version.toString().replaceFirst(/^v(?=\d)/, "")
@@ -34,7 +42,7 @@ if (!(neoForgeModVersion ==~ /^\d+.*/)) {
 }
 
 base {
-    archivesName = "${project.archives_base_name}-NeoForge-${minecraftVersion}"
+    archivesName = standaloneArchivesName
 }
 
 if (minecraftTarget != defaultTarget) {
@@ -177,6 +185,13 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
         ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(",
          "new IntegrationRegistry()"].each { token ->
             if (!factoryText.contains(token)) throw new GradleException("NeoForge factory missing '${token}'")
+        }
+        def adapterIdMatcher = factoryText =~ /new ClientAdapterBundle<>\(\s*"([^"]+)"/
+        def expectedAdapterId = "neoforge-${adapterVersion}"
+        if (!adapterIdMatcher.find() || adapterIdMatcher.group(1) != expectedAdapterId) {
+            def actual = adapterIdMatcher.find(0) ? adapterIdMatcher.group(1) : "<missing>"
+            throw new GradleException(
+                    "NeoForge ${adapterVersion} factory reports '${actual}', expected '${expectedAdapterId}'")
         }
         if (factory.readLines().size() > 100) throw new GradleException("NeoForge factory must remain thin")
         def gameBridge = new File(javaRoot, "client/bridge/NeoForgeGameClientBridge.java").getText("UTF-8")

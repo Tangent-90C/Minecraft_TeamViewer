@@ -13,12 +13,12 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 
-/** Minecraft 1.21.8 native adapter factory. */
+/** Minecraft 1.20.1 source adapter factory. */
 public final class FabricClientAdapterFactory implements ClientAdapterFactory<WorldRenderContext, DrawContext> {
     @Override
     public ClientAdapterBundle<WorldRenderContext, DrawContext> create() {
         return new ClientAdapterBundle<>(
-                "1.21.8",
+                "1.20.1",
                 new FabricRuntimeGateway(),
                 new FabricGameClientBridge(),
                 new FabricClientEventBridge(),

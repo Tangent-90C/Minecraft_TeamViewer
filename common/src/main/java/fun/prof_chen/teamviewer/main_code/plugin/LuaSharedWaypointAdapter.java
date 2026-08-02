@@ -26,7 +26,7 @@ final class LuaSharedWaypointAdapter implements SharedWaypointMapAdapter {
         this.upsert = upsert;
         this.delete = delete;
         this.clear = clear;
-        this.probe = new LuaCapabilityProbe(runtime, probe);
+        this.probe = new LuaCapabilityProbe(id, runtime, probe);
     }
 
     @Override public String id() { return id; }
@@ -42,7 +42,7 @@ final class LuaSharedWaypointAdapter implements SharedWaypointMapAdapter {
 
     @Override
     public List<NativeMapWaypointSnapshot> listLocalWaypoints() {
-        LuaValue values = runtime.invoke(listLocal);
+        LuaValue values = runtime.invoke("waypoint.list." + id, listLocal);
         if (!values.istable()) return List.of();
         List<NativeMapWaypointSnapshot> result = new ArrayList<>();
         for (int index = 1; ; index++) {
@@ -58,10 +58,10 @@ final class LuaSharedWaypointAdapter implements SharedWaypointMapAdapter {
     }
 
     @Override public void upsertRemoteWaypoint(MapWaypointCommand command) {
-        runtime.invoke(upsert, LuaValueConverters.toLua(command));
+        runtime.invoke("waypoint.upsert." + id, upsert, LuaValueConverters.toLua(command));
     }
     @Override public void deleteRemoteWaypoint(String waypointId) {
-        runtime.invoke(delete, LuaValue.valueOf(waypointId));
+        runtime.invoke("waypoint.delete." + id, delete, LuaValue.valueOf(waypointId));
     }
-    @Override public void clearRemoteWaypoints() { runtime.invoke(clear); }
+    @Override public void clearRemoteWaypoints() { runtime.invoke("waypoint.clear." + id, clear); }
 }
