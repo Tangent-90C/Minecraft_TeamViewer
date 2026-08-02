@@ -312,6 +312,10 @@ def verifyMapPluginContracts = tasks.register("verifyMapPluginContracts") {
                 requireTokens(requireClass(jar, "journeymap/client/api/model/WaypointBase.class"),
                         "JourneyMap ${minecraftTargetVersion} WaypointBase", ["setColor"])
             } else {
+                def pluginAnnotationPath = journeyMapApiFamily == "api-v2-full"
+                        ? "journeymap/api/v2/common/JourneyMapPlugin.class"
+                        : "journeymap/api/v2/client/JourneyMapPlugin.class"
+                requireClass(jar, pluginAnnotationPath)
                 def waypoint = requireClass(jar, "journeymap/api/v2/common/waypoint/Waypoint.class")
                 def factory = requireClass(jar, "journeymap/api/v2/common/waypoint/WaypointFactory.class")
                 requireTokens(requireClass(jar, "journeymap/api/v2/client/IClientAPI.class"),
@@ -470,6 +474,23 @@ tasks.register("verifyAdapterSdkCompleteness") {
             requiredFiles.each { relative ->
                 if (!new File(root, "java/fun/prof_chen/teamviewer/main_code/${relative}").isFile()) {
                     throw new GradleException("${adapter} adapter missing required port ${relative}")
+                }
+            }
+            if (journeyMapApiFamily.startsWith("api-v2")) {
+                def journeyMapPlugin = new File(root,
+                        "java/fun/prof_chen/teamviewer/main_code/mapbridge/provider/journey/JourneyMapClientPlugin.java")
+                def journeyMapPluginText = journeyMapPlugin.getText("UTF-8")
+                def expectedAnnotation = journeyMapApiFamily == "api-v2-full"
+                        ? "import journeymap.api.v2.common.JourneyMapPlugin;"
+                        : "import journeymap.api.v2.client.JourneyMapPlugin;"
+                def obsoleteAnnotation = journeyMapApiFamily == "api-v2-full"
+                        ? "journeymap.api.v2.client.JourneyMapPlugin"
+                        : "journeymap.api.v2.common.JourneyMapPlugin"
+                if (!journeyMapPluginText.contains(expectedAnnotation) ||
+                        journeyMapPluginText.contains(obsoleteAnnotation) ||
+                        journeyMapPluginText.count("@JourneyMapPlugin(apiVersion = \"2.0.0\")") != 1) {
+                    throw new GradleException(
+                            "${adapter} JourneyMap entrypoint must use only the annotation shipped by ${journeyMapApiFamily}")
                 }
             }
             if (["1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6",

@@ -2,7 +2,7 @@ package fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey;
 
 import journeymap.api.v2.client.IClientAPI;
 import journeymap.api.v2.client.IClientPlugin;
-import journeymap.api.v2.client.JourneyMapPlugin;
+import journeymap.api.v2.common.JourneyMapPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

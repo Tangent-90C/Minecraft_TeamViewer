@@ -33,6 +33,12 @@ pluginManagement {
     }
 }
 
+plugins {
+    // Some Minecraft tooling requests an older Java launcher than the Gradle
+    // runtime (for example, NeoForge 26.2 runs Gradle on 25 but assets on 21).
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 rootProject.name = "TeamViewRelay"
 
 include("common")
