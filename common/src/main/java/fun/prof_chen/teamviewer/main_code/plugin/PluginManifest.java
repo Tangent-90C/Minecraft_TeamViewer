@@ -39,7 +39,7 @@ public record PluginManifest(
             throw new IllegalArgumentException("Unsafe plugin entry path: " + normalizedEntry);
         }
         List<CapabilityDeclaration> normalizedProvides = safe(provides).stream()
-                .map(value -> value.normalized(normalizedId)).toList();
+                .map(CapabilityDeclaration::normalized).toList();
         if (normalizedProvides.isEmpty()) throw new IllegalArgumentException("Plugin must declare at least one capability");
         Set<String> ids = new HashSet<>();
         for (CapabilityDeclaration capability : normalizedProvides) {
@@ -136,7 +136,7 @@ public record PluginManifest(
     }
 
     public record CapabilityDeclaration(String id, String role, String name) {
-        private CapabilityDeclaration normalized(String pluginId) {
+        private CapabilityDeclaration normalized() {
             String capabilityId = IntegrationIds.canonicalize(requireToken(id, "capability id"));
             String normalizedRole = IntegrationRole.fromId(role).id();
             return new CapabilityDeclaration(capabilityId, normalizedRole,

@@ -706,7 +706,7 @@ class IntegrationPluginManagerTest {
         assertTrue(snapshot.cells().stream().anyMatch(cell -> cell.chunkX() == 12 && cell.chunkZ() == -4
                 && "#12ABEF".equals(cell.colorRaw()) && "╫".equals(cell.symbol())));
         assertTrue(snapshot.cells().stream().anyMatch(cell -> cell.chunkX() == -27 && cell.chunkZ() == 31
-                && "#FEDCBA".equals(cell.colorRaw()) && "".equals(cell.symbol())));
+                && "#FEDCBA".equals(cell.colorRaw()) && cell.symbol().isEmpty()));
         pluginManager.shutdown();
         com.simmc.mod.region.RegionManager.regionManager = null;
     }

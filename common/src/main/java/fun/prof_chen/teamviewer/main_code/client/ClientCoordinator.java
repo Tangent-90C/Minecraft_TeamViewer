@@ -203,6 +203,7 @@ public final class ClientCoordinator implements ClientControlGateway {
         this.pluginManager = Objects.requireNonNull(pluginManager, "pluginManager");
     }
 
+    @Override
     public List<PluginSnapshot> getIntegrationPlugins() {
         return pluginManager == null ? List.of() : pluginManager.snapshots();
     }
@@ -212,26 +213,32 @@ public final class ClientCoordinator implements ClientControlGateway {
         return integrationRegistry == null ? List.of() : integrationRegistry.capabilities();
     }
 
+    @Override
     public PluginSnapshot getIntegrationPlugin(String pluginId) {
         return pluginManager == null ? null : pluginManager.snapshot(pluginId);
     }
 
+    @Override
     public boolean setIntegrationPluginEnabled(String pluginId, boolean enabled) {
         return pluginManager != null && pluginManager.setEnabled(pluginId, enabled);
     }
 
+    @Override
     public boolean setIntegrationPluginSetting(String pluginId, String key, Object value) {
         return pluginManager != null && pluginManager.setSetting(pluginId, key, value);
     }
 
+    @Override
     public boolean rescanIntegrationPlugins() {
         return pluginManager != null && pluginManager.rescan();
     }
 
+    @Override
     public java.nio.file.Path copyBuiltinIntegrationPlugin(String pluginId) {
         return pluginManager == null ? null : pluginManager.copyBuiltin(pluginId);
     }
 
+    @Override
     public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult copyBuiltinIntegrationPluginResult(String pluginId) {
         return pluginManager == null
                 ? new fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult(
@@ -240,29 +247,35 @@ public final class ClientCoordinator implements ClientControlGateway {
                 : pluginManager.copyBuiltinResult(pluginId);
     }
 
+    @Override
     public List<fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot> getDisabledIntegrationPlugins() {
         return pluginManager == null ? List.of() : pluginManager.disabledSnapshots();
     }
 
+    @Override
     public fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot getDisabledIntegrationPlugin(String storageId) {
         return pluginManager == null ? null : pluginManager.disabledSnapshot(storageId);
     }
 
+    @Override
     public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult uninstallIntegrationPlugin(String pluginId) {
         return pluginManager == null
                 ? unavailablePluginFileOperation() : pluginManager.uninstall(pluginId);
     }
 
+    @Override
     public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult restoreIntegrationPlugin(String storageId) {
         return pluginManager == null
                 ? unavailablePluginFileOperation() : pluginManager.restore(storageId);
     }
 
+    @Override
     public fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult deleteDisabledIntegrationPlugin(String storageId) {
         return pluginManager == null
                 ? unavailablePluginFileOperation() : pluginManager.deleteDisabled(storageId);
     }
 
+    @Override
     public boolean openIntegrationPluginDirectory(java.nio.file.Path path) {
         return pluginManager != null && pluginManager.openDirectory(path);
     }

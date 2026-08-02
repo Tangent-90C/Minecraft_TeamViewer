@@ -2507,36 +2507,21 @@ public class NetworkManager {
 	}
 
 	private String readProtocolVersionFromHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
-		try {
-			if (packet.networkProtocolVersion != null) {
-				String value = packet.networkProtocolVersion;
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			}
-		} catch (Exception ignored) {
+		String value = packet.networkProtocolVersion;
+		if (value != null && !value.isBlank()) {
+			return value;
 		}
 		return runtimeGateway.getServerProtocolFallbackVersion();
 	}
 
 	private String readProgramVersionFromHandshakeAck(ProtocolPackets.HandshakeAckInboundPacket packet) {
-		if (packet.localProgramVersion != null) {
-			try {
-				String value = packet.localProgramVersion;
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			} catch (Exception ignored) {
-			}
+		String value = packet.localProgramVersion;
+		if (value != null && !value.isBlank()) {
+			return value;
 		}
-		if (packet.programVersion != null) {
-			try {
-				String value = packet.programVersion;
-				if (value != null && !value.isBlank()) {
-					return value;
-				}
-			} catch (Exception ignored) {
-			}
+		value = packet.programVersion;
+		if (value != null && !value.isBlank()) {
+			return value;
 		}
 		return runtimeGateway.getProgramVersionUnknown();
 	}
@@ -3157,7 +3142,7 @@ public class NetworkManager {
 
 		BigDecimal decimal = BigDecimal.valueOf(value).setScale(6, RoundingMode.HALF_UP).stripTrailingZeros();
 		String text = decimal.toPlainString();
-		if ("-0".equals(text) || "".equals(text)) {
+		if ("-0".equals(text)) {
 			return "0";
 		}
 		return text;

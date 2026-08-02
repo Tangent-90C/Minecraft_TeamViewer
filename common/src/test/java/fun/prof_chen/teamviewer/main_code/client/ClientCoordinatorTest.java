@@ -351,16 +351,24 @@ class ClientCoordinatorTest {
         private UUID submitPlayerId;
         private Map<String, WaypointSyncPayload> upserts = Map.of();
 
+        @Override
         public boolean isConnected() { return true; }
+        @Override
         public void addWaypointUpdateListener(WaypointUpdateListener listener) { }
+        @Override
         public void removeWaypointUpdateListener(WaypointUpdateListener listener) { }
+        @Override
         public void sendWaypointUpserts(UUID submitPlayerId, Map<String, WaypointSyncPayload> payloads) {
             this.submitPlayerId = submitPlayerId;
             this.upserts = Map.copyOf(payloads);
         }
+        @Override
         public void sendWaypointDeletes(UUID submitPlayerId, List<String> waypointIds) { }
+        @Override
         public void sendWaypointEntityDeathCancel(UUID submitPlayerId, List<String> targetEntityIds) { }
+        @Override
         public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) { return null; }
+        @Override
         public Position3D getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) { return null; }
     }
 
@@ -445,13 +453,21 @@ class ClientCoordinatorTest {
 
         private static RuntimeGateway runtime() {
             return new RuntimeGateway() {
+                @Override
                 public String getCurrentDimensionId() { return "minecraft:overworld"; }
+                @Override
                 public UUID getLocalPlayerId() { return null; }
+                @Override
                 public String getClientProgramVersion() { return "test"; }
+                @Override
                 public String getClientProtocolVersion() { return "0.6.2"; }
+                @Override
                 public String getClientMinCompatibleProtocolVersion() { return "0.6.1"; }
+                @Override
                 public String getServerProtocolFallbackVersion() { return "0.0.0"; }
+                @Override
                 public String getProgramVersionUnknown() { return "unknown"; }
+                @Override
                 public Path getLogsDirectory() { return Path.of("build", "test-logs"); }
             };
         }

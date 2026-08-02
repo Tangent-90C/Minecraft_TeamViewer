@@ -31,7 +31,9 @@ class AdapterTckTest {
     @Test
     void acceptsACompleteUnavailableTitleScreenAdapter() {
         ClientEventBridge<Object, Object> events = new ClientEventBridge<>() {
+            @Override
             public void register(ClientEventHandler<Object, Object> handler) { }
+            @Override
             public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
         };
         ClientAdapterBundle<Object, Object> adapters = new ClientAdapterBundle<>(
@@ -50,7 +52,9 @@ class AdapterTckTest {
     @Test
     void reportsFailedOptionalIntegrationWithoutFailingCoreTck() {
         ClientEventBridge<Object, Object> events = new ClientEventBridge<>() {
+            @Override
             public void register(ClientEventHandler<Object, Object> handler) { }
+            @Override
             public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
         };
         IntegrationRegistry registry = completeRegistry();
@@ -69,7 +73,9 @@ class AdapterTckTest {
     @Test
     void failsWhenAnExpectedCapabilityIsNotRegistered() {
         ClientEventBridge<Object, Object> events = new ClientEventBridge<>() {
+            @Override
             public void register(ClientEventHandler<Object, Object> handler) { }
+            @Override
             public Set<ClientEventType> registeredEvents() { return EnumSet.allOf(ClientEventType.class); }
         };
         IntegrationRegistry missingXaeroWorldMap = completeRegistry();
@@ -87,33 +93,52 @@ class AdapterTckTest {
 
     private static RuntimeGateway runtime() {
         return new RuntimeGateway() {
+            @Override
             public String getCurrentDimensionId() { return null; }
+            @Override
             public UUID getLocalPlayerId() { return null; }
+            @Override
             public String getClientProgramVersion() { return "test"; }
+            @Override
             public String getMinecraftVersion() { return "test-minecraft"; }
+            @Override
             public String getClientProtocolVersion() { return "test"; }
+            @Override
             public String getClientMinCompatibleProtocolVersion() { return "test"; }
+            @Override
             public String getServerProtocolFallbackVersion() { return "test"; }
+            @Override
             public String getProgramVersionUnknown() { return "unknown"; }
+            @Override
             public Path getLogsDirectory() { return Path.of("build", "test-logs"); }
         };
     }
 
     private static GameClientBridge game() {
         return new GameClientBridge() {
+            @Override
             public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) { return ClientReportSnapshot.unavailable(); }
+            @Override
             public List<fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot> captureTabPlayerSnapshot() {
                 return List.of();
             }
+            @Override
             public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
                 return ClientWorldSnapshot.unavailable();
             }
+            @Override
             public ScoreboardSnapshot captureScoreboardSnapshot() { return ScoreboardSnapshot.unavailable(); }
+            @Override
             public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) { return Optional.empty(); }
+            @Override
             public Optional<Position3D> resolveEntityPosition(String id, String name, String dimension) { return Optional.empty(); }
+            @Override
             public boolean isEntityDead(String entityId) { return false; }
+            @Override
             public boolean isMiddleMouseButtonDown() { return false; }
+            @Override
             public boolean isGameplayInputAvailable() { return false; }
+            @Override
             public void showActionBar(String message) { }
         };
     }
@@ -138,14 +163,19 @@ class AdapterTckTest {
 
     private static ConfigUiController configUi() {
         return new ConfigUiController() {
+            @Override
             public ConfigPageView page(ConfigPageId pageId, int width, int height) {
                 return new ConfigPageView(pageId, UiText.literal(pageId.name()), 10,
                         List.of(ConfigControlView.button(ConfigControlId.BACK,
                                 new UiRect(0, 0, 10, 10), UiText.literal("back"), null, true)));
             }
+            @Override
             public void setText(ConfigControlId id, String value) { }
+            @Override
             public void setChecked(ConfigControlId id, boolean checked) { }
+            @Override
             public ConfigUiAction activate(ConfigPageId currentPage, ConfigControlId id) { return ConfigUiAction.stay(); }
+            @Override
             public ConfigUiAction close(ConfigPageId pageId) { return ConfigUiAction.stay(); }
         };
     }

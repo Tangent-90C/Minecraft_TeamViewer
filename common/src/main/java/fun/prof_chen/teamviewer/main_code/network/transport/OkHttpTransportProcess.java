@@ -87,6 +87,21 @@ public final class OkHttpTransportProcess implements TransportProcess {
         return uri != null && uri.regionMatches(true, 0, "wss://", 0, 6);
     }
 
+    static int parseServerMaxWindowBits(String value) throws ProtocolException {
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (NumberFormatException error) {
+            ProtocolException failure = new ProtocolException("Invalid server_max_window_bits: " + value);
+            failure.initCause(error);
+            throw failure;
+        }
+        if (parsed < 8 || parsed > 15) {
+            throw new ProtocolException("Unsupported server_max_window_bits: " + value);
+        }
+        return parsed;
+    }
+
     private static UnsafeTlsComponents createUnsafeTlsComponents() {
         try {
             X509TrustManager trustManager = new X509TrustManager() {
@@ -316,12 +331,12 @@ public final class OkHttpTransportProcess implements TransportProcess {
         }
 
         @Override
-        public void onReadMessage(String text, long wireBytes) {
+        public void onReadMessage(String text) {
             listener.onTextMessage(text);
         }
 
         @Override
-        public void onReadMessage(byte[] bytes, long wireBytes) {
+        public void onReadMessage(byte[] bytes) {
             listener.onBinaryMessage(bytes);
         }
 
@@ -337,10 +352,6 @@ public final class OkHttpTransportProcess implements TransportProcess {
                 }
                 currentWriter.writePong(payload);
             });
-        }
-
-        @Override
-        public void onReadPong(byte[] payload) {
         }
 
         @Override
@@ -799,7 +810,9 @@ public final class OkHttpTransportProcess implements TransportProcess {
 
             switch (header.opcode()) {
                 case OPCODE_PING -> frameCallback.onReadPing(payload);
-                case OPCODE_PONG -> frameCallback.onReadPong(payload);
+                case OPCODE_PONG -> {
+                    // Pong payloads have no application callback; traffic was recorded above.
+                }
                 case OPCODE_CLOSE -> {
                     int code = 1005;
                     String reason = "";
@@ -853,9 +866,9 @@ public final class OkHttpTransportProcess implements TransportProcess {
             ));
 
             if (firstHeader.opcode() == OPCODE_TEXT) {
-                frameCallback.onReadMessage(new String(payload, StandardCharsets.UTF_8), wireBytes);
+                frameCallback.onReadMessage(new String(payload, StandardCharsets.UTF_8));
             } else {
-                frameCallback.onReadMessage(payload, wireBytes);
+                frameCallback.onReadMessage(payload);
             }
         }
 
@@ -943,13 +956,11 @@ public final class OkHttpTransportProcess implements TransportProcess {
         }
 
         private interface FrameCallback {
-            void onReadMessage(String text, long wireBytes) throws IOException;
+            void onReadMessage(String text) throws IOException;
 
-            void onReadMessage(byte[] bytes, long wireBytes) throws IOException;
+            void onReadMessage(byte[] bytes) throws IOException;
 
             void onReadPing(byte[] payload);
-
-            void onReadPong(byte[] payload);
 
             void onReadClose(int code, String reason);
         }
@@ -1035,10 +1046,7 @@ public final class OkHttpTransportProcess implements TransportProcess {
                     if (parameter.startsWith("server_max_window_bits")) {
                         String value = extractParameterValue(parameter);
                         if (value != null) {
-                            int parsed = Integer.parseInt(value);
-                            if (parsed < 8 || parsed > 15) {
-                                throw new ProtocolException("Unsupported server_max_window_bits: " + value);
-                            }
+                            parseServerMaxWindowBits(value);
                         }
                         continue;
                     }

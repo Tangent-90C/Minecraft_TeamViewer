@@ -68,6 +68,7 @@ public final class ConfigUiSession implements ConfigUiController {
         return pluginManager;
     }
 
+    @Override
     public ConfigPageView page(ConfigPageId pageId, int width, int height) {
         return switch (pageId) {
             case ROOT -> rootPage(width, height);
@@ -81,20 +82,22 @@ public final class ConfigUiSession implements ConfigUiController {
             case WAYPOINT_SHAPE -> waypointShapePage(width, height);
             case PACKET_CAPTURE -> packetCapturePage(width, height);
             case PLUGINS -> pluginsPage(width, height);
-            case PLUGIN_DETAIL -> pluginDetailPage(width, height);
-            case PLUGIN_COPY_GUIDE -> pluginCopyGuidePage(width, height);
+            case PLUGIN_DETAIL -> pluginDetailPage(width);
+            case PLUGIN_COPY_GUIDE -> pluginCopyGuidePage(width);
             case DISABLED_PLUGINS -> disabledPluginsPage(width, height);
-            case DISABLED_PLUGIN_DETAIL -> disabledPluginDetailPage(width, height);
+            case DISABLED_PLUGIN_DETAIL -> disabledPluginDetailPage(width);
             case PLUGIN_DELETE_CONFIRM -> pluginDeleteConfirmPage(width, height);
         };
     }
 
+    @Override
     public void setText(ConfigControlId id, String value) {
         if (id != null && value != null) {
             textValues.put(id, value);
         }
     }
 
+    @Override
     public void setChecked(ConfigControlId id, boolean checked) {
         if (ALLOW_INSECURE_TLS.equals(id)) {
             allowInsecureTls = checked;
@@ -106,6 +109,7 @@ public final class ConfigUiSession implements ConfigUiController {
         }
     }
 
+    @Override
     public ConfigUiAction activate(ConfigPageId currentPage, ConfigControlId id) {
         if (id == null) {
             return ConfigUiAction.stay();
@@ -201,6 +205,7 @@ public final class ConfigUiSession implements ConfigUiController {
         };
     }
 
+    @Override
     public ConfigUiAction close(ConfigPageId pageId) {
         if (pageId == ConfigPageId.ROOT) {
             cancelRoot();
@@ -675,7 +680,7 @@ public final class ConfigUiSession implements ConfigUiController {
                 tr("screen.mc_teamviewer.integration_plugins.title"), 24, controls);
     }
 
-    private ConfigPageView pluginDetailPage(int width, int height) {
+    private ConfigPageView pluginDetailPage(int width) {
         PluginSnapshot plugin = selectedPluginId == null ? null : control.getIntegrationPlugin(selectedPluginId);
         int x = (width - 430) / 2;
         int y = 46;
@@ -758,7 +763,7 @@ public final class ConfigUiSession implements ConfigUiController {
         return new ConfigPageView(ConfigPageId.PLUGIN_DETAIL, pluginName(plugin), 24, controls);
     }
 
-    private ConfigPageView pluginCopyGuidePage(int width, int height) {
+    private ConfigPageView pluginCopyGuidePage(int width) {
         int x = (width - 520) / 2;
         int y = 48;
         List<ConfigControlView> controls = new ArrayList<>();
@@ -835,7 +840,7 @@ public final class ConfigUiSession implements ConfigUiController {
                 tr("screen.mc_teamviewer.integration_plugin.disabled_title"), 24, controls);
     }
 
-    private ConfigPageView disabledPluginDetailPage(int width, int height) {
+    private ConfigPageView disabledPluginDetailPage(int width) {
         DisabledPluginSnapshot plugin = selectedDisabledPluginId == null
                 ? null : control.getDisabledIntegrationPlugin(selectedDisabledPluginId);
         int x = (width - 460) / 2;
@@ -1091,18 +1096,16 @@ public final class ConfigUiSession implements ConfigUiController {
     }
 
     private void applyColorFields() {
-        try {
-            Integer parsed = parseColor(value(BOX_COLOR));
-            if (parsed != null) config.setBoxColor(parsed);
-            parsed = parseColor(value(LINE_COLOR));
-            if (parsed != null) config.setLineColor(parsed);
-            parsed = parseColor(value(FRIENDLY_TEAM_COLOR));
-            if (parsed != null) config.setFriendlyTeamColor(parsed);
-            parsed = parseColor(value(NEUTRAL_TEAM_COLOR));
-            if (parsed != null) config.setNeutralTeamColor(parsed);
-            parsed = parseColor(value(ENEMY_TEAM_COLOR));
-            if (parsed != null) config.setEnemyTeamColor(parsed);
-        } catch (NumberFormatException ignored) { }
+        Integer parsed = parseColor(value(BOX_COLOR));
+        if (parsed != null) config.setBoxColor(parsed);
+        parsed = parseColor(value(LINE_COLOR));
+        if (parsed != null) config.setLineColor(parsed);
+        parsed = parseColor(value(FRIENDLY_TEAM_COLOR));
+        if (parsed != null) config.setFriendlyTeamColor(parsed);
+        parsed = parseColor(value(NEUTRAL_TEAM_COLOR));
+        if (parsed != null) config.setNeutralTeamColor(parsed);
+        parsed = parseColor(value(ENEMY_TEAM_COLOR));
+        if (parsed != null) config.setEnemyTeamColor(parsed);
     }
 
     private void applyWaypointFields() {
@@ -1367,13 +1370,17 @@ public final class ConfigUiSession implements ConfigUiController {
     private static Integer parseColor(String raw) {
         if (raw == null || raw.trim().isEmpty()) return null;
         String text = raw.trim();
-        if (text.startsWith("0x") || text.startsWith("0X")) return (int) Long.parseLong(text.substring(2), 16);
-        if (text.startsWith("#")) {
-            String hex = text.substring(1);
-            if (hex.length() == 6) return 0xFF000000 | Integer.parseInt(hex, 16);
-            if (hex.length() == 8) return (int) Long.parseLong(hex, 16);
+        try {
+            if (text.startsWith("0x") || text.startsWith("0X")) return (int) Long.parseLong(text.substring(2), 16);
+            if (text.startsWith("#")) {
+                String hex = text.substring(1);
+                if (hex.length() == 6) return 0xFF000000 | Integer.parseInt(hex, 16);
+                if (hex.length() == 8) return (int) Long.parseLong(hex, 16);
+            }
+            return Integer.parseInt(text);
+        } catch (NumberFormatException ignored) {
+            return null;
         }
-        return Integer.parseInt(text);
     }
 
     private static String statusKey(NetworkManager.ConnectionStage stage) {

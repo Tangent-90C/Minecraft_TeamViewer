@@ -149,6 +149,31 @@ class ConfigUiSessionTest {
     }
 
     @Test
+    void invalidColorsPreserveExistingValuesWithoutBlockingLaterFields() {
+        Config config = new Config();
+        config.setBoxColor(0xFF010203);
+        config.setEnemyTeamColor(0xFF040506);
+        ConfigUiSession session = session(config);
+
+        session.setText(ConfigControlId.BOX_COLOR, "not-a-color");
+        session.setText(ConfigControlId.LINE_COLOR, "#123456");
+        session.setText(ConfigControlId.FRIENDLY_TEAM_COLOR, "0x80ABCDEF");
+        session.setText(ConfigControlId.NEUTRAL_TEAM_COLOR, "-16711936");
+        session.setText(ConfigControlId.ENEMY_TEAM_COLOR, "2147483648");
+        session.close(ConfigPageId.COLOR);
+
+        assertEquals(0xFF010203, config.getBoxColor());
+        assertEquals(0xFF123456, config.getLineColor());
+        assertEquals(0x80ABCDEF, config.getFriendlyTeamColor());
+        assertEquals(-16711936, config.getNeutralTeamColor());
+        assertEquals(0xFF040506, config.getEnemyTeamColor());
+
+        session.setText(ConfigControlId.BOX_COLOR, "   ");
+        session.close(ConfigPageId.COLOR);
+        assertEquals(0xFF010203, config.getBoxColor());
+    }
+
+    @Test
     void pluginPagesUseDynamicIdsAndForwardSettingsAndToggleActions() {
         PluginManifest.SettingDefinition setting = new PluginManifest.SettingDefinition(
                 "enabled_marker", "boolean", "Enable marker", true,
@@ -534,46 +559,63 @@ class ConfigUiSessionTest {
             this.plugins = new ArrayList<>(plugins);
         }
 
+        @Override
         public Config getConfig() { return config; }
+        @Override
         public NetworkManager getNetworkManager() { return network; }
+        @Override
         public boolean isEnabled() { return enabled; }
+        @Override
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        @Override
         public void reconnect() { }
+        @Override
         public void showActionBar(String message) { }
+        @Override
         public List<PluginSnapshot> getIntegrationPlugins() { return List.copyOf(plugins); }
+        @Override
         public PluginSnapshot getIntegrationPlugin(String pluginId) {
             return plugins.stream().filter(value -> value.id().equals(pluginId)).findFirst().orElse(null);
         }
+        @Override
         public boolean setIntegrationPluginEnabled(String pluginId, boolean enabled) {
             lastEnabledValue = enabled;
             return true;
         }
+        @Override
         public boolean setIntegrationPluginSetting(String pluginId, String key, Object value) {
             changedSettings.put(key, value);
             return true;
         }
+        @Override
         public PluginFileOperationResult copyBuiltinIntegrationPluginResult(String pluginId) {
             return copyPath == null
                     ? new PluginFileOperationResult(PluginFileOperationResult.Code.IO_ERROR, null, "copy failed")
                     : PluginFileOperationResult.success(copyPath);
         }
+        @Override
         public List<DisabledPluginSnapshot> getDisabledIntegrationPlugins() { return disabledPlugins; }
+        @Override
         public DisabledPluginSnapshot getDisabledIntegrationPlugin(String storageId) {
             return disabledPlugins.stream().filter(value -> value.storageId().equals(storageId))
                     .findFirst().orElse(null);
         }
+        @Override
         public PluginFileOperationResult uninstallIntegrationPlugin(String pluginId) {
             uninstalledPluginId = pluginId;
             return PluginFileOperationResult.success(tempDirPath(pluginId));
         }
+        @Override
         public PluginFileOperationResult restoreIntegrationPlugin(String storageId) {
             restoredStorageId = storageId;
             return PluginFileOperationResult.success(tempDirPath(storageId));
         }
+        @Override
         public PluginFileOperationResult deleteDisabledIntegrationPlugin(String storageId) {
             deletedStorageId = storageId;
             return PluginFileOperationResult.success(tempDirPath(storageId));
         }
+        @Override
         public boolean openIntegrationPluginDirectory(Path path) {
             openedPath = path;
             return true;
@@ -585,13 +627,21 @@ class ConfigUiSessionTest {
 
         private static RuntimeGateway runtime() {
             return new RuntimeGateway() {
+                @Override
                 public String getCurrentDimensionId() { return "minecraft:overworld"; }
+                @Override
                 public UUID getLocalPlayerId() { return null; }
+                @Override
                 public String getClientProgramVersion() { return "test"; }
+                @Override
                 public String getClientProtocolVersion() { return "0.6.2"; }
+                @Override
                 public String getClientMinCompatibleProtocolVersion() { return "0.6.1"; }
+                @Override
                 public String getServerProtocolFallbackVersion() { return "0.0.0"; }
+                @Override
                 public String getProgramVersionUnknown() { return "unknown"; }
+                @Override
                 public Path getLogsDirectory() { return Path.of("build", "test-logs"); }
             };
         }

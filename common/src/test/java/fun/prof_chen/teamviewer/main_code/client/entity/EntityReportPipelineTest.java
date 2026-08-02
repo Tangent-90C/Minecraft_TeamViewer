@@ -84,13 +84,21 @@ class EntityReportPipelineTest {
 
         private static RuntimeGateway runtime() {
             return new RuntimeGateway() {
+                @Override
                 public String getCurrentDimensionId() { return "minecraft:overworld"; }
+                @Override
                 public UUID getLocalPlayerId() { return null; }
+                @Override
                 public String getClientProgramVersion() { return "test"; }
+                @Override
                 public String getClientProtocolVersion() { return "0.6.2"; }
+                @Override
                 public String getClientMinCompatibleProtocolVersion() { return "0.6.1"; }
+                @Override
                 public String getServerProtocolFallbackVersion() { return "0.0.0"; }
+                @Override
                 public String getProgramVersionUnknown() { return "unknown"; }
+                @Override
                 public Path getLogsDirectory() { return Path.of("build", "test-logs"); }
             };
         }

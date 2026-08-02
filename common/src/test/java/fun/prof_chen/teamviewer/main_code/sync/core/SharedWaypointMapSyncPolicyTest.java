@@ -61,45 +61,69 @@ class SharedWaypointMapSyncPolicyTest {
         private List<NativeMapWaypointSnapshot> local = List.of();
         private final List<MapWaypointCommand> upserts = new ArrayList<>();
         private final List<String> deletedIds = new ArrayList<>();
+        @Override
         public String id() { return "journeymap-test"; }
+        @Override
         public boolean isAvailable() { return true; }
+        @Override
         public List<NativeMapWaypointSnapshot> listLocalWaypoints() { return local; }
+        @Override
         public void upsertRemoteWaypoint(MapWaypointCommand command) { upserts.add(command); }
+        @Override
         public void deleteRemoteWaypoint(String waypointId) { deletedIds.add(waypointId); }
+        @Override
         public void clearRemoteWaypoints() { }
     }
 
     private static final class FakeGateway implements WaypointSyncGateway {
         private int upsertCount;
         private List<String> deletedIds = List.of();
+        @Override
         public boolean isConnected() { return true; }
+        @Override
         public void addWaypointUpdateListener(WaypointUpdateListener listener) { }
+        @Override
         public void removeWaypointUpdateListener(WaypointUpdateListener listener) { }
+        @Override
         public void sendWaypointUpserts(UUID submitPlayerId, Map<String, WaypointSyncPayload> payloads) {
             upsertCount += payloads.size();
         }
+        @Override
         public void sendWaypointDeletes(UUID submitPlayerId, List<String> waypointIds) { deletedIds = List.copyOf(waypointIds); }
+        @Override
         public void sendWaypointEntityDeathCancel(UUID submitPlayerId, List<String> targetEntityIds) { }
+        @Override
         public Position3D getRemoteEntityPosition(String entityId, String expectedDimension) { return null; }
+        @Override
         public Position3D getRemotePlayerPosition(String playerId, String playerName, String expectedDimension) { return null; }
     }
 
     private static final class FakeGame implements GameClientBridge {
+        @Override
         public ClientReportSnapshot captureReportSnapshot(boolean includeEntities) { return ClientReportSnapshot.unavailable(); }
+        @Override
         public List<fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot> captureTabPlayerSnapshot() {
             return List.of();
         }
+        @Override
         public ClientWorldSnapshot captureWorldSnapshot(boolean includeEntities) {
             Position3D position = new Position3D(0, 64, 0);
             return new ClientWorldSnapshot(LOCAL, "Local", true, "minecraft:overworld", -64,
                     position, position, new Position3D(0, 0, 1), new Position3D(0, 1, 0), List.of(), List.of());
         }
+        @Override
         public ScoreboardSnapshot captureScoreboardSnapshot() { return ScoreboardSnapshot.unavailable(); }
+        @Override
         public Optional<EntityTargetSnapshot> resolveMarkTarget(double maxDistance) { return Optional.empty(); }
+        @Override
         public Optional<Position3D> resolveEntityPosition(String entityId, String entityName, String dimensionId) { return Optional.empty(); }
+        @Override
         public boolean isEntityDead(String entityId) { return false; }
+        @Override
         public boolean isMiddleMouseButtonDown() { return false; }
+        @Override
         public boolean isGameplayInputAvailable() { return true; }
+        @Override
         public void showActionBar(String message) { }
     }
 }

@@ -22,21 +22,37 @@ class ProtobufRuntimeCompatibilityTest {
         UUID submit = UUID.randomUUID();
         UUID entity = UUID.randomUUID();
         EntityPatchView patch = new EntityPatchView() {
+            @Override
             public int upsertCount() { return 1; }
+            @Override
             public UUID upsertId(int index) { return entity; }
+            @Override
             public int fieldMask(int index) { return X | DIMENSION | TYPE | WIDTH; }
+            @Override
             public double x(int index) { return 12.5; }
+            @Override
             public double y(int index) { return 99; }
+            @Override
             public double z(int index) { return 0; }
+            @Override
             public double vx(int index) { return 0; }
+            @Override
             public double vy(int index) { return 0; }
+            @Override
             public double vz(int index) { return 0; }
+            @Override
             public String dimension(int index) { return "minecraft:overworld"; }
+            @Override
             public String entityType(int index) { return "minecraft:zombie"; }
+            @Override
             public String entityName(int index) { return "ignored"; }
+            @Override
             public float width(int index) { return 0.6f; }
+            @Override
             public float height(int index) { return 1.95f; }
+            @Override
             public int deleteCount() { return 0; }
+            @Override
             public UUID deleteId(int index) { throw new IndexOutOfBoundsException(index); }
         };
 

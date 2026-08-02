@@ -139,13 +139,21 @@ class NetworkManagerTabDiffTest {
 
     private static RuntimeGateway runtime() {
         return new RuntimeGateway() {
+            @Override
             public String getCurrentDimensionId() { return "minecraft:overworld"; }
+            @Override
             public UUID getLocalPlayerId() { return null; }
+            @Override
             public String getClientProgramVersion() { return "test"; }
+            @Override
             public String getClientProtocolVersion() { return "test"; }
+            @Override
             public String getClientMinCompatibleProtocolVersion() { return "test"; }
+            @Override
             public String getServerProtocolFallbackVersion() { return "test"; }
+            @Override
             public String getProgramVersionUnknown() { return "unknown"; }
+            @Override
             public Path getLogsDirectory() { return Path.of("build", "test-logs"); }
         };
     }
