@@ -117,6 +117,12 @@ JAVA25_HOME=/path/to/jdk-25 \
 task build
 ```
 
+所需 Gradle JDK 版本由同一份 Minecraft 目标清单生成，CI 也使用该命令安装对应的 JDK：
+
+```bash
+python3 scripts/minecraft_targets.py list-gradle-java
+```
+
 `build-artifacts` 最终包含 31 个可发布 Jar，文件名直接写明 Loader 和 Minecraft
 支持范围：
 

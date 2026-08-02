@@ -34,6 +34,32 @@ tasks:
           task package-all
           python3 scripts/minecraft_targets.py verify-release-set
 
+  codeql-build:
+    desc: Compile every Fabric and NeoForge source family once for CodeQL tracing
+    cmds:
+      - |
+          set -eu
+          seen_adapters=" "
+          for target in $(python3 scripts/minecraft_targets.py list-fabric); do
+            adapter="$(python3 scripts/minecraft_targets.py get "$target" adapter_version)"
+            case "$seen_adapters" in
+              *" $adapter "*) continue ;;
+            esac
+            seen_adapters="${seen_adapters}${adapter} "
+            echo "Tracing Fabric Minecraft $target"
+            task build-target TARGET="$target"
+          done
+          seen_adapters=" "
+          for target in $(python3 scripts/minecraft_targets.py list-neoforge); do
+            adapter="$(python3 scripts/minecraft_targets.py get --loader neoforge "$target" adapter_version)"
+            case "$seen_adapters" in
+              *" $adapter "*) continue ;;
+            esac
+            seen_adapters="${seen_adapters}${adapter} "
+            echo "Tracing NeoForge Minecraft $target"
+            task build-neoforge-target TARGET="$target"
+          done
+
   build-target:
     desc: 'Build one Fabric target (usage: task build-target TARGET=1.21.8)'
     requires:

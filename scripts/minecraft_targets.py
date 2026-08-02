@@ -441,13 +441,18 @@ def verify_release_set(matrix: Matrix) -> list[pathlib.Path]:
     return [artifact_dir / name for name in sorted(expected)]
 
 
-def java_home(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
-    required = profile(matrix.properties, loader, target)["gradle_runtime_java"]
+def java_home_candidates(required: str) -> tuple[str | pathlib.Path | None, ...]:
     preferred_name = f"JAVA{required}_HOME"
+    setup_java_prefix = f"JAVA_HOME_{required}_"
     current_java = shutil.which("java")
     current_home = str(pathlib.Path(current_java).resolve().parents[1]) if current_java else None
     candidates: list[str | pathlib.Path | None] = [
         os.environ.get(preferred_name),
+        *(
+            value
+            for name, value in sorted(os.environ.items())
+            if name.startswith(setup_java_prefix)
+        ),
         os.environ.get("JAVA_HOME"),
         current_home,
         pathlib.Path(f"/usr/lib/jvm/java-{required}-openjdk-amd64"),
@@ -458,7 +463,13 @@ def java_home(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
     system_jvm_dir = pathlib.Path("/usr/lib/jvm")
     if system_jvm_dir.is_dir():
         candidates.extend(sorted(system_jvm_dir.iterdir()))
-    for candidate in candidates:
+    return tuple(candidates)
+
+
+def java_home(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
+    required = profile(matrix.properties, loader, target)["gradle_runtime_java"]
+    preferred_name = f"JAVA{required}_HOME"
+    for candidate in java_home_candidates(required):
         if not candidate:
             continue
         home = pathlib.Path(candidate).expanduser().resolve()
@@ -471,8 +482,17 @@ def java_home(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
             return home
     raise SystemExit(
         f"Minecraft {target} ({loader}) requires a Java {required} Gradle runtime. "
-        f"Set {preferred_name} (preferred) or JAVA_HOME to that JDK."
+        f"Set {preferred_name} (preferred), JAVA_HOME_{required}_<ARCH>, or JAVA_HOME to that JDK."
     )
+
+
+def gradle_java_versions(matrix: Matrix) -> tuple[str, ...]:
+    versions = {
+        int(profile(matrix.properties, loader, target)["gradle_runtime_java"])
+        for loader, targets in (("fabric", matrix.fabric), ("neoforge", matrix.neoforge))
+        for target in targets
+    }
+    return tuple(str(version) for version in sorted(versions))
 
 
 def matrix_entry(matrix: Matrix, loader: str, target: str, *, release: str | None = None) -> dict[str, str]:
@@ -507,6 +527,7 @@ def main() -> None:
         "ci-matrix",
         "full-fabric-ci-matrix",
         "full-ci-matrix",
+        "list-gradle-java",
         "max-java",
         "shared-java",
         "packaging-java",
@@ -559,6 +580,8 @@ def main() -> None:
             for release in matrix.official
         ]
         print(json.dumps({"include": entries}, separators=(",", ":")))
+    elif args.command == "list-gradle-java":
+        print("\n".join(gradle_java_versions(matrix)))
     elif args.command == "fabric-owner":
         print(fabric_owner(matrix, args.release))
     elif args.command == "validate-runtime":

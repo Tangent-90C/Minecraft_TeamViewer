@@ -23,7 +23,7 @@ on:
       - 'settings.gradle'
       - 'build.gradle'
       - 'Taskfile.yml'
-      - 'scripts/minecraft_targets.py'
+      - 'scripts/**'
   pull_request:
     branches: ["main", "dev"]
     paths:
@@ -43,7 +43,7 @@ on:
       - 'settings.gradle'
       - 'build.gradle'
       - 'Taskfile.yml'
-      - 'scripts/minecraft_targets.py'
+      - 'scripts/**'
 
 jobs:
   manifest:
@@ -57,6 +57,9 @@ jobs:
       full-fabric-matrix: ${{ steps.targets.outputs.full-fabric-matrix }}
     steps:
       - uses: actions/checkout@v4
+      - name: Test target manifest tooling
+        shell: bash
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Validate target manifest
         id: targets
         shell: bash
