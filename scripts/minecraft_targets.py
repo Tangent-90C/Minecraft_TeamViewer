@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -48,6 +49,56 @@ NEOFORGE_PROFILE_KEYS = (
     "stability",
 )
 
+SERVICE_PROVIDER_PATH = pathlib.Path(
+    "resources/META-INF/services/"
+    "fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory"
+)
+MODULE_REQUIRED_PORTS = {
+    "fabric": tuple(
+        pathlib.Path("java/fun/prof_chen/teamviewer/main_code") / relative
+        for relative in (
+            "core/FabricClientAdapterFactory.java",
+            "client/bridge/FabricClientEventBridge.java",
+            "client/bridge/FabricGameClientBridge.java",
+            "render/FabricWorldRenderSink.java",
+            "render/FabricHudRenderSink.java",
+            "screen/ConfigScreen.java",
+            "screen/PluginManagerScreen.java",
+        )
+    ),
+    "neoforge": tuple(
+        pathlib.Path("java") / relative
+        for relative in (
+            "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java",
+            "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeClientEventBridge.java",
+            "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java",
+            "fun/prof_chen/teamviewer/main_code/network/bridge/NeoForgeRuntimeGateway.java",
+            "fun/prof_chen/teamviewer/main_code/render/NeoForgeWorldRenderSink.java",
+            "fun/prof_chen/teamviewer/main_code/render/NeoForgeHudRenderSink.java",
+            "fun/prof_chen/teamviewer/main_code/screen/ConfigScreen.java",
+            "fun/prof_chen/teamviewer/main_code/screen/PluginManagerScreen.java",
+        )
+    ),
+    "neoforge-legacy": tuple(
+        pathlib.Path("java/fun/prof_chen/teamviewer/main_code") / relative
+        for relative in (
+            "core/NeoForgeClientAdapterFactory.java",
+            "client/bridge/NeoForgeClientEventBridge.java",
+            "client/bridge/NeoForgeGameClientBridge.java",
+            "network/bridge/NeoForgeRuntimeGateway.java",
+            "render/NeoForgeWorldRenderSink.java",
+            "render/NeoForgeHudRenderSink.java",
+            "screen/ConfigScreen.java",
+            "screen/PluginManagerScreen.java",
+        )
+    ),
+}
+MODULE_MIXIN_PATH = {
+    "fabric": pathlib.Path("resources/teamviewer.client.mixins.json"),
+    "neoforge": pathlib.Path("resources/teamviewer.neoforge.client.mixins.json"),
+    "neoforge-legacy": pathlib.Path("resources/teamviewer.neoforge.client.mixins.json"),
+}
+
 
 @dataclass(frozen=True)
 class Matrix:
@@ -58,6 +109,20 @@ class Matrix:
     neoforge: tuple[str, ...]
     neoforge_modern: tuple[str, ...]
     neoforge_legacy: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceEntry:
+    path: pathlib.Path
+    origin: str
+
+
+@dataclass(frozen=True)
+class SourcePlan:
+    module: str
+    adapter: str
+    layers: tuple[str, ...]
+    entries: dict[pathlib.Path, SourceEntry]
 
 
 def read_properties(path: pathlib.Path) -> dict[str, str]:
@@ -86,8 +151,215 @@ def csv_property(properties: dict[str, str], key: str) -> tuple[str, ...]:
 
 
 def profile(properties: dict[str, str], loader: str, target: str) -> dict[str, str]:
+    default_prefix = f"{loader}.default."
     prefix = f"{loader}.{target}."
-    return {key[len(prefix):]: value for key, value in properties.items() if key.startswith(prefix)}
+    result = {
+        key[len(default_prefix):]: value
+        for key, value in properties.items()
+        if key.startswith(default_prefix)
+    }
+    result.update({key[len(prefix):]: value for key, value in properties.items() if key.startswith(prefix)})
+    result.setdefault("minecraft_target_version", target)
+    result.setdefault("adapter_version", target)
+    try:
+        game_java = expected_java(result["minecraft_target_version"])
+    except SystemExit:
+        game_java = None
+    if game_java is not None:
+        result.setdefault("game_java_version", str(game_java))
+        result.setdefault("adapter_java_release", str(game_java))
+        result.setdefault("gradle_runtime_java", str(max(21, game_java) if loader == "fabric" else game_java))
+    if loader == "fabric":
+        covered = tuple(value.strip() for value in result.get("covers", "").split(",") if value.strip())
+        if covered:
+            support_range = covered[0] if len(covered) == 1 else f"{covered[0]}-to-{covered[-1]}"
+            result.setdefault(
+                "standalone_artifact",
+                f"{gradle_property('archives_base_name')}-Fabric-MC{support_range}-{{mod_version}}.jar",
+            )
+        result.setdefault("slim_adapter_artifact", f"teamviewer-adapter-{target}.jar")
+    else:
+        legacy = set(value.strip() for value in properties.get("neoforge_legacy_targets", "").split(","))
+        result.setdefault("build_kind", "legacy" if target in legacy else "modern")
+        result.setdefault("stability", "stable")
+        result.setdefault(
+            "standalone_artifact",
+            f"{gradle_property('archives_base_name')}-NeoForge-MC{target}-{{mod_version}}.jar",
+        )
+    return result
+
+
+def adapter_module(matrix: Matrix, loader: str, target: str) -> str:
+    if loader == "fabric":
+        return "fabric"
+    return "neoforge-legacy" if target in matrix.neoforge_legacy else "neoforge"
+
+
+def module_adapters(matrix: Matrix, module: str) -> tuple[str, ...]:
+    if module == "fabric":
+        targets = matrix.fabric
+        loader = "fabric"
+    elif module == "neoforge":
+        targets = matrix.neoforge_modern
+        loader = "neoforge"
+    elif module == "neoforge-legacy":
+        targets = matrix.neoforge_legacy
+        loader = "neoforge"
+    else:
+        raise ValueError(f"Unknown adapter module: {module}")
+    return tuple(dict.fromkeys(profile(matrix.properties, loader, target)["adapter_version"] for target in targets))
+
+
+def _source_files(root: pathlib.Path) -> dict[pathlib.Path, pathlib.Path]:
+    entries: dict[pathlib.Path, pathlib.Path] = {}
+    for source_kind in ("java", "resources"):
+        source_root = root / source_kind
+        if not source_root.is_dir():
+            continue
+        for source in sorted(path for path in source_root.rglob("*") if path.is_file()):
+            entries[pathlib.Path(source_kind) / source.relative_to(source_root)] = source
+    return entries
+
+
+def source_plan(matrix: Matrix, loader: str, target: str) -> SourcePlan:
+    require_target(matrix, loader, target)
+    target_profile = profile(matrix.properties, loader, target)
+    adapter = target_profile["adapter_version"]
+    module = adapter_module(matrix, loader, target)
+    source_root = ROOT / module / "src"
+    entries = {
+        relative: SourceEntry(path, "shared")
+        for relative, path in _source_files(source_root / "shared").items()
+    }
+    selected_layers: list[str] = []
+    compat_owners: dict[pathlib.Path, str] = {}
+    compat_root = source_root / "compat"
+    if compat_root.is_dir():
+        for layer_root in sorted(path for path in compat_root.iterdir() if path.is_dir()):
+            metadata_path = layer_root / "layer.properties"
+            if not metadata_path.is_file():
+                raise SystemExit(f"Compatibility layer has no layer.properties: {layer_root}")
+            metadata = read_properties(metadata_path)
+            adapters = tuple(value.strip() for value in metadata.get("adapters", "").split(",") if value.strip())
+            if adapter not in adapters:
+                continue
+            selected_layers.append(layer_root.name)
+            layer_files = _source_files(layer_root)
+            for relative, path in layer_files.items():
+                previous = compat_owners.get(relative)
+                if previous is not None:
+                    raise SystemExit(
+                        f"Adapter {module}:{adapter} selects conflicting compatibility layers "
+                        f"{previous} and {layer_root.name} for {relative}"
+                    )
+                compat_owners[relative] = layer_root.name
+                entries[relative] = SourceEntry(path, f"compat:{layer_root.name}")
+    version_root = source_root / "version" / adapter
+    for relative, path in _source_files(version_root).items():
+        previous = entries.get(relative)
+        if previous is not None and previous.path.read_bytes() == path.read_bytes():
+            raise SystemExit(
+                f"Redundant version override for {module}:{adapter} {relative}; "
+                f"it is identical to {previous.origin}"
+            )
+        entries[relative] = SourceEntry(path, f"version:{adapter}")
+    return SourcePlan(module, adapter, tuple(selected_layers), entries)
+
+
+def validate_source_layout(matrix: Matrix) -> None:
+    for module in ("fabric", "neoforge", "neoforge-legacy"):
+        expected = set(module_adapters(matrix, module))
+        version_root = ROOT / module / "src" / "version"
+        actual = {path.name for path in version_root.iterdir() if path.is_dir()}
+        if actual != expected:
+            raise SystemExit(
+                f"{module} adapter directories mismatch: "
+                f"missing={sorted(expected - actual)}, unexpected={sorted(actual - expected)}"
+            )
+        for adapter in sorted(expected):
+            marker = version_root / adapter / "adapter.properties"
+            if not marker.is_file() or read_properties(marker).get("adapter") != adapter:
+                raise SystemExit(f"Invalid or missing adapter marker: {marker}")
+
+        compat_root = ROOT / module / "src" / "compat"
+        if compat_root.is_dir():
+            seen_variants: dict[tuple[pathlib.Path, str], pathlib.Path] = {}
+            for layer_root in sorted(path for path in compat_root.iterdir() if path.is_dir()):
+                metadata_path = layer_root / "layer.properties"
+                if not metadata_path.is_file():
+                    raise SystemExit(f"Compatibility layer has no layer.properties: {layer_root}")
+                metadata = read_properties(metadata_path)
+                adapters = tuple(value.strip() for value in metadata.get("adapters", "").split(",") if value.strip())
+                if len(adapters) < 2:
+                    raise SystemExit(f"Compatibility layer must cover at least two adapters: {layer_root}")
+                if len(set(adapters)) != len(adapters) or not set(adapters) <= expected:
+                    raise SystemExit(f"Compatibility layer has invalid adapters {adapters}: {layer_root}")
+                files = _source_files(layer_root)
+                if not files:
+                    raise SystemExit(f"Compatibility layer has no sources or resources: {layer_root}")
+                for relative, source in files.items():
+                    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+                    key = (relative, digest)
+                    previous = seen_variants.get(key)
+                    if previous is not None:
+                        raise SystemExit(
+                            f"Duplicate compatibility implementation for {relative}: {previous} and {source}"
+                        )
+                    seen_variants[key] = source
+
+        implementations: dict[tuple[pathlib.Path, str], pathlib.Path] = {}
+        implementation_roots = [ROOT / module / "src" / "shared"]
+        if compat_root.is_dir():
+            implementation_roots.extend(path for path in compat_root.iterdir() if path.is_dir())
+        implementation_roots.extend(version_root / adapter for adapter in sorted(expected))
+        for implementation_root in implementation_roots:
+            for relative, source in _source_files(implementation_root).items():
+                key = (relative, hashlib.sha256(source.read_bytes()).hexdigest())
+                previous = implementations.get(key)
+                if previous is not None:
+                    raise SystemExit(
+                        f"Duplicate adapter implementation for {relative}: {previous} and {source}"
+                    )
+                implementations[key] = source
+
+    for loader, targets in (("fabric", matrix.fabric), ("neoforge", matrix.neoforge)):
+        checked: set[tuple[str, str]] = set()
+        for target in targets:
+            plan = source_plan(matrix, loader, target)
+            key = (plan.module, plan.adapter)
+            if key in checked:
+                continue
+            checked.add(key)
+            missing_ports = [
+                str(relative)
+                for relative in MODULE_REQUIRED_PORTS[plan.module]
+                if relative not in plan.entries
+            ]
+            if missing_ports:
+                raise SystemExit(
+                    f"{plan.module}:{plan.adapter} has no mandatory ports: {missing_ports}"
+                )
+            provider = plan.entries.get(SERVICE_PROVIDER_PATH)
+            if provider is None:
+                raise SystemExit(f"{plan.module}:{plan.adapter} has no ClientAdapterFactory provider")
+            providers = [
+                line.strip()
+                for line in provider.path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            if len(providers) != 1:
+                raise SystemExit(
+                    f"{plan.module}:{plan.adapter} must resolve exactly one "
+                    f"ClientAdapterFactory provider; got {providers}"
+                )
+            mixin_entry = plan.entries.get(MODULE_MIXIN_PATH[plan.module])
+            if mixin_entry is None:
+                raise SystemExit(f"{plan.module}:{plan.adapter} has no client Mixin configuration")
+            mixin = json.loads(mixin_entry.path.read_text(encoding="utf-8"))
+            if not mixin.get("client"):
+                raise SystemExit(
+                    f"{plan.module}:{plan.adapter} must resolve a non-empty client Mixin list"
+                )
 
 
 def fabric_runtime_profile(properties: dict[str, str], release: str) -> dict[str, str]:
@@ -109,8 +381,9 @@ def expected_java(minecraft: str) -> int:
 
 
 def require_keys(properties: dict[str, str], loader: str, target: str, keys: tuple[str, ...]) -> None:
+    target_profile = profile(properties, loader, target)
     for key in keys:
-        if not properties.get(f"{loader}.{target}.{key}"):
+        if not target_profile.get(key):
             raise SystemExit(f"Missing target property: {loader}.{target}.{key}")
 
 
@@ -175,11 +448,6 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
     neoforge_modern = csv_property(properties, "neoforge_modern_targets")
     neoforge_legacy = csv_property(properties, "neoforge_legacy_targets")
 
-    official_count = properties.get("official_release_count", "")
-    if not official_count.isdigit() or int(official_count) != len(official):
-        raise SystemExit(
-            f"official_release_count={official_count!r} does not match the {len(official)} listed releases"
-        )
     if official[0] != "1.18" or official[-1] != "26.2":
         raise SystemExit(f"Official release bounds must be 1.18..26.2; got {official[0]}..{official[-1]}")
     shared_java_text = properties.get("shared_java_release", "")
@@ -235,11 +503,6 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
             raise SystemExit(f"Exact Fabric runtime {release} has invalid mappings mode {mappings_mode}")
         if expected_java(release) != int(owner_profile["game_java_version"]):
             raise SystemExit(f"Exact Fabric runtime {release} crosses its family Java boundary")
-    declared_fabric_adapters = csv_property(properties, "fabric_adapter_families")
-    if tuple(dict.fromkeys(fabric_adapters)) != declared_fabric_adapters:
-        raise SystemExit(
-            "fabric_adapter_families must equal the ordered unique Fabric adapter_version values"
-        )
 
     validate_map_matrix(official, map_properties)
 
@@ -276,13 +539,11 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
             adapter_dir = ROOT / module / "src" / "version" / adapter
             if not adapter_dir.is_dir():
                 raise SystemExit(f"NeoForge adapter directory does not exist for {target}: {adapter_dir}")
-    declared_neoforge_adapters = csv_property(properties, "neoforge_adapter_families")
-    if tuple(dict.fromkeys(neoforge_adapters)) != declared_neoforge_adapters:
-        raise SystemExit(
-            "neoforge_adapter_families must equal the ordered unique NeoForge adapter_version values"
-        )
 
-    return Matrix(properties, map_properties, official, fabric, neoforge, neoforge_modern, neoforge_legacy)
+    matrix = Matrix(properties, map_properties, official, fabric, neoforge, neoforge_modern, neoforge_legacy)
+    if require_source_dirs:
+        validate_source_layout(matrix)
+    return matrix
 
 
 def validate_map_matrix(official: tuple[str, ...], properties: dict[str, str]) -> None:
@@ -540,6 +801,9 @@ def main() -> None:
     owner_parser.add_argument("release")
     runtime_parser = subparsers.add_parser("validate-runtime")
     runtime_parser.add_argument("release")
+    source_plan_parser = subparsers.add_parser("source-plan")
+    source_plan_parser.add_argument("target")
+    source_plan_parser.add_argument("--loader", choices=("fabric", "neoforge"), default="fabric")
     for command in ("validate", "get", "collect", "java-home"):
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument("target")
@@ -593,6 +857,12 @@ def main() -> None:
             "fabric_api_version": runtime["fabric_api_version"],
             "mappings": runtime.get("yarn_mappings", runtime.get("mappings_mode", "none")),
         }, separators=(",", ":")))
+    elif args.command == "source-plan":
+        plan = source_plan(matrix, args.loader, args.target)
+        print(f"{plan.module}:{plan.adapter}")
+        print("generated\tjava/fun/prof_chen/teamviewer/main_code/core/AdapterBuildProfile.java")
+        for relative, entry in sorted(plan.entries.items()):
+            print(f"{entry.origin}\t{relative}")
     elif args.command == "max-java":
         print(
             max(

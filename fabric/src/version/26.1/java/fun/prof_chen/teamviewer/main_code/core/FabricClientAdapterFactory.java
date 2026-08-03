@@ -14,12 +14,12 @@ import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
-/** Minecraft 26.1 source adapter factory. */
+/** Fabric SDK adapter factory. */
 public final class FabricClientAdapterFactory implements ClientAdapterFactory<LevelRenderContext, GuiGraphicsExtractor> {
     @Override
     public ClientAdapterBundle<LevelRenderContext, GuiGraphicsExtractor> create() {
         return new ClientAdapterBundle<>(
-                "26.1",
+                AdapterBuildProfile.ADAPTER_ID,
                 new FabricRuntimeGateway(),
                 new FabricGameClientBridge(),
                 new FabricClientEventBridge(),

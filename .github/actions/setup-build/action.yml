@@ -1,0 +1,45 @@
+name: Set up TeamViewRelay build
+description: Install the shared JDK, Buf and Task prerequisites used by repository workflows.
+
+inputs:
+  java-version:
+    description: Temurin Java version or multiline version list for setup-java.
+    required: true
+  setup-buf:
+    description: Install Buf and export BUF_BIN.
+    required: false
+    default: 'true'
+  setup-task:
+    description: Install go-task.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Buf
+      if: inputs.setup-buf == 'true'
+      uses: bufbuild/buf-action@v1
+      with:
+        version: '1.50.0'
+        setup_only: true
+
+    - name: Resolve Buf binary
+      if: inputs.setup-buf == 'true'
+      shell: bash
+      run: |
+        buf_path="$(command -v buf)"
+        test -n "$buf_path"
+        echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
+        "$buf_path" --version
+
+    - name: Set up Java ${{ inputs.java-version }}
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: temurin
+        cache: gradle
+
+    - name: Set up Task
+      if: inputs.setup-task == 'true'
+      uses: go-task/setup-task@v2

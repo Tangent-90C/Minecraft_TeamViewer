@@ -89,6 +89,22 @@ that manifest through `scripts/minecraft_targets.py`; `task build` iterates ever
 Task starts each target in a separate no-daemon Gradle process so Loom and mapping services from
 one target cannot leak into the next target.
 
+Loader sources resolve in three stages: `src/shared` supplies loader-wide defaults, selected
+`src/compat/<capability>-<variant>` layers replace individual ports for their declared adapters,
+and `src/version/<adapter>` supplies the final exceptional overrides. Compatibility layers are
+self-described by `layer.properties`; two selected layers may not own the same relative path.
+For example, a layer reused by non-adjacent API-compatible adapters declares them explicitly:
+
+```properties
+adapters=1.18.2,1.19.2,1.19.4,1.20.1,1.20.2
+```
+
+Gradle filters the original `SourceDirectorySet` roots in place; it does not copy selected sources
+to a generated mirror. IDE navigation, Qodana findings and compiler diagnostics therefore keep the
+real shared/compat/version path.
+Run `python3 scripts/minecraft_targets.py source-plan <target> [--loader neoforge]` to inspect the
+effective owner of every Java and resource file.
+
 `common-sdk`, common runtime and `client-bootstrap` are Java 17 ABI artifacts. Each adapter is
 compiled with its target's `adapter_java_release`. A target below Java 17 is rejected until a
 separate legacy runtime exists; running an old Minecraft release on a newer JRE is not a supported
@@ -96,34 +112,20 @@ substitute. Every target produces a complete standalone Jar plus an internal rem
 The same slim bytecode is embedded into the All-in-One container, while business/runtime classes
 and third-party libraries remain shared once. See `docs/multi-version-packaging.md`.
 
-## 1.21.8 reference index
+## Adding an adapter
 
-The complete reference adapter is under `fabric/src/version/1.21.8`:
+Declare the target profile and its `src/version/<adapter>/adapter.properties` marker, then inspect
+each mandatory port in `source-plan`. Reuse an existing capability layer when its API compiles for
+the new target; otherwise create a new named variant and list every compatible adapter in that
+layer's metadata. Do not copy a complete adapter directory. A version directory contains only
+genuinely single-adapter exceptions, while Gradle generates the adapter identity used by the shared
+factory implementation.
 
-- Bundle assembly: `main_code/core/FabricClientAdapterFactory.java`
-- Lifecycle/input/render events: `main_code/client/bridge/FabricClientEventBridge.java`
-- Player/entity/camera/target/scoreboard snapshots:
-  `main_code/client/bridge/FabricGameClientBridge.java`
-- Runtime paths and metadata: `main_code/network/bridge/FabricRuntimeGateway.java`
-- Common frame executors: `main_code/render/FabricWorldRenderSink.java` and
-  `main_code/render/FabricHudRenderSink.java`
-- Widget host: `main_code/screen/ConfigScreen.java`
-- NodeMC packet clock: `mixin/client/ClientPlayNetworkHandlerMixin.java`
-- JourneyMap API entrypoint: `main_code/mapbridge/provider/journey/JourneyMapClientPlugin.java`
-
-To add a version, declare its manifest profile, copy the reference directory shape, implement each
-mandatory platform port, expose unavoidable annotated API entrypoints as host services, register
-its factory in `META-INF/services`, and run `task build`. Optional Mod conversion belongs in Lua
-or a Java implementation of the stable integration interfaces. The
-`compileVersionAdapterAgainstSdk` task proves the adapter compiles without common-runtime
-implementation classes.
-
-NeoForge follows the same contract under `neoforge/src/version/1.21.8` and
-`neoforge/src/version/26.1`. `compileNeoForgeAdapterAgainstSdk` enforces the same restricted
-classpath. Loader entrypoints may initialize an event-bus holder and call `ClientBootstrap.start()`;
-they must not own client state or business timing. Built-in fallback Lua entrypoints register
-NeoForge JourneyMap, Xaero and SimMC capabilities as `NOT_IMPLEMENTED`, so reports stay honest
-without platform-side fake adapters.
+Optional Mod conversion belongs in Lua or a Java implementation of the stable integration
+interfaces. `compileVersionAdapterAgainstSdk` and `compileNeoForgeAdapterAgainstSdk` prove the
+effective adapter compiles without common-runtime implementation classes. Loader entrypoints may
+initialize an event-bus holder and call `ClientBootstrap.start()`; they must not own client state
+or business timing.
 
 The `1.21.8` Fabric adapter is cross-compiled for Minecraft 1.21.6–1.21.8. The `26.1` source family
 is compiled into the 26.1.2 and 26.2 artifacts; cached compatibility access isolates the client UI,

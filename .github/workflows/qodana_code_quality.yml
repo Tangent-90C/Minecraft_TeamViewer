@@ -74,27 +74,10 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Buf
-        uses: bufbuild/buf-action@v1
+      - name: Set up Qodana preparation environment
+        uses: ./.github/actions/setup-build
         with:
-          version: '1.50.0'
-          setup_only: true
-
-      - name: Resolve Buf binary
-        shell: bash
-        run: |
-          buf_path="$(command -v buf)"
-          test -n "$buf_path"
-          echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
-          "$buf_path" --version
-
-      - name: Set up Java 21 for legacy runtime
-        if: matrix.prepare_legacy
-        uses: actions/setup-java@v5
-        with:
-          java-version: '21'
-          distribution: temurin
-          cache: gradle
+          java-version: ${{ matrix.prepare_legacy && '21' || matrix.analysis_java }}
 
       - name: Prepare Java 17 NeoForge runtime
         if: matrix.prepare_legacy
@@ -102,11 +85,11 @@ jobs:
         run: ./gradlew --no-daemon prepareLegacyNeoForgeRuntime
 
       - name: Set up analysis Java ${{ matrix.analysis_java }}
-        uses: actions/setup-java@v5
+        if: matrix.prepare_legacy
+        uses: ./.github/actions/setup-build
         with:
           java-version: ${{ matrix.analysis_java }}
-          distribution: temurin
-          cache: gradle
+          setup-buf: 'false'
 
       - name: Qodana Scan
         uses: JetBrains/qodana-action@v2026.2.0
@@ -116,8 +99,8 @@ jobs:
           args: --config ${{ matrix.config }}
           pr-mode: ${{ github.event_name == 'pull_request' }}
           use-caches: true
-          primary-cache-key: qodana-2026.2-native-v2-${{ matrix.id }}-${{ github.ref }}-${{ github.sha }}
-          additional-cache-key: qodana-2026.2-native-v2-${{ matrix.id }}-${{ github.ref }}
+          primary-cache-key: qodana-2026.2-native-v3-source-layers-${{ matrix.id }}-${{ github.ref }}-${{ github.sha }}
+          additional-cache-key: qodana-2026.2-native-v3-source-layers-${{ matrix.id }}-${{ github.ref }}
           post-pr-comment: ${{ matrix.post_pr_comment }}
           use-annotations: true
           upload-result: true

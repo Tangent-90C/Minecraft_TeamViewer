@@ -1,0 +1,116 @@
+/** Resolve shared -> capability layer -> exact adapter overrides without copying sources. */
+ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
+    def sourceFiles = { File root ->
+        def result = [:]
+        ["java", "resources"].each { kind ->
+            def kindRoot = new File(root, kind)
+            if (kindRoot.isDirectory()) {
+                fileTree(kindRoot).files.findAll { it.isFile() }.sort().each { source ->
+                    def relative = kindRoot.toPath().relativize(source.toPath()).toString().replace('\\', '/')
+                    result["${kind}/${relative}"] = source
+                }
+            }
+        }
+        result
+    }
+    def readProperties = { File path ->
+        def properties = new Properties()
+        path.withInputStream { properties.load(it) }
+        properties
+    }
+
+    def sharedRoot = new File(sourceRoot, "shared")
+    def versionBase = new File(sourceRoot, "version")
+    def knownAdapters = versionBase.listFiles()?.findAll { it.isDirectory() }?.collect { it.name } ?: []
+    if (!knownAdapters.contains(adapter)) {
+        throw new GradleException(
+                "Unknown adapter ${adapter} under ${versionBase}; known adapters: ${knownAdapters.sort()}")
+    }
+    def versionRoot = new File(versionBase, adapter)
+    def adapterMarker = new File(versionRoot, "adapter.properties")
+    if (!adapterMarker.isFile() || readProperties(adapterMarker).getProperty("adapter") != adapter) {
+        throw new GradleException("Invalid or missing adapter marker: ${adapterMarker}")
+    }
+    def effective = new LinkedHashMap<String, File>()
+    effective.putAll(sourceFiles(sharedRoot))
+    def selectedLayers = []
+    def compatibilityOwners = [:]
+    def compatRoot = new File(sourceRoot, "compat")
+    if (compatRoot.isDirectory()) {
+        compatRoot.listFiles().findAll { it.isDirectory() }.sort { it.name }.each { layerRoot ->
+            def metadata = new File(layerRoot, "layer.properties")
+            if (!metadata.isFile()) {
+                throw new GradleException("Compatibility layer has no layer.properties: ${layerRoot}")
+            }
+            def adapters = readProperties(metadata).getProperty("adapters", "")
+                    .split(",").collect { it.trim() }.findAll { !it.isEmpty() }
+            if (adapters.size() < 2) {
+                throw new GradleException(
+                        "Compatibility layer must cover at least two adapters: ${layerRoot}")
+            }
+            if (adapters.toSet().size() != adapters.size() || !knownAdapters.containsAll(adapters)) {
+                throw new GradleException(
+                        "Compatibility layer has invalid adapters ${adapters}: ${layerRoot}")
+            }
+            def layerFiles = sourceFiles(layerRoot)
+            if (layerFiles.isEmpty()) {
+                throw new GradleException(
+                        "Compatibility layer has no sources or resources: ${layerRoot}")
+            }
+            if (!adapters.contains(adapter)) return
+            selectedLayers << layerRoot
+            layerFiles.each { relative, source ->
+                def previous = compatibilityOwners[relative]
+                if (previous != null) {
+                    throw new GradleException(
+                            "Adapter ${adapter} selects conflicting compatibility layers " +
+                                    "${previous.name} and ${layerRoot.name} for ${relative}")
+                }
+                compatibilityOwners[relative] = layerRoot
+                effective[relative] = source
+            }
+        }
+    }
+    sourceFiles(versionRoot).each { relative, source ->
+        def previous = effective[relative]
+        if (previous != null && java.util.Arrays.equals(previous.bytes, source.bytes)) {
+            throw new GradleException(
+                    "Redundant version override for ${adapter} ${relative}; it is identical to ${previous}")
+        }
+        effective[relative] = source
+    }
+
+    def roots = [sharedRoot] + selectedLayers + [versionRoot]
+    def javaRoots = roots.collect { new File(it, "java") }.findAll { it.isDirectory() }
+    def resourceRoots = roots.collect { new File(it, "resources") }.findAll { it.isDirectory() }
+    def javaFiles = effective.findAll { relative, ignored -> relative.startsWith("java/") }
+            .values().collect { it.canonicalFile }.toSet()
+    def resourceFiles = effective.findAll { relative, ignored -> relative.startsWith("resources/") }
+            .values().collect { it.canonicalFile }.toSet()
+    [
+            adapter: adapter,
+            layers: selectedLayers.collect { it.name },
+            entries: effective.asImmutable(),
+            javaRoots: javaRoots.asImmutable(),
+            resourceRoots: resourceRoots.asImmutable(),
+            javaFiles: javaFiles.asImmutable(),
+            resourceFiles: resourceFiles.asImmutable(),
+            file: { String relative -> effective[relative] }
+    ]
+}
+
+ext.configureAdapterSourceSet = { sourceSet, layout, additionalJavaRoots = [] ->
+    def additionalRoots = additionalJavaRoots.collect { file(it).canonicalFile }
+    sourceSet.java.setSrcDirs(layout.javaRoots + additionalRoots)
+    sourceSet.java.exclude { details ->
+        if (details.isDirectory()) return false
+        def source = details.file.canonicalFile
+        !layout.javaFiles.contains(source) && !additionalRoots.any { root ->
+            source.toPath().startsWith(root.toPath())
+        }
+    }
+    sourceSet.resources.setSrcDirs(layout.resourceRoots)
+    sourceSet.resources.exclude { details ->
+        !details.isDirectory() && !layout.resourceFiles.contains(details.file.canonicalFile)
+    }
+}

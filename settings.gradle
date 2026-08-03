@@ -13,6 +13,9 @@ pluginManagement {
         throw new GradleException(
                 "Unsupported Fabric target '${selectedTarget}'. Supported targets: ${supportedTargets.join(', ')}")
     }
+    def selectedLoomVersion = versionProperties.getProperty(
+            "fabric.${selectedTarget}.loom_version",
+            versionProperties.getProperty("fabric.default.loom_version"))
 
     repositories {
         maven {
@@ -27,8 +30,8 @@ pluginManagement {
     }
 
     plugins {
-        id 'fabric-loom' version versionProperties.getProperty("fabric.${selectedTarget}.loom_version")
-        id 'net.fabricmc.fabric-loom' version versionProperties.getProperty("fabric.${selectedTarget}.loom_version")
+        id 'fabric-loom' version selectedLoomVersion
+        id 'net.fabricmc.fabric-loom' version selectedLoomVersion
         id 'net.neoforged.moddev' version versionProperties.getProperty('neoforge_moddev_version')
     }
 }

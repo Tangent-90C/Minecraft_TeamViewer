@@ -102,10 +102,9 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew -Pfabric_target=26.2 :fabric:build
 task build
 ```
 
-该任务会构建 17 个 Fabric 发布家族、逐个解析并编译检查从 1.18 到 26.2 的全部
-31 个正式 Minecraft 版本、构建 13 个 NeoForge 发布目标、组装 Fabric All-in-One，
-最后按版本清单校验发布文件。1.21.9 因 Fabric 世界渲染 API 的实际断档而从原
-1.21.9–1.21.10 家族中拆为独立产物。
+该任务会从版本清单读取全部 Fabric 发布家族和精确 Minecraft runtime，构建全部
+NeoForge 目标、组装 Fabric All-in-One，最后按同一份规范化清单校验发布文件。
+使用 `minecraft_targets.py list-*` 命令查询当前数量和范围，避免文档复制易过期的版本表。
 
 本机需要 JDK 17、21、25。任务会优先读取 `JAVA17_HOME`、`JAVA21_HOME`、
 `JAVA25_HOME`，也会自动检查当前 `JAVA_HOME` 和常见系统 JDK 目录。例如：
@@ -123,8 +122,8 @@ task build
 python3 scripts/minecraft_targets.py list-gradle-java
 ```
 
-`build-artifacts` 最终包含 31 个可发布 Jar，文件名直接写明 Loader 和 Minecraft
-支持范围：
+`build-artifacts` 最终包含清单定义的全部可发布 Jar；实际数量由目标清单推导，文件名直接写明
+Loader 和 Minecraft 支持范围：
 
 - Fabric 多版本家族：`TeamViewRelay-Fabric-MC1.18-to-1.18.2-<mod_version>.jar`
 - Fabric 单版本家族：`TeamViewRelay-Fabric-MC1.20.2-<mod_version>.jar`
@@ -216,10 +215,14 @@ Loader 公开 Mod ID 分别为：Fabric `team-view-relay`、NeoForge `team_view_
 
 ```bash
 ./gradlew build
-JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.1.2 build
-JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.2 build
+task build-target TARGET=1.21.8
+task build-neoforge-target TARGET=1.21.8
+task check-fabric-runtime RUNTIME=1.21
 ./gradlew runClient
 ```
+
+需要直接调用 Gradle 时，Fabric 使用 `-Pfabric_target=<版本>`，NeoForge 使用
+`-Pneoforge_target=<版本>`；Taskfile 会自动选择目标需要的 JDK。
 
 主要代码目录：
 
@@ -227,24 +230,26 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew -Pmc_target=26.2 build
 - `common/src/main/java`：网络、配置、同步、战局地图、HUD/世界渲染规划等唯一业务实现
 - `client-bootstrap/src/main/java`：Java 17 Loader 中立启动编排和 Adapter TCK
 - `fabric-bootstrap/src/main/java`：Java 17 Fabric Loader 薄入口
-- `fabric/src/shared`：确实跨 Minecraft 版本稳定的 adapter 胶水
-- `fabric/src/version/1.21.8`：Minecraft 1.21.6–1.21.8 API 适配
-- `fabric/src/version/26.1`：Minecraft 26.1–26.2 API 适配（26.2 使用专用依赖与元数据）
-- `neoforge/src/shared`：NeoForge 薄入口及稳定事件总线胶水
-- `neoforge/src/version/1.21.8` / `26.1`：NeoForge Minecraft API 适配；后者覆盖 26.1–26.2
+- `fabric/src/shared` / `neoforge/src/shared` / `neoforge-legacy/src/shared`：对应构建边界内
+  所有目标共用的默认实现
+- 各 Loader 的 `src/compat`：按 HUD、网络、渲染、Screen 等真实 API 边界复用的兼容层，
+  每层通过 `layer.properties` 声明适用 adapter
+- `*/src/version/<adapter>`：adapter 身份文件及只适用于该 adapter 的最终覆盖
+- `fabric/src/main/resources`：Fabric 公共资源与语言文件
 - `universal`：All-in-One 元数据、组装和产物守卫
 
-具体版本代码只能实现 Common Adapter SDK，不得复制业务逻辑。完整边界与打包约束见
+使用 `python3 scripts/minecraft_targets.py source-plan <目标> [--loader neoforge]` 可以查看
+每个有效文件来自 shared、compat 还是具体版本。版本代码只能实现 Common Adapter SDK，
+不得复制业务逻辑。完整边界与打包约束见
 [`docs/adapter-sdk.md`](docs/adapter-sdk.md) 和
 [`docs/multi-version-packaging.md`](docs/multi-version-packaging.md)。
-- `fabric/src/main/resources`：Fabric 资源与语言文件
 
 ## 协议 / 版本兼容
 
 当前版本基线：
 
-- Minecraft：Fabric `1.21.6`–`1.21.8`、Fabric/NeoForge `26.1`–`26.2`；
-  NeoForge 1.21 系列仅 `1.21.8`
+- Minecraft 支持范围以 `gradle/minecraft-versions.properties` 为唯一来源；运行
+  `python3 scripts/minecraft_targets.py list-fabric`、`list-neoforge` 或 `list-official` 查询
 - Mod：`v0.4.14-proto0.6.2`
 - 协议版本：`0.6.2`
 - 最低兼容协议版本：`0.6.1`

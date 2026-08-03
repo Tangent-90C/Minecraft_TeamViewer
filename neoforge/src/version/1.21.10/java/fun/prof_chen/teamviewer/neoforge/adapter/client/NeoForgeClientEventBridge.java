@@ -22,7 +22,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Complete Minecraft 1.21.8 NeoForge event/input adapter. */
+/** NeoForge event and input adapter. */
 public final class NeoForgeClientEventBridge
         implements ClientEventBridge<RenderLevelStageEvent, GuiGraphics> {
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(

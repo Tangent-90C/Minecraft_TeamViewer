@@ -73,8 +73,8 @@ common business behavior.
 ## Required checks
 
 Run `task build`. It must leave one Fabric and one NeoForge standalone per manifest target, plus
-one Fabric All-in-One Jar, in `build-artifacts`. With the current three targets this is seven
-Loader-labelled Jars. Legacy filenames without `Fabric` or
+one Fabric All-in-One Jar, in `build-artifacts`. The expected set is derived from the normalized
+manifest rather than documented as a fixed count. Legacy filenames without `Fabric` or
 `NeoForge` are forbidden. Fabric adapter hashes and target data in `META-INF/teamviewer/targets.json` must match
 the nested bytes. Shared libraries occur once, root/shared bytecode is Java 17-compatible, each
 adapter has exactly one Factory provider and non-empty Mixin configuration, and no slim adapter

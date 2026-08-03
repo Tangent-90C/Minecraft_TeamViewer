@@ -3,6 +3,9 @@ plugins {
     id 'net.neoforged.gradle.userdev'
 }
 
+apply from: file("../gradle/adapter-source-layers.gradle")
+apply from: file("../gradle/minecraft-target-profiles.gradle")
+
 def repositoryRoot = file("..")
 def projectProperties = new Properties()
 file("../gradle.properties").withInputStream {
@@ -30,8 +33,10 @@ if (!supportedTargets.contains(minecraftTarget)) {
     throw new GradleException(
             "Unsupported legacy NeoForge target '${minecraftTarget}'; supported: ${supportedTargets}")
 }
+def selectedProfile = normalizedMinecraftProfile(
+        versionManifest, "neoforge", minecraftTarget, projectProperties.getProperty("archives_base_name"))
 def profile = { String key ->
-    def value = versionManifest.getProperty("neoforge.${minecraftTarget}.${key}")
+    def value = selectedProfile[key]
     if (value == null || value.isBlank()) {
         throw new GradleException("Missing neoforge.${minecraftTarget}.${key}")
     }
@@ -42,6 +47,7 @@ def minecraftVersionRange = profile("minecraft_version_range")
 def neoForgeVersion = profile("neoforge_version")
 def neoForgeVersionRange = profile("neoforge_version_range")
 def adapterVersion = profile("adapter_version")
+def adapterSourceLayout = resolveAdapterSourceLayers(file("src"), adapterVersion)
 def targetJavaRelease = profile("adapter_java_release").toInteger()
 def neoForgeModVersion = project.version.toString().replaceFirst(/^v(?=\d)/, "")
 def standaloneArtifactSuffix = "-{mod_version}.jar"
@@ -60,9 +66,36 @@ layout.buildDirectory = file("build/${minecraftTarget}")
 
 sourceSets {
     main {
-        java.srcDirs = ["src/shared/java", "src/version/${adapterVersion}/java"]
-        resources.srcDirs = ["src/shared/resources", "src/version/${adapterVersion}/resources"]
+        java.srcDirs = []
+        resources.srcDirs = []
     }
+}
+
+def generatedAdapterProfileDir = layout.buildDirectory.dir("generated/sources/adapterProfile/java")
+def generateAdapterBuildProfile = tasks.register("generateAdapterBuildProfile") {
+    def adapterId = "neoforge-${adapterVersion}"
+    inputs.property("adapterId", adapterId)
+    outputs.dir(generatedAdapterProfileDir)
+    doLast {
+        def packageDir = generatedAdapterProfileDir.get().dir(
+                "fun/prof_chen/teamviewer/main_code/core").asFile
+        packageDir.mkdirs()
+        new File(packageDir, "AdapterBuildProfile.java").setText(
+                """package fun.prof_chen.teamviewer.main_code.core;
+
+/** Generated identity for the selected adapter source family. */
+final class AdapterBuildProfile {
+    static final String ADAPTER_ID = \"${adapterId}\";
+
+    private AdapterBuildProfile() { }
+}
+""", "UTF-8")
+    }
+}
+configureAdapterSourceSet(
+        sourceSets.main, adapterSourceLayout, [generatedAdapterProfileDir.get().asFile])
+tasks.named("compileJava") {
+    dependsOn(generateAdapterBuildProfile)
 }
 
 dependencies {
@@ -123,12 +156,14 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(targetJavaRelease)
     withSourcesJar()
 }
+tasks.named("sourcesJar") {
+    dependsOn(generateAdapterBuildProfile)
+}
 
 def verifyLegacyAdapterCompleteness = tasks.register("verifyLegacyAdapterCompleteness") {
     group = "verification"
-    inputs.files(fileTree("src/version/${adapterVersion}"), fileTree("src/shared"))
+    inputs.files(adapterSourceLayout.entries.values())
     doLast {
-        def javaRoot = file("src/version/${adapterVersion}/java/fun/prof_chen/teamviewer/main_code")
         [
                 "core/NeoForgeClientAdapterFactory.java",
                 "client/bridge/NeoForgeClientEventBridge.java",
@@ -139,20 +174,11 @@ def verifyLegacyAdapterCompleteness = tasks.register("verifyLegacyAdapterComplet
                 "screen/ConfigScreen.java",
                 "screen/PluginManagerScreen.java"
         ].each { relative ->
-            if (!new File(javaRoot, relative).isFile()) {
+            if (adapterSourceLayout.file("java/fun/prof_chen/teamviewer/main_code/${relative}") == null) {
                 throw new GradleException("${minecraftVersion} legacy NeoForge adapter missing ${relative}")
             }
         }
-        def factory = new File(javaRoot, "core/NeoForgeClientAdapterFactory.java")
-        def factoryText = factory.getText("UTF-8")
-        def adapterIdMatcher = factoryText =~ /new ClientAdapterBundle<>\(\s*"([^"]+)"/
-        def expectedAdapterId = "neoforge-${adapterVersion}"
-        if (!adapterIdMatcher.find() || adapterIdMatcher.group(1) != expectedAdapterId) {
-            def actual = adapterIdMatcher.find(0) ? adapterIdMatcher.group(1) : "<missing>"
-            throw new GradleException(
-                    "Legacy NeoForge ${adapterVersion} factory reports '${actual}', expected '${expectedAdapterId}'")
-        }
-        def service = file("src/version/${adapterVersion}/resources/META-INF/services/" +
+        def service = adapterSourceLayout.file("resources/META-INF/services/" +
                 "fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory")
         if (!service.isFile() || service.readLines().findAll { !it.trim().isEmpty() }.size() != 1) {
             throw new GradleException("${minecraftVersion} must declare exactly one adapter provider")

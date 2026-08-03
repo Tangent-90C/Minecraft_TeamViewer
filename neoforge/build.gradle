@@ -3,6 +3,9 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+apply from: rootProject.file("gradle/adapter-source-layers.gradle")
+apply from: rootProject.file("gradle/minecraft-target-profiles.gradle")
+
 def versionManifest = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
     versionManifest.load(it)
@@ -15,14 +18,17 @@ def supportedTargets = versionManifest.getProperty("neoforge_modern_targets")
 // complete multi-project graph.
 def requestedTarget = providers.gradleProperty("neoforge_target").getOrElse(defaultTarget)
 def minecraftTarget = supportedTargets.contains(requestedTarget) ? requestedTarget : defaultTarget
+def selectedProfile = normalizedMinecraftProfile(
+        versionManifest, "neoforge", minecraftTarget, project.archives_base_name.toString())
 def profile = { String key ->
-    def value = versionManifest.getProperty("neoforge.${minecraftTarget}.${key}")
+    def value = selectedProfile[key]
     if (value == null || value.isBlank()) throw new GradleException("Missing ${minecraftTarget}.${key}")
     value
 }
 def minecraftVersion = profile("minecraft_target_version")
 def minecraftVersionRange = profile("minecraft_version_range")
 def adapterVersion = profile("adapter_version")
+def adapterSourceLayout = resolveAdapterSourceLayers(file("src"), adapterVersion)
 def neoForgeVersion = profile("neoforge_version")
 def neoForgeVersionRange = profile("neoforge_version_range")
 def targetJavaRelease = profile("adapter_java_release").toInteger()
@@ -51,9 +57,36 @@ if (minecraftTarget != defaultTarget) {
 
 sourceSets {
     main {
-        java.srcDirs = ["src/shared/java", "src/version/${adapterVersion}/java"]
-        resources.srcDirs = ["src/shared/resources", "src/version/${adapterVersion}/resources"]
+        java.srcDirs = []
+        resources.srcDirs = []
     }
+}
+
+def generatedAdapterProfileDir = layout.buildDirectory.dir("generated/sources/adapterProfile/java")
+def generateAdapterBuildProfile = tasks.register("generateAdapterBuildProfile") {
+    def adapterId = "neoforge-${adapterVersion}"
+    inputs.property("adapterId", adapterId)
+    outputs.dir(generatedAdapterProfileDir)
+    doLast {
+        def packageDir = generatedAdapterProfileDir.get().dir(
+                "fun/prof_chen/teamviewer/main_code/core").asFile
+        packageDir.mkdirs()
+        new File(packageDir, "AdapterBuildProfile.java").setText(
+                """package fun.prof_chen.teamviewer.main_code.core;
+
+/** Generated identity for the selected adapter source family. */
+final class AdapterBuildProfile {
+    static final String ADAPTER_ID = \"${adapterId}\";
+
+    private AdapterBuildProfile() { }
+}
+""", "UTF-8")
+    }
+}
+configureAdapterSourceSet(
+        sourceSets.main, adapterSourceLayout, [generatedAdapterProfileDir.get().asFile])
+tasks.named("compileJava") {
+    dependsOn(generateAdapterBuildProfile)
 }
 
 configurations.configureEach {
@@ -130,7 +163,8 @@ tasks.withType(JavaCompile).configureEach {
 def verifyNeoForgeAdapterBoundary = tasks.register("verifyNeoForgeAdapterBoundary") {
     group = "verification"
     description = "Keep NeoForge version code behind the Common Adapter SDK boundary."
-    inputs.files(fileTree("src/version") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
+    inputs.files(fileTree("src/version") { include "**/*.java" },
+            fileTree("src/compat") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
     doLast {
         def forbiddenImports = [
                 "fun.prof_chen.teamviewer.main_code.config.Config",
@@ -161,10 +195,8 @@ def verifyNeoForgeAdapterBoundary = tasks.register("verifyNeoForgeAdapterBoundar
 def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCompleteness") {
     group = "verification"
     description = "Require every NeoForge target to supply every mandatory SDK port."
-    inputs.files(fileTree("src/version/${adapterVersion}"), fileTree("src/shared"))
+    inputs.files(adapterSourceLayout.entries.values())
     doLast {
-        def root = file("src/version/${adapterVersion}")
-        def javaRoot = new File(root, "java")
         def required = [
                 "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java",
                 "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeClientEventBridge.java",
@@ -176,36 +208,22 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
                 "fun/prof_chen/teamviewer/main_code/screen/PluginManagerScreen.java"
         ]
         required.each { relative ->
-            if (!new File(javaRoot, relative).isFile()) {
+            if (adapterSourceLayout.file("java/${relative}") == null) {
                 throw new GradleException("${minecraftVersion} NeoForge adapter missing required port ${relative}")
             }
         }
-        def factory = new File(javaRoot,
-                "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java")
-        def factoryText = factory.getText("UTF-8")
-        ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(",
-         "new IntegrationRegistry()"].each { token ->
-            if (!factoryText.contains(token)) throw new GradleException("NeoForge factory missing '${token}'")
-        }
-        def adapterIdMatcher = factoryText =~ /new ClientAdapterBundle<>\(\s*"([^"]+)"/
-        def expectedAdapterId = "neoforge-${adapterVersion}"
-        if (!adapterIdMatcher.find() || adapterIdMatcher.group(1) != expectedAdapterId) {
-            def actual = adapterIdMatcher.find(0) ? adapterIdMatcher.group(1) : "<missing>"
-            throw new GradleException(
-                    "NeoForge ${adapterVersion} factory reports '${actual}', expected '${expectedAdapterId}'")
-        }
-        if (factory.readLines().size() > 100) throw new GradleException("NeoForge factory must remain thin")
-        def gameBridge = new File(javaRoot,
-                "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java").getText("UTF-8")
+        def gameBridge = adapterSourceLayout.file(
+                "java/fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java")
+                .getText("UTF-8")
         if (!gameBridge.contains("normalizeMarkTargetDistance(maxDistance)") || gameBridge.contains("crosshairTarget")) {
             throw new GradleException("NeoForge raycast must use the shared 512-block distance bound")
         }
-        def service = new File(root,
+        def service = adapterSourceLayout.file(
                 "resources/META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory")
         if (!service.isFile() || service.readLines().findAll { !it.trim().isEmpty() }.size() != 1) {
             throw new GradleException("NeoForge target must declare exactly one ServiceLoader provider")
         }
-        def mixin = new File(root, "resources/teamviewer.neoforge.client.mixins.json")
+        def mixin = adapterSourceLayout.file("resources/teamviewer.neoforge.client.mixins.json")
         if (!mixin.isFile() || !mixin.getText("UTF-8").contains("Mixin\"")) {
             throw new GradleException("NeoForge target must declare a non-empty Scoreboard Mixin")
         }
@@ -220,9 +238,12 @@ def compileNeoForgeAdapterAgainstSdk = tasks.register("compileNeoForgeAdapterAga
     group = "verification"
     description = "Compile NeoForge adapter ports without the common runtime on their classpath."
     dependsOn(project(":common-sdk").tasks.named("classes"), tasks.named("createMinecraftArtifacts"))
-    source(fileTree("src/version/${adapterVersion}/java") { include "**/*.java" })
-    source(fileTree("src/shared/java") { include "fun/prof_chen/teamviewer/main_code/**/*.java" })
-    source(file("src/shared/java/fun/prof_chen/teamviewer/neoforge/NeoForgeClientContext.java"))
+    dependsOn(generateAdapterBuildProfile)
+    source(adapterSourceLayout.javaFiles.findAll { source ->
+        def normalized = source.path.replace('\\', '/')
+        !normalized.endsWith("/fun/prof_chen/teamviewer/neoforge/TeamViewRelayNeoForge.java")
+    })
+    source(generatedAdapterProfileDir)
     classpath = sourceSets.main.compileClasspath - project(":common").sourceSets.main.output -
             project(":client-bootstrap").sourceSets.main.output
     destinationDirectory.set(layout.buildDirectory.dir("classes/java/adapterSdkBoundary"))
@@ -240,6 +261,9 @@ java {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaRelease)
     }
     withSourcesJar()
+}
+tasks.named("sourcesJar") {
+    dependsOn(generateAdapterBuildProfile)
 }
 
 jar {

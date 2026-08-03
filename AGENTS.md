@@ -25,18 +25,19 @@
 ## Common Adapter SDK Architecture
 
 修改客户端代码前，必须完整阅读 `docs/adapter-sdk.md`。本项目采用桥接模式，
-`common/src/main/java` 是唯一业务实现，Minecraft/Fabric 版本目录只能实现 Common Adapter SDK。
+`common/src/main/java` 是唯一业务实现，各 Loader 的 shared/compat/version 源码只能实现 Common Adapter SDK。
 
 ### Source boundaries
 
 - `common/src/main/java`：协议编排、连接生命周期、同步策略、状态机、配置读写、七页配置页面模型、
   战局地图解析与投影、地图差异计算、世界渲染帧和 HUD 帧计算。
-- `fabric/src/shared/java`：确认在所有目标版本中稳定的 Fabric Loader/Fabric API 胶水，以及不直接依赖
-  Minecraft 类的可选模组反射端口。
+- `fabric/src/shared/java`：所有 Fabric adapter 共用的默认实现。
+- `fabric/src/compat/<capability>-<variant>`：按真实 Minecraft/Fabric API 边界复用的实现；
+  `layer.properties` 声明适用 adapter，同一路径不得由两个已选 compat 层同时提供。
 - `fabric-bootstrap/src/main/java`：Java 17 共享 Fabric Loader 入口、Factory 发现、`ClientApplication` 启动和
   Adapter TCK；不得依赖 Minecraft 或 Fabric API 类型。
-- `fabric/src/version/<adapter>/java`：具体 Minecraft API 转换、Fabric 事件注册、原生 Screen 控件、
-  渲染命令执行、Scoreboard/Mixin 和可选地图模组原生 CRUD。
+- `fabric/src/version/<adapter>`：adapter 身份和只适用于该 adapter 的最终覆盖；禁止复制已有
+  shared/compat 实现。NeoForge 和 legacy NeoForge 使用相同三级规则，但不得跨 Loader 共享原生类型。
 - `universal`：只负责组装和校验 All-in-One，不得实现业务或重新编译 adapter。
 - 禁止重新创建 `common/src/version/*` 或 `fabric/src/client` 这种不对称版本入口。
 
@@ -61,12 +62,14 @@
 
 ### Adding or changing a Minecraft version
 
-1. 在 `gradle/minecraft-versions.properties` 增加目标版本与 adapter 版本映射。
-2. 以 `fabric/src/version/1.21.8` 为完整参考，逐项实现 `docs/adapter-sdk.md` 列出的全部端口。
+1. 在 `gradle/minecraft-versions.properties` 增加目标；可推导的 Java、artifact 和 build kind 不重复声明。
+2. 为每个强制端口选择已有 compat 层；API 未变化时只扩展该层的 `adapters`，发生变化时新增能力变体，
+   仅单版本实现放入 `src/version/<adapter>`。
 3. 如果 Minecraft API 变化需要新的能力，先扩充 SDK 的强类型 snapshot/command；不要把原生类型泄漏进 common。
 4. 同步实现 Scoreboard Mixin、配置 Screen 宿主、世界/HUD sink、JourneyMap/Xaero 端口和战局地图桥。
 5. 为 common 业务补假适配器测试，并更新功能矩阵/完整性守卫。缺失能力必须构建失败，不允许生成缩水 Jar。
-6. 执行 `task build`，再分别启动各目标客户端进行游戏内烟测。
+6. 先用 `python3 scripts/minecraft_targets.py source-plan <目标>` 审查有效源码，再执行 `task build`
+   并分别启动各目标客户端进行游戏内烟测。
 
 ### Required verification
 
@@ -79,8 +82,9 @@
 - `verifyUniversalJar`：通用包必须包含 manifest 的全部 adapter、正确哈希和唯一共享依赖。
 - 不得通过跳过上述任务、删除失败检查或使用旧构建目录来获得“成功”产物。
 
-默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；单版本调试使用
-`task build-1.21.8`、`task build-26.1.2` 或 `task build-26.2`。
+默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；Fabric、NeoForge 和
+精确 Fabric runtime 的单目标调试分别使用 `task build-target TARGET=<目标>`、
+`task build-neoforge-target TARGET=<目标>` 和 `task check-fabric-runtime RUNTIME=<版本>`。
 正式产物只有各版本 standalone 和
 `TeamViewRelay-Fabric-MC1.18-to-26.2-All-in-One-<mod_version>.jar`；
 `build/adapter-artifacts` 不得发布。

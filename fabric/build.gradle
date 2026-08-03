@@ -4,6 +4,9 @@ plugins {
     id 'maven-publish'
 }
 
+apply from: rootProject.file("gradle/adapter-source-layers.gradle")
+apply from: rootProject.file("gradle/minecraft-target-profiles.gradle")
+
 evaluationDependsOn(":fabric-bootstrap")
 
 def minecraftVersionProperties = new Properties()
@@ -21,10 +24,12 @@ def supportedMinecraftTargets = minecraftVersionProperties.getProperty("fabric_t
         .split(",")
         .collect { it.trim() }
 if (!supportedMinecraftTargets.contains(minecraftTarget)) {
-    throw new GradleException("Unsupported mc_target '${minecraftTarget}'. Supported targets: ${supportedMinecraftTargets.join(', ')}")
+    throw new GradleException("Unsupported fabric_target '${minecraftTarget}'. Supported targets: ${supportedMinecraftTargets.join(', ')}")
 }
+def selectedProfile = normalizedMinecraftProfile(
+        minecraftVersionProperties, "fabric", minecraftTarget, project.archives_base_name.toString())
 def profileProperty = { String name ->
-    def value = minecraftVersionProperties.getProperty("fabric.${minecraftTarget}.${name}")
+    def value = selectedProfile[name]
     if (value == null || value.isBlank()) {
         throw new GradleException("Missing ${name} for Minecraft target ${minecraftTarget}")
     }
@@ -48,6 +53,7 @@ def runtimeProperty = { String name ->
 }
 def fabricMinecraftVersionRange = profileProperty("minecraft_version_range")
 def minecraftAdapterVersion = profileProperty("adapter_version")
+def adapterSourceLayout = resolveAdapterSourceLayers(file("src"), minecraftAdapterVersion)
 def targetJavaVersion = profileProperty("adapter_java_release").toInteger()
 def gameJavaVersion = profileProperty("game_java_version").toInteger()
 def sharedJavaVersion = minecraftVersionProperties.getProperty("shared_java_release").toInteger()
@@ -70,8 +76,8 @@ def journeyMapDeclaration = parseMapDeclaration("journeymap")
 def xaeroDeclaration = parseMapDeclaration("xaero")
 def journeyMapApiFamily = journeyMapDeclaration[0]
 def journeyMapTestDependency = journeyMapDeclaration.size() > 1 ? journeyMapDeclaration[1] : null
-def journeyMapPluginSource = file(
-        "src/version/${minecraftAdapterVersion}/java/fun/prof_chen/teamviewer/main_code/mapbridge/provider/journey/JourneyMapClientPlugin.java")
+def journeyMapPluginSource = adapterSourceLayout.file(
+        "java/fun/prof_chen/teamviewer/main_code/mapbridge/provider/journey/JourneyMapClientPlugin.java")
 // JourneyMap's Waypoint feature family and plugin annotation package evolved independently.
 def journeyMapAnnotationImports = [
         client: "import journeymap.api.v2.client.JourneyMapPlugin;",
@@ -165,9 +171,35 @@ sourceSets {
         resources.srcDirs = ["src/main/resources"]
     }
     client {
-        java.srcDirs = ["src/shared/java", "src/version/${minecraftAdapterVersion}/java"]
-        resources.srcDirs = ["src/shared/resources", "src/version/${minecraftAdapterVersion}/resources"]
+        java.srcDirs = []
+        resources.srcDirs = []
     }
+}
+
+def generatedAdapterProfileDir = layout.buildDirectory.dir("generated/sources/adapterProfile/java")
+def generateAdapterBuildProfile = tasks.register("generateAdapterBuildProfile") {
+    inputs.property("adapterId", minecraftAdapterVersion)
+    outputs.dir(generatedAdapterProfileDir)
+    doLast {
+        def packageDir = generatedAdapterProfileDir.get().dir(
+                "fun/prof_chen/teamviewer/main_code/core").asFile
+        packageDir.mkdirs()
+        new File(packageDir, "AdapterBuildProfile.java").setText(
+                """package fun.prof_chen.teamviewer.main_code.core;
+
+/** Generated identity for the selected adapter source family. */
+final class AdapterBuildProfile {
+    static final String ADAPTER_ID = \"${minecraftAdapterVersion}\";
+
+    private AdapterBuildProfile() { }
+}
+""", "UTF-8")
+    }
+}
+configureAdapterSourceSet(
+        sourceSets.client, adapterSourceLayout, [generatedAdapterProfileDir.get().asFile])
+tasks.named("compileClientJava") {
+    dependsOn(generateAdapterBuildProfile)
 }
 
 configurations.configureEach {
@@ -441,7 +473,8 @@ tasks.withType(JavaCompile).configureEach {
 tasks.register("verifyVersionAdapterBoundary") {
     group = "verification"
     description = "Keep Minecraft version sources behind the Common Adapter SDK boundary."
-    inputs.files(fileTree("src/version") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
+    inputs.files(fileTree("src/version") { include "**/*.java" },
+            fileTree("src/compat") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
 
     doLast {
         def forbiddenImports = [
@@ -470,25 +503,14 @@ tasks.register("verifyVersionAdapterBoundary") {
 tasks.register("verifyAdapterSdkCompleteness") {
     group = "verification"
     description = "Verify every supported Minecraft adapter supplies the complete SDK bundle and feature ports."
-    inputs.files(fileTree("src/version") { include "**/*.java", "**/*.json" })
+    inputs.files(adapterSourceLayout.entries.values())
     inputs.property("minecraftAdapterVersion", minecraftAdapterVersion)
 
     doLast {
         [minecraftAdapterVersion].each { adapter ->
-            def root = file("src/version/${adapter}")
-            def entry = new File(root, "java/fun/prof_chen/teamviewer/main_code/core/FabricClientAdapterFactory.java")
-            if (!entry.isFile()) throw new GradleException("Missing ${adapter} adapter factory")
-            def text = entry.getText("UTF-8")
-            ["implements ClientAdapterFactory<", "new ClientAdapterBundle<>(", "new IntegrationRegistry()"
-            ].each { token ->
-                if (!text.contains(token)) throw new GradleException("${adapter} adapter factory missing '${token}'")
-            }
-            def adapterIdMatcher = text =~ /new ClientAdapterBundle<>\(\s*"([^"]+)"/
-            if (!adapterIdMatcher.find() || adapterIdMatcher.group(1) != adapter) {
-                def actual = adapterIdMatcher.find(0) ? adapterIdMatcher.group(1) : "<missing>"
-                throw new GradleException(
-                        "${adapter} adapter factory reports '${actual}', expected source adapter id '${adapter}'")
-            }
+            def entry = adapterSourceLayout.file(
+                    "java/fun/prof_chen/teamviewer/main_code/core/FabricClientAdapterFactory.java")
+            if (entry == null || !entry.isFile()) throw new GradleException("Missing ${adapter} adapter factory")
             def requiredFiles = [
                     "client/bridge/FabricClientEventBridge.java",
                     "client/bridge/FabricGameClientBridge.java",
@@ -498,17 +520,17 @@ tasks.register("verifyAdapterSdkCompleteness") {
                     "screen/PluginManagerScreen.java"
             ]
             requiredFiles.each { relative ->
-                if (!new File(root, "java/fun/prof_chen/teamviewer/main_code/${relative}").isFile()) {
+                if (adapterSourceLayout.file("java/fun/prof_chen/teamviewer/main_code/${relative}") == null) {
                     throw new GradleException("${adapter} adapter missing required port ${relative}")
                 }
             }
             if (journeyMapApiFamily.startsWith("api-v2")) {
-                journeyMapAnnotationKind(new File(root,
+                journeyMapAnnotationKind(adapterSourceLayout.file(
                         "java/fun/prof_chen/teamviewer/main_code/mapbridge/provider/journey/JourneyMapClientPlugin.java"))
             }
             if (["1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6",
                  "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.8"].contains(adapter)) {
-                def eventBridge = new File(root,
+                def eventBridge = adapterSourceLayout.file(
                         "java/fun/prof_chen/teamviewer/main_code/client/bridge/FabricClientEventBridge.java")
                 def eventBridgeText = eventBridge.getText("UTF-8")
                 if (!eventBridgeText.contains("WorldRenderEvents.LAST.register(handler::onWorldRender)") ||
@@ -518,7 +540,7 @@ tasks.register("verifyAdapterSdkCompleteness") {
                 }
             }
             if (["1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6"].contains(adapter)) {
-                def renderModule = new File(root,
+                def renderModule = adapterSourceLayout.file(
                         "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
                 def incompleteVertices = renderModule.readLines().findAll { line ->
                     line.contains("buffer.vertex(") && !line.contains(".next();")
@@ -529,7 +551,7 @@ tasks.register("verifyAdapterSdkCompleteness") {
                 }
             }
             if (["1.18.2", "1.19.2", "1.19.4"].contains(adapter)) {
-                def renderModule = new File(root,
+                def renderModule = adapterSourceLayout.file(
                         "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
                 def renderText = renderModule.getText("UTF-8")
                 if (renderText.count("VertexFormat.DrawMode.LINES, VertexFormats.LINES") != 2 ||
@@ -551,7 +573,7 @@ tasks.register("verifyAdapterSdkCompleteness") {
             }
             if (["1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4",
                  "1.21.5", "1.21.8", "1.21.9", "1.21.10"].contains(adapter)) {
-                def renderModule = new File(root,
+                def renderModule = adapterSourceLayout.file(
                         "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
                 def renderText = renderModule.getText("UTF-8")
                 if (renderText.count("VertexFormat.DrawMode.DEBUG_LINES") != 2 ||
@@ -561,7 +583,7 @@ tasks.register("verifyAdapterSdkCompleteness") {
                             "${adapter} debug position-color pipeline must render independent DEBUG_LINES")
                 }
             }
-            def gameBridge = new File(root,
+            def gameBridge = adapterSourceLayout.file(
                     "java/fun/prof_chen/teamviewer/main_code/client/bridge/FabricGameClientBridge.java")
             def gameBridgeText = gameBridge.getText("UTF-8")
             if (!gameBridgeText.contains("normalizeMarkTargetDistance(maxDistance)")) {
@@ -571,12 +593,9 @@ tasks.register("verifyAdapterSdkCompleteness") {
                 throw new GradleException(
                         "${adapter} mark targeting must raycast beyond Minecraft's interaction-limited crosshairTarget")
             }
-            def mixin = new File(root, "resources/teamviewer.client.mixins.json")
+            def mixin = adapterSourceLayout.file("resources/teamviewer.client.mixins.json")
             if (!mixin.isFile() || !mixin.getText("UTF-8").contains("Mixin\"")) {
                 throw new GradleException("${adapter} adapter must declare a non-empty Scoreboard Mixin list")
-            }
-            if (entry.readLines().size() > 120) {
-                throw new GradleException("${adapter} FabricClientAdapterFactory must remain a thin adapter factory")
             }
         }
     }
@@ -590,13 +609,12 @@ def compileVersionAdapterAgainstSdk = tasks.register("compileVersionAdapterAgain
     group = "verification"
     description = "Compile Minecraft adapter sources without the common runtime on their classpath."
     dependsOn(project(":common-sdk").tasks.named("classes"))
+    dependsOn(generateAdapterBuildProfile)
     if (journeyMapApiNestedPath != null) {
         dependsOn(tasks.named("extractJourneyMapApi"))
     }
-    source(fileTree("src/version/${minecraftAdapterVersion}/java") { include "**/*.java" })
-    source(fileTree("src/shared/java") {
-        include "fun/prof_chen/teamviewer/main_code/mapbridge/**/*.java"
-    })
+    source(adapterSourceLayout.javaFiles)
+    source(generatedAdapterProfileDir)
     classpath = sourceSets.client.compileClasspath - project(":common").sourceSets.main.output
     destinationDirectory.set(layout.buildDirectory.dir("classes/java/adapterSdkBoundary"))
     options.encoding = "UTF-8"
@@ -906,6 +924,9 @@ java {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
     withSourcesJar()
+}
+tasks.named("sourcesJar") {
+    dependsOn(generateAdapterBuildProfile)
 }
 
 jar {

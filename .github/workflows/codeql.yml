@@ -16,6 +16,7 @@ on:
     branches: [ "main", "dev" ]
     paths:
       - '.github/workflows/codeql.yml'
+      - '.github/actions/**'
       - '.gitmodules'
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/**'
@@ -36,6 +37,7 @@ on:
     branches: [ "main", "dev" ]
     paths:
       - '.github/workflows/codeql.yml'
+      - '.github/actions/**'
       - '.gitmodules'
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/**'
@@ -122,22 +124,6 @@ jobs:
     # - name: Setup runtime (example)
     #   uses: actions/setup-example@v1
 
-    - name: Set up Buf
-      if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
-      uses: bufbuild/buf-action@v1
-      with:
-        version: '1.50.0'
-        setup_only: true
-
-    - name: Resolve Buf binary
-      if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
-      shell: bash
-      run: |
-        buf_path="$(command -v buf)"
-        test -n "$buf_path"
-        echo "BUF_BIN=$buf_path" >> "$GITHUB_ENV"
-        "$buf_path" --version
-
     - name: Resolve required JDKs
       id: required-jdks
       if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
@@ -172,16 +158,12 @@ jobs:
 
 
 
-    - name: Set up required JDKs
+    - name: Set up CodeQL build environment
       if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
-      uses: actions/setup-java@v5
+      uses: ./.github/actions/setup-build
       with:
         java-version: ${{ steps.required-jdks.outputs.versions }}
-        distribution: 'temurin'
-        cache: 'gradle'
-
-    - name: Setup Task
-      uses: go-task/setup-task@v2
+        setup-task: 'true'
 
     - name: Build Java/Kotlin manually
       if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'

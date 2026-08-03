@@ -20,7 +20,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Complete Minecraft 1.21.8 Fabric event and input adapter. */
+/** Fabric event and input adapter. */
 public final class FabricClientEventBridge implements ClientEventBridge<WorldExtractionContext, DrawContext> {
     private static final KeyBinding.Category CATEGORY = KeyBinding.Category.create(
             Identifier.of("team-view-relay", "general"));

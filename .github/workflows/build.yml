@@ -8,6 +8,7 @@ on:
     branches: ["main", "dev"]
     paths:
       - '.github/workflows/build.yml'
+      - '.github/actions/**'
       - '.gitmodules'
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/**'
@@ -28,6 +29,7 @@ on:
     branches: ["main", "dev"]
     paths:
       - '.github/workflows/build.yml'
+      - '.github/actions/**'
       - '.gitmodules'
       - 'third_party/TeamViewRelay-Protocol'
       - 'common/**'
@@ -80,20 +82,10 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-      - name: Set up Buf
-        uses: bufbuild/buf-action@v1
-        with:
-          version: '1.50.0'
-          setup_only: true
-      - name: Resolve Buf binary
-        shell: bash
-        run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
-      - name: Set up shared Java ${{ needs.manifest.outputs.shared-java }}
-        uses: actions/setup-java@v5
+      - name: Set up shared build environment
+        uses: ./.github/actions/setup-build
         with:
           java-version: '${{ needs.manifest.outputs.shared-java }}'
-          distribution: temurin
-          cache: gradle
       - name: Test Java 17 shared runtime and bootstrap
         shell: bash
         # Avoid configuring Fabric Loom, whose Gradle plugin itself requires Java 21.
@@ -112,22 +104,11 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-      - name: Set up Buf
-        uses: bufbuild/buf-action@v1
-        with:
-          version: '1.50.0'
-          setup_only: true
-      - name: Resolve Buf binary
-        shell: bash
-        run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
-      - name: Set up Gradle Java ${{ matrix.java }}
-        uses: actions/setup-java@v5
+      - name: Set up target build environment
+        uses: ./.github/actions/setup-build
         with:
           java-version: '${{ matrix.java }}'
-          distribution: temurin
-          cache: gradle
-      - name: Setup Task
-        uses: go-task/setup-task@v2
+          setup-task: 'true'
       - name: Build ${{ matrix.loader }} Minecraft ${{ matrix.minecraft }}
         shell: bash
         run: |
@@ -164,22 +145,11 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-      - name: Set up Buf
-        uses: bufbuild/buf-action@v1
-        with:
-          version: '1.50.0'
-          setup_only: true
-      - name: Resolve Buf binary
-        shell: bash
-        run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
-      - name: Set up Gradle Java ${{ matrix.java }}
-        uses: actions/setup-java@v5
+      - name: Set up compatibility environment
+        uses: ./.github/actions/setup-build
         with:
           java-version: '${{ matrix.java }}'
-          distribution: temurin
-          cache: gradle
-      - name: Setup Task
-        uses: go-task/setup-task@v2
+          setup-task: 'true'
       - name: Compile exact Fabric runtime ${{ matrix.release }}
         run: task check-fabric-runtime RUNTIME="${{ matrix.release }}"
 
@@ -193,20 +163,10 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-      - name: Set up Buf
-        uses: bufbuild/buf-action@v1
-        with:
-          version: '1.50.0'
-          setup_only: true
-      - name: Resolve Buf binary
-        shell: bash
-        run: echo "BUF_BIN=$(command -v buf)" >> "$GITHUB_ENV"
-      - name: Set up universal packaging Java ${{ needs.manifest.outputs.packaging-java }}
-        uses: actions/setup-java@v5
+      - name: Set up packaging environment
+        uses: ./.github/actions/setup-build
         with:
           java-version: '${{ needs.manifest.outputs.packaging-java }}'
-          distribution: temurin
-          cache: gradle
       - name: Download standalone Jars
         uses: actions/download-artifact@v7
         with:

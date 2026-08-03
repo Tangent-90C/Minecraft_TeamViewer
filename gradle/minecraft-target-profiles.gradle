@@ -1,0 +1,47 @@
+/** Expand the compact target manifest into the stable profile consumed by every build. */
+ext.expectedMinecraftJava = { String minecraft ->
+    if (minecraft.startsWith("26.")) return 25
+    def parts = minecraft.split(/\./).collect { it.toInteger() }
+    if (parts[0] != 1 || parts.size() < 2 || parts[1] < 18) {
+        throw new GradleException("Unrecognised supported Minecraft release: ${minecraft}")
+    }
+    def patch = parts.size() > 2 ? parts[2] : 0
+    parts[1] > 20 || (parts[1] == 20 && patch >= 5) ? 21 : 17
+}
+
+ext.normalizedMinecraftProfile = {
+    Properties manifest, String loader, String target, String archivesBaseName ->
+        def result = [:]
+        def defaultsPrefix = "${loader}.default."
+        def targetPrefix = "${loader}.${target}."
+        manifest.stringPropertyNames().findAll { it.startsWith(defaultsPrefix) }.each { key ->
+            result[key.substring(defaultsPrefix.length())] = manifest.getProperty(key)
+        }
+        manifest.stringPropertyNames().findAll { it.startsWith(targetPrefix) }.each { key ->
+            result[key.substring(targetPrefix.length())] = manifest.getProperty(key)
+        }
+        result.minecraft_target_version = target
+        result.adapter_version = result.adapter_version ?: target
+        def gameJava = expectedMinecraftJava(target)
+        result.game_java_version = result.game_java_version ?: gameJava.toString()
+        result.adapter_java_release = result.adapter_java_release ?: gameJava.toString()
+        result.gradle_runtime_java = result.gradle_runtime_java ?:
+                (loader == "fabric" ? Math.max(21, gameJava) : gameJava).toString()
+        if (loader == "fabric") {
+            def covered = (result.covers ?: "").split(",").collect { it.trim() }.findAll { !it.isEmpty() }
+            if (!covered.isEmpty()) {
+                def supportRange = covered.size() == 1 ? covered[0] : "${covered.first()}-to-${covered.last()}"
+                result.standalone_artifact = result.standalone_artifact ?:
+                        "${archivesBaseName}-Fabric-MC${supportRange}-{mod_version}.jar"
+            }
+            result.slim_adapter_artifact = result.slim_adapter_artifact ?: "teamviewer-adapter-${target}.jar"
+        } else {
+            def legacyTargets = manifest.getProperty("neoforge_legacy_targets", "")
+                    .split(",").collect { it.trim() }
+            result.build_kind = result.build_kind ?: (legacyTargets.contains(target) ? "legacy" : "modern")
+            result.stability = result.stability ?: "stable"
+            result.standalone_artifact = result.standalone_artifact ?:
+                    "${archivesBaseName}-NeoForge-MC${target}-{mod_version}.jar"
+        }
+        result.asImmutable()
+}
