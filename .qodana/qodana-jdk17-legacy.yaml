@@ -3,8 +3,8 @@ version: "1.0"
 profile:
   name: qodana.starter
 
-# The isolated NeoForge legacy build uses Gradle 8.13 and an exact JDK 17
-# toolchain. Runtime JARs are prepared by the workflow before project import.
+# The isolated NeoForge legacy build uses the shared Gradle 9.5.1 wrapper and
+# an exact JDK 17 toolchain. Runtime JARs are prepared before project import.
 projectJDK: "17"
 
 withinDocker: false

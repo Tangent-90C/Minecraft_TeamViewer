@@ -56,20 +56,34 @@ tasks.register("prepareLegacyNeoForgeRuntime", Sync) {
     }
 }
 
+def selectedLegacyNeoForgeTarget = providers.gradleProperty("neoforge_target").getOrElse("1.20.2")
+def legacyGradleJavaHome = providers.exec {
+    commandLine("python3", "scripts/minecraft_targets.py", "java-home", "--loader", "neoforge",
+            selectedLegacyNeoForgeTarget)
+}.standardOutput.asText.map { it.trim() }
+
 tasks.register("buildLegacyNeoForge", Exec) {
     group = "build"
-    description = "Build one legacy NeoForge target in its Gradle 8 isolation boundary."
+    description = "Build one legacy NeoForge target with the shared root Gradle wrapper."
     dependsOn(tasks.named("prepareLegacyNeoForgeRuntime"))
-    workingDir(file("neoforge-legacy"))
-    def selected = providers.gradleProperty("neoforge_target").getOrElse("1.20.2")
-    commandLine("./gradlew", "build", "-Pneoforge_target=${selected}")
+    workingDir(projectDir)
+    inputs.property("neoforge_target", selectedLegacyNeoForgeTarget)
+    doFirst {
+        environment("JAVA_HOME", legacyGradleJavaHome.get())
+    }
+    commandLine("./gradlew", "--no-daemon", "-p", "neoforge-legacy",
+            "-Pneoforge_target=${selectedLegacyNeoForgeTarget}", "build")
 }
 
 tasks.register("cleanLegacyNeoForge", Exec) {
     group = "build"
-    description = "Clean the isolated legacy NeoForge build."
-    workingDir(file("neoforge-legacy"))
-    commandLine("./gradlew", "clean")
+    description = "Clean the isolated legacy NeoForge build with the shared root Gradle wrapper."
+    workingDir(projectDir)
+    doFirst {
+        environment("JAVA_HOME", legacyGradleJavaHome.get())
+    }
+    commandLine("./gradlew", "--no-daemon", "-p", "neoforge-legacy",
+            "-Pneoforge_target=${selectedLegacyNeoForgeTarget}", "clean")
 }
 
 ["runClient", "runclient"].each { taskName ->

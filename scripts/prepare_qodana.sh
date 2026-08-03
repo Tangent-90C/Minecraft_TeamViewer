@@ -12,7 +12,7 @@ case "$mode" in
       :neoforge:testClasses
     ;;
   legacy)
-    ./neoforge-legacy/gradlew --no-daemon -p neoforge-legacy testClasses
+    ./gradlew --no-daemon -p neoforge-legacy testClasses
     ;;
   *)
     echo "Unsupported Qodana preparation mode: $mode" >&2

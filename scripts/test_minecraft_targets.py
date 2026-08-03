@@ -13,6 +13,21 @@ import minecraft_targets
 
 
 class MinecraftTargetsTest(unittest.TestCase):
+    def test_repository_has_single_gradle_wrapper(self) -> None:
+        wrappers = sorted(
+            path.relative_to(minecraft_targets.ROOT)
+            for path in minecraft_targets.ROOT.glob("**/gradle/wrapper/gradle-wrapper.properties")
+        )
+
+        self.assertEqual(
+            [pathlib.Path("gradle/wrapper/gradle-wrapper.properties")],
+            wrappers,
+        )
+        self.assertIn(
+            "gradle-9.5.1-bin.zip",
+            (minecraft_targets.ROOT / wrappers[0]).read_text(encoding="utf-8"),
+        )
+
     def test_gradle_java_versions_are_numeric_sorted_and_deduplicated(self) -> None:
         matrix = minecraft_targets.Matrix(
             properties={

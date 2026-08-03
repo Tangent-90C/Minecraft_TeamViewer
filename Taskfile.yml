@@ -107,7 +107,7 @@ tasks:
             root_target="$(python3 scripts/minecraft_targets.py default-target)"
             root_java_home="$(python3 scripts/minecraft_targets.py java-home "$root_target")"
             JAVA_HOME="$root_java_home" {{.GRADLE}} --no-daemon --configure-on-demand prepareLegacyNeoForgeRuntime
-            JAVA_HOME="$java_home" neoforge-legacy/gradlew --no-daemon \
+            JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
               -p neoforge-legacy -Pneoforge_target="{{.TARGET}}" build
           else
             JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
