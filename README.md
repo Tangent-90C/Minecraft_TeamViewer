@@ -250,7 +250,7 @@ task check-fabric-runtime RUNTIME=1.21
 
 - Minecraft 支持范围以 `gradle/minecraft-versions.properties` 为唯一来源；运行
   `python3 scripts/minecraft_targets.py list-fabric`、`list-neoforge` 或 `list-official` 查询
-- Mod：`v0.4.14-proto0.6.2`
+- Mod：`v0.5.0-proto0.6.2`
 - 协议版本：`0.6.2`
 - 最低兼容协议版本：`0.6.1`
 
@@ -264,7 +264,7 @@ task check-fabric-runtime RUNTIME=1.21
 
 ```bash
 git -C third_party/TeamViewRelay-Protocol fetch --tags
-git -C third_party/TeamViewRelay-Protocol checkout proto/v0.6.1
+git -C third_party/TeamViewRelay-Protocol checkout proto/v0.6.2
 git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
