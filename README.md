@@ -1,17 +1,19 @@
 # TeamViewRelay Mod
 
 TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。
-当前实际验证的运行范围如下：
+当前发布版本为 `v0.5.0-proto0.6.2`。实际验证的运行范围如下：
 
 | 安装产物 | Loader | 可运行的 Minecraft 版本 |
 | --- | --- | --- |
-| `Fabric-1.21.8` | Fabric | `1.21.6`–`1.21.8` |
-| `NeoForge-1.21.8` | NeoForge | `1.21.8` |
-| `Fabric/NeoForge-26.1.2` | 对应 Loader | `26.1`–`26.1.2` |
-| `Fabric/NeoForge-26.2` | 对应 Loader | `26.2` |
+| Fabric All-in-One | Fabric | `1.18`–`26.2` 之间的全部 31 个正式版本 |
+| Fabric 独立版 | Fabric | 同上，由 17 个按 API 家族划分的 Jar 覆盖 |
+| NeoForge 独立版 | NeoForge | `1.20.2`、`1.20.4`、`1.20.6`、`1.21`、`1.21.1`、`1.21.3`、`1.21.4`、`1.21.5`、`1.21.8`、`1.21.10`、`1.21.11`、`26.1`–`26.1.2`、`26.2` |
 
 `26.2` 存在客户端 UI、相机和 JourneyMap API 变更，因此使用专用产物；不要把
 `26.1.2` 产物强行放到 `26.2`。
+
+Fabric 玩家可选择一个 All-in-One，或选择文件名范围覆盖当前 Minecraft 版本的独立版；
+两者不能同时安装。NeoForge 目前只发布独立版。完整版本变更见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 整套系统通常由以下组件配合使用：
 
@@ -50,29 +52,22 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 
 ## 安装 / 运行
 
-1.21 系列产物至少需要：
+1. 根据 Minecraft 版本选择 Fabric 或 NeoForge。
+2. Fabric 安装对应 Minecraft 版本的 Fabric API，再选择 All-in-One 或一个匹配的独立版。
+3. NeoForge 选择文件名与 Minecraft 版本匹配的独立版；不提供跨版本 All-in-One。
+4. Java 版本必须与 Minecraft 运行要求一致：
 
-- Fabric：Minecraft `1.21.6`–`1.21.8`
-- NeoForge：Minecraft `1.21.8`
-- Java `21`
-- Fabric Loader `0.17.2`
-- 与当前 Minecraft 版本匹配的 Fabric API
-- 本项目 Mod Jar
+| Minecraft | Java |
+| --- | --- |
+| `1.18`–`1.20.4` | Java 17 |
+| `1.20.5`–`1.21.11` | Java 21 |
+| `26.1`–`26.2` | Java 25 |
 
-26.1 系列产物至少需要：
+Fabric Loader、Fabric API 和 NeoForge 的精确下限由
+[`gradle/minecraft-versions.properties`](gradle/minecraft-versions.properties) 锁定，并写入对应
+Jar 的 Loader 元数据。不要通过修改依赖元数据把某个独立版强行用于文件名范围之外的版本。
 
-- Minecraft `26.1`–`26.1.2`
-- Java `25`
-- Fabric Loader `0.19.3`
-- 与当前 Minecraft 版本匹配的 Fabric API
-- 文件名含 `26.1.2` 的本项目 Mod Jar
-
-26.2 产物需要 Minecraft `26.2`、Java `25`、Fabric Loader `0.19.3` 与匹配的 Fabric API，
-或 NeoForge `26.2.0.32-beta` 及更新的 26.2 版本。
-
-NeoForge 版本分别要求 NeoForge `21.8.54`（Minecraft 1.21.8）、26.1 系列 NeoForge
-（Minecraft 26.1–26.1.2）或 `26.2.0.32-beta` 及更新的 26.2 版本。NeoForge 的
-JourneyMap、Xaero、SimMC 原生联动会明确报告 `NOT_IMPLEMENTED`，核心连接、同步、HUD、
+NeoForge 的 JourneyMap、Xaero、SimMC 原生联动会明确报告 `NOT_IMPLEMENTED`，核心连接、同步、HUD、
 世界渲染、配置与 NodeMC 功能不因此缩水。
 
 推荐安装：
@@ -132,6 +127,9 @@ Loader 和 Minecraft 支持范围：
 
 独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
 仅供打包使用，不是玩家可安装产物。
+
+维护者发布版本时应按 [`docs/releasing.md`](docs/releasing.md) 完成版本、测试、校验和、标签和
+GitHub Release 检查，不要直接发布单个默认 Gradle 构建产物。
 
 Loader 公开 Mod ID 分别为：Fabric `team-view-relay`、NeoForge `team_view_relay`。NeoForge 使用下划线
 是因为 FML 的 Mod ID 语法不允许连字符；配置文件名、协议身份和功能行为不因此改变。
@@ -269,7 +267,7 @@ git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-版本号采用“双版本号”约定，例如 `v0.4.12-proto0.6.1`：
+版本号采用“双版本号”约定，例如当前的 `v0.5.0-proto0.6.2`：
 
 - 前半段是程序版本号，用于表示 Mod 自身功能迭代
 - 后半段是网络协议版本号，用于表示可与哪些配套组件互通

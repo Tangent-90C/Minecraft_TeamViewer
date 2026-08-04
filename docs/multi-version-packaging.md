@@ -79,3 +79,8 @@ manifest rather than documented as a fixed count. Legacy filenames without `Fabr
 the nested bytes. Shared libraries occur once, root/shared bytecode is Java 17-compatible, each
 adapter has exactly one Factory provider and non-empty Mixin configuration, and no slim adapter
 contains common/runtime/protocol/third-party classes.
+
+Only files accepted by `scripts/minecraft_targets.py verify-release-set` are public release Jars.
+Generate `build-artifacts/SHA256SUMS` from that verified set and upload it with every Jar. The release
+tag must exactly match `mod_version`; protocol, backend and web versions move independently unless
+their compatibility contract changed. The complete maintainer checklist is in `docs/releasing.md`.

@@ -88,3 +88,9 @@
 正式产物只有各版本 standalone 和
 `TeamViewRelay-Fabric-MC1.18-to-26.2-All-in-One-<mod_version>.jar`；
 `build/adapter-artifacts` 不得发布。
+
+## Release Hygiene
+
+发布 Mod 前必须阅读 `docs/releasing.md`，同步更新 `gradle.properties`、README 和 CHANGELOG，运行
+完整 `task build` 与发布集校验，并为所有正式 Jar 生成 SHA-256。Mod、协议、后端和网页脚本各自
+独立递增版本；协议未变化时保留现有 `proto` 后缀，不得为凑齐版本号而更新协议 submodule。
