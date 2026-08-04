@@ -5,33 +5,93 @@
 
 ## v0.5.0-proto0.6.2 - 2026-08-04
 
-### 新增
+比较范围：[`v0.4.14-proto0.6.2`（`f599b1c`）](https://github.com/MC-TeamViewer/Minecraft_TeamViewer/commit/f599b1c6aedd7e8150c44485d6ba3d1d1c826461)
+至 `v0.5.0-proto0.6.2`。
 
-- Fabric 覆盖 Minecraft `1.18`–`26.2` 之间的全部 31 个正式版本，提供 17 个独立版和一个
-  All-in-One。
-- 新增 NeoForge 支持，发布 13 个目标，覆盖选定的 `1.20.2`–`26.2` 版本。
-- 引入 Loader 中立的 Adapter SDK、能力注册表和 TCK，使版本适配与业务逻辑保持分离。
-- 加入 `shared -> compat -> version` 三级源码解析和 `source-plan`，可按真实 API 边界复用端口实现。
+### Minecraft、Loader 与发布产物
 
-### 调整
+- Fabric 从只验证 Minecraft 1.21.8 扩展为覆盖 `1.18`–`26.2` 之间的全部 31 个正式版本。
+  17 个独立 Jar 按真实 API 兼容范围划分，同时提供一个覆盖全部 Fabric 目标的 All-in-One。
+- 新增 NeoForge 支持，提供 13 个独立 Jar：Minecraft `1.20.2`、`1.20.4`、`1.20.6`、
+  `1.21`、`1.21.1`、`1.21.3`、`1.21.4`、`1.21.5`、`1.21.8`、`1.21.10`、
+  `1.21.11`、`26.1`–`26.1.2` 和 `26.2`。
+- 根据 Minecraft 目标分别使用 Java 17、21 或 25；公共运行时保持 Java 17 ABI，版本 Adapter
+  可使用目标游戏要求的 Java 版本。
+- Fabric 发布物区分完整 standalone 与内部 slim adapter；NeoForge 使用独立 standalone。
+  构建会检查 Mod ID、Mixin、ServiceLoader、嵌套依赖、字节码版本、目标元数据和 Adapter 哈希。
+- Fabric 的公开 Mod ID 仍为 `team-view-relay`；NeoForge 因 FML 命名规则使用
+  `team_view_relay`，配置文件名和协议身份不变。
 
-- 所有 NeoForge 构建统一使用根 Gradle 9.5.1 wrapper；legacy UserDev 与现代 ModDevGradle 仍保持
-  独立工程边界。
-- Fabric 独立版、NeoForge 独立版、slim adapter 和 All-in-One 使用同一份目标清单与产物校验规则。
-- 外部地图和 SimMC 集成改为稳定能力接口与插件化装配，缺失或不支持的能力会明确报告状态。
-- 优化实体采集、Tab 信息、配置保存、网络重连和多版本源码结构，减少运行与维护开销。
+### 集成插件与地图联动
 
-### 修复
+- 新增 Lua 集成插件运行时和稳定能力注册表。插件可提供远程玩家投影、共享路标或战局地图数据源，
+  并明确报告可用、未安装、不支持、未实现、入口未就绪或加载失败等状态。
+- 内置 NodeMC、SimMC、Xaero 和 JourneyMap 插件，并提供可执行的中英双语 Lua Adapter 示例。
+  JourneyMap 同时适配旧版 API v1、API v2 及 26.2 的接口变化；Xaero 包含旧版本兼容入口。
+- 新增完整的集成插件管理界面：查看能力和诊断信息、修改插件设置、启停、重新扫描、复制内置示例为
+  自定义插件，以及卸载、恢复或永久删除自定义插件。
+- 战局地图由固定模式改为可选择的数据源。NodeMC 计分板与 SimMC 原生区域数据共用历史对齐、坐标投影、
+  差异检测、缓存保留和 keepalive 上传流程。
+- JourneyMap/Xaero 的远程玩家和共享路标同步统一由能力接口管理；插件停用、功能关闭、断线或切换世界时
+  会清理其创建的原生标记。
 
-- 修复 JourneyMap 不同 API 世代的入口注解与兼容性检查。
-- 修复 Fabric 1.18.2 渲染、26.1/26.1.1 JourneyMap 入口及多个完整兼容矩阵 CI 问题。
-- 修复 Gson 兼容反序列化、SimMC 战争地图和插件对接问题。
+### 实体上传、界面与渲染
 
-### 兼容性
+- 新增实体上传专用设置页，可选择自适应或固定采集周期。自适应模式会在实体数量较大时自动降低
+  采集频率，固定模式仍受服务器协商的最小上报周期约束。
+- 新增实体类型与自定义名称的精确白名单/黑名单，可在游戏内分页新增和删除规则；规则在采集阶段应用，
+  不需要先构造完整实体对象。
+- 配置 UI 改为公共页面模型与各版本原生控件宿主，统一网络、显示、颜色、路标、实体上传、抓包和插件页面；
+  无效颜色字段会保留旧值，同时允许其余合法字段继续保存。
+- HUD 与世界渲染改为公共 Planner 生成不可变帧、Loader Adapter 执行原生绘制，保证 Fabric 与 NeoForge
+  共享相同的显示决策。
+- 快速报点使用目标版本的原生射线检测，正确处理交互距离、最大标记距离和方块遮挡。
 
-- 网络协议仍为 `0.6.2`，最低兼容协议为 `0.6.1`。
-- 本次只发布 Minecraft Mod；后端、网页脚本和协议仓库没有版本变更。
-- Fabric 独立版与 All-in-One 不能同时安装；NeoForge 只提供独立版。
+### 性能、稳定性与协议处理
+
+- 重构高频实体上报：客户端线程单次遍历已加载实体并写入可复用的结构化数组，后台单线程完成状态比较、
+  patch 生成和 Protobuf 编码，减少对象分配和游戏线程占用。
+- Tab 玩家列表改为独立低频快照和增量比较，不再在每次世界状态采集中重复读取；远程玩家、路标和战局地图
+  协调器共享一次轻量世界快照。
+- 只有确实需要实体定位时才枚举世界实体；上报、HUD、渲染和地图集成的时钟与清理生命周期集中管理。
+- 重连预算改为原子扣减，避免并发重连丢失次数或降到零以下；WebSocket 扩展参数的非法数字和越界值现在
+  会转换成带原始值与原因的协议错误。
+- 精简 WebSocket 帧回调和无意义队列分支，保留统一的传输流量统计；修正配置逐字段保存、空值处理及
+  legacy Gson record 反序列化。
+
+### 架构、构建与质量保障
+
+- 引入 Loader 中立的 Common Adapter SDK、`ClientAdapterBundle`、`ServiceLoader` 启动层和 Adapter TCK。
+  网络、配置、同步、HUD、渲染和战局地图业务只保留一份，各版本仅转换原生 Minecraft/Loader API。
+- Fabric、现代 NeoForge 和 legacy NeoForge 均采用 `shared -> compat -> version` 三级源码解析。
+  相同 API 实现按 HUD、Screen、网络、渲染和事件等真实边界复用，具体版本目录只保留必要覆盖。
+- 新增 `source-plan`，可追踪每个目标的有效文件来自 shared、哪个 compat 层或 version override；
+  compat 层发生同路径冲突、空层、冗余覆盖或目标遗漏时直接构建失败。
+- 所有 NeoForge 构建统一使用根 Gradle 9.5.1 wrapper。Minecraft 1.20.x 的 UserDev 与 1.21+
+  的 ModDevGradle 保持独立工程边界，但不再维护第二套 Gradle wrapper。
+- Minecraft 目标、精确 Fabric runtime、依赖版本、Java 要求和发布文件名集中到统一清单；Taskfile、Gradle、
+  GitHub Actions、CodeQL 与 Qodana 使用同一套目标信息和本地构建准备 Action。
+- 新增公共业务、Adapter TCK、插件、实体管线、配置 UI、战局地图、协议、传输、HUD、渲染以及目标清单测试；
+  完整矩阵会逐个编译 31 个 Fabric 正式 runtime 和所有 NeoForge 目标。
+
+### 主要修复
+
+- 修复 Fabric 1.18.2 的渲染矩阵/API 差异，以及跨版本报点距离与遮挡判断。
+- 修复 Fabric 1.21.1、26.1、26.1.1 和 26.2 等 JourneyMap 入口注解、Waypoint API 与构建检查问题。
+- 修复 SimMC 战争地图区域读取、位置历史与投影问题，以及 Lua/外部插件能力注册、设置持久化和生命周期清理。
+- 修复插件使用旧 Gson 时对 Java record 的反序列化兼容问题。
+- 修复多个配置解析、空值、并发状态、无界队列语义和包目录问题，并清理未使用缓存及重复版本源码。
+- 修复多版本 Fabric/NeoForge 构建、All-in-One 打包、Qodana 项目模型与完整兼容矩阵 CI 问题。
+
+### 升级说明
+
+- 网络协议仍为 `0.6.2`，最低兼容协议仍为 `0.6.1`。本次只发布 Minecraft Mod；后端、网页脚本和
+  协议仓库不需要跟随升级。
+- Fabric 玩家应在一个匹配版本的独立版和 All-in-One 之间二选一，不能同时安装。NeoForge 目前只提供
+  独立版，也没有跨 Loader 通用 Jar。
+- 旧配置仍从 `config/team-view-relay.json` 读取；原战局地图模式会回落到默认 NodeMC 数据源，之后可在
+  配置页选择实际可用的插件数据源。
+- 自定义插件位于 `config/team-view-relay/plugins/`；内置插件只读，只能停用或复制为自定义插件。
 
 ## v0.4.14-proto0.6.2
 
