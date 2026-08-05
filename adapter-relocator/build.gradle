@@ -14,6 +14,31 @@ tasks.named("test") {
     useJUnitPlatform()
 }
 
+def relocatorMainClassEntry = "fun/prof_chen/teamviewer/buildtools/AdapterRelocator.class"
+def verifyRelocatorJar = tasks.register("verifyRelocatorJar") {
+    group = "verification"
+    description = "Verify the NeoForge adapter relocator executable is packaged."
+    dependsOn(tasks.named("jar"))
+    inputs.file(tasks.named("jar").flatMap { it.archiveFile })
+    doLast {
+        def artifact = tasks.named("jar").get().archiveFile.get().asFile
+        def zip = new java.util.zip.ZipFile(artifact)
+        try {
+            if (zip.getEntry(relocatorMainClassEntry) == null) {
+                throw new GradleException(
+                        "Adapter relocator Jar is missing ${relocatorMainClassEntry}; " +
+                                "check that its source directory is tracked by Git")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyRelocatorJar)
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
     options.release.set(rootProject.ext.sharedJavaRelease as int)

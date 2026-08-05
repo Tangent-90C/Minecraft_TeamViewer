@@ -136,12 +136,12 @@ def relocateTasks = supportedTargets.collectEntries { target ->
     def taskProvider = tasks.register("relocateNeoForgeAdapter_${suffix}", JavaExec) {
         group = "build"
         description = "Relocate the Minecraft ${target} NeoForge adapter into its private game-library namespace."
-        dependsOn(":adapter-relocator:classes")
+        dependsOn(":adapter-relocator:check")
         // A root `build` can also produce the default target's raw adapter in this invocation.
         // The other raw adapters are intentionally staged by their target-specific builds.
         mustRunAfter(":neoforge:neoForgeRawAdapterJar")
         classpath = configurations.adapterRelocatorRuntime
-        mainClass = "fun.prof_chen.teamviewer.build.AdapterRelocator"
+        mainClass = "fun.prof_chen.teamviewer.buildtools.AdapterRelocator"
         inputs.file(rawAdapterFile(target))
         inputs.property("classPrefix", internalClassPrefix(target))
         inputs.property("mixinPrefix", internalMixinPrefix(target))

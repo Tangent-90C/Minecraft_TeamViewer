@@ -16,6 +16,22 @@ import minecraft_targets
 
 
 class MinecraftTargetsTest(unittest.TestCase):
+    def test_adapter_relocator_sources_are_not_hidden_by_build_ignore_rule(self) -> None:
+        main_source = (
+            minecraft_targets.ROOT
+            / "adapter-relocator/src/main/java/fun/prof_chen/teamviewer/buildtools/AdapterRelocator.java"
+        )
+        test_source = (
+            minecraft_targets.ROOT
+            / "adapter-relocator/src/test/java/fun/prof_chen/teamviewer/buildtools/AdapterRelocatorTest.java"
+        )
+
+        self.assertTrue(main_source.is_file())
+        self.assertTrue(test_source.is_file())
+        self.assertFalse(any("build" == part for part in main_source.relative_to(
+            minecraft_targets.ROOT / "adapter-relocator/src/main/java"
+        ).parts[:-1]))
+
     @staticmethod
     def _source_layout_matrix() -> minecraft_targets.Matrix:
         return minecraft_targets.Matrix(
