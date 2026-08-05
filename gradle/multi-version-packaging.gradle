@@ -1,0 +1,171 @@
+/** Loader-neutral helpers used by the Fabric and NeoForge multi-version packagers. */
+def sha256Bytes = { byte[] bytes ->
+    java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .collect { String.format("%02x", it & 0xff) }.join()
+}
+
+def sha256File = { File file ->
+    def digest = java.security.MessageDigest.getInstance("SHA-256")
+    file.withInputStream { stream ->
+        byte[] buffer = new byte[8192]
+        for (int read = stream.read(buffer); read >= 0; read = stream.read(buffer)) {
+            if (read > 0) digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { String.format("%02x", it & 0xff) }.join()
+}
+
+def classMajor = { byte[] bytes ->
+    if (bytes.length < 8) throw new GradleException("Invalid Java class header")
+    ((bytes[6] & 0xff) << 8) | (bytes[7] & 0xff)
+}
+
+def readZipBytes = { java.util.zip.ZipFile zip, String path ->
+    def entry = zip.getEntry(path)
+    if (entry == null) throw new GradleException("${zip.name} is missing ${path}")
+    zip.getInputStream(entry).withCloseable { it.bytes }
+}
+
+def readZipText = { java.util.zip.ZipFile zip, String path ->
+    new String(readZipBytes(zip, path), java.nio.charset.StandardCharsets.UTF_8)
+}
+
+def readZipJson = { java.util.zip.ZipFile zip, String path ->
+    new groovy.json.JsonSlurper().parse(readZipBytes(zip, path))
+}
+
+def requireZipEntries = { Set<String> entries, Collection<String> required, String owner ->
+    def missing = required.findAll { !entries.contains(it) }
+    if (!missing.isEmpty()) throw new GradleException("${owner} is missing ${missing}")
+}
+
+def verifyNeoForgeResourcePack = { java.util.zip.ZipFile zip, String owner ->
+    def metadata = readZipJson(zip, "pack.mcmeta")
+    def pack = metadata.pack
+    if (pack?.pack_format != 18
+            || pack?.supported_formats != [18, Integer.MAX_VALUE]
+            || pack?.min_format != 18
+            || pack?.max_format != [Integer.MAX_VALUE, Integer.MAX_VALUE]) {
+        throw new GradleException(
+                "${owner} has invalid Minecraft 1.20.2+ ResourcePack metadata")
+    }
+}
+
+ext.multiVersionPackaging = [
+        sha256Bytes: sha256Bytes,
+        sha256File: sha256File,
+        classMajor: classMajor,
+        readZipBytes: readZipBytes,
+        readZipText: readZipText,
+        readZipJson: readZipJson,
+        requireZipEntries: requireZipEntries,
+        verifyNeoForgeResourcePack: verifyNeoForgeResourcePack,
+        registerNeoForgeRawAdapterTasks: { Map spec ->
+            def artifactDirectory = spec.artifactDirectory
+            def rawAdapterName = "teamviewer-neoforge-adapter-${spec.minecraftTarget}-raw.jar"
+            def generatedMetadata = layout.buildDirectory.dir("generated/neoforge-adapter-metadata")
+            def adapterClasses = spec.adapterClassesDirectory ?: sourceSets.main.output.classesDirs
+            def adapterClassPaths = providers.provider {
+                def paths = new TreeSet<String>()
+                project.files(adapterClasses).files.findAll { it.isDirectory() }.each { classesRoot ->
+                    fileTree(classesRoot) { include "**/*.class" }.files.each { classFile ->
+                        paths.add(classesRoot.toPath().relativize(classFile.toPath()).toString().replace('\\', '/'))
+                    }
+                }
+                paths
+            }
+
+            def metadataTask = tasks.register("generateNeoForgeAdapterMetadata") {
+                group = "build"
+                description = "Generate target identity for the internal NeoForge All-in-One adapter."
+                dependsOn(tasks.named("classes"))
+                outputs.dir(generatedMetadata)
+                inputs.property("minecraftTarget", spec.minecraftTarget)
+                inputs.property("minecraftRange", spec.minecraftRange)
+                inputs.property("neoforgeRange", spec.neoForgeRange)
+                inputs.property("adapterVersion", spec.adapterVersion)
+                inputs.property("javaRelease", spec.javaRelease)
+                doLast {
+                    def mixinFile = spec.adapterSourceLayout.file(
+                            "resources/teamviewer.neoforge.client.mixins.json")
+                    def mixin = new groovy.json.JsonSlurper().parse(mixinFile)
+                    def mixinClasses = (mixin.client ?: []).collect { "${mixin.package}.${it}" }
+                    if (mixinClasses.isEmpty()) {
+                        throw new GradleException(
+                                "NeoForge ${spec.minecraftTarget} raw adapter has no client Mixin")
+                    }
+                    def metadataFile = generatedMetadata.get().file(
+                            "META-INF/teamviewer/neoforge-adapter.json").asFile
+                    metadataFile.parentFile.mkdirs()
+                    metadataFile.text = groovy.json.JsonOutput.prettyPrint(
+                            groovy.json.JsonOutput.toJson([
+                                    minecraft: spec.minecraftTarget,
+                                    minecraftRange: spec.minecraftRange,
+                                    neoforgeRange: spec.neoForgeRange,
+                                    adapter: spec.adapterVersion,
+                                    adapterJavaRelease: spec.javaRelease,
+                                    entrypoint: "fun.prof_chen.teamviewer.neoforge.TeamViewRelayNeoForge",
+                                    factory: "fun.prof_chen.teamviewer.main_code.core.NeoForgeClientAdapterFactory",
+                                    mixins: mixinClasses
+                            ]))
+                }
+            }
+
+            def rawTask = tasks.register("neoForgeRawAdapterJar", Jar) {
+                group = "build"
+                description = "Extract production-mapped NeoForge adapter classes for All-in-One relocation."
+                dependsOn(tasks.named(spec.productionArchiveTask as String), metadataTask)
+                archiveFileName.set(rawAdapterName)
+                destinationDirectory.set(artifactDirectory)
+                duplicatesStrategy = DuplicatesStrategy.FAIL
+                from({ zipTree(tasks.named(spec.productionArchiveTask as String)
+                        .get().archiveFile.get().asFile) }) {
+                    include { details -> adapterClassPaths.get().contains(details.path) }
+                }
+                from(generatedMetadata)
+            }
+
+            def verifyTask = tasks.register("verifyNeoForgeRawAdapter") {
+                group = "verification"
+                description = "Verify the raw NeoForge adapter contains only target classes and metadata."
+                dependsOn(rawTask)
+                inputs.file(rawTask.flatMap { it.archiveFile })
+                doLast {
+                    def artifact = rawTask.get().archiveFile.get().asFile
+                    def zip = new java.util.zip.ZipFile(artifact)
+                    try {
+                        def entries = zip.entries().findAll { !it.directory }.collect { it.name } as Set
+                        def expectedClasses = adapterClassPaths.get() as Set
+                        def actualClasses = entries.findAll { it.endsWith(".class") } as Set
+                        if (actualClasses != expectedClasses) {
+                            throw new GradleException("NeoForge ${spec.minecraftTarget} raw classes differ: " +
+                                    "missing=${expectedClasses - actualClasses}, " +
+                                    "unexpected=${actualClasses - expectedClasses}")
+                        }
+                        def allowed = actualClasses + ["META-INF/MANIFEST.MF",
+                                "META-INF/teamviewer/neoforge-adapter.json"]
+                        if (entries != allowed as Set) {
+                            throw new GradleException("NeoForge ${spec.minecraftTarget} raw adapter has " +
+                                    "unexpected entries: ${entries - allowed}")
+                        }
+                        requireZipEntries(entries, [
+                                "fun/prof_chen/teamviewer/neoforge/TeamViewRelayNeoForge.class",
+                                "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.class"
+                        ], "NeoForge ${spec.minecraftTarget} raw adapter")
+                        int expectedMajor = (spec.javaRelease as int) + 44
+                        actualClasses.each { name ->
+                            byte[] bytes = readZipBytes(zip, name)
+                            int major = classMajor(bytes)
+                            if (major > expectedMajor) {
+                                throw new GradleException(
+                                        "${name} has class major ${major}, expected <= ${expectedMajor}")
+                            }
+                        }
+                    } finally {
+                        zip.close()
+                    }
+                }
+            }
+            [metadata: metadataTask, jar: rawTask, verify: verifyTask]
+        }
+]

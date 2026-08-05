@@ -12,12 +12,20 @@
 
 - Fabric 从只验证 Minecraft 1.21.8 扩展为覆盖 `1.18`–`26.2` 之间的全部 31 个正式版本。
   17 个独立 Jar 按真实 API 兼容范围划分，同时提供一个覆盖全部 Fabric 目标的 All-in-One。
-- 新增 NeoForge 支持，提供 13 个独立 Jar：Minecraft `1.20.2`、`1.20.4`、`1.20.6`、
-  `1.21`、`1.21.1`、`1.21.3`、`1.21.4`、`1.21.5`、`1.21.8`、`1.21.10`、
-  `1.21.11`、`26.1`–`26.1.2` 和 `26.2`。
+- 新增 NeoForge 支持，19 个独立 Jar 覆盖 Minecraft `1.20.2`–`26.2` 的全部 21 个正式版本；
+  补齐仅有 beta NeoForge 的 `1.20.3`、`1.20.5`、`1.21.2`、`1.21.6`、`1.21.7` 和 `1.21.9`。
+  `1.20.1` 留给后续独立 Forge 版本，不引入旧 Forge 命名空间或双 FML 入口。
+- 新增实验性的 NeoForge All-in-One。一个 Java 17 外壳按运行时版本选择唯一的重定位
+  `GAMELIBRARY` adapter、Factory 和 Mixin；19 个独立 Jar 继续作为回退选择。
+- NeoForge beta 目标分离构建 pin、玩家运行范围和发布渠道；玩家可更新同一 Minecraft 版本线的
+  Loader，定时 CI 会从官方 Maven 元数据解析并构建该线最新版本。26.2 基线更新到 `26.2.0.48-beta`。
+- AIO 外壳同时提供 FML 1 的 `META-INF/mods.toml` 与现代 FML 的
+  `META-INF/neoforge.mods.toml`，并分别使用对应 dependency schema。独立包则按构建前端只保留
+  一份元数据，避免 NeoForge 1.20.6 的 FML 3 误读 FML 4 描述文件而拒绝加载。
 - 根据 Minecraft 目标分别使用 Java 17、21 或 25；公共运行时保持 Java 17 ABI，版本 Adapter
   可使用目标游戏要求的 Java 版本。
-- Fabric 发布物区分完整 standalone 与内部 slim adapter；NeoForge 使用独立 standalone。
+- Fabric 与 NeoForge 发布物都区分完整 standalone 与内部 slim adapter；NeoForge slim adapter
+  经过精确 class 重定位后只用于 AIO JarJar 组装。
   构建会检查 Mod ID、Mixin、ServiceLoader、嵌套依赖、字节码版本、目标元数据和 Adapter 哈希。
 - Fabric 的公开 Mod ID 仍为 `team-view-relay`；NeoForge 因 FML 命名规则使用
   `team_view_relay`，配置文件名和协议身份不变。
@@ -63,12 +71,14 @@
 
 - 引入 Loader 中立的 Common Adapter SDK、`ClientAdapterBundle`、`ServiceLoader` 启动层和 Adapter TCK。
   网络、配置、同步、HUD、渲染和战局地图业务只保留一份，各版本仅转换原生 Minecraft/Loader API。
-- Fabric、现代 NeoForge 和 legacy NeoForge 均采用 `shared -> compat -> version` 三级源码解析。
-  相同 API 实现按 HUD、Screen、网络、渲染和事件等真实边界复用，具体版本目录只保留必要覆盖。
+- Fabric 与 NeoForge 均采用 `shared -> compat -> version` 三级源码解析。现代 ModDev 和 legacy UserDev
+  共同消费唯一的 `neoforge-adapter` 源码树，相同 API 实现可跨构建边界复用，具体版本目录只保留必要覆盖。
 - 新增 `source-plan`，可追踪每个目标的有效文件来自 shared、哪个 compat 层或 version override；
   compat 层发生同路径冲突、空层、冗余覆盖或目标遗漏时直接构建失败。
 - 所有 NeoForge 构建统一使用根 Gradle 9.5.1 wrapper。Minecraft 1.20.x 的 UserDev 与 1.21+
   的 ModDevGradle 保持独立工程边界，但不再维护第二套 Gradle wrapper。
+- `task build` 现在会按 CPU、cgroup 和可用内存并行构建各版本 adapter 与 Fabric runtime；
+  每个目标使用独立 Gradle project cache，`JOBS=1` 可恢复串行排障。
 - Minecraft 目标、精确 Fabric runtime、依赖版本、Java 要求和发布文件名集中到统一清单；Taskfile、Gradle、
   GitHub Actions、CodeQL 与 Qodana 使用同一套目标信息和本地构建准备 Action。
 - 新增公共业务、Adapter TCK、插件、实体管线、配置 UI、战局地图、协议、传输、HUD、渲染以及目标清单测试；
@@ -82,13 +92,22 @@
 - 修复插件使用旧 Gson 时对 Java record 的反序列化兼容问题。
 - 修复多个配置解析、空值、并发状态、无界队列语义和包目录问题，并清理未使用缓存及重复版本源码。
 - 修复多版本 Fabric/NeoForge 构建、All-in-One 打包、Qodana 项目模型与完整兼容矩阵 CI 问题。
+- NeoForge Mixin 的 Java compatibility level 现在由目标工具链生成；legacy UserDev 的严格 Adapter TCK
+  使用与 standalone 相同的扁平公共运行时，避免开发运行漏载 bootstrap 或 JarJar 类。
+- 为所有 standalone 和 All-in-One 外壳补充跨版本 `pack.mcmeta`，修复 NeoForge 1.20.2 将
+  `mod:team_view_relay` 判定为无效 ResourcePack 的启动告警。
+- NeoForge 的 `pack.mcmeta` 同时声明旧版 `supported_formats` 与新版 `min_format` / `max_format`，
+  避免 Minecraft 1.21.11 和 26.2 在每次资源仓库刷新时重复打印元数据解析异常。
+- 将 NeoForge 元数据引用的 Mod 图标放到 Jar 根目录，修复 1.20.2 在 Mod 列表中选择
+  TeamViewRelay 时因旧版路径校验不接受 `assets/teamviewer/icon.ico` 而崩溃。
 
 ### 升级说明
 
 - 网络协议仍为 `0.6.2`，最低兼容协议仍为 `0.6.1`。本次只发布 Minecraft Mod；后端、网页脚本和
   协议仓库不需要跟随升级。
-- Fabric 玩家应在一个匹配版本的独立版和 All-in-One 之间二选一，不能同时安装。NeoForge 目前只提供
-  独立版，也没有跨 Loader 通用 Jar。
+- Fabric 玩家应在一个匹配版本的独立版和 Fabric All-in-One 之间二选一；NeoForge 玩家应在对应独立版
+  和实验性 NeoForge All-in-One 之间二选一。两种 Loader 都不能同时安装 standalone 与 AIO，且不存在
+  跨 Loader 通用 Jar。
 - 旧配置仍从 `config/team-view-relay.json` 读取；原战局地图模式会回落到默认 NodeMC 数据源，之后可在
   配置页选择实际可用的插件数据源。
 - 自定义插件位于 `config/team-view-relay/plugins/`；内置插件只读，只能停用或复制为自定义插件。

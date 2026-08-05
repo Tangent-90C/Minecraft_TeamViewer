@@ -37,8 +37,12 @@
 - `fabric-bootstrap/src/main/java`：Java 17 共享 Fabric Loader 入口、Factory 发现、`ClientApplication` 启动和
   Adapter TCK；不得依赖 Minecraft 或 Fabric API 类型。
 - `fabric/src/version/<adapter>`：adapter 身份和只适用于该 adapter 的最终覆盖；禁止复制已有
-  shared/compat 实现。NeoForge 和 legacy NeoForge 使用相同三级规则，但不得跨 Loader 共享原生类型。
-- `universal`：只负责组装和校验 All-in-One，不得实现业务或重新编译 adapter。
+  shared/compat 实现。
+- `neoforge-adapter/src/shared|compat|version`：全部 NeoForge 目标唯一的源码树；compat 层可以跨越
+  ModDev/UserDev 边界。`neoforge` 与 `neoforge-legacy` 只负责按目标工具链编译，禁止重新建立各自的 `src`。
+- `universal`：只负责组装和校验 Fabric All-in-One，不得实现业务或重新编译 adapter。
+- `neoforge-aio`：只负责 NeoForge AIO 的 Java 17 选择外壳、Mixin 选择、组装和校验；
+  `adapter-relocator` 只能精确重定位 adapter 自有 class，禁止改写 Common SDK 类名。
 - 禁止重新创建 `common/src/version/*` 或 `fabric/src/client` 这种不对称版本入口。
 
 ### Mandatory bridge rules
@@ -64,12 +68,15 @@
 
 1. 在 `gradle/minecraft-versions.properties` 增加目标；可推导的 Java、artifact 和 build kind 不重复声明。
 2. 为每个强制端口选择已有 compat 层；API 未变化时只扩展该层的 `adapters`，发生变化时新增能力变体，
-   仅单版本实现放入 `src/version/<adapter>`。
+   仅单版本实现放入对应 Loader 的 `src/version/<adapter>`；NeoForge 固定使用 `neoforge-adapter/src`。
 3. 如果 Minecraft API 变化需要新的能力，先扩充 SDK 的强类型 snapshot/command；不要把原生类型泄漏进 common。
 4. 同步实现 Scoreboard Mixin、配置 Screen 宿主、世界/HUD sink、JourneyMap/Xaero 端口和战局地图桥。
 5. 为 common 业务补假适配器测试，并更新功能矩阵/完整性守卫。缺失能力必须构建失败，不允许生成缩水 Jar。
 6. 先用 `python3 scripts/minecraft_targets.py source-plan <目标>` 审查有效源码，再执行 `task build`
    并分别启动各目标客户端进行游戏内烟测。
+7. NeoForge beta 目标必须分别声明可复现的 `neoforge_version`、同 Minecraft 版本线内的
+   `neoforge_version_range` 和 `stability=beta`；发布前查询并验证该线最新官方版本。
+   Minecraft 1.20.1 属于未来 Forge 边界，禁止为它向 NeoForge AIO 增加双 FML 入口。
 
 ### Required verification
 
@@ -79,15 +86,19 @@
 - `compileVersionAdapterAgainstSdk`：在移除 common-runtime 的类路径下重新编译版本 adapter。
 - `verifyNoCommonClassShadowing`：Fabric 外层不得包含与 common 同名的旧类或重复类。
 - `verifyAdapterArtifact` / `verifyStandaloneArtifact`：slim 不得夹带 runtime，独立 Jar 必须完整。
-- `verifyUniversalJar`：通用包必须包含 manifest 的全部 adapter、正确哈希和唯一共享依赖。
+- `verifyUniversalJar` / `verifyNeoForgeAio`：两个 Loader 的通用包必须包含 manifest 的全部 adapter、
+  正确哈希、唯一共享依赖，以及唯一入口、Factory、Mixin 和隔离命名空间。
 - 不得通过跳过上述任务、删除失败检查或使用旧构建目录来获得“成功”产物。
 
 默认交付命令是 `task build`，它应构建并收集所有受支持 Minecraft 版本；Fabric、NeoForge 和
 精确 Fabric runtime 的单目标调试分别使用 `task build-target TARGET=<目标>`、
 `task build-neoforge-target TARGET=<目标>` 和 `task check-fabric-runtime RUNTIME=<版本>`。
-正式产物只有各版本 standalone 和
-`TeamViewRelay-Fabric-MC1.18-to-26.2-All-in-One-<mod_version>.jar`；
-`build/adapter-artifacts` 不得发布。
+完整构建默认通过 `scripts/parallel_build.py` 自动并行 adapter 与精确 runtime 检查，公共 runtime
+和 AIO 组装保持串行；使用 `task build JOBS=<数量>` 覆盖并发度，`JOBS=1` 用于复现串行问题。
+并行任务日志保存在 `build/parallel-logs/`，不得通过忽略失败任务继续组装发布包。
+每个并行目标必须保留独立的 `build/parallel-project-cache/`；不得让不同目标共享 Gradle task history。
+正式产物只有各版本 standalone、Fabric AIO 和实验性的 NeoForge AIO；
+`build/adapter-artifacts` 与 `build/neoforge-adapter-artifacts` 不得发布。
 
 ## Release Hygiene
 

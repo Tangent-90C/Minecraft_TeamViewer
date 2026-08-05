@@ -1,0 +1,430 @@
+plugins {
+    id 'java-library'
+}
+
+apply from: rootProject.file("gradle/minecraft-target-profiles.gradle")
+apply from: rootProject.file("gradle/multi-version-packaging.gradle")
+
+// The AIO shell embeds the bootstrap output directly. Configure that producer even when
+// Gradle configuration-on-demand is enabled so the packaging task remains lazily creatable.
+evaluationDependsOn(":client-bootstrap")
+
+def versionManifest = new Properties()
+rootProject.file("gradle/minecraft-versions.properties").withInputStream {
+    versionManifest.load(it)
+}
+def supportedTargets = versionManifest.getProperty("neoforge_targets").split(",").collect { it.trim() }
+def targetProfiles = supportedTargets.collectEntries { target ->
+    [(target): normalizedMinecraftProfile(
+            versionManifest, "neoforge", target, project.archives_base_name.toString())]
+}
+def sharedJavaRelease = versionManifest.getProperty("shared_java_release").toInteger()
+def normalizedVersion = project.version.toString().replaceFirst(/^v/, "")
+def rawAdapterDirectory = rootProject.layout.buildDirectory.dir("neoforge-adapter-artifacts")
+def relocatedAdapterDirectory = layout.buildDirectory.dir("relocated-adapters")
+def generatedTargetsDirectory = layout.buildDirectory.dir("generated/sources/targets/java")
+def generatedPayloadDirectory = layout.buildDirectory.dir("generated/aio-payload")
+def originalEntrypoint = "fun.prof_chen.teamviewer.neoforge.TeamViewRelayNeoForge"
+def originalFactory = "fun.prof_chen.teamviewer.main_code.core.NeoForgeClientAdapterFactory"
+def originalMixin = "fun.prof_chen.teamviewer.mixin.client.ClientPacketListenerMixin"
+def internalRoot = { String target ->
+    "fun.prof_chen.teamviewer.internal.neoforge.mc_${target.replaceAll(/[^0-9A-Za-z]+/, '_')}"
+}
+def internalClassPrefix = { String target -> "${internalRoot(target)}.adapter" }
+def internalMixinPrefix = { String target ->
+    "fun.prof_chen.teamviewer.internal.neoforge.mixin.mc_${target.replaceAll(/[^0-9A-Za-z]+/, '_')}"
+}
+def internalModule = { String target -> internalRoot(target) }
+def rawAdapterFile = { String target ->
+    rawAdapterDirectory.map { it.file("teamviewer-neoforge-adapter-${target}-raw.jar").asFile }
+}
+def relocatedAdapterFile = { String target ->
+    relocatedAdapterDirectory.map { it.file("teamviewer-neoforge-adapter-${target}.jar").asFile }
+}
+def boundedNeoForgeRange = { String range ->
+    if (!range.endsWith(",)")) return range
+    def lower = range.substring(1, range.length() - 2)
+    def numeric = (lower =~ /^(\d+)\.(\d+)/)
+    if (!numeric.find()) throw new GradleException("Cannot bound NeoForge range ${range}")
+    "[${lower},${numeric.group(1)}.${numeric.group(2).toInteger() + 1})"
+}
+
+sourceSets.main.java.srcDir(generatedTargetsDirectory)
+
+configurations {
+    adapterRelocatorRuntime {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    compileOnly project(":common-sdk")
+    compileOnly project(":client-bootstrap")
+    compileOnly("net.neoforged.fancymodloader:loader:1.0.16") { transitive = false }
+    compileOnly("net.neoforged.fancymodloader:core:1.0.16") { transitive = false }
+    compileOnly("net.neoforged.fancymodloader:language-java:1.0.16") { transitive = false }
+    compileOnly("net.neoforged:bus:7.2.0") { transitive = false }
+    compileOnly("org.spongepowered:mixin:0.8.5") { transitive = false }
+    compileOnly "org.ow2.asm:asm-tree:${project.asm_version}"
+    adapterRelocatorRuntime project(":adapter-relocator")
+
+    testImplementation project(":common-sdk")
+    testImplementation platform("org.junit:junit-bom:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+def quote = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+def generateNeoForgeAioTargets = tasks.register("generateNeoForgeAioTargets") {
+    group = "build"
+    description = "Generate the runtime selector table from the normalized NeoForge manifest."
+    inputs.file(rootProject.file("gradle/minecraft-versions.properties"))
+    outputs.dir(generatedTargetsDirectory)
+    doLast {
+        def packageDir = generatedTargetsDirectory.get().dir(
+                "fun/prof_chen/teamviewer/neoforge/aio").asFile
+        packageDir.mkdirs()
+        def rows = supportedTargets.collect { target ->
+            def targetProfile = targetProfiles[target]
+            def classPrefix = internalClassPrefix(target)
+            def mixinPrefix = internalMixinPrefix(target)
+            def mixins = "List.of(${quote("${mixinPrefix}.${originalMixin}")})"
+            """        new NeoForgeAioTarget(${quote(target)}, ${quote(targetProfile.minecraft_version_range)},
+                ${quote(boundedNeoForgeRange(targetProfile.neoforge_version_range))}, ${quote(targetProfile.adapter_version)},
+                ${targetProfile.adapter_java_release}, ${quote("${classPrefix}.${originalEntrypoint}")},
+                ${quote("${classPrefix}.${originalFactory}")}, ${mixins})"""
+        }.join(",\n")
+        new File(packageDir, "NeoForgeAioTargets.java").setText("""package fun.prof_chen.teamviewer.neoforge.aio;
+
+import java.util.List;
+
+/** Generated from gradle/minecraft-versions.properties. */
+final class NeoForgeAioTargets {
+    static final List<NeoForgeAioTarget> ALL = List.of(
+${rows}
+    );
+
+    private NeoForgeAioTargets() { }
+}
+""", "UTF-8")
+    }
+}
+
+tasks.named("compileJava") {
+    dependsOn(generateNeoForgeAioTargets)
+}
+tasks.named("compileTestJava") {
+    dependsOn(generateNeoForgeAioTargets)
+}
+tasks.named("test") {
+    useJUnitPlatform()
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(sharedJavaRelease)
+}
+java {
+    def javaVersion = JavaVersion.toVersion(sharedJavaRelease)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(sharedJavaRelease)
+    }
+}
+
+def relocateTasks = supportedTargets.collectEntries { target ->
+    def suffix = target.replaceAll(/[^0-9A-Za-z]+/, '_')
+    def taskProvider = tasks.register("relocateNeoForgeAdapter_${suffix}", JavaExec) {
+        group = "build"
+        description = "Relocate the Minecraft ${target} NeoForge adapter into its private game-library namespace."
+        dependsOn(":adapter-relocator:classes")
+        // A root `build` can also produce the default target's raw adapter in this invocation.
+        // The other raw adapters are intentionally staged by their target-specific builds.
+        mustRunAfter(":neoforge:neoForgeRawAdapterJar")
+        classpath = configurations.adapterRelocatorRuntime
+        mainClass = "fun.prof_chen.teamviewer.build.AdapterRelocator"
+        inputs.file(rawAdapterFile(target))
+        inputs.property("classPrefix", internalClassPrefix(target))
+        inputs.property("mixinPrefix", internalMixinPrefix(target))
+        inputs.property("module", internalModule(target))
+        outputs.file(relocatedAdapterFile(target))
+        doFirst {
+            def raw = rawAdapterFile(target).get()
+            if (!raw.isFile()) {
+                throw new GradleException("Missing NeoForge raw adapter ${raw}; build every NeoForge target first")
+            }
+            args(raw.absolutePath, relocatedAdapterFile(target).get().absolutePath,
+                    internalClassPrefix(target), internalMixinPrefix(target), internalModule(target),
+                    "${normalizedVersion}.mc.${target.replaceAll(/[^0-9A-Za-z-]+/, '.')}",
+                    originalMixin.replace('.', '/'))
+        }
+    }
+    [(target): taskProvider]
+}
+
+def canonicalTarget = versionManifest.getProperty("default_neoforge_target")
+def canonicalStandaloneName = targetProfiles[canonicalTarget].standalone_artifact
+        .replace("{mod_version}", project.version.toString())
+def canonicalStandalone = rootProject.layout.projectDirectory.file("build-artifacts/${canonicalStandaloneName}")
+
+def sha256 = multiVersionPackaging.sha256Bytes
+def minecraftUnion = supportedTargets.collect { targetProfiles[it].minecraft_version_range }.join(",")
+def neoForgeUnion = supportedTargets.collect { boundedNeoForgeRange(targetProfiles[it].neoforge_version_range) }
+        .unique().join(",")
+
+processResources {
+    inputs.property("mod_version", normalizedVersion)
+    inputs.property("minecraft_version", minecraftUnion)
+    inputs.property("neoforge_version", neoForgeUnion)
+    filteringCharset = "UTF-8"
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand(mod_version: normalizedVersion, minecraft_version: minecraftUnion,
+                neoforge_version: neoForgeUnion)
+    }
+    filesMatching("META-INF/mods.toml") {
+        expand(mod_version: normalizedVersion, minecraft_version: minecraftUnion,
+                neoforge_version: neoForgeUnion)
+    }
+    from(rootProject.file("fabric/src/main/resources")) {
+        include "assets/**"
+    }
+    from(rootProject.file("neoforge-adapter/src/shared/resources")) {
+        include "pack.mcmeta"
+    }
+    from(rootProject.file("fabric/src/main/resources/assets/teamviewer/icon.ico")) {
+        rename { "teamviewer-icon.png" }
+    }
+}
+
+def generateNeoForgeAioPayload = tasks.register("generateNeoForgeAioPayload") {
+    group = "build"
+    description = "Combine canonical shared JarJar dependencies with all relocated NeoForge adapters."
+    dependsOn(relocateTasks.values())
+    inputs.file(canonicalStandalone)
+    inputs.files(supportedTargets.collect { relocatedAdapterFile(it) })
+    inputs.files(supportedTargets.collect { rawAdapterFile(it) })
+    inputs.file(rootProject.file("gradle/minecraft-versions.properties"))
+    outputs.dir(generatedPayloadDirectory)
+    doLast {
+        def canonical = canonicalStandalone.asFile
+        if (!canonical.isFile()) {
+            throw new GradleException("Missing canonical NeoForge standalone ${canonical}; collect target ${canonicalTarget} first")
+        }
+        def outputRoot = generatedPayloadDirectory.get().asFile
+        project.delete(outputRoot)
+        def jarJarRoot = new File(outputRoot, "META-INF/jarjar")
+        def teamviewerRoot = new File(outputRoot, "META-INF/teamviewer")
+        jarJarRoot.mkdirs()
+        teamviewerRoot.mkdirs()
+
+        def canonicalZip = new java.util.zip.ZipFile(canonical)
+        def canonicalMetadata
+        try {
+            canonicalMetadata = multiVersionPackaging.readZipJson(
+                    canonicalZip, "META-INF/jarjar/metadata.json")
+            canonicalMetadata.jars.each { nested ->
+                def entry = canonicalZip.getEntry(nested.path as String)
+                if (entry == null) throw new GradleException("Canonical standalone is missing ${nested.path}")
+                new File(outputRoot, nested.path as String).withOutputStream { destination ->
+                    canonicalZip.getInputStream(entry).withCloseable { it.transferTo(destination) }
+                }
+            }
+        } finally {
+            canonicalZip.close()
+        }
+
+        def targetRows = []
+        def adapterMetadataRows = []
+        supportedTargets.each { target ->
+            def targetProfile = targetProfiles[target]
+            def relocated = relocatedAdapterFile(target).get()
+            def raw = rawAdapterFile(target).get()
+            def rawZip = new java.util.zip.ZipFile(raw)
+            def rawMetadata
+            try {
+                rawMetadata = multiVersionPackaging.readZipJson(
+                        rawZip, "META-INF/teamviewer/neoforge-adapter.json")
+            } finally {
+                rawZip.close()
+            }
+            if (rawMetadata.minecraft != target || rawMetadata.entrypoint != originalEntrypoint
+                    || rawMetadata.factory != originalFactory || rawMetadata.mixins != [originalMixin]) {
+                throw new GradleException("Raw NeoForge adapter metadata mismatch for ${target}: ${rawMetadata}")
+            }
+            def nestedName = relocated.name
+            java.nio.file.Files.copy(relocated.toPath(), new File(jarJarRoot, nestedName).toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            def artifactVersion = "${normalizedVersion}.mc.${target.replaceAll(/[^0-9A-Za-z-]+/, '.')}"
+            adapterMetadataRows << [
+                    identifier: [group: "fun.prof_chen.teamviewer.internal.neoforge",
+                                 artifact: "adapter-${target.replaceAll(/[^0-9A-Za-z-]+/, '-')}"],
+                    version: [range: "[${artifactVersion}]", artifactVersion: artifactVersion],
+                    path: "META-INF/jarjar/${nestedName}",
+                    isObfuscated: false
+            ]
+            byte[] bytes = java.nio.file.Files.readAllBytes(relocated.toPath())
+            targetRows << [
+                    minecraft: target,
+                    minecraftRange: targetProfile.minecraft_version_range,
+                    neoforgeRange: boundedNeoForgeRange(targetProfile.neoforge_version_range),
+                    adapter: targetProfile.adapter_version,
+                    adapterJavaRelease: targetProfile.adapter_java_release.toInteger(),
+                    module: internalModule(target),
+                    classNamespace: internalClassPrefix(target),
+                    mixinNamespace: internalMixinPrefix(target),
+                    file: "META-INF/jarjar/${nestedName}",
+                    size: bytes.length,
+                    sha256: sha256(bytes)
+            ]
+        }
+        new File(jarJarRoot, "metadata.json").text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson([jars: canonicalMetadata.jars + adapterMetadataRows]))
+        new File(teamviewerRoot, "neoforge-targets.json").text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson([
+                        modVersion: project.version.toString(),
+                        minecraftRange: minecraftUnion,
+                        neoforgeRange: neoForgeUnion,
+                        targets: targetRows
+                ]))
+    }
+}
+
+def packageNeoForgeAio = tasks.register("packageNeoForgeAio", Jar) {
+    group = "build"
+    description = "Assemble the experimental NeoForge multi-version All-in-One Jar."
+    dependsOn(tasks.named("classes"), project(":client-bootstrap").tasks.named("classes"),
+            generateNeoForgeAioPayload)
+    archiveFileName.set("${project.archives_base_name}-NeoForge-MC${supportedTargets.first()}-to-" +
+            "${supportedTargets.last()}-All-in-One-${project.version}.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("libs"))
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    from(sourceSets.main.output)
+    from(project(":client-bootstrap").sourceSets.main.output)
+    from(generatedPayloadDirectory)
+    from(rootProject.file("LICENSE.txt")) {
+        rename { "${it}_${project.archives_base_name}-neoforge-all" }
+    }
+}
+
+def verifyNeoForgeAio = tasks.register("verifyNeoForgeAio") {
+    group = "verification"
+    description = "Verify NeoForge AIO module isolation, metadata, bytecode and target completeness."
+    dependsOn(packageNeoForgeAio)
+    inputs.file(packageNeoForgeAio.flatMap { it.archiveFile })
+    doLast {
+        def artifact = packageNeoForgeAio.get().archiveFile.get().asFile
+        def zip = new java.util.zip.ZipFile(artifact)
+        try {
+            def names = zip.entries().collect { it.name }
+            def entries = names as Set
+            ["META-INF/neoforge.mods.toml", "META-INF/mods.toml", "META-INF/jarjar/metadata.json",
+             "pack.mcmeta", "teamviewer-icon.png",
+             "META-INF/teamviewer/neoforge-targets.json", "teamviewer.neoforge.aio.mixins.json",
+             "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
+             "fun/prof_chen/teamviewer/neoforge/aio/TeamViewRelayNeoForgeAllInOne.class"].each { required ->
+                if (!entries.contains(required)) throw new GradleException("NeoForge AIO missing ${required}")
+            }
+            multiVersionPackaging.verifyNeoForgeResourcePack(zip, "NeoForge AIO")
+            def provider = multiVersionPackaging.readZipText(zip,
+                    "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory")
+                    .readLines().collect { it.trim() }.findAll { !it.isEmpty() }
+            if (provider != ["fun.prof_chen.teamviewer.neoforge.aio.NeoForgeAioFactory"]) {
+                throw new GradleException("NeoForge AIO must expose only its dispatcher factory: ${provider}")
+            }
+            def descriptor = multiVersionPackaging.readZipText(zip, "META-INF/neoforge.mods.toml")
+            def legacyDescriptor = multiVersionPackaging.readZipText(zip, "META-INF/mods.toml")
+            if (!descriptor.contains('loaderVersion="[1,)"')
+                    || !legacyDescriptor.contains('loaderVersion="[1,)"')) {
+                throw new GradleException("NeoForge AIO descriptors must support every bundled FML generation")
+            }
+            if (!descriptor.contains('type="required"') || !legacyDescriptor.contains("mandatory=true")) {
+                throw new GradleException("NeoForge AIO descriptors do not match their FML schema")
+            }
+            if (!descriptor.contains('logoFile="teamviewer-icon.png"')
+                    || !legacyDescriptor.contains('logoFile="teamviewer-icon.png"')) {
+                throw new GradleException("NeoForge AIO logo must be a root Jar resource")
+            }
+            if (descriptor.count("[[mods]]") != 1) {
+                throw new GradleException("NeoForge AIO must declare exactly one root Mod")
+            }
+            def targetInfo = multiVersionPackaging.readZipJson(
+                    zip, "META-INF/teamviewer/neoforge-targets.json")
+            if ((targetInfo.targets*.minecraft as Set) != supportedTargets as Set) {
+                throw new GradleException("NeoForge AIO target metadata differs from the manifest")
+            }
+            def metadata = multiVersionPackaging.readZipJson(zip, "META-INF/jarjar/metadata.json")
+            def adapterRows = metadata.jars.findAll {
+                it.identifier?.group == "fun.prof_chen.teamviewer.internal.neoforge"
+            }
+            if (adapterRows.size() != supportedTargets.size()) {
+                throw new GradleException("NeoForge AIO has ${adapterRows.size()} adapters; expected ${supportedTargets.size()}")
+            }
+            targetInfo.targets.each { target ->
+                def nested = zip.getEntry(target.file as String)
+                if (nested == null) throw new GradleException("Missing nested adapter ${target.file}")
+                byte[] bytes = multiVersionPackaging.readZipBytes(zip, nested.name)
+                if (bytes.length != target.size || sha256(bytes) != target.sha256) {
+                    throw new GradleException("Nested adapter hash mismatch for ${target.minecraft}")
+                }
+                def nestedZip = new java.util.zip.ZipInputStream(new ByteArrayInputStream(bytes))
+                def nestedNames = []
+                def manifestBytes = null
+                int nestedModAnnotations = 0
+                try {
+                    java.util.zip.ZipEntry entry
+                    while ((entry = nestedZip.nextEntry) != null) {
+                        nestedNames << entry.name
+                        if (entry.name == "META-INF/MANIFEST.MF") manifestBytes = nestedZip.readAllBytes()
+                        if (entry.name.endsWith(".class")) {
+                            def classText = new String(nestedZip.readAllBytes(),
+                                    java.nio.charset.StandardCharsets.ISO_8859_1)
+                            if (classText.contains("Lnet/neoforged/fml/common/Mod;")) nestedModAnnotations++
+                        }
+                    }
+                } finally {
+                    nestedZip.close()
+                }
+                def prefixes = [target.classNamespace, target.mixinNamespace].collect {
+                    (it as String).replace('.', '/') + "/"
+                }
+                if (!nestedNames.findAll { it.endsWith(".class") }.every { name ->
+                    prefixes.any { name.startsWith(it) }
+                }) {
+                    throw new GradleException("Adapter ${target.minecraft} leaked classes outside ${prefixes}")
+                }
+                if (nestedNames.any { it == "META-INF/mods.toml" || it.endsWith("neoforge.mods.toml")
+                        || it.contains("META-INF/services/")
+                        || it.endsWith(".mixins.json") }) {
+                    throw new GradleException("Adapter ${target.minecraft} contains active Mod metadata")
+                }
+                if (nestedModAnnotations != 0) {
+                    throw new GradleException("Adapter ${target.minecraft} still contains a @Mod entrypoint")
+                }
+                def manifest = new java.util.jar.Manifest(new ByteArrayInputStream(manifestBytes))
+                if (manifest.mainAttributes.getValue("FMLModType") != "GAMELIBRARY"
+                        || manifest.mainAttributes.getValue("Automatic-Module-Name") != target.module) {
+                    throw new GradleException("Adapter ${target.minecraft} has invalid GAMELIBRARY manifest")
+                }
+            }
+            int expectedRootMajor = sharedJavaRelease + 44
+            int rootModAnnotations = 0
+            names.findAll { it.endsWith(".class") }.each { name ->
+                byte[] classBytes = multiVersionPackaging.readZipBytes(zip, name)
+                int major = multiVersionPackaging.classMajor(classBytes)
+                if (major > expectedRootMajor) {
+                    throw new GradleException("NeoForge AIO root class ${name} has major ${major} > ${expectedRootMajor}")
+                }
+                if (new String(classBytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                        .contains("Lnet/neoforged/fml/common/Mod;")) rootModAnnotations++
+            }
+            if (rootModAnnotations != 1) {
+                throw new GradleException("NeoForge AIO has ${rootModAnnotations} root @Mod classes; expected one")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named("build") {
+    dependsOn(verifyNeoForgeAio)
+}

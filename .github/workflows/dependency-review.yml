@@ -9,6 +9,7 @@ on:
       - 'common/**'
       - 'fabric/**'
       - 'neoforge/**'
+      - 'neoforge-adapter/**'
 
 jobs:
   dependency-review:

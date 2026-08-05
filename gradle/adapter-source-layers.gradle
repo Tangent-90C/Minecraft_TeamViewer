@@ -32,7 +32,11 @@ ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
         throw new GradleException("Invalid or missing adapter marker: ${adapterMarker}")
     }
     def effective = new LinkedHashMap<String, File>()
-    effective.putAll(sourceFiles(sharedRoot))
+    def origins = new LinkedHashMap<String, String>()
+    sourceFiles(sharedRoot).each { relative, source ->
+        effective[relative] = source
+        origins[relative] = "shared"
+    }
     def selectedLayers = []
     def compatibilityOwners = [:]
     def compatRoot = new File(sourceRoot, "compat")
@@ -68,6 +72,7 @@ ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
                 }
                 compatibilityOwners[relative] = layerRoot
                 effective[relative] = source
+                origins[relative] = "compat:${layerRoot.name}"
             }
         }
     }
@@ -78,6 +83,7 @@ ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
                     "Redundant version override for ${adapter} ${relative}; it is identical to ${previous}")
         }
         effective[relative] = source
+        origins[relative] = "version:${adapter}"
     }
 
     def roots = [sharedRoot] + selectedLayers + [versionRoot]
@@ -91,6 +97,7 @@ ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
             adapter: adapter,
             layers: selectedLayers.collect { it.name },
             entries: effective.asImmutable(),
+            origins: origins.asImmutable(),
             javaRoots: javaRoots.asImmutable(),
             resourceRoots: resourceRoots.asImmutable(),
             javaFiles: javaFiles.asImmutable(),

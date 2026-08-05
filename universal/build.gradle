@@ -3,6 +3,7 @@ plugins {
 }
 
 apply from: rootProject.file("gradle/minecraft-target-profiles.gradle")
+apply from: rootProject.file("gradle/multi-version-packaging.gradle")
 
 def versionManifest = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
@@ -69,16 +70,7 @@ def processedSharedFiles = providers.provider {
 
 def generatedMetadataDirectory = layout.buildDirectory.dir("generated/universal-metadata")
 
-def sha256 = { File file ->
-    def digest = java.security.MessageDigest.getInstance("SHA-256")
-    file.withInputStream { stream ->
-        byte[] buffer = new byte[8192]
-        for (int read = stream.read(buffer); read >= 0; read = stream.read(buffer)) {
-            if (read > 0) digest.update(buffer, 0, read)
-        }
-    }
-    digest.digest().collect { String.format("%02x", it & 0xff) }.join()
-}
+def sha256 = multiVersionPackaging.sha256File
 
 def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
     group = "build"
@@ -151,8 +143,7 @@ def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
             def adapterZip = new java.util.zip.ZipFile(adapterFile)
             def adapterMod
             try {
-                adapterMod = new groovy.json.JsonSlurper().parse(
-                        adapterZip.getInputStream(adapterZip.getEntry("fabric.mod.json")))
+                adapterMod = multiVersionPackaging.readZipJson(adapterZip, "fabric.mod.json")
             } finally {
                 adapterZip.close()
             }
@@ -197,7 +188,7 @@ def packageUniversalJar = tasks.register("packageUniversalJar", Jar) {
     from(project(":fabric-bootstrap").sourceSets.main.output)
     from(project(":client-bootstrap").sourceSets.main.output)
     from(rootProject.file("fabric/src/main/resources")) {
-        include "assets/**"
+        include "assets/**", "pack.mcmeta"
     }
     from(rootProject.file("LICENSE.txt")) {
         rename { "${it}_${project.archives_base_name}-all" }
@@ -222,6 +213,9 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
         def zip = new java.util.zip.ZipFile(universalFile)
         try {
             def entries = zip.entries().collect { it.name } as Set
+            if (!entries.contains("pack.mcmeta")) {
+                throw new GradleException("Universal Jar is missing ResourcePack metadata")
+            }
             def expectedAdapters = adapterFiles.collect { "META-INF/jars/${it.get().name}" } as Set
             def actualAdapters = entries.findAll { it.startsWith("META-INF/jars/teamviewer-adapter-") && it.endsWith(".jar") } as Set
             if (actualAdapters != expectedAdapters) {
@@ -251,12 +245,12 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
                     nestedZip.close()
                 }
             }
-            def rootMod = new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry("fabric.mod.json")))
+            def rootMod = multiVersionPackaging.readZipJson(zip, "fabric.mod.json")
             if (rootMod.id != "team-view-relay" || rootMod.depends?.get("team-view-relay-adapter") != "*") {
                 throw new GradleException("Invalid universal root Fabric metadata")
             }
-            def targetInfo = new groovy.json.JsonSlurper().parse(
-                    zip.getInputStream(zip.getEntry("META-INF/teamviewer/targets.json")))
+            def targetInfo = multiVersionPackaging.readZipJson(
+                    zip, "META-INF/teamviewer/targets.json")
             if ((targetInfo.targets*.minecraft as Set) != supportedTargets.collect {
                 targetProfiles[it].minecraft_target_version
             } as Set) {
@@ -265,25 +259,16 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
             targetInfo.targets.each { target ->
                 def nestedEntry = zip.getEntry(target.file as String)
                 File expectedFile = adapterFiles.find { "META-INF/jars/${it.get().name}" == target.file }.get()
-                def nestedDigest = java.security.MessageDigest.getInstance("SHA-256")
-                if (nestedEntry != null) {
-                    zip.getInputStream(nestedEntry).withCloseable { stream ->
-                        byte[] buffer = new byte[8192]
-                        for (int read = stream.read(buffer); read >= 0; read = stream.read(buffer)) {
-                            if (read > 0) nestedDigest.update(buffer, 0, read)
-                        }
-                    }
-                }
-                def nestedSha = nestedEntry == null ? null : nestedDigest.digest()
-                        .collect { String.format("%02x", it & 0xff) }.join()
+                def nestedSha = nestedEntry == null ? null :
+                        multiVersionPackaging.sha256Bytes(
+                                multiVersionPackaging.readZipBytes(zip, nestedEntry.name))
                 if (nestedEntry == null || target.sha256 != sha256(expectedFile)
                         || target.sha256 != nestedSha || target.size != expectedFile.length()) {
                     throw new GradleException("Adapter hash/size mismatch for ${target.minecraft}")
                 }
                 def adapterZip = new java.util.zip.ZipFile(expectedFile)
                 try {
-                    def adapterMod = new groovy.json.JsonSlurper().parse(
-                            adapterZip.getInputStream(adapterZip.getEntry("fabric.mod.json")))
+                    def adapterMod = multiVersionPackaging.readZipJson(adapterZip, "fabric.mod.json")
                     if (adapterMod.id != "team-view-relay-adapter"
                             || adapterMod.version != target.internalAdapterVersion
                             || adapterMod.depends?.minecraft != target.minecraftRange
@@ -291,7 +276,7 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
                         throw new GradleException("Invalid nested adapter metadata for ${target.minecraft}")
                     }
                     def providerPath = "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory"
-                    def providers = adapterZip.getInputStream(adapterZip.getEntry(providerPath)).getText("UTF-8")
+                    def providers = multiVersionPackaging.readZipText(adapterZip, providerPath)
                             .readLines().collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith("#") }
                     if (providers.size() != 1) {
                         throw new GradleException("Adapter ${target.minecraft} must expose exactly one Factory")
@@ -321,14 +306,8 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
             }
             int expectedSharedMajor = sharedJavaRelease + 44
             entries.findAll { it.endsWith(".class") }.each { name ->
-                byte[] header = new byte[8]
-                def stream = zip.getInputStream(zip.getEntry(name))
-                try {
-                    if (stream.read(header) != 8) throw new GradleException("Invalid root class ${name}")
-                } finally {
-                    stream.close()
-                }
-                int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                int major = multiVersionPackaging.classMajor(
+                        multiVersionPackaging.readZipBytes(zip, name))
                 if (major > expectedSharedMajor) {
                     throw new GradleException("Universal root class ${name} has major ${major}, expected <= ${expectedSharedMajor}")
                 }
@@ -341,14 +320,8 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
                         if (!entry.name.endsWith(".class")) return
                         def versioned = (entry.name =~ /^META-INF\/versions\/(\d+)\//)
                         if (versioned.find() && versioned.group(1).toInteger() > sharedJavaRelease) return
-                        byte[] header = new byte[8]
-                        def stream = sharedZip.getInputStream(entry)
-                        try {
-                            if (stream.read(header) != 8) throw new GradleException("Invalid class ${entry.name}")
-                        } finally {
-                            stream.close()
-                        }
-                        int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                        int major = multiVersionPackaging.classMajor(
+                                multiVersionPackaging.readZipBytes(sharedZip, entry.name))
                         maximumMajor = Math.max(maximumMajor, major)
                         if (major > expectedSharedMajor) {
                             throw new GradleException(

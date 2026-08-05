@@ -829,6 +829,9 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             def entries = entryNames as Set
             def descriptorEntry = zip.getEntry("fabric.mod.json")
             if (descriptorEntry == null) throw new GradleException("Standalone is missing fabric.mod.json")
+            if (!entries.contains("pack.mcmeta")) {
+                throw new GradleException("Standalone is missing ResourcePack metadata")
+            }
             def descriptor = new groovy.json.JsonSlurper().parse(zip.getInputStream(descriptorEntry))
             if (descriptor.id != "team-view-relay"
                     || descriptor.depends?.minecraft != fabricMinecraftVersionRange

@@ -18,6 +18,9 @@ on:
       - 'fabric/**'
       - 'neoforge/**'
       - 'neoforge-legacy/**'
+      - 'neoforge-adapter/**'
+      - 'neoforge-aio/**'
+      - 'adapter-relocator/**'
       - 'universal/**'
       - 'gradle/**'
       - 'gradle.properties'
@@ -39,6 +42,9 @@ on:
       - 'fabric/**'
       - 'neoforge/**'
       - 'neoforge-legacy/**'
+      - 'neoforge-adapter/**'
+      - 'neoforge-aio/**'
+      - 'adapter-relocator/**'
       - 'universal/**'
       - 'gradle/**'
       - 'gradle.properties'
@@ -56,7 +62,9 @@ jobs:
       matrix: ${{ steps.targets.outputs.matrix }}
       shared-java: ${{ steps.targets.outputs.shared-java }}
       packaging-java: ${{ steps.targets.outputs.packaging-java }}
+      gradle-java: ${{ steps.targets.outputs.gradle-java }}
       full-fabric-matrix: ${{ steps.targets.outputs.full-fabric-matrix }}
+      neoforge-runtime-matrix: ${{ steps.targets.outputs.neoforge-runtime-matrix }}
     steps:
       - uses: actions/checkout@v6
       - name: Test target manifest tooling
@@ -70,7 +78,18 @@ jobs:
           echo "matrix=$(python3 scripts/minecraft_targets.py ci-matrix)" >> "$GITHUB_OUTPUT"
           echo "shared-java=$(python3 scripts/minecraft_targets.py shared-java)" >> "$GITHUB_OUTPUT"
           echo "packaging-java=$(python3 scripts/minecraft_targets.py packaging-java)" >> "$GITHUB_OUTPUT"
+          {
+            echo 'gradle-java<<EOF'
+            python3 scripts/minecraft_targets.py list-gradle-java
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
           echo "full-fabric-matrix=$(python3 scripts/minecraft_targets.py full-fabric-ci-matrix)" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            runtime_matrix="$(python3 scripts/minecraft_targets.py latest-neoforge-runtime-matrix)"
+          else
+            runtime_matrix='{"include":[]}'
+          fi
+          echo "neoforge-runtime-matrix=$runtime_matrix" >> "$GITHUB_OUTPUT"
 
   common-java17:
     runs-on: ubuntu-latest
@@ -107,7 +126,7 @@ jobs:
       - name: Set up target build environment
         uses: ./.github/actions/setup-build
         with:
-          java-version: '${{ matrix.java }}'
+          java-version: '${{ needs.manifest.outputs.gradle-java }}'
           setup-task: 'true'
       - name: Build ${{ matrix.loader }} Minecraft ${{ matrix.minecraft }}
         shell: bash
@@ -129,6 +148,13 @@ jobs:
         with:
           name: team-view-relay-adapter-fabric-${{ matrix.minecraft }}
           path: build/adapter-artifacts/*.jar
+          if-no-files-found: error
+      - name: Upload internal NeoForge adapter
+        if: matrix.loader == 'neoforge'
+        uses: actions/upload-artifact@v6
+        with:
+          name: team-view-relay-adapter-neoforge-${{ matrix.minecraft }}
+          path: build/neoforge-adapter-artifacts/*.jar
           if-no-files-found: error
 
   full-fabric-compatibility:
@@ -153,6 +179,39 @@ jobs:
       - name: Compile exact Fabric runtime ${{ matrix.release }}
         run: task check-fabric-runtime RUNTIME="${{ matrix.release }}"
 
+  full-neoforge-compatibility:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: manifest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.manifest.outputs.neoforge-runtime-matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Set up NeoForge compatibility environment
+        uses: ./.github/actions/setup-build
+        with:
+          java-version: '${{ needs.manifest.outputs.gradle-java }}'
+          setup-task: 'true'
+      - name: Ensure virtual display is available
+        shell: bash
+        run: |
+          if ! command -v xvfb-run >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --yes xvfb
+          fi
+      - name: Build Minecraft ${{ matrix.minecraft }} with NeoForge ${{ matrix.neoforge_runtime }}
+        env:
+          TEAMVIEWER_RUN_TCK: '1'
+        run: >-
+          task check-neoforge-runtime TARGET="${{ matrix.minecraft }}"
+          NEOFORGE_RUNTIME="${{ matrix.neoforge_runtime }}"
+
   universal-package:
     runs-on: ubuntu-latest
     needs: [manifest, common-java17, target-build]
@@ -176,14 +235,21 @@ jobs:
       - name: Download slim adapters
         uses: actions/download-artifact@v7
         with:
-          pattern: team-view-relay-adapter-*
+          pattern: team-view-relay-adapter-fabric-*
           path: build/adapter-artifacts
+          merge-multiple: true
+      - name: Download NeoForge slim adapters
+        uses: actions/download-artifact@v7
+        with:
+          pattern: team-view-relay-adapter-neoforge-*
+          path: build/neoforge-adapter-artifacts
           merge-multiple: true
       - name: Package and verify All-in-One
         shell: bash
         run: |
-          ./gradlew --no-daemon :universal:build
+          ./gradlew --no-daemon verifySourcePlanParity :universal:build :neoforge-aio:build
           python3 scripts/minecraft_targets.py collect-universal
+          python3 scripts/minecraft_targets.py collect-neoforge-aio
           python3 scripts/minecraft_targets.py verify-release-set
       - name: Upload official release Jars
         uses: actions/upload-artifact@v6

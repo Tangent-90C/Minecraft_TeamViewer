@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import pathlib
 import sys
 import tempfile
@@ -33,8 +36,8 @@ class MinecraftTargetsTest(unittest.TestCase):
 
     @staticmethod
     def _write_source_layout_skeleton(root: pathlib.Path) -> None:
-        for module in ("fabric", "neoforge", "neoforge-legacy"):
-            (root / module / "src/version").mkdir(parents=True)
+        for source_family in ("fabric", "neoforge-adapter"):
+            (root / source_family / "src/version").mkdir(parents=True)
         for adapter in ("1.20.1", "1.20.2"):
             version_root = root / "fabric/src/version" / adapter
             version_root.mkdir()
@@ -82,6 +85,60 @@ class MinecraftTargetsTest(unittest.TestCase):
             minecraft_targets.profile(matrix.properties, "neoforge", "26.2")["adapter_version"],
         )
 
+        beta = minecraft_targets.profile(matrix.properties, "neoforge", "1.21.6")
+        self.assertEqual("beta", beta["stability"])
+        self.assertEqual("1.21.8", beta["adapter_version"])
+        self.assertEqual("[21.6.20-beta,21.7)", beta["neoforge_version_range"])
+        self.assertEqual("26.1,26.1.1,26.1.2", minecraft_targets.profile(
+            matrix.properties, "neoforge", "26.1.2"
+        )["covers"])
+
+    def test_neoforge_matrix_covers_every_release_from_1_20_2(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        owners = {release: [] for release in matrix.official[matrix.official.index("1.20.2"): ]}
+        for target in matrix.neoforge:
+            target_profile = minecraft_targets.profile(matrix.properties, "neoforge", target)
+            for release in target_profile["covers"].split(","):
+                owners[release].append(target)
+
+        self.assertEqual(19, len(matrix.neoforge))
+        self.assertEqual(21, len(owners))
+        self.assertTrue(all(len(targets) == 1 for targets in owners.values()))
+        self.assertNotIn("1.20.1", owners)
+
+    def test_beta_runtime_ranges_allow_updates_only_within_the_same_line(self) -> None:
+        self.assertTrue(minecraft_targets.version_in_range(
+            "20.3.8-beta", "[20.3.8-beta,20.4)"
+        ))
+        self.assertTrue(minecraft_targets.version_in_range(
+            "20.3.9-beta", "[20.3.8-beta,20.4)"
+        ))
+        self.assertTrue(minecraft_targets.version_in_range(
+            "20.3.9", "[20.3.8-beta,20.4)"
+        ))
+        self.assertFalse(minecraft_targets.version_in_range(
+            "20.3.7-beta", "[20.3.8-beta,20.4)"
+        ))
+        self.assertFalse(minecraft_targets.version_in_range(
+            "20.4.0-beta", "[20.3.8-beta,20.4)"
+        ))
+
+    def test_latest_neoforge_runtime_matrix_selects_each_beta_line(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        available = (
+            "20.3.8-beta", "20.3.9-beta", "20.4.251",
+            "20.5.21-beta", "21.2.1-beta", "21.6.20-beta",
+            "21.7.25-beta", "21.9.16-beta", "26.2.0.48-beta",
+        )
+        payload = minecraft_targets.latest_neoforge_runtime_matrix(matrix, available)
+        selected = {
+            entry["minecraft"]: entry["neoforge_runtime"] for entry in payload["include"]
+        }
+
+        self.assertEqual("20.3.9-beta", selected["1.20.3"])
+        self.assertEqual("26.2.0.48-beta", selected["26.2"])
+        self.assertEqual(7, len(selected))
+
     def test_every_adapter_source_has_one_explainable_origin(self) -> None:
         matrix = minecraft_targets.load_manifest()
         for loader, targets in (("fabric", matrix.fabric), ("neoforge", matrix.neoforge)):
@@ -93,6 +150,103 @@ class MinecraftTargetsTest(unittest.TestCase):
                     all(entry.origin == "shared" or entry.origin.startswith(("compat:", "version:"))
                         for entry in plan.entries.values())
                 )
+
+    def test_neoforge_build_frontends_share_one_source_family(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        legacy = minecraft_targets.source_plan(matrix, "neoforge", "1.20.6")
+        modern = minecraft_targets.source_plan(matrix, "neoforge", "1.21")
+        runtime = pathlib.Path(
+            "java/fun/prof_chen/teamviewer/main_code/network/bridge/NeoForgeRuntimeGateway.java"
+        )
+
+        self.assertEqual("neoforge-legacy", legacy.module)
+        self.assertEqual("neoforge", modern.module)
+        self.assertEqual(legacy.entries[runtime].path, modern.entries[runtime].path)
+        legacy_descriptor = pathlib.Path("resources/META-INF/mods.toml")
+        modern_descriptor = pathlib.Path("resources/META-INF/neoforge.mods.toml")
+        resource_pack = pathlib.Path("resources/pack.mcmeta")
+        self.assertIn(legacy_descriptor, legacy.entries)
+        self.assertNotIn(modern_descriptor, legacy.entries)
+        self.assertIn(modern_descriptor, modern.entries)
+        self.assertNotIn(legacy_descriptor, modern.entries)
+        for target in matrix.neoforge:
+            plan = minecraft_targets.source_plan(matrix, "neoforge", target)
+            expected = (
+                {legacy_descriptor}
+                if target in matrix.neoforge_legacy
+                else {modern_descriptor}
+            )
+            actual = {descriptor for descriptor in (legacy_descriptor, modern_descriptor)
+                      if descriptor in plan.entries}
+            self.assertEqual(expected, actual, target)
+            self.assertIn(resource_pack, plan.entries)
+        pack_metadata = json.loads(legacy.entries[resource_pack].path.read_text(encoding="utf-8"))
+        self.assertEqual(18, pack_metadata["pack"]["pack_format"])
+        self.assertEqual([18, 2147483647], pack_metadata["pack"]["supported_formats"])
+        self.assertEqual(18, pack_metadata["pack"]["min_format"])
+        self.assertEqual([2147483647, 2147483647], pack_metadata["pack"]["max_format"])
+        self.assertTrue(
+            all(
+                entry.path.is_relative_to(
+                    minecraft_targets.ROOT / "neoforge-adapter/src"
+                )
+                for plan in (legacy, modern)
+                for entry in plan.entries.values()
+            )
+        )
+        self.assertFalse(any((minecraft_targets.ROOT / "neoforge/src").rglob("*")))
+        self.assertFalse(any((minecraft_targets.ROOT / "neoforge-legacy/src").rglob("*")))
+
+    def test_neoforge_source_families_match_normalized_manifest(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        expected = {
+            minecraft_targets.profile(matrix.properties, "neoforge", target)[
+                "adapter_version"
+            ]
+            for target in matrix.neoforge
+        }
+        actual = {
+            path.name
+            for path in (
+                minecraft_targets.ROOT / "neoforge-adapter/src/version"
+            ).iterdir()
+            if path.is_dir()
+        }
+
+        self.assertEqual(12, len(expected))
+        self.assertEqual(expected, actual)
+        self.assertEqual(
+            "26.1",
+            minecraft_targets.source_plan(matrix, "neoforge", "26.2").adapter,
+        )
+
+    def test_source_plan_json_preserves_build_module_and_real_sources(self) -> None:
+        output = io.StringIO()
+        with unittest.mock.patch.object(
+            sys,
+            "argv",
+            [
+                "minecraft_targets.py",
+                "source-plan",
+                "1.20.2",
+                "--loader",
+                "neoforge",
+                "--format",
+                "json",
+            ],
+        ), contextlib.redirect_stdout(output):
+            minecraft_targets.main()
+
+        payload = json.loads(output.getvalue())
+        self.assertEqual("neoforge-legacy", payload["module"])
+        self.assertEqual("neoforge-adapter", payload["sourceFamily"])
+        self.assertTrue(payload["entries"])
+        self.assertTrue(
+            all(
+                entry["source"].startswith("neoforge-adapter/src/")
+                for entry in payload["entries"]
+            )
+        )
 
     def test_version_override_wins_over_shared_and_compatibility_layer(self) -> None:
         matrix = minecraft_targets.Matrix(

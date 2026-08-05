@@ -7,13 +7,20 @@ TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野
 | --- | --- | --- |
 | Fabric All-in-One | Fabric | `1.18`–`26.2` 之间的全部 31 个正式版本 |
 | Fabric 独立版 | Fabric | 同上，由 17 个按 API 家族划分的 Jar 覆盖 |
-| NeoForge 独立版 | NeoForge | `1.20.2`、`1.20.4`、`1.20.6`、`1.21`、`1.21.1`、`1.21.3`、`1.21.4`、`1.21.5`、`1.21.8`、`1.21.10`、`1.21.11`、`26.1`–`26.1.2`、`26.2` |
+| NeoForge All-in-One（实验性） | NeoForge | `1.20.2`–`26.2` 之间的全部 21 个正式版本 |
+| NeoForge 独立版 | NeoForge | 同上，由 19 个针对实际 Minecraft/NeoForge 组合编译的 Jar 覆盖 |
+
+Minecraft `1.20.3`、`1.20.5`、`1.21.2`、`1.21.6`、`1.21.7`、`1.21.9` 和 `26.2`
+只有 beta NeoForge，相关独立版属于实验性目标。构建时分别固定到已验证的最低 Loader，玩家可以更新
+同一 Minecraft 版本线内的 NeoForge；若新版 beta 出现兼容问题，请先回退到清单中的最低版本并附日志反馈。
+Minecraft `1.20.1` 不作为 NeoForge 目标，计划由后续独立 Forge 版本支持。
 
 `26.2` 存在客户端 UI、相机和 JourneyMap API 变更，因此使用专用产物；不要把
 `26.1.2` 产物强行放到 `26.2`。
 
-Fabric 玩家可选择一个 All-in-One，或选择文件名范围覆盖当前 Minecraft 版本的独立版；
-两者不能同时安装。NeoForge 目前只发布独立版。完整版本变更见 [`CHANGELOG.md`](CHANGELOG.md)。
+Fabric 和 NeoForge 玩家都可选择对应 Loader 的 All-in-One，或选择文件名匹配当前 Minecraft
+版本的独立版；两者不能同时安装。NeoForge All-in-One 首个版本属于实验性产物，遇到整合包或旧 FML
+兼容问题时应换回对应独立版。完整版本变更见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 整套系统通常由以下组件配合使用：
 
@@ -54,7 +61,7 @@ Fabric 玩家可选择一个 All-in-One，或选择文件名范围覆盖当前 M
 
 1. 根据 Minecraft 版本选择 Fabric 或 NeoForge。
 2. Fabric 安装对应 Minecraft 版本的 Fabric API，再选择 All-in-One 或一个匹配的独立版。
-3. NeoForge 选择文件名与 Minecraft 版本匹配的独立版；不提供跨版本 All-in-One。
+3. NeoForge 可选择实验性的 All-in-One，或选择文件名与 Minecraft 版本匹配的独立版；上述 beta 目标同样为实验性。
 4. Java 版本必须与 Minecraft 运行要求一致：
 
 | Minecraft | Java |
@@ -66,6 +73,8 @@ Fabric 玩家可选择一个 All-in-One，或选择文件名范围覆盖当前 M
 Fabric Loader、Fabric API 和 NeoForge 的精确下限由
 [`gradle/minecraft-versions.properties`](gradle/minecraft-versions.properties) 锁定，并写入对应
 Jar 的 Loader 元数据。不要通过修改依赖元数据把某个独立版强行用于文件名范围之外的版本。
+`neoforge_version` 是可复现的构建 pin，`neoforge_version_range` 是玩家可用范围，`stability`
+只用于标记发布渠道。维护者可用 `latest-neoforge-runtime-matrix` 查询每条 beta 线的最新官方版本。
 
 NeoForge 的 JourneyMap、Xaero、SimMC 原生联动会明确报告 `NOT_IMPLEMENTED`，核心连接、同步、HUD、
 世界渲染、配置与 NodeMC 功能不因此缩水。
@@ -98,7 +107,19 @@ task build
 ```
 
 该任务会从版本清单读取全部 Fabric 发布家族和精确 Minecraft runtime，构建全部
-NeoForge 目标、组装 Fabric All-in-One，最后按同一份规范化清单校验发布文件。
+NeoForge 目标、组装 Fabric 与 NeoForge 两个 All-in-One，最后按同一份规范化清单校验发布文件。
+Adapter 构建和精确 Fabric runtime 检查会按 CPU、cgroup 配额和可用内存自动并行；公共 runtime
+准备及两个 All-in-One 的组装保持串行。每个 Gradle 任务预算 2 GiB，另外为系统预留 2 GiB，
+自动并发最多为 8。可以显式调整并发数，低内存或排障时用 `JOBS=1` 恢复串行：
+
+```bash
+task build JOBS=4
+task build JOBS=1
+```
+
+每个子任务的完整输出保存在 `build/parallel-logs/adapters/` 和
+`build/parallel-logs/fabric-runtimes/`；控制台只显示开始、结束、耗时和失败日志末尾。并行目标还使用
+各自的 `build/parallel-project-cache/`，防止不同版本的同名 Gradle 任务互相清理输出。
 使用 `minecraft_targets.py list-*` 命令查询当前数量和范围，避免文档复制易过期的版本表。
 
 本机需要 JDK 17、21、25。任务会优先读取 `JAVA17_HOME`、`JAVA21_HOME`、
@@ -115,6 +136,7 @@ task build
 
 ```bash
 python3 scripts/minecraft_targets.py list-gradle-java
+python3 scripts/minecraft_targets.py latest-neoforge-runtime-matrix
 ```
 
 `build-artifacts` 最终包含清单定义的全部可发布 Jar；实际数量由目标清单推导，文件名直接写明
@@ -124,9 +146,10 @@ Loader 和 Minecraft 支持范围：
 - Fabric 单版本家族：`TeamViewRelay-Fabric-MC1.20.2-<mod_version>.jar`
 - NeoForge 单版本目标：`TeamViewRelay-NeoForge-MC1.20.2-<mod_version>.jar`
 - Fabric 全版本包：`TeamViewRelay-Fabric-MC1.18-to-26.2-All-in-One-<mod_version>.jar`
+- NeoForge 全版本包：`TeamViewRelay-NeoForge-MC1.20.2-to-26.2-All-in-One-<mod_version>.jar`
 
-独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts` 下的 slim adapter
-仅供打包使用，不是玩家可安装产物。
+同一 Loader 的独立版和 All-in-One 二选一安装，不能同时放入 mods 目录。`build/adapter-artifacts`
+和 `build/neoforge-adapter-artifacts` 下的 slim adapter 仅供打包使用，不是玩家可安装产物。
 
 维护者发布版本时应按 [`docs/releasing.md`](docs/releasing.md) 完成版本、测试、校验和、标签和
 GitHub Release 检查，不要直接发布单个默认 Gradle 构建产物。
@@ -228,15 +251,18 @@ task check-fabric-runtime RUNTIME=1.21
 - `common/src/main/java`：网络、配置、同步、战局地图、HUD/世界渲染规划等唯一业务实现
 - `client-bootstrap/src/main/java`：Java 17 Loader 中立启动编排和 Adapter TCK
 - `fabric-bootstrap/src/main/java`：Java 17 Fabric Loader 薄入口
-- `fabric/src/shared` / `neoforge/src/shared` / `neoforge-legacy/src/shared`：对应构建边界内
-  所有目标共用的默认实现
-- 各 Loader 的 `src/compat`：按 HUD、网络、渲染、Screen 等真实 API 边界复用的兼容层，
+- `fabric/src/shared`：所有 Fabric adapter 共用的默认实现
+- `neoforge-adapter/src/shared`：modern ModDev 与 legacy UserDev 共用的 NeoForge 默认实现；
+  两个 Gradle 工程只是编译前端，不拥有第二份源码
+- `fabric/src/compat` / `neoforge-adapter/src/compat`：按 HUD、网络、渲染、Screen 等真实 API 边界复用的兼容层，
   每层通过 `layer.properties` 声明适用 adapter
-- `*/src/version/<adapter>`：adapter 身份文件及只适用于该 adapter 的最终覆盖
+- `fabric/src/version/<adapter>` / `neoforge-adapter/src/version/<adapter>`：adapter 身份文件及单版本最终覆盖
 - `fabric/src/main/resources`：Fabric 公共资源与语言文件
-- `universal`：All-in-One 元数据、组装和产物守卫
+- `universal`：Fabric All-in-One 元数据、组装和产物守卫
+- `neoforge-aio`：Java 17 NeoForge AIO 外壳、目标选择、Mixin 选择与 JarJar 组装
+- `adapter-relocator`：按实际 adapter class 精确重定位 NeoForge slim adapter 的构建工具
 
-使用 `python3 scripts/minecraft_targets.py source-plan <目标> [--loader neoforge]` 可以查看
+使用 `python3 scripts/minecraft_targets.py source-plan <目标> [--loader neoforge] [--format json]` 可以查看
 每个有效文件来自 shared、compat 还是具体版本。版本代码只能实现 Common Adapter SDK，
 不得复制业务逻辑。完整边界与打包约束见
 [`docs/adapter-sdk.md`](docs/adapter-sdk.md) 和

@@ -41,9 +41,27 @@
    python3 scripts/minecraft_targets.py verify-release-set
    ```
 
-   `task build` 必须验证 Fabric 的全部正式 runtime、所有 NeoForge 目标并生成 All-in-One。不要把
-   `fabric/build/libs`、`neoforge/build/libs` 或 `build/adapter-artifacts` 中的中间产物作为 Release
-   附件。
+   `task build` 默认自动并行 adapter 与精确 Fabric runtime 检查，同时限制每个 Gradle 进程的
+   worker 数。可用 `task build JOBS=<数量>` 覆盖自动值；排查并发或内存问题时使用
+   `task build JOBS=1`。子任务日志位于 `build/parallel-logs/`，失败后不会继续组装 AIO。
+
+   发布包含 beta NeoForge 目标时，先查询每条版本线的最新版本并运行兼容构建：
+
+   ```bash
+   python3 scripts/minecraft_targets.py latest-neoforge-runtime-matrix
+   task check-neoforge-runtime TARGET=1.20.3 NEOFORGE_RUNTIME=20.3.8-beta
+   ```
+
+   定时 CI 还会设置 `TEAMVIEWER_RUN_TCK=1`，在虚拟显示器中启动实际客户端；只有严格 Adapter TCK
+   写出通过报告后才结束进程。该流程内部以 `-Padapter_tck_runtime=true` 模拟 standalone 的运行时依赖
+   布局；普通发布构建不会展开 JarJar。本地只想做依赖与打包兼容检查时无需设置该变量。
+
+   如果官方版本高于清单 pin，必须先通过对应目标构建，再同步提高 `neoforge_version` 和
+   `neoforge_version_range` 下限。不得把下一条 Minecraft 的 Loader 版本纳入范围。
+
+   `task build` 必须验证 Fabric 的全部正式 runtime、所有 NeoForge 目标，并生成 Fabric 与 NeoForge
+   两个 All-in-One。不要把 `fabric/build/libs`、`neoforge/build/libs`、`build/adapter-artifacts` 或
+   `build/neoforge-adapter-artifacts` 中的中间产物作为 Release 附件。
 
 4. 为最终发布文件生成校验和，并确认条目数与 Jar 数一致：
 
@@ -67,8 +85,9 @@
 
 4. 创建 GitHub Release，上传 `build-artifacts` 中的全部正式 Jar 和 `SHA256SUMS`。Release 说明至少
    包含支持范围、安装选择、Java 要求、协议兼容性和主要变更。
-5. 发布后从 GitHub 下载至少一个 Fabric 独立版、一个 NeoForge 独立版和 All-in-One，重新核对
-   文件名、SHA-256 与 Loader 元数据。
+5. 发布后从 GitHub 下载至少一个 Fabric 独立版、一个 NeoForge 独立版和两个 Loader 的 All-in-One，
+   重新核对文件名、SHA-256 与 Loader 元数据。NeoForge AIO 在首个版本的说明中标记为实验性，并保留
+   全部 NeoForge 独立包作为回退；发布说明必须单列清单中 `stability=beta` 的实验性目标。
 
 发布过程中不要上传 slim adapter，也不要发布 `sources`、开发环境或未经过
 `verify-release-set` 的 Jar。

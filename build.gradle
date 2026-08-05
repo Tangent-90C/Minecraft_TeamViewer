@@ -2,6 +2,9 @@ plugins {
     id 'base'
 }
 
+apply from: file("gradle/adapter-source-layers.gradle")
+apply from: file("gradle/minecraft-target-profiles.gradle")
+
 version = project.mod_version
 group = project.maven_group
 
@@ -32,13 +35,72 @@ allprojects {
     }
 }
 
+def parallelTargetBuild = providers.gradleProperty("parallel_target_build")
+        .map { it.toBoolean() }.getOrElse(false)
+if (parallelTargetBuild) {
+    [project(":common"), project(":common-sdk"), project(":client-bootstrap"),
+     project(":fabric-bootstrap")].each { sharedProject ->
+        sharedProject.tasks.configureEach {
+            onlyIf("shared outputs were frozen by prepareParallelBuild") { false }
+        }
+    }
+}
+
 tasks.named("build") {
-    dependsOn(":fabric:build", ":neoforge:build")
+    dependsOn(":fabric:build", ":neoforge:build", "verifySourcePlanParity")
+}
+
+tasks.register("verifySourcePlanParity") {
+    group = "verification"
+    description = "Require Gradle and the Python target CLI to resolve identical adapter source plans."
+    inputs.file(file("gradle/minecraft-versions.properties"))
+    inputs.file(file("scripts/minecraft_targets.py"))
+    inputs.files(fileTree("fabric/src"), fileTree("neoforge-adapter/src"))
+    doLast {
+        def legacyTargets = minecraftVersionProperties.getProperty("neoforge_legacy_targets")
+                .split(",").collect { it.trim() } as Set
+        [
+                fabric: minecraftVersionProperties.getProperty("fabric_targets"),
+                neoforge: minecraftVersionProperties.getProperty("neoforge_targets")
+        ].each { loader, targetsValue ->
+            targetsValue.split(",").collect { it.trim() }.each { target ->
+                def targetProfile = normalizedMinecraftProfile(
+                        minecraftVersionProperties, loader, target, project.archives_base_name.toString())
+                def sourceRoot = loader == "fabric"
+                        ? file("fabric/src") : file("neoforge-adapter/src")
+                def layout = resolveAdapterSourceLayers(sourceRoot, targetProfile.adapter_version)
+                def result = providers.exec {
+                    commandLine("python3", "scripts/minecraft_targets.py", "source-plan", target,
+                            "--loader", loader, "--format", "json")
+                }
+                def pythonPlan = new groovy.json.JsonSlurper().parseText(
+                        result.standardOutput.asText.get().trim())
+                def expectedModule = loader == "fabric" ? "fabric" :
+                        (legacyTargets.contains(target) ? "neoforge-legacy" : "neoforge")
+                if (pythonPlan.module != expectedModule || pythonPlan.adapter != layout.adapter
+                        || pythonPlan.layers != layout.layers) {
+                    throw new GradleException("Source plan header mismatch for ${loader}:${target}")
+                }
+                def pythonEntries = pythonPlan.entries.collectEntries {
+                    [(it.path): [origin: it.origin, source: it.source]]
+                }
+                def gradleEntries = layout.entries.collectEntries { relative, source ->
+                    def sourcePath = projectDir.toPath().relativize(source.toPath()).toString()
+                            .replace('\\', '/')
+                    [(relative): [origin: layout.origins[relative], source: sourcePath]]
+                }
+                if (pythonEntries != gradleEntries) {
+                    throw new GradleException("Gradle/Python source plan mismatch for ${loader}:${target}")
+                }
+            }
+        }
+    }
 }
 
 tasks.named("clean") {
     dependsOn(":common:clean", ":common-sdk:clean", ":client-bootstrap:clean", ":fabric-bootstrap:clean",
-            ":fabric:clean", ":neoforge:clean", ":universal:clean")
+            ":fabric:clean", ":neoforge:clean", ":adapter-relocator:clean", ":neoforge-aio:clean",
+            ":universal:clean")
 }
 
 def legacyRuntimeDir = layout.projectDirectory.dir("neoforge-legacy/runtime-libs")
@@ -54,6 +116,13 @@ tasks.register("prepareLegacyNeoForgeRuntime", Sync) {
     from(project(":client-bootstrap").tasks.named("jar").flatMap { it.archiveFile }) {
         rename { "client-bootstrap.jar" }
     }
+}
+
+tasks.register("prepareParallelBuild") {
+    group = "build"
+    description = "Build immutable shared outputs before isolated target builds run in parallel."
+    dependsOn(tasks.named("prepareLegacyNeoForgeRuntime"), ":common:jar", ":common-sdk:jar",
+            ":client-bootstrap:jar", ":fabric-bootstrap:jar")
 }
 
 def selectedLegacyNeoForgeTarget = providers.gradleProperty("neoforge_target").getOrElse("1.20.2")

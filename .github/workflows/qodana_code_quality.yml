@@ -99,8 +99,8 @@ jobs:
           args: --config ${{ matrix.config }}
           pr-mode: ${{ github.event_name == 'pull_request' }}
           use-caches: true
-          primary-cache-key: qodana-2026.2-native-v3-source-layers-${{ matrix.id }}-${{ github.ref }}-${{ github.sha }}
-          additional-cache-key: qodana-2026.2-native-v3-source-layers-${{ matrix.id }}-${{ github.ref }}
+          primary-cache-key: qodana-2026.2-native-v4-unified-neoforge-${{ matrix.id }}-${{ github.ref }}-${{ github.sha }}
+          additional-cache-key: qodana-2026.2-native-v4-unified-neoforge-${{ matrix.id }}-${{ github.ref }}
           post-pr-comment: ${{ matrix.post_pr_comment }}
           use-annotations: true
           upload-result: true

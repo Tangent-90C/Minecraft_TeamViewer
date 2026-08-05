@@ -1,0 +1,15 @@
+{
+  "pack": {
+    "description": "TeamViewRelay client resources",
+    "pack_format": 18,
+    "supported_formats": [
+      18,
+      2147483647
+    ],
+    "min_format": 18,
+    "max_format": [
+      2147483647,
+      2147483647
+    ]
+  }
+}

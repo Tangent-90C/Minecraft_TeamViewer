@@ -10,6 +10,8 @@ import os
 import pathlib
 import re
 import shutil
+import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
 
@@ -17,6 +19,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "gradle" / "minecraft-versions.properties"
 MAP_MANIFEST = ROOT / "gradle" / "map-mod-versions.properties"
 GRADLE_PROPERTIES = ROOT / "gradle.properties"
+NEOFORGE_METADATA_URL = (
+    "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
+)
 
 FABRIC_PROFILE_KEYS = (
     "minecraft_target_version",
@@ -37,6 +42,7 @@ FABRIC_PROFILE_KEYS = (
 )
 NEOFORGE_PROFILE_KEYS = (
     "minecraft_target_version",
+    "covers",
     "minecraft_version_range",
     "neoforge_version_range",
     "adapter_version",
@@ -80,16 +86,16 @@ MODULE_REQUIRED_PORTS = {
         )
     ),
     "neoforge-legacy": tuple(
-        pathlib.Path("java/fun/prof_chen/teamviewer/main_code") / relative
+        pathlib.Path("java") / relative
         for relative in (
-            "core/NeoForgeClientAdapterFactory.java",
-            "client/bridge/NeoForgeClientEventBridge.java",
-            "client/bridge/NeoForgeGameClientBridge.java",
-            "network/bridge/NeoForgeRuntimeGateway.java",
-            "render/NeoForgeWorldRenderSink.java",
-            "render/NeoForgeHudRenderSink.java",
-            "screen/ConfigScreen.java",
-            "screen/PluginManagerScreen.java",
+            "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java",
+            "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeClientEventBridge.java",
+            "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java",
+            "fun/prof_chen/teamviewer/main_code/network/bridge/NeoForgeRuntimeGateway.java",
+            "fun/prof_chen/teamviewer/main_code/render/NeoForgeWorldRenderSink.java",
+            "fun/prof_chen/teamviewer/main_code/render/NeoForgeHudRenderSink.java",
+            "fun/prof_chen/teamviewer/main_code/screen/ConfigScreen.java",
+            "fun/prof_chen/teamviewer/main_code/screen/PluginManagerScreen.java",
         )
     ),
 }
@@ -180,6 +186,7 @@ def profile(properties: dict[str, str], loader: str, target: str) -> dict[str, s
         result.setdefault("slim_adapter_artifact", f"teamviewer-adapter-{target}.jar")
     else:
         legacy = set(value.strip() for value in properties.get("neoforge_legacy_targets", "").split(","))
+        result.setdefault("covers", target)
         result.setdefault("build_kind", "legacy" if target in legacy else "modern")
         result.setdefault("stability", "stable")
         result.setdefault(
@@ -193,6 +200,10 @@ def adapter_module(matrix: Matrix, loader: str, target: str) -> str:
     if loader == "fabric":
         return "fabric"
     return "neoforge-legacy" if target in matrix.neoforge_legacy else "neoforge"
+
+
+def adapter_source_family(loader: str) -> str:
+    return "fabric" if loader == "fabric" else "neoforge-adapter"
 
 
 def module_adapters(matrix: Matrix, module: str) -> tuple[str, ...]:
@@ -226,7 +237,7 @@ def source_plan(matrix: Matrix, loader: str, target: str) -> SourcePlan:
     target_profile = profile(matrix.properties, loader, target)
     adapter = target_profile["adapter_version"]
     module = adapter_module(matrix, loader, target)
-    source_root = ROOT / module / "src"
+    source_root = ROOT / adapter_source_family(loader) / "src"
     entries = {
         relative: SourceEntry(path, "shared")
         for relative, path in _source_files(source_root / "shared").items()
@@ -267,13 +278,28 @@ def source_plan(matrix: Matrix, loader: str, target: str) -> SourcePlan:
 
 
 def validate_source_layout(matrix: Matrix) -> None:
-    for module in ("fabric", "neoforge", "neoforge-legacy"):
-        expected = set(module_adapters(matrix, module))
-        version_root = ROOT / module / "src" / "version"
+    for obsolete in (ROOT / "neoforge/src", ROOT / "neoforge-legacy/src"):
+        obsolete_files = sorted(path for path in obsolete.rglob("*") if path.is_file())
+        if obsolete_files:
+            raise SystemExit(
+                f"NeoForge build frontend must not own adapter sources: {obsolete_files}"
+            )
+    source_families = (
+        ("fabric", set(module_adapters(matrix, "fabric"))),
+        (
+            "neoforge-adapter",
+            {
+                profile(matrix.properties, "neoforge", target)["adapter_version"]
+                for target in matrix.neoforge
+            },
+        ),
+    )
+    for source_family, expected in source_families:
+        version_root = ROOT / source_family / "src" / "version"
         actual = {path.name for path in version_root.iterdir() if path.is_dir()}
         if actual != expected:
             raise SystemExit(
-                f"{module} adapter directories mismatch: "
+                f"{source_family} adapter directories mismatch: "
                 f"missing={sorted(expected - actual)}, unexpected={sorted(actual - expected)}"
             )
         for adapter in sorted(expected):
@@ -281,7 +307,7 @@ def validate_source_layout(matrix: Matrix) -> None:
             if not marker.is_file() or read_properties(marker).get("adapter") != adapter:
                 raise SystemExit(f"Invalid or missing adapter marker: {marker}")
 
-        compat_root = ROOT / module / "src" / "compat"
+        compat_root = ROOT / source_family / "src" / "compat"
         if compat_root.is_dir():
             seen_variants: dict[tuple[pathlib.Path, str], pathlib.Path] = {}
             for layer_root in sorted(path for path in compat_root.iterdir() if path.is_dir()):
@@ -308,7 +334,7 @@ def validate_source_layout(matrix: Matrix) -> None:
                     seen_variants[key] = source
 
         implementations: dict[tuple[pathlib.Path, str], pathlib.Path] = {}
-        implementation_roots = [ROOT / module / "src" / "shared"]
+        implementation_roots = [ROOT / source_family / "src" / "shared"]
         if compat_root.is_dir():
             implementation_roots.extend(path for path in compat_root.iterdir() if path.is_dir())
         implementation_roots.extend(version_root / adapter for adapter in sorted(expected))
@@ -321,6 +347,22 @@ def validate_source_layout(matrix: Matrix) -> None:
                         f"Duplicate adapter implementation for {relative}: {previous} and {source}"
                     )
                 implementations[key] = source
+
+                if relative.parts[0] == "java":
+                    text = source.read_text(encoding="utf-8")
+                    package_match = re.search(r"^package\s+([^;]+);", text, re.MULTILINE)
+                    if package_match is None:
+                        raise SystemExit(f"Adapter Java source has no package declaration: {source}")
+                    expected_relative = (
+                        pathlib.Path("java")
+                        / pathlib.Path(*package_match.group(1).split("."))
+                        / source.name
+                    )
+                    if relative != expected_relative:
+                        raise SystemExit(
+                            f"Adapter source path does not match package: {source}; "
+                            f"expected {expected_relative}"
+                        )
 
     for loader, targets in (("fabric", matrix.fabric), ("neoforge", matrix.neoforge)):
         checked: set[tuple[str, str]] = set()
@@ -365,6 +407,93 @@ def validate_source_layout(matrix: Matrix) -> None:
 def fabric_runtime_profile(properties: dict[str, str], release: str) -> dict[str, str]:
     prefix = f"fabric_runtime.{release}."
     return {key[len(prefix):]: value for key, value in properties.items() if key.startswith(prefix)}
+
+
+def _version_parts(version: str) -> tuple[tuple[int, ...], int]:
+    match = re.fullmatch(r"(\d+(?:\.\d+)+)(?:-(beta))?", version)
+    if match is None:
+        raise SystemExit(f"Unsupported NeoForge version: {version}")
+    numbers = tuple(int(part) for part in match.group(1).split("."))
+    # A stable release sorts after the beta with the same numeric components.
+    return numbers, 0 if match.group(2) == "beta" else 1
+
+
+def compare_versions(left: str, right: str) -> int:
+    left_numbers, _ = _version_parts(left)
+    right_numbers, _ = _version_parts(right)
+    width = max(len(left_numbers), len(right_numbers))
+    left_key = left_numbers + (0,) * (width - len(left_numbers))
+    right_key = right_numbers + (0,) * (width - len(right_numbers))
+    # Runtime range boundaries identify a Minecraft/NeoForge numeric line.
+    # Qualifiers do not let a beta from the next line slip below its boundary.
+    return (left_key > right_key) - (left_key < right_key)
+
+
+def version_in_range(version: str, version_range: str) -> bool:
+    exact = re.fullmatch(r"\[([^,]+)]", version_range)
+    if exact:
+        return compare_versions(version, exact.group(1)) == 0
+    if (
+        len(version_range) < 3
+        or version_range[0] not in "[("
+        or version_range[-1] not in ")]"
+        or version_range[1:-1].count(",") != 1
+    ):
+        raise SystemExit(f"Unsupported NeoForge version range: {version_range}")
+    lower_inclusive = version_range[0] == "["
+    upper_inclusive = version_range[-1] == "]"
+    lower, upper = version_range[1:-1].split(",", 1)
+    if lower:
+        compared = compare_versions(version, lower)
+        if compared < 0 or (compared == 0 and not lower_inclusive):
+            return False
+    if upper:
+        compared = compare_versions(version, upper)
+        if compared > 0 or (compared == 0 and not upper_inclusive):
+            return False
+    return True
+
+
+def fetch_neoforge_versions(url: str = NEOFORGE_METADATA_URL) -> tuple[str, ...]:
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            root = ET.fromstring(response.read())
+    except Exception as failure:
+        raise SystemExit(f"Cannot download NeoForge Maven metadata from {url}: {failure}") from failure
+    versions = tuple(
+        node.text.strip()
+        for node in root.findall("./versioning/versions/version")
+        if node.text and re.fullmatch(r"\d+(?:\.\d+)+(?:-beta)?", node.text.strip())
+    )
+    if not versions:
+        raise SystemExit(f"NeoForge Maven metadata contains no supported versions: {url}")
+    return versions
+
+
+def latest_neoforge_runtime_matrix(
+    matrix: Matrix, available_versions: tuple[str, ...] | None = None
+) -> dict[str, list[dict[str, str]]]:
+    available = available_versions if available_versions is not None else fetch_neoforge_versions()
+    entries: list[dict[str, str]] = []
+    for target in matrix.neoforge:
+        target_profile = profile(matrix.properties, "neoforge", target)
+        if target_profile["stability"] != "beta":
+            continue
+        compatible = [
+            version
+            for version in available
+            if version_in_range(version, target_profile["neoforge_version_range"])
+        ]
+        if not compatible:
+            raise SystemExit(
+                f"No published NeoForge runtime matches {target} "
+                f"{target_profile['neoforge_version_range']}"
+            )
+        latest = max(compatible, key=lambda value: (_version_parts(value)[0], _version_parts(value)[1]))
+        entry = matrix_entry(matrix, "neoforge", target)
+        entry["neoforge_runtime"] = latest
+        entries.append(entry)
+    return {"include": entries}
 
 
 def expected_java(minecraft: str) -> int:
@@ -515,6 +644,9 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
     if set(neoforge_modern) | set(neoforge_legacy) != set(neoforge):
         raise SystemExit("Every NeoForge target must be exactly one of modern or legacy")
 
+    neoforge_coverage = {
+        release: [] for release in official[official.index("1.20.2"):]
+    }
     neoforge_adapters: list[str] = []
     for target in neoforge:
         require_keys(properties, "neoforge", target, NEOFORGE_PROFILE_KEYS)
@@ -526,19 +658,52 @@ def load_manifest(*, require_source_dirs: bool = True) -> Matrix:
         expected_kind = "legacy" if target in neoforge_legacy else "modern"
         if target_profile["build_kind"] != expected_kind:
             raise SystemExit(f"NeoForge {target} must use build_kind={expected_kind}")
-        if target_profile["stability"] != "stable" and not (
-            target == "26.2" and target_profile["stability"] == "beta-exception"
-        ):
-            raise SystemExit(f"NeoForge {target} is not stable and is not the 26.2 compatibility exception")
+        stability = target_profile["stability"]
+        if stability not in ("stable", "beta"):
+            raise SystemExit(f"NeoForge {target} has invalid stability {stability!r}")
+        pinned_version = target_profile["neoforge_version"]
+        if stability == "beta" and not pinned_version.endswith("-beta"):
+            raise SystemExit(f"NeoForge {target} beta profile must pin a -beta version")
+        if stability == "stable" and pinned_version.endswith("-beta"):
+            raise SystemExit(f"NeoForge {target} stable profile cannot pin a beta version")
+        if not version_in_range(pinned_version, target_profile["neoforge_version_range"]):
+            raise SystemExit(
+                f"NeoForge {target} build pin {pinned_version} is outside "
+                f"{target_profile['neoforge_version_range']}"
+            )
+        covered = tuple(
+            release.strip() for release in target_profile["covers"].split(",") if release.strip()
+        )
+        if target not in covered:
+            raise SystemExit(f"NeoForge target {target} must cover itself")
+        for release in covered:
+            if release not in neoforge_coverage:
+                raise SystemExit(f"NeoForge target {target} covers unsupported release {release}")
+            if not version_in_range(release, target_profile["minecraft_version_range"]):
+                raise SystemExit(
+                    f"NeoForge target {target} range {target_profile['minecraft_version_range']} "
+                    f"does not contain {release}"
+                )
+            if expected_java(release) != int(target_profile["game_java_version"]):
+                raise SystemExit(f"NeoForge target {target} crosses the Java boundary at {release}")
+            neoforge_coverage[release].append(target)
         validate_java(properties, "neoforge", target, shared_java)
         validate_artifact_name(properties, "neoforge", target)
         adapter = target_profile["adapter_version"]
         neoforge_adapters.append(adapter)
         if require_source_dirs:
-            module = "neoforge-legacy" if expected_kind == "legacy" else "neoforge"
-            adapter_dir = ROOT / module / "src" / "version" / adapter
+            adapter_dir = ROOT / "neoforge-adapter" / "src" / "version" / adapter
             if not adapter_dir.is_dir():
                 raise SystemExit(f"NeoForge adapter directory does not exist for {target}: {adapter_dir}")
+
+    invalid_neoforge_coverage = {
+        release: owners for release, owners in neoforge_coverage.items() if len(owners) != 1
+    }
+    if invalid_neoforge_coverage:
+        raise SystemExit(
+            "Each official NeoForge release from 1.20.2 must have exactly one owner: "
+            f"{invalid_neoforge_coverage}"
+        )
 
     matrix = Matrix(properties, map_properties, official, fabric, neoforge, neoforge_modern, neoforge_legacy)
     if require_source_dirs:
@@ -655,11 +820,31 @@ def universal_artifact_name(matrix: Matrix) -> str:
     )
 
 
+def neoforge_aio_artifact_name(matrix: Matrix) -> str:
+    return (
+        f"{gradle_property('archives_base_name')}-NeoForge-"
+        f"MC{matrix.neoforge[0]}-to-{matrix.neoforge[-1]}-All-in-One-"
+        f"{gradle_property('mod_version')}.jar"
+    )
+
+
 def collect_universal(matrix: Matrix) -> pathlib.Path:
     artifact_name = universal_artifact_name(matrix)
     source = ROOT / "universal" / "build" / "libs" / artifact_name
     if not source.is_file():
         raise SystemExit(f"Expected universal artifact not found: {source}")
+    destination_dir = ROOT / "build-artifacts"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination = destination_dir / artifact_name
+    shutil.copy2(source, destination)
+    return destination
+
+
+def collect_neoforge_aio(matrix: Matrix) -> pathlib.Path:
+    artifact_name = neoforge_aio_artifact_name(matrix)
+    source = ROOT / "neoforge-aio" / "build" / "libs" / artifact_name
+    if not source.is_file():
+        raise SystemExit(f"Expected NeoForge AIO artifact not found: {source}")
     destination_dir = ROOT / "build-artifacts"
     destination_dir.mkdir(parents=True, exist_ok=True)
     destination = destination_dir / artifact_name
@@ -675,6 +860,9 @@ def prepare_build() -> None:
     adapter_dir = ROOT / "build" / "adapter-artifacts"
     if adapter_dir.is_dir():
         shutil.rmtree(adapter_dir)
+    neoforge_adapter_dir = ROOT / "build" / "neoforge-adapter-artifacts"
+    if neoforge_adapter_dir.is_dir():
+        shutil.rmtree(neoforge_adapter_dir)
 
 
 def verify_release_set(matrix: Matrix) -> list[pathlib.Path]:
@@ -692,6 +880,7 @@ def verify_release_set(matrix: Matrix) -> list[pathlib.Path]:
         for target in matrix.neoforge
     )
     expected.add(universal_artifact_name(matrix))
+    expected.add(neoforge_aio_artifact_name(matrix))
     artifact_dir = ROOT / "build-artifacts"
     actual = {path.name for path in artifact_dir.glob("*.jar")} if artifact_dir.is_dir() else set()
     if actual != expected:
@@ -770,6 +959,7 @@ def matrix_entry(matrix: Matrix, loader: str, target: str, *, release: str | Non
         entry["family"] = target
     if loader == "neoforge":
         entry["build_kind"] = target_profile["build_kind"]
+        entry["stability"] = target_profile["stability"]
     return entry
 
 
@@ -787,6 +977,7 @@ def main() -> None:
         "default-neoforge-target",
         "ci-matrix",
         "full-fabric-ci-matrix",
+        "latest-neoforge-runtime-matrix",
         "full-ci-matrix",
         "list-gradle-java",
         "max-java",
@@ -794,6 +985,7 @@ def main() -> None:
         "packaging-java",
         "prepare-build",
         "collect-universal",
+        "collect-neoforge-aio",
         "verify-release-set",
     ):
         subparsers.add_parser(command)
@@ -801,9 +993,13 @@ def main() -> None:
     owner_parser.add_argument("release")
     runtime_parser = subparsers.add_parser("validate-runtime")
     runtime_parser.add_argument("release")
+    neoforge_runtime_parser = subparsers.add_parser("validate-neoforge-runtime")
+    neoforge_runtime_parser.add_argument("target")
+    neoforge_runtime_parser.add_argument("runtime")
     source_plan_parser = subparsers.add_parser("source-plan")
     source_plan_parser.add_argument("target")
     source_plan_parser.add_argument("--loader", choices=("fabric", "neoforge"), default="fabric")
+    source_plan_parser.add_argument("--format", choices=("text", "json"), default="text")
     for command in ("validate", "get", "collect", "java-home"):
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument("target")
@@ -844,6 +1040,8 @@ def main() -> None:
             for release in matrix.official
         ]
         print(json.dumps({"include": entries}, separators=(",", ":")))
+    elif args.command == "latest-neoforge-runtime-matrix":
+        print(json.dumps(latest_neoforge_runtime_matrix(matrix), separators=(",", ":")))
     elif args.command == "list-gradle-java":
         print("\n".join(gradle_java_versions(matrix)))
     elif args.command == "fabric-owner":
@@ -857,12 +1055,45 @@ def main() -> None:
             "fabric_api_version": runtime["fabric_api_version"],
             "mappings": runtime.get("yarn_mappings", runtime.get("mappings_mode", "none")),
         }, separators=(",", ":")))
+    elif args.command == "validate-neoforge-runtime":
+        require_target(matrix, "neoforge", args.target)
+        target_profile = profile(matrix.properties, "neoforge", args.target)
+        if not version_in_range(args.runtime, target_profile["neoforge_version_range"]):
+            raise SystemExit(
+                f"NeoForge runtime {args.runtime} is outside {args.target} "
+                f"{target_profile['neoforge_version_range']}"
+            )
+        print(json.dumps({
+            "minecraft": args.target,
+            "runtime": args.runtime,
+            "range": target_profile["neoforge_version_range"],
+            "stability": target_profile["stability"],
+        }, separators=(",", ":")))
     elif args.command == "source-plan":
         plan = source_plan(matrix, args.loader, args.target)
-        print(f"{plan.module}:{plan.adapter}")
-        print("generated\tjava/fun/prof_chen/teamviewer/main_code/core/AdapterBuildProfile.java")
-        for relative, entry in sorted(plan.entries.items()):
-            print(f"{entry.origin}\t{relative}")
+        if args.format == "json":
+            print(json.dumps({
+                "module": plan.module,
+                "sourceFamily": adapter_source_family(args.loader),
+                "adapter": plan.adapter,
+                "layers": plan.layers,
+                "generated": [
+                    "java/fun/prof_chen/teamviewer/main_code/core/AdapterBuildProfile.java"
+                ],
+                "entries": [
+                    {
+                        "path": str(relative),
+                        "origin": entry.origin,
+                        "source": str(entry.path.relative_to(ROOT)),
+                    }
+                    for relative, entry in sorted(plan.entries.items())
+                ],
+            }, separators=(",", ":")))
+        else:
+            print(f"{plan.module}:{plan.adapter}")
+            print("generated\tjava/fun/prof_chen/teamviewer/main_code/core/AdapterBuildProfile.java")
+            for relative, entry in sorted(plan.entries.items()):
+                print(f"{entry.origin}\t{relative}")
     elif args.command == "max-java":
         print(
             max(
@@ -880,6 +1111,9 @@ def main() -> None:
         prepare_build()
     elif args.command == "collect-universal":
         artifact = collect_universal(matrix)
+        print(f"Created {artifact.relative_to(ROOT)}")
+    elif args.command == "collect-neoforge-aio":
+        artifact = collect_neoforge_aio(matrix)
         print(f"Created {artifact.relative_to(ROOT)}")
     elif args.command == "verify-release-set":
         for artifact in verify_release_set(matrix):

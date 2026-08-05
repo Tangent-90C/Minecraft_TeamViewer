@@ -93,6 +93,10 @@ Loader sources resolve in three stages: `src/shared` supplies loader-wide defaul
 `src/compat/<capability>-<variant>` layers replace individual ports for their declared adapters,
 and `src/version/<adapter>` supplies the final exceptional overrides. Compatibility layers are
 self-described by `layer.properties`; two selected layers may not own the same relative path.
+Fabric resolves these stages under `fabric/src`. Every NeoForge target resolves them under the
+single `neoforge-adapter/src` tree; `neoforge` and `neoforge-legacy` are ModDev/UserDev compilation
+frontends, not separate source owners. A NeoForge compatibility layer may therefore span the
+legacy/modern build boundary when the native API is actually identical.
 For example, a layer reused by non-adjacent API-compatible adapters declares them explicitly:
 
 ```properties
@@ -102,19 +106,22 @@ adapters=1.18.2,1.19.2,1.19.4,1.20.1,1.20.2
 Gradle filters the original `SourceDirectorySet` roots in place; it does not copy selected sources
 to a generated mirror. IDE navigation, Qodana findings and compiler diagnostics therefore keep the
 real shared/compat/version path.
-Run `python3 scripts/minecraft_targets.py source-plan <target> [--loader neoforge]` to inspect the
+Run `python3 scripts/minecraft_targets.py source-plan <target> [--loader neoforge] [--format json]` to inspect the
 effective owner of every Java and resource file.
 
 `common-sdk`, common runtime and `client-bootstrap` are Java 17 ABI artifacts. Each adapter is
 compiled with its target's `adapter_java_release`. A target below Java 17 is rejected until a
 separate legacy runtime exists; running an old Minecraft release on a newer JRE is not a supported
-substitute. Every target produces a complete standalone Jar plus an internal remapped slim adapter.
-The same slim bytecode is embedded into the All-in-One container, while business/runtime classes
+substitute. Every target produces a complete standalone Jar plus an internal slim adapter. Fabric
+uses Loom's remapped slim output; NeoForge extracts production-mapped classes and applies exact-class
+relocation when assembling its AIO. The same adapter bytecode is embedded into the Loader-specific
+All-in-One container, while business/runtime classes
 and third-party libraries remain shared once. See `docs/multi-version-packaging.md`.
 
 ## Adding an adapter
 
-Declare the target profile and its `src/version/<adapter>/adapter.properties` marker, then inspect
+Declare the target profile and its `fabric/src/version/<adapter>/adapter.properties` or
+`neoforge-adapter/src/version/<adapter>/adapter.properties` marker, then inspect
 each mandatory port in `source-plan`. Reuse an existing capability layer when its API compiles for
 the new target; otherwise create a new named variant and list every compatible adapter in that
 layer's metadata. Do not copy a complete adapter directory. A version directory contains only
@@ -131,3 +138,9 @@ The `1.21.8` Fabric adapter is cross-compiled for Minecraft 1.21.6–1.21.8. The
 is compiled into the 26.1.2 and 26.2 artifacts; cached compatibility access isolates the client UI,
 camera and HUD API changes introduced by 26.2. Do not widen metadata beyond these ranges without
 cross-compiling the adapter and checking optional-Mod entrypoints against the real target APIs.
+
+NeoForge compiles every official Minecraft release from 1.20.2 through 26.2 as its own binary target.
+The beta-only 1.20.3/1.20.5/1.21.2/1.21.6/1.21.7/1.21.9 targets reuse the proven
+1.20.4/1.20.6/1.21.3/1.21.8/1.21.8/1.21.10 source families respectively, but never reuse their
+bytecode. Minecraft 1.20.1 is reserved for a future Forge loader implementation and must not add
+`net.minecraftforge.*` classes or a second `@Mod` entrypoint to the NeoForge AIO.

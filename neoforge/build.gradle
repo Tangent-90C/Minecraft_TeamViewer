@@ -5,6 +5,7 @@ plugins {
 
 apply from: rootProject.file("gradle/adapter-source-layers.gradle")
 apply from: rootProject.file("gradle/minecraft-target-profiles.gradle")
+apply from: rootProject.file("gradle/multi-version-packaging.gradle")
 
 def versionManifest = new Properties()
 rootProject.file("gradle/minecraft-versions.properties").withInputStream {
@@ -28,9 +29,16 @@ def profile = { String key ->
 def minecraftVersion = profile("minecraft_target_version")
 def minecraftVersionRange = profile("minecraft_version_range")
 def adapterVersion = profile("adapter_version")
-def adapterSourceLayout = resolveAdapterSourceLayers(file("src"), adapterVersion)
-def neoForgeVersion = profile("neoforge_version")
+def adapterSourceLayout = resolveAdapterSourceLayers(
+        rootProject.file("neoforge-adapter/src"), adapterVersion)
 def neoForgeVersionRange = profile("neoforge_version_range")
+def neoForgeRuntimeOverride = providers.gradleProperty("neoforge_runtime_version").orNull
+if (neoForgeRuntimeOverride != null &&
+        !versionInHalfOpenRange(neoForgeRuntimeOverride, neoForgeVersionRange)) {
+    throw new GradleException(
+            "NeoForge runtime ${neoForgeRuntimeOverride} is outside ${minecraftTarget} range ${neoForgeVersionRange}")
+}
+def neoForgeVersion = neoForgeRuntimeOverride ?: profile("neoforge_version")
 def targetJavaRelease = profile("adapter_java_release").toInteger()
 def standaloneArtifactSuffix = "-{mod_version}.jar"
 def standaloneArtifact = profile("standalone_artifact")
@@ -137,6 +145,27 @@ dependencies {
     jarJar "org.luaj:luaj-jse:${project.luaj_version}"
 }
 
+def adapterTckRuntime = providers.gradleProperty("adapter_tck_runtime")
+        .map { it.toBoolean() }.getOrElse(false)
+def modernTckRuntimeDirectory = layout.buildDirectory.dir("generated/tckRuntime")
+def prepareModernTckRuntime = tasks.register("prepareModernTckRuntime", Sync) {
+    inputs.property("layoutVersion", 1)
+    inputs.files(configurations.jarJar)
+    from({ configurations.jarJar.collect { zipTree(it) } })
+    exclude("META-INF/**")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    into(modernTckRuntimeDirectory)
+}
+if (adapterTckRuntime) {
+    // ModDev development runs do not consume the packaged JarJar module graph.
+    // Flatten those libraries only into the opt-in TCK run output; release Jars
+    // keep their normal nested dependencies and module boundaries.
+    sourceSets.main.output.classesDirs.from(modernTckRuntimeDirectory)
+    tasks.named("runClient") {
+        dependsOn(prepareModernTckRuntime)
+    }
+}
+
 processResources {
     inputs.property("mod_version", neoForgeModVersion)
     inputs.property("minecraft_version", minecraftVersionRange)
@@ -150,8 +179,14 @@ processResources {
                 neoforge_version: neoForgeVersionRange,
                 java_version: targetJavaRelease)
     }
+    filesMatching("teamviewer.neoforge.client.mixins.json") {
+        expand(java_version: targetJavaRelease)
+    }
     from(rootProject.file("fabric/src/main/resources")) {
         include "assets/**"
+    }
+    from(rootProject.file("fabric/src/main/resources/assets/teamviewer/icon.ico")) {
+        rename { "teamviewer-icon.png" }
     }
 }
 
@@ -163,8 +198,7 @@ tasks.withType(JavaCompile).configureEach {
 def verifyNeoForgeAdapterBoundary = tasks.register("verifyNeoForgeAdapterBoundary") {
     group = "verification"
     description = "Keep NeoForge version code behind the Common Adapter SDK boundary."
-    inputs.files(fileTree("src/version") { include "**/*.java" },
-            fileTree("src/compat") { include "**/*.java" }, fileTree("src/shared") { include "**/*.java" })
+    inputs.files(adapterSourceLayout.javaFiles)
     doLast {
         def forbiddenImports = [
                 "fun.prof_chen.teamviewer.main_code.config.Config",
@@ -274,6 +308,18 @@ jar {
     }
 }
 
+def neoForgeRawAdapterTasks = multiVersionPackaging.registerNeoForgeRawAdapterTasks([
+        minecraftTarget: minecraftTarget,
+        minecraftRange: minecraftVersionRange,
+        neoForgeRange: neoForgeVersionRange,
+        adapterVersion: adapterVersion,
+        javaRelease: targetJavaRelease,
+        adapterSourceLayout: adapterSourceLayout,
+        adapterClassesDirectory: tasks.named("compileJava").flatMap { it.destinationDirectory },
+        productionArchiveTask: "jar",
+        artifactDirectory: rootProject.layout.buildDirectory.dir("neoforge-adapter-artifacts")
+])
+def verifyNeoForgeRawAdapter = neoForgeRawAdapterTasks.verify
 def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
     group = "verification"
     description = "Verify the NeoForge standalone descriptor, SDK bundle, JarJar dependencies and bytecode."
@@ -289,7 +335,8 @@ def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
         try {
             def names = zip.entries().collect { it.name }
             def entries = names as Set
-            ["META-INF/neoforge.mods.toml", "META-INF/jarjar/metadata.json",
+            ["META-INF/neoforge.mods.toml", "META-INF/jarjar/metadata.json", "pack.mcmeta",
+             "teamviewer-icon.png",
              "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
              "teamviewer.neoforge.client.mixins.json",
              "fun/prof_chen/teamviewer/client/bootstrap/ClientBootstrap.class"].each { required ->
@@ -298,7 +345,17 @@ def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
             if (entries.contains("fabric.mod.json") || names.any { it.contains("FabricClientAdapterFactory") }) {
                 throw new GradleException("NeoForge standalone contains a Fabric descriptor or adapter")
             }
+            if (entries.contains("META-INF/mods.toml")) {
+                throw new GradleException("Modern NeoForge standalone must not contain the legacy FML descriptor")
+            }
+            multiVersionPackaging.verifyNeoForgeResourcePack(zip, "NeoForge standalone")
             def descriptor = zip.getInputStream(zip.getEntry("META-INF/neoforge.mods.toml")).getText("UTF-8")
+            if (!descriptor.contains('loaderVersion="[4,)"')) {
+                throw new GradleException("Modern NeoForge standalone must require the FML 4 descriptor schema")
+            }
+            if (!descriptor.contains('logoFile="teamviewer-icon.png"')) {
+                throw new GradleException("NeoForge standalone logo must be a root Jar resource")
+            }
             ["modId=\"team_view_relay\"", "version=\"${neoForgeModVersion}\"",
              "versionRange=\"${minecraftVersionRange}\"",
              "versionRange=\"${neoForgeVersionRange}\"", "[features.team_view_relay]",
@@ -423,5 +480,5 @@ def verifyNeoForgeStandalone = tasks.register("verifyNeoForgeStandalone") {
 }
 
 tasks.named("check") {
-    dependsOn(verifyNeoForgeStandalone)
+    dependsOn(verifyNeoForgeStandalone, verifyNeoForgeRawAdapter)
 }

@@ -9,6 +9,38 @@ ext.expectedMinecraftJava = { String minecraft ->
     parts[1] > 20 || (parts[1] == 20 && patch >= 5) ? 21 : 17
 }
 
+/** Compare NeoForge versions by their numeric components, ignoring qualifiers such as -beta. */
+ext.compareNumericVersions = { String left, String right ->
+    def numericParts = { String version ->
+        version.split(/\./).collect { part ->
+            def match = part =~ /^(\d+)/
+            if (!match.find()) {
+                throw new GradleException("Version component has no numeric prefix: ${version}")
+            }
+            match.group(1).toInteger()
+        }
+    }
+    def leftParts = numericParts(left)
+    def rightParts = numericParts(right)
+    def count = Math.max(leftParts.size(), rightParts.size())
+    for (int index = 0; index < count; index++) {
+        def leftPart = index < leftParts.size() ? leftParts[index] : 0
+        def rightPart = index < rightParts.size() ? rightParts[index] : 0
+        if (leftPart != rightPart) return leftPart <=> rightPart
+    }
+    0
+}
+
+/** Check the half-open NeoForge ranges used by the target manifest, for example [21.2.1-beta,21.3). */
+ext.versionInHalfOpenRange = { String version, String range ->
+    def match = range =~ /^\[([^,]+),([^\)]+)\)$/
+    if (!match.matches()) {
+        throw new GradleException("Unsupported version range syntax: ${range}")
+    }
+    compareNumericVersions(version, match.group(1)) >= 0 &&
+            compareNumericVersions(version, match.group(2)) < 0
+}
+
 ext.normalizedMinecraftProfile = {
     Properties manifest, String loader, String target, String archivesBaseName ->
         def result = [:]
@@ -38,6 +70,7 @@ ext.normalizedMinecraftProfile = {
         } else {
             def legacyTargets = manifest.getProperty("neoforge_legacy_targets", "")
                     .split(",").collect { it.trim() }
+            result.covers = result.covers ?: target
             result.build_kind = result.build_kind ?: (legacyTargets.contains(target) ? "legacy" : "modern")
             result.stability = result.stability ?: "stable"
             result.standalone_artifact = result.standalone_artifact ?:

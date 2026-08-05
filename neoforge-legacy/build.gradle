@@ -5,6 +5,7 @@ plugins {
 
 apply from: file("../gradle/adapter-source-layers.gradle")
 apply from: file("../gradle/minecraft-target-profiles.gradle")
+apply from: file("../gradle/multi-version-packaging.gradle")
 
 def repositoryRoot = file("..")
 def projectProperties = new Properties()
@@ -44,10 +45,17 @@ def profile = { String key ->
 }
 def minecraftVersion = profile("minecraft_target_version")
 def minecraftVersionRange = profile("minecraft_version_range")
-def neoForgeVersion = profile("neoforge_version")
 def neoForgeVersionRange = profile("neoforge_version_range")
+def neoForgeRuntimeOverride = providers.gradleProperty("neoforge_runtime_version").orNull
+if (neoForgeRuntimeOverride != null &&
+        !versionInHalfOpenRange(neoForgeRuntimeOverride, neoForgeVersionRange)) {
+    throw new GradleException(
+            "NeoForge runtime ${neoForgeRuntimeOverride} is outside ${minecraftTarget} range ${neoForgeVersionRange}")
+}
+def neoForgeVersion = neoForgeRuntimeOverride ?: profile("neoforge_version")
 def adapterVersion = profile("adapter_version")
-def adapterSourceLayout = resolveAdapterSourceLayers(file("src"), adapterVersion)
+def adapterSourceLayout = resolveAdapterSourceLayers(
+        file("../neoforge-adapter/src"), adapterVersion)
 def targetJavaRelease = profile("adapter_java_release").toInteger()
 def neoForgeModVersion = project.version.toString().replaceFirst(/^v(?=\d)/, "")
 def standaloneArtifactSuffix = "-{mod_version}.jar"
@@ -119,9 +127,31 @@ dependencies {
 
 jarJar.enable()
 
+def legacyTckRuntimeDirectory = layout.buildDirectory.dir("generated/tckRuntime")
+def adapterTckRuntime = providers.gradleProperty("adapter_tck_runtime")
+        .map { it.toBoolean() }.getOrElse(false)
+def prepareLegacyTckRuntime = tasks.register("prepareLegacyTckRuntime", Sync) {
+    inputs.property("layoutVersion", 2)
+    inputs.files(file("runtime-libs/common-runtime.jar"), file("runtime-libs/client-bootstrap.jar"),
+            configurations.jarJar)
+    from({ zipTree(file("runtime-libs/common-runtime.jar")) })
+    from({ zipTree(file("runtime-libs/client-bootstrap.jar")) })
+    from({ configurations.jarJar.collect { zipTree(it) } })
+    exclude("META-INF/**")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    into(legacyTckRuntimeDirectory)
+}
+// UserDev exposes each SourceSet as a separate module. Attach the flattened
+// Java 17 runtime to the adapter's main output so development runs model the
+// single-module standalone Jar instead of creating a second isolated Mod source.
+if (adapterTckRuntime) {
+    sourceSets.main.output.classesDirs.from(legacyTckRuntimeDirectory)
+}
+
 runs {
     configureEach {
         modSource sourceSets.main
+        if (adapterTckRuntime) dependsOn(prepareLegacyTckRuntime.get())
         systemProperty "teamviewer.adapterTck.strict", "true"
     }
     client {
@@ -135,15 +165,21 @@ processResources {
     inputs.property("neoforge_version", neoForgeVersionRange)
     inputs.property("java_version", targetJavaRelease)
     filteringCharset = "UTF-8"
-    filesMatching("META-INF/neoforge.mods.toml") {
+    filesMatching("META-INF/mods.toml") {
         expand(
                 mod_version: neoForgeModVersion,
                 minecraft_version: minecraftVersionRange,
                 neoforge_version: neoForgeVersionRange,
                 java_version: targetJavaRelease)
     }
+    filesMatching("teamviewer.neoforge.client.mixins.json") {
+        expand(java_version: targetJavaRelease)
+    }
     from(file("../fabric/src/main/resources")) {
         include "assets/**"
+    }
+    from(file("../fabric/src/main/resources/assets/teamviewer/icon.ico")) {
+        rename { "teamviewer-icon.png" }
     }
 }
 
@@ -165,16 +201,16 @@ def verifyLegacyAdapterCompleteness = tasks.register("verifyLegacyAdapterComplet
     inputs.files(adapterSourceLayout.entries.values())
     doLast {
         [
-                "core/NeoForgeClientAdapterFactory.java",
-                "client/bridge/NeoForgeClientEventBridge.java",
-                "client/bridge/NeoForgeGameClientBridge.java",
-                "network/bridge/NeoForgeRuntimeGateway.java",
-                "render/NeoForgeWorldRenderSink.java",
-                "render/NeoForgeHudRenderSink.java",
-                "screen/ConfigScreen.java",
-                "screen/PluginManagerScreen.java"
+                "fun/prof_chen/teamviewer/main_code/core/NeoForgeClientAdapterFactory.java",
+                "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeClientEventBridge.java",
+                "fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java",
+                "fun/prof_chen/teamviewer/main_code/network/bridge/NeoForgeRuntimeGateway.java",
+                "fun/prof_chen/teamviewer/main_code/render/NeoForgeWorldRenderSink.java",
+                "fun/prof_chen/teamviewer/main_code/render/NeoForgeHudRenderSink.java",
+                "fun/prof_chen/teamviewer/main_code/screen/ConfigScreen.java",
+                "fun/prof_chen/teamviewer/main_code/screen/PluginManagerScreen.java"
         ].each { relative ->
-            if (adapterSourceLayout.file("java/fun/prof_chen/teamviewer/main_code/${relative}") == null) {
+            if (adapterSourceLayout.file("java/${relative}") == null) {
                 throw new GradleException("${minecraftVersion} legacy NeoForge adapter missing ${relative}")
             }
         }
@@ -209,6 +245,18 @@ tasks.named("jarJar") {
     archiveClassifier = ""
 }
 
+def neoForgeRawAdapterTasks = multiVersionPackaging.registerNeoForgeRawAdapterTasks([
+        minecraftTarget: minecraftTarget,
+        minecraftRange: minecraftVersionRange,
+        neoForgeRange: neoForgeVersionRange,
+        adapterVersion: adapterVersion,
+        javaRelease: targetJavaRelease,
+        adapterSourceLayout: adapterSourceLayout,
+        adapterClassesDirectory: tasks.named("compileJava").flatMap { it.destinationDirectory },
+        productionArchiveTask: "jarJar",
+        artifactDirectory: file("../build/neoforge-adapter-artifacts")
+])
+def verifyNeoForgeRawAdapter = neoForgeRawAdapterTasks.verify
 tasks.register("verifyLegacyStandalone") {
     group = "verification"
     dependsOn(tasks.named("jarJar"))
@@ -223,14 +271,29 @@ tasks.register("verifyLegacyStandalone") {
         try {
             def names = entries.entries().collect { it.name } as Set
             [
-                    "META-INF/neoforge.mods.toml",
+                    "META-INF/mods.toml",
                     "META-INF/jarjar/metadata.json",
+                    "pack.mcmeta",
+                    "teamviewer-icon.png",
                     "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
                     "fun/prof_chen/teamviewer/client/bootstrap/ClientBootstrap.class"
             ].each { required ->
                 if (!names.contains(required)) {
                     throw new GradleException("${archive.name} is missing ${required}")
                 }
+            }
+            if (names.contains("META-INF/neoforge.mods.toml")) {
+                throw new GradleException(
+                        "Legacy NeoForge standalone must not contain the FML 4 descriptor")
+            }
+            multiVersionPackaging.verifyNeoForgeResourcePack(
+                    entries, "Legacy NeoForge standalone")
+            def descriptor = multiVersionPackaging.readZipText(entries, "META-INF/mods.toml")
+            if (!descriptor.contains('loaderVersion="[1,)"')) {
+                throw new GradleException("Legacy NeoForge standalone must support its FML 1-3 runtime")
+            }
+            if (!descriptor.contains('logoFile="teamviewer-icon.png"')) {
+                throw new GradleException("Legacy NeoForge standalone logo must be a root Jar resource")
             }
             def nestedRuntimeCount = names.count { it.startsWith("META-INF/jarjar/") && it.endsWith(".jar") }
             if (nestedRuntimeCount != 6) {
@@ -243,5 +306,5 @@ tasks.register("verifyLegacyStandalone") {
 }
 
 tasks.named("check") {
-    dependsOn(tasks.named("verifyLegacyStandalone"))
+    dependsOn(tasks.named("verifyLegacyStandalone"), verifyNeoForgeRawAdapter)
 }

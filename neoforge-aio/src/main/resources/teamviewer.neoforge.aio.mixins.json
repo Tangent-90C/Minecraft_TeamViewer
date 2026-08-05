@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "fun.prof_chen.teamviewer.internal.neoforge.mixin",
+  "plugin": "fun.prof_chen.teamviewer.neoforge.aio.NeoForgeAioMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [],
+  "injectors": {"defaultRequire": 1}
+}

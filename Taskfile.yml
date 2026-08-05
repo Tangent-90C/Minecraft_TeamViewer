@@ -17,20 +17,18 @@ tasks:
       - '{{.GRADLE}} clean'
 
   build:
-    desc: Build every release artifact and compile-check all 31 exact Fabric Minecraft releases
+    desc: Build every release artifact with bounded parallelism and check all exact Fabric releases
+    vars:
+      BUILD_JOBS: '{{default "auto" .JOBS}}'
     cmds:
       - |
           set -eu
           python3 scripts/minecraft_targets.py prepare-build
-          for target in $(python3 scripts/minecraft_targets.py list); do
-            echo "Building Fabric Minecraft $target"
-            task build-target TARGET="$target"
-          done
-          task check-all-fabric-runtimes
-          for target in $(python3 scripts/minecraft_targets.py list-neoforge); do
-            echo "Building NeoForge Minecraft $target"
-            task build-neoforge-target TARGET="$target"
-          done
+          default_target="$(python3 scripts/minecraft_targets.py default-target)"
+          root_java_home="$(python3 scripts/minecraft_targets.py java-home "$default_target")"
+          JAVA_HOME="$root_java_home" {{.GRADLE}} --no-daemon --configure-on-demand prepareParallelBuild
+          python3 scripts/parallel_build.py adapters --jobs "{{.BUILD_JOBS}}" --gradle "{{.GRADLE}}"
+          python3 scripts/parallel_build.py fabric-runtimes --jobs "{{.BUILD_JOBS}}" --gradle "{{.GRADLE}}"
           task package-all
           python3 scripts/minecraft_targets.py verify-release-set
 
@@ -94,6 +92,48 @@ tasks:
             task check-fabric-runtime RUNTIME="$runtime"
           done
 
+  check-neoforge-runtime:
+    desc: 'Build one NeoForge target against another compatible Loader release; CI can also run its strict TCK'
+    requires:
+      vars: [TARGET, NEOFORGE_RUNTIME]
+    cmds:
+      - 'python3 scripts/minecraft_targets.py validate-neoforge-runtime "{{.TARGET}}" "{{.NEOFORGE_RUNTIME}}"'
+      - |
+          java_home="$(python3 scripts/minecraft_targets.py java-home --loader neoforge "{{.TARGET}}")"
+          kind="$(python3 scripts/minecraft_targets.py get --loader neoforge "{{.TARGET}}" build_kind)"
+          if [ "$kind" = "legacy" ]; then
+            root_target="$(python3 scripts/minecraft_targets.py default-target)"
+            root_java_home="$(python3 scripts/minecraft_targets.py java-home "$root_target")"
+            JAVA_HOME="$root_java_home" {{.GRADLE}} --no-daemon --configure-on-demand prepareLegacyNeoForgeRuntime
+            JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -p neoforge-legacy \
+              -Pneoforge_target="{{.TARGET}}" -Pneoforge_runtime_version="{{.NEOFORGE_RUNTIME}}" build
+          else
+            JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
+              -Pneoforge_target="{{.TARGET}}" -Pneoforge_runtime_version="{{.NEOFORGE_RUNTIME}}" \
+              :neoforge:build
+          fi
+          if [ "${TEAMVIEWER_RUN_TCK:-0}" = "1" ]; then
+            command -v xvfb-run >/dev/null
+            if [ "$kind" = "legacy" ]; then
+              report="neoforge-legacy/run/{{.TARGET}}/logs/teamviewer-adapter-capabilities.json"
+              python3 scripts/run_adapter_tck.py --report "$report" --timeout 300 -- \
+                xvfb-run -a env JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon -p neoforge-legacy \
+                -Pneoforge_target="{{.TARGET}}" -Pneoforge_runtime_version="{{.NEOFORGE_RUNTIME}}" \
+                -Padapter_tck_runtime=true runClient
+            else
+              default_target="$(python3 scripts/minecraft_targets.py default-neoforge-target)"
+              if [ "{{.TARGET}}" = "$default_target" ]; then
+                report="neoforge/run/logs/teamviewer-adapter-capabilities.json"
+              else
+                report="neoforge/run/{{.TARGET}}/logs/teamviewer-adapter-capabilities.json"
+              fi
+              python3 scripts/run_adapter_tck.py --report "$report" --timeout 300 -- \
+                xvfb-run -a env JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
+                -Pneoforge_target="{{.TARGET}}" -Pneoforge_runtime_version="{{.NEOFORGE_RUNTIME}}" \
+                -Padapter_tck_runtime=true :neoforge:runClient
+            fi
+          fi
+
   build-neoforge-target:
     desc: 'Build one NeoForge target (usage: task build-neoforge-target TARGET=1.21.8)'
     requires:
@@ -134,13 +174,24 @@ tasks:
         vars: { TARGET: '26.2' }
 
   package-all:
-    desc: Assemble and collect the Fabric-only All-in-One Jar from every staged Fabric adapter
+    desc: Assemble and collect the Fabric and NeoForge All-in-One Jars from staged adapters
     cmds:
       - |
           default_target="$(python3 scripts/minecraft_targets.py default-target)"
           java_home="$(python3 scripts/minecraft_targets.py java-home "$default_target")"
-          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon :universal:build
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon \
+            verifySourcePlanParity :universal:build :neoforge-aio:build
           python3 scripts/minecraft_targets.py collect-universal
+          python3 scripts/minecraft_targets.py collect-neoforge-aio
+
+  build-neoforge-aio:
+    desc: Assemble the experimental NeoForge All-in-One from all staged NeoForge adapters
+    cmds:
+      - |
+          default_target="$(python3 scripts/minecraft_targets.py default-target)"
+          java_home="$(python3 scripts/minecraft_targets.py java-home "$default_target")"
+          JAVA_HOME="$java_home" {{.GRADLE}} --no-daemon :neoforge-aio:build
+          python3 scripts/minecraft_targets.py collect-neoforge-aio
 
   build-all:
     desc: Alias for the all-version build
