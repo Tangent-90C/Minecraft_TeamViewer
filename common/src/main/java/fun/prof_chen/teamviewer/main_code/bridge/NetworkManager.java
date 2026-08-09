@@ -2,6 +2,9 @@
 // 负责处理与服务器的WebSocket连接和数据同步
 package fun.prof_chen.teamviewer.main_code.bridge;
 
+import fun.prof_chen.teamviewer.api.PlayerRelation;
+import fun.prof_chen.teamviewer.api.RemotePlayerSnapshot;
+
 import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +34,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -218,6 +222,9 @@ public class NetworkManager {
 	
 	// 远程玩家数据缓存 - 存储玩家的完整属性数据
 	private final Map<UUID, Map<String, Object>> remotePlayerDataCache = new HashMap<>();
+
+	// Immutable external view, published only after a complete inbound update.
+	private volatile List<RemotePlayerSnapshot> publishedRemotePlayerSnapshots = List.of();
 	
 	// 远程实体数据缓存 - 存储世界中实体的位置和属性
 	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
@@ -1377,6 +1384,8 @@ public class NetworkManager {
 		if (packet.playerMarks != null) {
 			replacePlayerMarks(playerMarks);
 		}
+
+		publishRemotePlayerSnapshots();
 	}
 
 	/**
@@ -1504,6 +1513,8 @@ public class NetworkManager {
 				replacePlayerMarks(playerMarks);
 			}
 		}
+
+		publishRemotePlayerSnapshots();
 	}
 
 	private void replacePlayerMarks(Map<String, Object> marks) {
@@ -2190,6 +2201,98 @@ public class NetworkManager {
 		}
 		PlayerMarkState mark = remotePlayerMarks.get(playerId.toString().toLowerCase());
 		return mark == null ? null : mark.team();
+	}
+
+	/** Returns the latest immutable, loader-neutral remote-player snapshot. */
+	public List<RemotePlayerSnapshot> getRemotePlayerSnapshots() {
+		return publishedRemotePlayerSnapshots;
+	}
+
+	private void publishRemotePlayerSnapshots() {
+		List<RemotePlayerSnapshot> snapshots = new ArrayList<>();
+		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
+			UUID playerId = entry.getKey();
+			RemotePlayerInfo info = entry.getValue();
+			Map<String, Object> data = remotePlayerDataCache.get(playerId);
+			RemotePlayerSnapshot snapshot = buildRemotePlayerSnapshot(playerId, info, data);
+			if (snapshot != null) {
+				snapshots.add(snapshot);
+			}
+		}
+		snapshots.sort(Comparator.comparing(snapshot -> snapshot.uuid().toString()));
+		publishedRemotePlayerSnapshots = List.copyOf(snapshots);
+	}
+
+	private RemotePlayerSnapshot buildRemotePlayerSnapshot(UUID playerId, RemotePlayerInfo info,
+			Map<String, Object> data) {
+		if (playerId == null || info == null || info.position() == null || data == null) {
+			return null;
+		}
+
+		String playerName = info.name();
+		String dimension = info.dimension();
+		if (playerName == null || playerName.isBlank() || dimension == null || dimension.isBlank()) {
+			return null;
+		}
+
+		Object reportedUuid = data.get("playerUUID");
+		if (reportedUuid != null) {
+			try {
+				if (!playerId.equals(UUID.fromString(String.valueOf(reportedUuid)))) {
+					return null;
+				}
+			} catch (IllegalArgumentException ignored) {
+				return null;
+			}
+		}
+
+		Double x = finite(info.position().x());
+		Double y = finite(info.position().y());
+		Double z = finite(info.position().z());
+		Double velocityX = finite(getAsDouble(data.get("vx")));
+		Double velocityY = finite(getAsDouble(data.get("vy")));
+		Double velocityZ = finite(getAsDouble(data.get("vz")));
+		Double health = finite(getAsDouble(data.get("health")));
+		Double maxHealth = finite(getAsDouble(data.get("maxHealth")));
+		Double armor = finite(getAsDouble(data.get("armor")));
+		Double width = finite(getAsDouble(data.get("width")));
+		Double height = finite(getAsDouble(data.get("height")));
+		Boolean riding = getAsBoolean(data.get("isRiding"));
+		if (x == null || y == null || z == null || velocityX == null || velocityY == null
+				|| velocityZ == null || health == null || maxHealth == null || armor == null
+				|| width == null || height == null || riding == null || health < 0
+				|| maxHealth <= 0 || armor < 0 || width <= 0 || height <= 0) {
+			return null;
+		}
+
+		PlayerMarkState mark = remotePlayerMarks.get(playerId.toString().toLowerCase());
+		PlayerRelation relation = mark == null ? PlayerRelation.NEUTRAL : switch (mark.team()) {
+			case "friendly" -> PlayerRelation.FRIENDLY;
+			case "enemy" -> PlayerRelation.ENEMY;
+			default -> PlayerRelation.NEUTRAL;
+		};
+		return new RemotePlayerSnapshot(playerId, playerName, dimension, x, y, z,
+			velocityX, velocityY, velocityZ, health.floatValue(), maxHealth.floatValue(),
+			armor.floatValue(), riding, width.floatValue(), height.floatValue(), relation);
+	}
+
+	private Double finite(double value) {
+		return Double.isFinite(value) ? value : null;
+	}
+
+	private Double finite(Double value) {
+		return value != null && Double.isFinite(value) ? value : null;
+	}
+
+	private Boolean getAsBoolean(Object value) {
+		if (value instanceof Boolean booleanValue) {
+			return booleanValue;
+		}
+		if (value instanceof String text) {
+			if ("true".equalsIgnoreCase(text)) return true;
+			if ("false".equalsIgnoreCase(text)) return false;
+		}
+		return null;
 	}
 
 	private boolean isRemotePlayerMatch(RemotePlayerInfo info, String expectedPlayerName, String expectedDimension) {
@@ -3366,5 +3469,6 @@ public class NetworkManager {
 		remoteWaypointDataCache.clear();
 		remoteBattleChunkDataCache.clear();
 		remotePlayerMarks.clear();
+		publishedRemotePlayerSnapshots = List.of();
 	}
 }
