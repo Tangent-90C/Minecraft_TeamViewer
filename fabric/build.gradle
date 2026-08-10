@@ -463,6 +463,15 @@ processResources {
     }
 }
 
+tasks.named("processClientResources") {
+    inputs.property "java_version", targetJavaVersion
+    filteringCharset = "UTF-8"
+
+    filesMatching("teamviewer.client.mixins.json") {
+        expand "java_version": targetJavaVersion
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
@@ -789,6 +798,10 @@ def verifyAdapterArtifact = tasks.register("verifyAdapterArtifact") {
             if (!(mixin.client instanceof List) || mixin.client.isEmpty()) {
                 throw new GradleException("Slim adapter must contain a non-empty client Mixin list")
             }
+            if (mixin.compatibilityLevel != "JAVA_${targetJavaVersion}") {
+                throw new GradleException(
+                        "Slim adapter Mixin compatibility ${mixin.compatibilityLevel} does not match Java ${targetJavaVersion}")
+            }
             int expectedMajor = targetJavaVersion + 44
             int maximumMajor = 0
             entryNames.findAll { it.endsWith(".class") }.each { name ->
@@ -900,6 +913,12 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             }
             if (!entries.contains("teamviewer.client.mixins.json")) {
                 throw new GradleException("Standalone is missing its target Mixin config")
+            }
+            def mixin = new groovy.json.JsonSlurper().parse(
+                    zip.getInputStream(zip.getEntry("teamviewer.client.mixins.json")))
+            if (mixin.compatibilityLevel != "JAVA_${targetJavaVersion}") {
+                throw new GradleException(
+                        "Standalone Mixin compatibility ${mixin.compatibilityLevel} does not match Java ${targetJavaVersion}")
             }
         } finally {
             zip.close()
