@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,6 +69,40 @@ class RemotePlayerProjectionCoordinatorTest {
         assertTrue(aware.syncCount > relationSyncs);
     }
 
+    @Test
+    void retriesOnlyProjectionsWithPendingNativeCleanup() {
+        UUID localId = UUID.randomUUID();
+        UUID remoteId = UUID.randomUUID();
+        Map<UUID, RemotePlayerInfo> players = new HashMap<>();
+        players.put(remoteId, new RemotePlayerInfo(remoteId, new Position3D(4, 65, 8),
+                "minecraft:overworld", "Remote"));
+        IntegrationRegistry registry = new IntegrationRegistry();
+        RetryProjection projection = new RetryProjection();
+        register(registry, projection.id(), "plugin.retry", projection);
+        AtomicLong clock = new AtomicLong();
+        RemotePlayerProjectionCoordinator coordinator = new RemotePlayerProjectionCoordinator(
+                registry, ignored -> null, clock::get);
+        MapBackedRemotePlayerRepository repository = new MapBackedRemotePlayerRepository(players);
+        ClientWorldSnapshot world = new ClientWorldSnapshot(localId, "Local", true,
+                "minecraft:overworld", -64, new Position3D(0, 64, 0), new Position3D(0, 65.6, 0),
+                new Position3D(0, 0, 1), new Position3D(0, 1, 0), List.of(), List.of());
+
+        coordinator.tick(repository, true, world);
+        players.clear();
+        projection.failNextEmptySync = true;
+        coordinator.tick(repository, true, world);
+        assertTrue(projection.needsReconcile());
+        int failedSyncCount = projection.syncCount;
+
+        clock.set(500_000_000L);
+        coordinator.tick(repository, true, world);
+        assertEquals(failedSyncCount, projection.syncCount);
+        clock.set(1_000_000_000L);
+        coordinator.tick(repository, true, world);
+        assertEquals(failedSyncCount + 1, projection.syncCount);
+        assertTrue(!projection.needsReconcile());
+    }
+
     private static void register(
             IntegrationRegistry registry, String id, String pluginId, RemotePlayerProjection projection) {
         registry.registerNative(new IntegrationCapability(
@@ -106,5 +141,27 @@ class RemotePlayerProjectionCoordinatorTest {
             synced = true;
             syncCount++;
         }
+    }
+
+    private static final class RetryProjection implements RemotePlayerProjection {
+        private int syncCount;
+        private boolean failNextEmptySync;
+        private boolean pending;
+
+        @Override public String id() { return "retry"; }
+        @Override public boolean isAvailable() { return true; }
+        @Override public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) { syncCount++; }
+        @Override public void syncResolved(Map<UUID, RemotePlayerInfo> players,
+                                            Map<UUID, PlayerRelationView> relations,
+                                            boolean enabled) {
+            syncCount++;
+            if (players.isEmpty() && failNextEmptySync) {
+                failNextEmptySync = false;
+                pending = true;
+            } else if (pending) {
+                pending = false;
+            }
+        }
+        @Override public boolean needsReconcile() { return pending; }
     }
 }

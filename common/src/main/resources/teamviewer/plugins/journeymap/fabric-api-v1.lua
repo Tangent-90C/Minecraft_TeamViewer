@@ -48,10 +48,43 @@ local function probe()
   return {status = "AVAILABLE", detail = ""}
 end
 
+local function deletion_failed(state, id, detail)
+  state.pending_delete = true
+  if not state.delete_warned then
+    tv.log.warn("JourneyMap retained managed waypoint " .. tostring(id) .. ": " .. tostring(detail))
+    state.delete_warned = true
+  end
+  return false
+end
+
+local function has_pending(managed)
+  for _, value in pairs(managed) do if value.pending_delete then return true end end
+  return false
+end
+
+local function contains_guid(client, guid)
+  local iterator = handles.iterableIterator:invoke(client:getAllWaypoints(), nil)
+  while handles.iteratorHasNext:invoke(iterator, nil) == true do
+    local value = handles.iteratorNext:invoke(iterator, nil)
+    if value ~= nil and tostring(value:getGuid()) == guid then return true end
+  end
+  return false
+end
+
 local function remove(managed, id)
   local value = managed[id]
-  if value ~= nil and api() ~= nil then pcall(function() api():remove(value.object) end) end
+  if value == nil then return true end
+  local client = api()
+  if client == nil then return deletion_failed(value, id, "JourneyMap API is unavailable") end
+  local removed, remove_error = pcall(function() client:remove(value.object) end)
+  if not removed then return deletion_failed(value, id, remove_error) end
+  local verified, remaining = pcall(function()
+    return contains_guid(client, tostring(value.object:getGuid()))
+  end)
+  if verified and remaining then return deletion_failed(value, id, "native delete was suppressed") end
+  if value.delete_warned then tv.log.info("JourneyMap cleanup recovered for " .. tostring(id)) end
   managed[id] = nil
+  return true
 end
 
 local function clear(managed)
@@ -63,7 +96,8 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
   local client = api(); if client == nil then return end
   local state = managed[id]
   if state ~= nil and (state.name ~= name or state.dimension ~= dimension_id) then
-    remove(managed, id); state = nil
+    if not remove(managed, id) then return end
+    state = nil
   end
   local position = client_objects:blockPosition(x, y, z)
   if state == nil then
@@ -77,6 +111,7 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
     state.object:setPosition(dimension_id, position)
     state.object:setColor(color); state.object:setEnabled(true); state.object:setDirty()
   end
+  state.pending_delete = false
 end
 
 local function sync_players(players, enabled, relations)
@@ -118,7 +153,8 @@ local function list_local()
 end
 
 tv.register_remote_player_projection({id = "journeymap-players", probe = probe,
-  sync = sync_players, clear = function() clear(managed_players) end})
+  sync = sync_players, clear = function() clear(managed_players) end,
+  needs_reconcile = function() return has_pending(managed_players) end})
 tv.register_remote_player_projection({id = "journeymap-player-beacons", probe = probe,
   sync = function(players, enabled) end, clear = function() end})
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe,
@@ -126,7 +162,8 @@ tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe =
   upsert_remote = function(command) upsert(managed_waypoints, command.waypointId, command.name,
       command.x, command.y, command.z, command.dimension, command.color) end,
   delete_remote = function(id) remove(managed_waypoints, id) end,
-  clear_remote = function() clear(managed_waypoints) end})
+  clear_remote = function() clear(managed_waypoints) end,
+  needs_reconcile = function() return has_pending(managed_waypoints) end})
 
 tv.on_enable(function() initialize() end)
 tv.on_disable(function() clear(managed_players); clear(managed_waypoints) end)

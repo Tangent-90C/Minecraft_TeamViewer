@@ -15,17 +15,20 @@ final class LuaSharedWaypointAdapter implements SharedWaypointMapAdapter {
     private final LuaValue upsert;
     private final LuaValue delete;
     private final LuaValue clear;
+    private final LuaValue needsReconcile;
     private final LuaCapabilityProbe probe;
     private volatile LuaCapabilityProbe.Result lastProbe;
 
     LuaSharedWaypointAdapter(String id, LuaPluginRuntime runtime, LuaValue listLocal,
-                             LuaValue upsert, LuaValue delete, LuaValue clear, LuaValue probe) {
+                             LuaValue upsert, LuaValue delete, LuaValue clear,
+                             LuaValue needsReconcile, LuaValue probe) {
         this.id = id;
         this.runtime = runtime;
         this.listLocal = listLocal;
         this.upsert = upsert;
         this.delete = delete;
         this.clear = clear;
+        this.needsReconcile = needsReconcile;
         this.probe = new LuaCapabilityProbe(id, runtime, probe);
     }
 
@@ -64,4 +67,8 @@ final class LuaSharedWaypointAdapter implements SharedWaypointMapAdapter {
         runtime.invoke("waypoint.delete." + id, delete, LuaValue.valueOf(waypointId));
     }
     @Override public void clearRemoteWaypoints() { runtime.invoke("waypoint.clear." + id, clear); }
+    @Override public boolean needsReconcile() {
+        return needsReconcile != null && needsReconcile.isfunction()
+                && runtime.invoke("waypoint.needs_reconcile." + id, needsReconcile).toboolean();
+    }
 }

@@ -56,6 +56,10 @@ final class SharedWaypointMapSyncPolicy {
                 continue;
             }
             if (!adapter.isAvailable() || !world.available()) continue;
+            if (adapter.needsReconcile() && now - state.lastRemoteSync >= REMOTE_SYNC_INTERVAL_MS) {
+                adapter.clearRemoteWaypoints();
+                state.renderedRemoteIds.clear();
+            }
             if (gateway.isConnected() && now - state.lastLocalScan >= LOCAL_SCAN_INTERVAL_MS) {
                 state.lastLocalScan = now;
                 syncLocal(adapter, state, world);

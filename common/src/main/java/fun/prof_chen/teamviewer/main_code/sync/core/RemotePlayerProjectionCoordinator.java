@@ -12,23 +12,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 
 public final class RemotePlayerProjectionCoordinator {
 	private static final long AVAILABILITY_PROBE_INTERVAL_NANOS = 1_000_000_000L;
+	private static final long RECONCILE_RETRY_INTERVAL_NANOS = 1_000_000_000L;
 	private final IntegrationRegistry integrations;
 	private final Function<UUID, PlayerRelationView> relationResolver;
+	private final LongSupplier nanoClock;
 	private List<RemotePlayerProjection> cachedProjections = List.of();
 	private long lastAvailabilityProbeNanos = Long.MIN_VALUE;
+	private long lastReconcileRetryNanos = Long.MIN_VALUE;
 	private ProjectionState lastState;
 
 	public RemotePlayerProjectionCoordinator(IntegrationRegistry integrations) {
-		this(integrations, ignored -> null);
+		this(integrations, ignored -> null, System::nanoTime);
 	}
 
 	public RemotePlayerProjectionCoordinator(
 			IntegrationRegistry integrations, Function<UUID, PlayerRelationView> relationResolver) {
+		this(integrations, relationResolver, System::nanoTime);
+	}
+
+	RemotePlayerProjectionCoordinator(
+			IntegrationRegistry integrations,
+			Function<UUID, PlayerRelationView> relationResolver,
+			LongSupplier nanoClock) {
 		this.integrations = integrations;
 		this.relationResolver = relationResolver == null ? ignored -> null : relationResolver;
+		this.nanoClock = nanoClock == null ? System::nanoTime : nanoClock;
 	}
 
 	public void tick(RemotePlayerRepository repository, boolean enabled, ClientWorldSnapshot world) {
@@ -45,14 +57,22 @@ public final class RemotePlayerProjectionCoordinator {
 		ProjectionState state = new ProjectionState(filtered, relations, enabled,
 				world != null && world.available(), world == null ? null : world.dimension(),
 				world == null ? null : world.localPlayerId());
-		if (state.equals(lastState)) return;
-		lastState = state;
+		boolean stateChanged = !state.equals(lastState);
+		long now = nanoClock.getAsLong();
+		boolean retryDue = lastReconcileRetryNanos == Long.MIN_VALUE
+				|| now - lastReconcileRetryNanos >= RECONCILE_RETRY_INTERVAL_NANOS;
+		if (!stateChanged && !retryDue) return;
+		if (stateChanged) lastState = state;
+		boolean retried = false;
 		for (RemotePlayerProjection projection : projections) {
 			if (!projection.isAvailable()) {
 				continue;
 			}
+			if (!stateChanged && !projection.needsReconcile()) continue;
 			projection.syncResolved(filtered, relations, enabled);
+			if (!stateChanged) retried = true;
 		}
+		if (stateChanged || retried) lastReconcileRetryNanos = now;
 	}
 
 	private Map<UUID, RemotePlayerInfo> filter(
@@ -80,11 +100,12 @@ public final class RemotePlayerProjectionCoordinator {
 	public void invalidate() {
 		cachedProjections = List.of();
 		lastAvailabilityProbeNanos = Long.MIN_VALUE;
+		lastReconcileRetryNanos = Long.MIN_VALUE;
 		lastState = null;
 	}
 
 	private List<RemotePlayerProjection> projections() {
-		long now = System.nanoTime();
+		long now = nanoClock.getAsLong();
 		if (lastAvailabilityProbeNanos == Long.MIN_VALUE
 				|| now - lastAvailabilityProbeNanos >= AVAILABILITY_PROBE_INTERVAL_NANOS) {
 			List<RemotePlayerProjection> previous = cachedProjections;

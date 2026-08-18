@@ -13,15 +13,18 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     private final LuaPluginRuntime runtime;
     private final LuaValue sync;
     private final LuaValue clear;
+    private final LuaValue needsReconcile;
     private final LuaCapabilityProbe probe;
     private volatile LuaCapabilityProbe.Result lastProbe;
 
     LuaRemotePlayerProjection(
-            String id, LuaPluginRuntime runtime, LuaValue sync, LuaValue clear, LuaValue probe) {
+            String id, LuaPluginRuntime runtime, LuaValue sync, LuaValue clear,
+            LuaValue needsReconcile, LuaValue probe) {
         this.id = id;
         this.runtime = runtime;
         this.sync = sync;
         this.clear = clear;
+        this.needsReconcile = needsReconcile;
         this.probe = new LuaCapabilityProbe(id, runtime, probe);
     }
 
@@ -56,5 +59,11 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     public void clear() {
         if (clear != null && clear.isfunction()) runtime.invoke("remote.clear." + id, clear);
         else RemotePlayerProjection.super.clear();
+    }
+
+    @Override
+    public boolean needsReconcile() {
+        return needsReconcile != null && needsReconcile.isfunction()
+                && runtime.invoke("remote.needs_reconcile." + id, needsReconcile).toboolean();
     }
 }

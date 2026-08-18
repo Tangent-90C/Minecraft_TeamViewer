@@ -41,10 +41,32 @@ local function probe()
   return {status = "AVAILABLE", detail = ""}
 end
 local function dimension(id) return client_objects:dimensionKey(id) end
+local function deletion_failed(state, id, detail)
+  state.pending_delete = true
+  if not state.delete_warned then
+    tv.log.warn("JourneyMap retained managed waypoint " .. tostring(id) .. ": " .. tostring(detail))
+    state.delete_warned = true
+  end
+  return false
+end
+local function has_pending(managed)
+  for _, value in pairs(managed) do if value.pending_delete then return true end end
+  return false
+end
 local function remove(managed, id)
   local value = managed[id]
-  if value ~= nil and api() ~= nil then pcall(function() api():removeWaypoint(JM_MOD_ID, value.object) end) end
+  if value == nil then return true end
+  local client = api()
+  if client == nil then return deletion_failed(value, id, "JourneyMap API is unavailable") end
+  local removed, remove_error = pcall(function() client:removeWaypoint(JM_MOD_ID, value.object) end)
+  if not removed then return deletion_failed(value, id, remove_error) end
+  local verified, remaining = pcall(function()
+    return client:getWaypoint(JM_MOD_ID, tostring(value.object:getGuid())) ~= nil
+  end)
+  if verified and remaining then return deletion_failed(value, id, "native delete was suppressed") end
+  if value.delete_warned then tv.log.info("JourneyMap cleanup recovered for " .. tostring(id)) end
   managed[id] = nil
+  return true
 end
 local function clear(managed)
   local ids = {}; for id, _ in pairs(managed) do table.insert(ids, id) end
@@ -54,7 +76,10 @@ end
 local function upsert(managed, id, name, x, y, z, dimension_id, color, presentation)
   local client = api(); if client == nil then return end
   local state = managed[id]
-  if state ~= nil and state.name ~= name then remove(managed, id); state = nil end
+  if state ~= nil and state.name ~= name then
+    if not remove(managed, id) then return end
+    state = nil
+  end
   if state == nil then
     local position = client_objects:blockPosition(x, y, z)
     local native_dimension = dimension(dimension_id)
@@ -81,6 +106,7 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color, presentat
     client:addWaypoint(JM_MOD_ID, object)
     state = {object = object, name = name}; managed[id] = state
   end
+  state.pending_delete = false
   state.object:setPos(x, y, z); state.object:setColor(color); state.object:setEnabled(true)
 end
 local function sync_players(managed, prefix, presentation, players, enabled, setting_enabled, relations)
@@ -118,15 +144,18 @@ end
 -- 3. Capability registration / 能力注册
 tv.register_remote_player_projection({id = "journeymap-players", probe = probe,
   sync = function(players, enabled, relations) sync_players(managed_markers, "player-marker:", "marker", players,
-      enabled, settings.show_map_markers, relations) end, clear = function() clear(managed_markers) end})
+      enabled, settings.show_map_markers, relations) end, clear = function() clear(managed_markers) end,
+  needs_reconcile = function() return has_pending(managed_markers) end})
 tv.register_remote_player_projection({id = "journeymap-player-beacons", probe = probe,
   sync = function(players, enabled, relations) sync_players(managed_beacons, "player-beacon:", "beacon", players,
-      enabled, settings.show_beacons, relations) end, clear = function() clear(managed_beacons) end})
+      enabled, settings.show_beacons, relations) end, clear = function() clear(managed_beacons) end,
+  needs_reconcile = function() return has_pending(managed_beacons) end})
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe, list_local = list_local,
   upsert_remote = function(command) upsert(managed_waypoints, command.waypointId, command.name,
       command.x, command.y, command.z, command.dimension, command.color, "waypoint") end,
   delete_remote = function(id) remove(managed_waypoints, id) end,
-  clear_remote = function() clear(managed_waypoints) end})
+  clear_remote = function() clear(managed_waypoints) end,
+  needs_reconcile = function() return has_pending(managed_waypoints) end})
 -- 4. Lifecycle cleanup / 生命周期清理
 tv.on_enable(function() initialize() end)
 tv.on_disable(function() clear(managed_markers); clear(managed_beacons); clear(managed_waypoints) end)

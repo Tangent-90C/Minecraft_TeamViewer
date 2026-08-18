@@ -92,6 +92,40 @@ class NetworkManagerTabDiffTest {
     }
 
     @Test
+    void disconnectInvalidatesRemoteRenderState() throws Exception {
+        Map<UUID, RemotePlayerInfo> remotePlayers = new HashMap<>();
+        NetworkManager manager = new NetworkManager(
+                remotePlayers, runtime(), (uri, options, listener) -> null);
+        UUID playerId = UUID.randomUUID();
+        ProtocolPackets.SnapshotFullInboundPacket snapshot = new ProtocolPackets.SnapshotFullInboundPacket();
+        snapshot.players = Map.of(playerId.toString(), Map.of("data", Map.of(
+                "x", 10D, "y", 64D, "z", 20D,
+                "dimension", "minecraft:overworld", "playerName", "Remote")));
+        snapshot.entities = Map.of();
+        snapshot.waypoints = Map.of();
+        snapshot.battleChunks = Map.of();
+        snapshot.playerMarks = Map.of();
+        invoke(manager, "applySnapshot", ProtocolPackets.SnapshotFullInboundPacket.class, snapshot);
+        assertEquals(1, remotePlayers.size());
+
+        manager.disconnect();
+
+        assertTrue(remotePlayers.isEmpty());
+        assertTrue(manager.getRemotePlayerSnapshots().isEmpty());
+    }
+
+    @Test
+    void digestCanonicalizationUsesWireCompatibleEscapingAndRounding() throws Exception {
+        Map<String, Map<String, Object>> state = Map.of(
+                "<id>&", Map.of("name", "<A&B>", "x", 1.2345645));
+        Method digest = NetworkManager.class.getDeclaredMethod("stateDigest", Map.class);
+        digest.setAccessible(true);
+        assertEquals("0cabc8c9afc26756", digest.invoke(
+                new NetworkManager(new HashMap<UUID, RemotePlayerInfo>(), runtime(),
+                        (uri, options, listener) -> null), state));
+    }
+
+    @Test
     void mainThreadTaskBudgetPreservesOrderWithoutDroppingTasks() throws Exception {
         NetworkManager manager = new NetworkManager(
                 new HashMap<UUID, RemotePlayerInfo>(), runtime(), (uri, options, listener) -> null);

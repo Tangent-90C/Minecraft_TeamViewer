@@ -36,4 +36,9 @@ public interface SharedWaypointMapAdapter {
 	}
 
 	void clearRemoteWaypoints();
+
+	/** True when the native integration retained an object whose deletion must be retried. */
+	default boolean needsReconcile() {
+		return false;
+	}
 }

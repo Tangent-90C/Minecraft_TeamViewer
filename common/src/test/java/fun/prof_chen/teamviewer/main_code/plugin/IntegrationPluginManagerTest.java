@@ -1078,6 +1078,38 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
+    void journeyMapRetainsSuppressedDeletesForProjectionRetry() {
+        JourneyMapApiStub api = new JourneyMapApiStub();
+        UUID localId = UUID.randomUUID();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(localId, "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("retry-config.json")), host);
+        UUID remoteId = UUID.randomUUID();
+        Map<UUID, RemotePlayerInfo> players = Map.of(remoteId,
+                new RemotePlayerInfo(remoteId, new Position3D(4, 70, 8),
+                        "minecraft:overworld", "Retry Remote"));
+        List<RemotePlayerProjection> projections = registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .toList();
+        projections.forEach(value -> value.sync(players, true));
+        assertEquals(2, api.waypoints().size());
+
+        api.suppressNextRemovals(2);
+        projections.forEach(RemotePlayerProjection::clear);
+        assertEquals(2, api.waypoints().size());
+        assertTrue(projections.stream().anyMatch(RemotePlayerProjection::needsReconcile));
+
+        projections.forEach(RemotePlayerProjection::clear);
+        assertTrue(api.waypoints().isEmpty());
+        assertFalse(projections.stream().anyMatch(RemotePlayerProjection::needsReconcile));
+        manager.shutdown();
+    }
+
+    @Test
     void exactFabricMapPluginRoutesMatchOfficialArtifactMatrix() {
         List<String> releases = List.of(
                 "1.18", "1.18.1", "1.18.2", "1.19", "1.19.1", "1.19.2", "1.19.3", "1.19.4",

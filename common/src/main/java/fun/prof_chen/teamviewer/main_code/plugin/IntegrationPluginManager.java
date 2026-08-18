@@ -678,7 +678,8 @@ public final class IntegrationPluginManager {
                 PluginManifest.CapabilityDeclaration declaration = declaration(descriptor, id, IntegrationRole.REMOTE_PLAYER);
                 // Legacy "kind" is accepted as an ignored table member for API v1 compatibility.
                 LuaRemotePlayerProjection projection = new LuaRemotePlayerProjection(id, runtime,
-                        requireFunction(table, "sync"), table.get("clear"), table.get("probe"));
+                        requireFunction(table, "sync"), table.get("clear"),
+                        table.get("needs_reconcile"), table.get("probe"));
                 integrations.registerPluginImplementation(descriptor.manifest.id(), id, declaration.role(), projection,
                         IntegrationImplementationSource.LUA);
                 descriptor.registered.add(id);
@@ -693,7 +694,7 @@ public final class IntegrationPluginManager {
                 LuaSharedWaypointAdapter adapter = new LuaSharedWaypointAdapter(id, runtime,
                         requireFunction(table, "list_local"), requireFunction(table, "upsert_remote"),
                         requireFunction(table, "delete_remote"), requireFunction(table, "clear_remote"),
-                        table.get("probe"));
+                        table.get("needs_reconcile"), table.get("probe"));
                 integrations.registerPluginImplementation(descriptor.manifest.id(), id, declaration.role(), adapter,
                         IntegrationImplementationSource.LUA);
                 descriptor.registered.add(id);

@@ -6,6 +6,7 @@ import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.api.RemotePlayerSnapshot;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
@@ -278,7 +279,7 @@ public class NetworkManager {
 	private volatile boolean reconnectSuppressedForVersionMismatch = false;
 	
 	// JSON序列化工具 - 用于协议数据的编码解码
-	private final Gson gson = new Gson();
+	private final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
 	private final MessageCodec messageCodec = new ProtobufMessageCodec();
 	private final Object outboundStateLock = new Object();
 	private volatile long outboundEpoch = 1L;
@@ -604,7 +605,8 @@ public class NetworkManager {
 		}
 		transportOpen = false;
 		resetNegotiationState();
-		clearLocalOutboundSnapshots();
+		resetOutboundReportState();
+		invalidateInboundRelayState();
 		isConnected = false;
 		connectionStage = ConnectionStage.DISCONNECTED;
 		lastConnectionError = "";
@@ -1179,7 +1181,8 @@ public class NetworkManager {
 			reconnectAttemptsRemaining.set(maxReconnectAttempts);
 			resetNegotiationState();
 			resetTrafficStats();
-			clearLocalOutboundSnapshots();
+			resetOutboundReportState();
+			invalidateInboundRelayState();
 			currentNegotiatedExtensions = negotiatedExtensions == null ? "" : negotiatedExtensions.trim();
 			LOGGER.info("WebSocket connection opened to TeamViewRelay server");
 			if (negotiatedExtensions != null && !negotiatedExtensions.isBlank()) {
@@ -1464,7 +1467,6 @@ public class NetworkManager {
 					UUID playerId = UUID.fromString(playerIdRaw);
 					remotePlayers.remove(playerId);
 					remotePlayerDataCache.remove(playerId);
-					lastSentPlayersSnapshot.remove(playerIdRaw);
 				} catch (Exception ignored) {
 				}
 			}
@@ -1480,7 +1482,6 @@ public class NetworkManager {
 				String entityId = idValue == null ? null : String.valueOf(idValue);
 				if (entityId != null && !entityId.isBlank()) {
 					remoteEntityDataCache.remove(entityId);
-					lastSentEntitiesSnapshot.remove(entityId);
 				}
 			}
 			Map<String, Object> upsert = objectMap(entitiesPatch.get("upsert"));
@@ -1776,7 +1777,8 @@ public class NetworkManager {
 			closePacketDumpWriterQuietly();
 			currentNegotiatedExtensions = "";
 			resetNegotiationState();
-			clearLocalOutboundSnapshots();
+			resetOutboundReportState();
+			invalidateInboundRelayState();
 			notifyConnectionStatusChanged(false);
 			if (statusCode == 1000) {
 				LOGGER.info("Disconnected from TeamViewRelay server via normal close. Status: {}, Reason: {}", statusCode, reason);
@@ -1832,7 +1834,8 @@ public class NetworkManager {
 			closePacketDumpWriterQuietly();
 			currentNegotiatedExtensions = "";
 			resetNegotiationState();
-			clearLocalOutboundSnapshots();
+			resetOutboundReportState();
+			invalidateInboundRelayState();
 			notifyConnectionStatusChanged(false);
 			if (shouldReconnect) {
 				scheduleReconnect();
@@ -2601,6 +2604,8 @@ public class NetworkManager {
 		shouldReconnect = false;
 		reconnectSuppressedForVersionMismatch = true;
 		invalidateConnectionAttempt(attemptId);
+		resetOutboundReportState();
+		invalidateInboundRelayState();
 		notifyConnectionStatusChanged(false);
 
 		if (socket != null) {
@@ -3479,7 +3484,7 @@ public class NetworkManager {
 		return drained;
 	}
 
-	private void clearLocalOutboundSnapshots() {
+	private void resetOutboundReportState() {
 		lastSentPlayersSnapshot.clear();
 		lastSentEntitiesSnapshot.clear();
 		lastSentTabPlayersSnapshot.clear();
@@ -3488,11 +3493,21 @@ public class NetworkManager {
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();
 		pendingBattleChunkRefreshIds.clear();
+	}
+
+	private void invalidateInboundRelayState() {
+		List<String> removedWaypointIds = remoteWaypointDataCache.isEmpty()
+				? List.of()
+				: List.copyOf(remoteWaypointDataCache.keySet());
+		remotePlayers.clear();
 		remotePlayerDataCache.clear();
 		remoteEntityDataCache.clear();
 		remoteWaypointDataCache.clear();
 		remoteBattleChunkDataCache.clear();
 		remotePlayerMarks.clear();
 		publishedRemotePlayerSnapshots = List.of();
+		if (!removedWaypointIds.isEmpty()) {
+			notifyWaypointsDeleted(removedWaypointIds);
+		}
 	}
 }

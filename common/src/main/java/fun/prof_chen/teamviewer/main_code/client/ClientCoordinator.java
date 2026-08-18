@@ -207,6 +207,9 @@ public final class ClientCoordinator implements ClientControlGateway {
         this.remotePlayerProjectionCoordinator = Objects.requireNonNull(remotePlayerProjectionCoordinator, "remotePlayerProjectionCoordinator");
         configureWaypointSupport(sharedWaypointRepository, sharedWaypointSyncCoordinator);
         this.worldRenderPlanner = new WorldRenderPlanner(config, this::resolvePlayerRelation, waypointGateway);
+        networkManager.addConnectionStatusListener(connected -> {
+            if (!connected) clearRelayDerivedRuntimeState();
+        });
     }
 
     public void configurePlayerRelationSupport(IntegrationRegistry integrations) {
@@ -712,6 +715,7 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     @Override
     public void reconnect() {
+        clearRelayDerivedRuntimeState();
         networkManager.disconnect();
         if (enabled) {
             networkManager.connect();
@@ -780,17 +784,21 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     private void clearRuntimeState() {
         entityReportPipeline.discardPending();
+        clearRelayDerivedRuntimeState();
+        clearTabState();
+        localMarkedState = LocalMarkedState.inactive();
+        lastMarkedFingerprint = "";
+        middlePressedLastTick = false;
+        lastMiddleClickAt = 0L;
+    }
+
+    private void clearRelayDerivedRuntimeState() {
         if (remotePlayerRepository != null) remotePlayerRepository.clear();
         if (waypointRepository != null) waypointRepository.clear();
         if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.clear();
         if (waypointCoordinator != null) waypointCoordinator.clear();
         if (worldRenderPlanner != null) worldRenderPlanner.clear();
         if (battleMapCoordinator != null) battleMapCoordinator.reset();
-        clearTabState();
-        localMarkedState = LocalMarkedState.inactive();
-        lastMarkedFingerprint = "";
-        middlePressedLastTick = false;
-        lastMiddleClickAt = 0L;
     }
 
     private void clearTabState() {
