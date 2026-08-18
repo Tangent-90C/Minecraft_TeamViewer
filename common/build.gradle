@@ -58,6 +58,7 @@ sourceSets {
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigPageId.java")
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigPageView.java")
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiAction.java")
+            exclude("fun/prof_chen/teamviewer/main_code/config/ui/ClientUiSession.java")
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiController.java")
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/ConfigUiSessions.java")
             exclude("fun/prof_chen/teamviewer/main_code/config/ui/PluginManagerUiController.java")
@@ -76,6 +77,7 @@ sourceSets {
             exclude("fun/prof_chen/teamviewer/main_code/plugin/MinecraftClientObjects.java")
             exclude("fun/prof_chen/teamviewer/main_code/renderbridge/abstraction/**")
             exclude("fun/prof_chen/teamviewer/main_code/renderbridge/model/**")
+            exclude("fun/prof_chen/teamviewer/main_code/renderbridge/core/WorldRenderBatchCompiler.java")
         }
         resources.srcDirs = ["src/main/resources"]
     }

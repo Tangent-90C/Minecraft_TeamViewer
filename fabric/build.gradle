@@ -548,57 +548,60 @@ tasks.register("verifyAdapterSdkCompleteness") {
                             "${adapter} immediate renderer must run in WorldRenderEvents.LAST")
                 }
             }
-            if (["1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6"].contains(adapter)) {
-                def renderModule = adapterSourceLayout.file(
-                        "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
-                def incompleteVertices = renderModule.readLines().findAll { line ->
-                    line.contains("buffer.vertex(") && !line.contains(".next();")
-                }
-                if (!incompleteVertices.isEmpty()) {
-                    throw new GradleException(
-                            "${adapter} legacy BufferBuilder vertices must be finalized with next()")
-                }
-            }
             if (["1.18.2", "1.19.2", "1.19.4"].contains(adapter)) {
-                def renderModule = adapterSourceLayout.file(
-                        "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
-                def renderText = renderModule.getText("UTF-8")
-                if (renderText.count("VertexFormat.DrawMode.LINES, VertexFormats.LINES") != 2 ||
-                        !renderText.contains("WorldRenderer.drawBox(matrices, buffer") ||
-                        renderText.count("normal(normalX") != 2 ||
-                        renderText.count("MatrixStack matrices = new MatrixStack();") != 4 ||
-                        renderText.contains("MatrixStack matrices = requireMatrixStack(context);") ||
-                        !renderText.contains("createLineLayer(width, depthTest)") ||
-                        !renderText.contains("RenderSystem.setShader(GameRenderer::getRenderTypeLines") ||
-                        !renderText.contains("createDebugQuadLayer(true)") ||
-                        !renderText.contains("RenderSystem.setShader(GameRenderer::getPositionColor") ||
-                        renderText.contains("RenderLayer.getLines()") ||
+                def batchRenderer = adapterSourceLayout.file(
+                        "java/fun/prof_chen/teamviewer/main_code/bridge/FabricWorldRenderBatchRenderer.java")
+                def renderCompat = adapterSourceLayout.file(
+                        "java/fun/prof_chen/teamviewer/main_code/bridge/FabricLegacyRenderCompat.java")
+                def apiCompat = adapterSourceLayout.file(
+                        "java/fun/prof_chen/teamviewer/main_code/bridge/FabricLegacyApiCompat.java")
+                if (batchRenderer == null || renderCompat == null || apiCompat == null) {
+                    throw new GradleException("${adapter} legacy renderer must provide batch core and API compat")
+                }
+                def batchText = batchRenderer.getText("UTF-8")
+                def compatText = renderCompat.getText("UTF-8")
+                def apiText = apiCompat.getText("UTF-8")
+                def renderText = batchText + "\n" + compatText + "\n" + apiText
+                if (!batchText.contains("WorldRenderBatch.LineBatch") ||
+                        !batchText.contains("WorldRenderBatch.QuadBatch") ||
+                        !batchText.contains("VertexFormat.DrawMode.LINES, VertexFormats.LINES") ||
+                        !batchText.contains("FabricLegacyRenderCompat.addLineVertex") ||
+                        !apiText.contains(".normal(normalX, normalY, normalZ).next();") ||
+                        !compatText.contains("cache.computeIfAbsent(width") ||
+                        !apiText.contains("RenderSystem.setShader(GameRenderer::getRenderTypeLines") ||
+                        !apiText.contains("RenderSystem.setShader(GameRenderer::getPositionColor") ||
+                        renderText.contains("UnifiedRenderModule") ||
+                        renderText.contains("WorldRenderer.drawBox") ||
                         renderText.contains("RenderLayer.getLineStrip()") ||
-                        renderText.contains("RenderLayer.getLightning()") ||
                         renderText.contains("VertexFormat.DrawMode.DEBUG_LINE_STRIP")) {
                     throw new GradleException(
-                            "${adapter} renderer must use camera-relative vertices, complete LINES normals, and main-target position-color quads")
+                            "${adapter} renderer must batch camera-relative lines/quads with complete LINES normals")
                 }
             }
             if (["1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4",
                  "1.21.5", "1.21.8", "1.21.9", "1.21.10"].contains(adapter)) {
-                def renderModule = adapterSourceLayout.file(
-                        "java/fun/prof_chen/teamviewer/main_code/bridge/UnifiedRenderModule.java")
-                def renderText = renderModule.getText("UTF-8")
-                if (renderText.count("VertexFormat.DrawMode.DEBUG_LINES") != 2 ||
-                        !renderText.contains("RenderLayer.getDebugLineStrip") ||
-                        renderText.contains("VertexFormat.DrawMode.DEBUG_LINE_STRIP")) {
+                def renderSources = adapterSourceLayout.javaFiles.findAll { source ->
+                    source.path.contains("/main_code/bridge/") &&
+                            (source.name == "FabricWorldRenderBatchRenderer.java" ||
+                                    source.name == "FabricRenderLayerCompat.java")
+                }.collect { it.getText("UTF-8") }.join("\n")
+                if (!renderSources.contains("DrawMode.DEBUG_LINES") ||
+                        !renderSources.contains("RenderLayer.getDebugLineStrip") ||
+                        renderSources.contains("DrawMode.DEBUG_LINE_STRIP")) {
                     throw new GradleException(
-                            "${adapter} debug position-color pipeline must render independent DEBUG_LINES")
+                            "${adapter} batch renderer must use independent DEBUG_LINES")
                 }
             }
             def gameBridge = adapterSourceLayout.file(
                     "java/fun/prof_chen/teamviewer/main_code/client/bridge/FabricGameClientBridge.java")
             def gameBridgeText = gameBridge.getText("UTF-8")
-            if (!gameBridgeText.contains("normalizeMarkTargetDistance(maxDistance)")) {
+            def gameClientSources = adapterSourceLayout.javaFiles.findAll { source ->
+                source.name.endsWith("GameClientBridge.java")
+            }.collect { it.getText("UTF-8") }.join("\n")
+            if (!gameClientSources.contains("normalizeMarkTargetDistance(maxDistance)")) {
                 throw new GradleException("${adapter} mark targeting must use the SDK distance bound")
             }
-            if (adapter == "1.21.8" && gameBridgeText.contains("crosshairTarget")) {
+            if (adapter == "1.21.8" && gameClientSources.contains("crosshairTarget")) {
                 throw new GradleException(
                         "${adapter} mark targeting must raycast beyond Minecraft's interaction-limited crosshairTarget")
             }

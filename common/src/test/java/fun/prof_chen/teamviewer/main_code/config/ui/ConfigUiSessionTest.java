@@ -176,38 +176,6 @@ class ConfigUiSessionTest {
     }
 
     @Test
-    void pluginPagesUseDynamicIdsAndForwardSettingsAndToggleActions() {
-        PluginManifest.SettingDefinition setting = new PluginManifest.SettingDefinition(
-                "enabled_marker", "boolean", "Enable marker", true,
-                null, null, List.of(), false);
-        PluginSnapshot plugin = new PluginSnapshot(
-                "custom.ui", "UI plugin", "1.0.0", false, true, true,
-                PluginRuntimeStatus.ACTIVE, "", tempDir.resolve("custom.ui"), Map.of("enabled_marker", true),
-                List.of(setting), List.of(new IntegrationCapability(
-                "custom-ui-map", "battle-map-source", IntegrationSupportStatus.AVAILABLE, "",
-                "custom.ui", IntegrationImplementationSource.LUA, PluginRuntimeStatus.ACTIVE)));
-        FakeControl control = new FakeControl(new Config(), plugin);
-        ConfigUiSession session = new ConfigUiSession(control);
-        ConfigControlId open = ConfigControlId.plugin(plugin.id(), "open");
-
-        assertContains(session, ConfigPageId.PLUGINS, open);
-        assertEquals(ConfigPageId.PLUGIN_DETAIL,
-                session.activate(ConfigPageId.PLUGINS, open).targetPage());
-        ConfigControlId dynamicSetting = ConfigControlId.setting(plugin.id(), "enabled_marker");
-        assertContains(session, ConfigPageId.PLUGIN_DETAIL, dynamicSetting,
-                ConfigControlId.plugin(plugin.id(), "toggle"));
-
-        session.setChecked(dynamicSetting, false);
-        assertEquals(false, control.changedSettings.get("enabled_marker"));
-        session.activate(ConfigPageId.PLUGIN_DETAIL, ConfigControlId.plugin(plugin.id(), "toggle"));
-        assertEquals(Boolean.FALSE, control.lastEnabledValue);
-
-        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
-        session.activate(ConfigPageId.NETWORK, ConfigControlId.BATTLE_MAP_SOURCE);
-        assertEquals("custom-ui-map", control.config.getBattleMapSourceId());
-    }
-
-    @Test
     void journeyMapMergedSettingsAreIdenticalAndSafeInBothLayouts() {
         List<PluginManifest.SettingDefinition> definitions = List.of(
                 new PluginManifest.SettingDefinition("show_remote_players", "boolean",
@@ -226,23 +194,10 @@ class ConfigUiSessionTest {
                         "show_map_markers", new PluginSettingState(false, false, ""),
                         "show_beacons", new PluginSettingState(false, false, "")), List.of());
         FakeControl control = new FakeControl(new Config(), plugin);
-        ConfigUiSession session = new ConfigUiSession(control);
-        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(plugin.id(), "open"));
+        PluginManagerUiController manager = new PluginManagerUiSession(control);
 
         ConfigControlId combined = ConfigControlId.setting(plugin.id(), "show_remote_players");
         ConfigControlId marker = ConfigControlId.setting(plugin.id(), "show_map_markers");
-        ConfigControlId beacon = ConfigControlId.setting(plugin.id(), "show_beacons");
-        Set<ConfigControlId> detailIds = session.page(ConfigPageId.PLUGIN_DETAIL, 854, 480).controls()
-                .stream().map(ConfigControlView::id).collect(Collectors.toSet());
-        assertTrue(detailIds.contains(combined));
-        assertFalse(detailIds.contains(marker));
-        assertFalse(detailIds.contains(beacon));
-        session.setChecked(marker, false);
-        session.activate(ConfigPageId.PLUGIN_DETAIL, beacon);
-        assertFalse(control.changedSettings.containsKey("show_map_markers"));
-        assertFalse(control.changedSettings.containsKey("show_beacons"));
-
-        PluginManagerUiController manager = session.pluginManager();
         PluginManagerView wide = manager.view(854, 480);
         assertEquals(List.of(combined), wide.detail().settings().stream()
                 .map(PluginManagerView.SettingView::id).toList());
@@ -268,74 +223,10 @@ class ConfigUiSessionTest {
     }
 
     @Test
-    void copyActionOpensLocalizedGuideWithPathAndDirectoryAction() {
-        PluginSnapshot builtIn = plugin("nodemc", true);
-        FakeControl control = new FakeControl(new Config(), builtIn);
-        control.copyPath = tempDir.resolve("team-view-relay/plugins/nodemc.custom");
-        ConfigUiSession session = new ConfigUiSession(control);
-        ConfigControlId open = ConfigControlId.plugin(builtIn.id(), "open");
-        assertEquals(ConfigPageId.PLUGIN_DETAIL,
-                session.activate(ConfigPageId.PLUGINS, open).targetPage());
-
-        ConfigUiAction copied = session.activate(ConfigPageId.PLUGIN_DETAIL,
-                ConfigControlId.plugin(builtIn.id(), "copy"));
-        assertEquals(ConfigPageId.PLUGIN_COPY_GUIDE, copied.targetPage());
-        assertContains(session, ConfigPageId.PLUGIN_COPY_GUIDE,
-                ConfigControlId.PLUGIN_GUIDE_OPEN_DIRECTORY,
-                ConfigControlId.PLUGIN_GUIDE_RETURN_LIST);
-        ConfigPageView guide = session.page(ConfigPageId.PLUGIN_COPY_GUIDE, 854, 480);
-        assertTrue(guide.controls().stream()
-                .filter(value -> value.label() != null)
-                .allMatch(value -> value.label().translationKey() != null),
-                "framework copy-guide labels must remain translatable");
-
-        session.activate(ConfigPageId.PLUGIN_COPY_GUIDE, ConfigControlId.PLUGIN_GUIDE_OPEN_DIRECTORY);
-        assertEquals(control.copyPath, control.openedPath);
-    }
-
-    @Test
-    void customAndDisabledPluginPagesExposeSafeUninstallRestoreAndDeleteFlow() {
-        PluginSnapshot custom = plugin("custom.ui", false);
-        FakeControl control = new FakeControl(new Config(), custom);
-        DisabledPluginSnapshot disabled = new DisabledPluginSnapshot(
-                "custom.ui-20260726", custom.id(), custom.name(), custom.version(),
-                "custom.ui", false, 1L, tempDir.resolve("plugins-disabled/custom.ui-20260726"));
-        control.disabledPlugins = List.of(disabled);
-        ConfigUiSession session = new ConfigUiSession(control);
-
-        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(custom.id(), "open"));
-        assertContains(session, ConfigPageId.PLUGIN_DETAIL,
-                ConfigControlId.plugin(custom.id(), "uninstall"));
-        assertEquals(ConfigPageId.PLUGINS, session.activate(ConfigPageId.PLUGIN_DETAIL,
-                ConfigControlId.plugin(custom.id(), "uninstall")).targetPage());
-        assertEquals(custom.id(), control.uninstalledPluginId);
-
-        assertContains(session, ConfigPageId.DISABLED_PLUGINS,
-                ConfigControlId.plugin(disabled.storageId(), "disabled-open"));
-        assertEquals(ConfigPageId.DISABLED_PLUGIN_DETAIL,
-                session.activate(ConfigPageId.DISABLED_PLUGINS,
-                        ConfigControlId.plugin(disabled.storageId(), "disabled-open")).targetPage());
-        assertContains(session, ConfigPageId.DISABLED_PLUGIN_DETAIL,
-                ConfigControlId.plugin(disabled.storageId(), "disabled-restore"),
-                ConfigControlId.plugin(disabled.storageId(), "disabled-open-dir"),
-                ConfigControlId.plugin(disabled.storageId(), "disabled-delete"));
-
-        assertEquals(ConfigPageId.PLUGIN_DELETE_CONFIRM,
-                session.activate(ConfigPageId.DISABLED_PLUGIN_DETAIL,
-                        ConfigControlId.plugin(disabled.storageId(), "disabled-delete")).targetPage());
-        assertContains(session, ConfigPageId.PLUGIN_DELETE_CONFIRM,
-                ConfigControlId.plugin(disabled.storageId(), "disabled-delete-confirm"));
-        assertEquals(ConfigPageId.DISABLED_PLUGINS,
-                session.activate(ConfigPageId.PLUGIN_DELETE_CONFIRM,
-                        ConfigControlId.plugin(disabled.storageId(), "disabled-delete-confirm")).targetPage());
-        assertEquals(disabled.storageId(), control.deletedStorageId);
-    }
-
-    @Test
     void pluginManagerUsesDenseWideAndCompactLayoutsWithToggleOnlyInTheList() {
         PluginSnapshot plugin = pluginWithSettings("custom.dense");
-        PluginManagerUiController manager = new ConfigUiSession(
-                new FakeControl(new Config(), plugin)).pluginManager();
+        PluginManagerUiController manager = new PluginManagerUiSession(
+                new FakeControl(new Config(), plugin));
 
         PluginManagerView wide = manager.view(854, 480);
         assertFalse(wide.compact());
@@ -400,19 +291,8 @@ class ConfigUiSessionTest {
                 .withRuntimeState(List.of(
                         new PluginRuntimeState("source.status", "导入状态", "已导入"),
                         new PluginRuntimeState("effective.friendly", "当前 Tab 友军", "2 人: Alice, Bob")));
-        ConfigUiSession session = new ConfigUiSession(new FakeControl(new Config(), plugin));
-        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(pluginId, "open"));
-
-        Map<ConfigControlId, ConfigControlView> detailControls = session.page(
-                        ConfigPageId.PLUGIN_DETAIL, 854, 480).controls().stream()
-                .collect(Collectors.toMap(ConfigControlView::id, value -> value));
-        assertTrue(detailControls.containsKey(ConfigControlId.plugin(pluginId, "runtime-heading")));
-        assertEquals("饶州", detailControls.get(
-                ConfigControlId.setting(pluginId, "friendly_tags")).value());
-        assertEquals("星辉", detailControls.get(
-                ConfigControlId.setting(pluginId, "enemy_tags")).value());
-
-        PluginManagerView managerView = session.pluginManager().view(854, 480);
+        PluginManagerView managerView = new PluginManagerUiSession(
+                new FakeControl(new Config(), plugin)).view(854, 480);
         assertEquals("screen.mc_teamviewer.integration_plugin.manager.runtime_state",
                 managerView.detail().runtimeSectionTitle().translationKey());
         int firstRuntime = managerView.detail().runtimeLineStartIndex();
@@ -438,8 +318,7 @@ class ConfigUiSessionTest {
                         "clear_automatic_relations", "清空自动识别", "只清空自动结果",
                         true, true, "确定清空当前自动识别结果吗？")));
         FakeControl control = new FakeControl(new Config(), plugin);
-        ConfigUiSession session = new ConfigUiSession(control);
-        PluginManagerUiController manager = session.pluginManager();
+        PluginManagerUiController manager = new PluginManagerUiSession(control);
 
         PluginManagerView narrow = manager.view(320, 360);
         assertNotNull(narrow.detail().description());
@@ -460,19 +339,13 @@ class ConfigUiSessionTest {
         assertEquals(pluginId, control.invokedPluginId);
         assertEquals("clear_automatic_relations", control.invokedPluginActionId);
 
-        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(pluginId, "open"));
-        assertEquals(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM,
-                session.activate(ConfigPageId.PLUGIN_DETAIL, clear).targetPage());
-        assertEquals(1, control.invokedPluginActionCount);
-        session.activate(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM, ConfigControlId.PLUGIN_RUNTIME_CONFIRM);
-        assertEquals(2, control.invokedPluginActionCount);
     }
 
     @Test
     void pluginManagerCommitsTextOnNavigationAndAppliesBooleanAndEnumImmediately() {
         PluginSnapshot plugin = pluginWithSettings("custom.settings");
         FakeControl control = new FakeControl(new Config(), plugin);
-        PluginManagerUiController manager = new ConfigUiSession(control).pluginManager();
+        PluginManagerUiController manager = new PluginManagerUiSession(control);
         manager.view(854, 480);
 
         manager.activate(ConfigControlId.setting(plugin.id(), "visible"));
@@ -492,7 +365,7 @@ class ConfigUiSessionTest {
         List<PluginSnapshot> plugins = new ArrayList<>();
         for (int index = 0; index < 10; index++) plugins.add(plugin("custom." + index, false));
         FakeControl control = new FakeControl(new Config(), plugins);
-        PluginManagerUiController manager = new ConfigUiSession(control).pluginManager();
+        PluginManagerUiController manager = new PluginManagerUiSession(control);
         manager.view(854, 260);
         manager.moveSelection(9);
         PluginManagerView scrolled = manager.view(854, 260);
@@ -520,8 +393,8 @@ class ConfigUiSessionTest {
             PluginSnapshot plugin = new PluginSnapshot(
                     "state." + status.name().toLowerCase(), status.name(), "1", false, true, true,
                     status, "", tempDir.resolve(status.name()), Map.of(), List.of(), List.of(), false);
-            PluginManagerView view = new ConfigUiSession(
-                    new FakeControl(new Config(), plugin)).pluginManager().view(854, 480);
+            PluginManagerView view = new PluginManagerUiSession(
+                    new FakeControl(new Config(), plugin)).view(854, 480);
             PluginManagerView.ListItemView item = view.items().get(0);
             boolean available = status == PluginRuntimeStatus.ACTIVE
                     || status == PluginRuntimeStatus.DISABLED;
@@ -535,7 +408,7 @@ class ConfigUiSessionTest {
                 "custom.modal", false, 1L, tempDir.resolve("disabled/custom.modal"));
         FakeControl control = new FakeControl(new Config(), custom);
         control.disabledPlugins = List.of(disabled);
-        PluginManagerUiController manager = new ConfigUiSession(control).pluginManager();
+        PluginManagerUiController manager = new PluginManagerUiSession(control);
         manager.activate(ConfigControlId.PLUGIN_TAB_DISABLED);
         PluginManagerView disabledView = manager.view(854, 480);
         assertEquals(3, disabledView.detail().actions().size());
@@ -556,14 +429,14 @@ class ConfigUiSessionTest {
         PluginSnapshot builtIn = plugin("teamviewer.copy-test", true);
         FakeControl successControl = new FakeControl(new Config(), builtIn);
         successControl.copyPath = tempDir.resolve("plugins/copy-test.custom");
-        PluginManagerUiController success = new ConfigUiSession(successControl).pluginManager();
+        PluginManagerUiController success = new PluginManagerUiSession(successControl);
         success.view(854, 480);
         success.activate(ConfigControlId.plugin(builtIn.id(), "copy"));
         assertEquals(PluginManagerView.DialogKind.COPY_GUIDE,
                 success.view(854, 480).dialog().kind());
 
         FakeControl failureControl = new FakeControl(new Config(), builtIn);
-        PluginManagerUiController failure = new ConfigUiSession(failureControl).pluginManager();
+        PluginManagerUiController failure = new PluginManagerUiSession(failureControl);
         failure.view(854, 480);
         failure.activate(ConfigControlId.plugin(builtIn.id(), "copy"));
         PluginManagerView failed = failure.view(854, 480);

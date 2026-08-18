@@ -4,7 +4,7 @@ import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageId;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageView;
-import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
+import fun.prof_chen.teamviewer.main_code.config.ui.ClientUiSession;
 import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureFrame;
 import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
 
@@ -20,7 +20,7 @@ public final class AdapterTck {
 
     public static <W, H> AdapterTckReport inspect(
             ClientAdapterBundle<W, H> adapters,
-            ConfigUiController configUi) {
+            ClientUiSession clientUi) {
         List<String> issues = new ArrayList<>();
         probe("report snapshot", issues, () -> validateReport(adapters.gameClientBridge().captureReportSnapshot(false)));
         probe("world snapshot", issues, () -> validateWorld(adapters.gameClientBridge().captureWorldSnapshot(false)));
@@ -50,8 +50,14 @@ public final class AdapterTck {
         missingEvents.removeAll(adapters.eventBridge().registeredEvents());
         if (!missingEvents.isEmpty()) issues.add("missing registered events: " + missingEvents);
         for (ConfigPageId pageId : ConfigPageId.values()) {
-            probe("config page " + pageId, issues, () -> validatePage(configUi.page(pageId, 854, 480), pageId));
+            probe("config page " + pageId, issues,
+                    () -> validatePage(clientUi.config().page(pageId, 854, 480), pageId));
         }
+        probe("plugin manager", issues, () -> {
+            if (clientUi.plugins().view(854, 480) == null) {
+                throw new IllegalStateException("returned null");
+            }
+        });
         List<String> integrationIssues = adapters.integrationRegistry().issues();
         integrationIssues.forEach(issue -> issues.add("integration: " + issue));
         List<IntegrationCapability> integrations = adapters.integrationRegistry().capabilities();

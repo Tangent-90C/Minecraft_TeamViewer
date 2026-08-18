@@ -11,6 +11,9 @@ import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageId;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigPageView;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiAction;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiController;
+import fun.prof_chen.teamviewer.main_code.config.ui.ClientUiSession;
+import fun.prof_chen.teamviewer.main_code.config.ui.PluginManagerUiController;
+import fun.prof_chen.teamviewer.main_code.config.ui.PluginManagerView;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiRect;
 import fun.prof_chen.teamviewer.main_code.config.ui.UiText;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
@@ -161,8 +164,8 @@ class AdapterTckTest {
         return result;
     }
 
-    private static ConfigUiController configUi() {
-        return new ConfigUiController() {
+    private static ClientUiSession configUi() {
+        ConfigUiController config = new ConfigUiController() {
             @Override
             public ConfigPageView page(ConfigPageId pageId, int width, int height) {
                 return new ConfigPageView(pageId, UiText.literal(pageId.name()), 10,
@@ -178,5 +181,30 @@ class AdapterTckTest {
             @Override
             public ConfigUiAction close(ConfigPageId pageId) { return ConfigUiAction.stay(); }
         };
+        PluginManagerUiController plugins = new PluginManagerUiController() {
+            @Override
+            public PluginManagerView view(int width, int height) {
+                UiRect bounds = new UiRect(0, 0, width, height);
+                return new PluginManagerView(
+                        bounds, bounds, bounds, null, null, null, null,
+                        bounds, bounds, false, false,
+                        PluginManagerView.PluginManagerTab.INSTALLED,
+                        List.of(), null, null, null);
+            }
+
+            @Override
+            public ConfigUiAction activate(ConfigControlId id) { return ConfigUiAction.stay(); }
+            @Override
+            public void setText(ConfigControlId id, String value) { }
+            @Override
+            public void scrollList(int rows) { }
+            @Override
+            public void scrollDetail(int pixels) { }
+            @Override
+            public void moveSelection(int rows) { }
+            @Override
+            public void commitTextSettings() { }
+        };
+        return new ClientUiSession(config, plugins);
     }
 }

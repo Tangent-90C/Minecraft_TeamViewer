@@ -114,6 +114,18 @@ real shared/compat/version path.
 Run `python3 scripts/minecraft_targets.py source-plan <target> [--loader neoforge] [--format json]` to inspect the
 effective owner of every Java and resource file.
 
+Large native ports follow a core/shim split inside those layers. `GameClientBridge`, runtime
+metadata, configuration screens, plugin screens and event registration keep their stable control
+flow in a shared core; a version shim contains only the native method names, event signatures or
+text/input constructors that actually changed. UI state and layout remain in common and native
+screens only paint `ConfigPageView`/`PluginManagerView` and translate input events.
+
+Immediate world renderers compile `WorldRenderFrame` once through `WorldRenderBatchCompiler`.
+Lines are grouped by depth mode and width, while filled primitives are grouped by depth mode, so
+the number of native submissions depends on render state rather than remote-player count. Minecraft
+1.21.11 and 26.x use the vanilla Gizmo pipeline instead; their custom `BatchGizmo` combines all
+commands for each occlusion mode and must not be replaced with per-command Gizmo registration.
+
 `common-sdk`, common runtime and `client-bootstrap` are Java 17 ABI artifacts. Each adapter is
 compiled with its target's `adapter_java_release`. A target below Java 17 is rejected until a
 separate legacy runtime exists; running an old Minecraft release on a newer JRE is not a supported

@@ -2,7 +2,7 @@ package fun.prof_chen.teamviewer.main_code.core;
 
 import fun.prof_chen.teamviewer.neoforge.adapter.client.NeoForgeClientEventBridge;
 import fun.prof_chen.teamviewer.neoforge.adapter.client.NeoForgeGameClientBridge;
-import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftClientUiCompat;
+import fun.prof_chen.teamviewer.minecraft.adapter.bridge.MinecraftClientUiCompat;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterBundle;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;

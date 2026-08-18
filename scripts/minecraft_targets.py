@@ -265,6 +265,9 @@ def source_plan(matrix: Matrix, loader: str, target: str) -> SourcePlan:
                     )
                 compat_owners[relative] = layer_root.name
                 entries[relative] = SourceEntry(path, f"compat:{layer_root.name}")
+    native_version_root = ROOT / "minecraft-adapter" / "src" / "version" / adapter
+    for relative, path in _source_files(native_version_root).items():
+        entries[relative] = SourceEntry(path, f"native-version:{adapter}")
     version_root = source_root / "version" / adapter
     for relative, path in _source_files(version_root).items():
         previous = entries.get(relative)
@@ -278,6 +281,24 @@ def source_plan(matrix: Matrix, loader: str, target: str) -> SourcePlan:
 
 
 def validate_source_layout(matrix: Matrix) -> None:
+    native_root = ROOT / "minecraft-adapter" / "src" / "version"
+    if native_root.is_dir():
+        for source in sorted(native_root.rglob("*.java")):
+            text = source.read_text(encoding="utf-8")
+            if re.search(r"\b(?:net\.fabricmc|net\.neoforged|net\.minecraftforge)\b", text):
+                raise SystemExit(f"Native Minecraft layer imports a Loader API: {source}")
+            package_match = re.search(r"^package\s+([^;]+);", text, re.MULTILINE)
+            if package_match is None:
+                raise SystemExit(f"Native Minecraft source has no package declaration: {source}")
+            expected = native_root / source.relative_to(native_root).parts[0] / "java"
+            relative = source.relative_to(expected)
+            expected_relative = pathlib.Path(*package_match.group(1).split(".")) / source.name
+            if relative != expected_relative:
+                raise SystemExit(
+                    f"Native Minecraft source path does not match package: {source}; "
+                    f"expected {expected_relative}"
+                )
+
     for obsolete in (ROOT / "neoforge/src", ROOT / "neoforge-legacy/src"):
         obsolete_files = sorted(path for path in obsolete.rglob("*") if path.is_file())
         if obsolete_files:

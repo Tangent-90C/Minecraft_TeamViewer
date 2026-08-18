@@ -43,6 +43,7 @@ sourceSets {
             include("fun/prof_chen/teamviewer/main_code/plugin/MinecraftClientObjects.java")
             include("fun/prof_chen/teamviewer/main_code/renderbridge/abstraction/**")
             include("fun/prof_chen/teamviewer/main_code/renderbridge/model/**")
+            include("fun/prof_chen/teamviewer/main_code/renderbridge/core/WorldRenderBatchCompiler.java")
         }
     }
 }

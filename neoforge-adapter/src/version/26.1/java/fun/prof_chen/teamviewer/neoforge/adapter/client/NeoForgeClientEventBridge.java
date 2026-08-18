@@ -6,7 +6,7 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
 import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.neoforge.NeoForgeClientContext;
-import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftClientUiCompat;
+import fun.prof_chen.teamviewer.minecraft.adapter.bridge.MinecraftClientUiCompat;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;

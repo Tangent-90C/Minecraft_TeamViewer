@@ -13,7 +13,7 @@
   明确迁移要求；`1.0.0` 后按 SemVer 递增 major。
 - 网络消息或握手兼容性变化：单独递增 `proto` 版本，并同步评估后端和网页脚本。
 
-只修改 Mod 时，保留当前 `proto` 后缀。本次示例为 `v0.5.0-proto0.6.2`。
+只修改 Mod 时，保留当前 `proto` 后缀。本次示例为 `v0.6.0-proto0.6.2`。
 
 ## 发布前检查
 
@@ -78,7 +78,7 @@
 3. CI 全绿后创建并推送与 `mod_version` 完全一致的 annotated tag：
 
    ```bash
-   release_tag=v0.5.0-proto0.6.2
+   release_tag=v0.6.0-proto0.6.2
    git tag -a "$release_tag" -m "TeamViewRelay $release_tag"
    git push origin "$release_tag"
    ```

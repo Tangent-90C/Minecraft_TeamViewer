@@ -6,18 +6,8 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationIds;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
-import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationImplementationSource;
-import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 import fun.prof_chen.teamviewer.main_code.config.Config;
-import fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot;
-import fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult;
-import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
-import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
-import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
-import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeState;
-import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeAction;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -38,23 +28,12 @@ public final class ConfigUiSession implements ConfigUiController {
 
     private final ClientControlGateway control;
     private final Config config;
-    private final PluginManagerUiController pluginManager;
     private final Map<ConfigControlId, String> textValues = new HashMap<>();
     private String originalUrl;
     private String originalRoomCode;
     private boolean originalAutoConnect;
     private boolean originalAllowInsecureTls;
     private boolean allowInsecureTls;
-    private String selectedPluginId;
-    private String selectedDisabledPluginId;
-    private String pendingDeleteDisabledPluginId;
-    private String pendingRuntimePluginId;
-    private String pendingRuntimeActionId;
-    private PluginFileOperationResult lastPluginOperation;
-    private Path copiedPluginPath;
-    private boolean openDirectoryFailed;
-    private int pluginListPage;
-    private int disabledPluginListPage;
     private int entityFilterListPage;
     private String editingEntityFilterKind = Config.ENTITY_FILTER_ALLOW_TYPE;
     private String editingEntityFilterOriginalValue = "";
@@ -62,14 +41,8 @@ public final class ConfigUiSession implements ConfigUiController {
     public ConfigUiSession(ClientControlGateway control) {
         this.control = Objects.requireNonNull(control, "control");
         this.config = Objects.requireNonNull(control.getConfig(), "config");
-        this.pluginManager = new PluginManagerUiSession(control);
         captureRootBaseline();
         initializeTextValues();
-    }
-
-    @Override
-    public PluginManagerUiController pluginManager() {
-        return pluginManager;
     }
 
     @Override
@@ -85,13 +58,6 @@ public final class ConfigUiSession implements ConfigUiController {
             case WAYPOINT -> waypointPage(width, height);
             case WAYPOINT_SHAPE -> waypointShapePage(width, height);
             case PACKET_CAPTURE -> packetCapturePage(width, height);
-            case PLUGINS -> pluginsPage(width, height);
-            case PLUGIN_DETAIL -> pluginDetailPage(width);
-            case PLUGIN_RUNTIME_ACTION_CONFIRM -> pluginRuntimeActionConfirmPage(width, height);
-            case PLUGIN_COPY_GUIDE -> pluginCopyGuidePage(width);
-            case DISABLED_PLUGINS -> disabledPluginsPage(width, height);
-            case DISABLED_PLUGIN_DETAIL -> disabledPluginDetailPage(width);
-            case PLUGIN_DELETE_CONFIRM -> pluginDeleteConfirmPage(width, height);
         };
     }
 
@@ -106,11 +72,6 @@ public final class ConfigUiSession implements ConfigUiController {
     public void setChecked(ConfigControlId id, boolean checked) {
         if (ALLOW_INSECURE_TLS.equals(id)) {
             allowInsecureTls = checked;
-        } else if (id != null && id.isPluginSetting()) {
-            PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
-            if (settingInteractive(plugin, id.settingKey())) {
-                control.setIntegrationPluginSetting(id.pluginId(), id.settingKey(), checked);
-            }
         }
     }
 
@@ -120,13 +81,10 @@ public final class ConfigUiSession implements ConfigUiController {
             return ConfigUiAction.stay();
         }
         if (id.isEntityRuleAction()) return activateEntityRuleAction(id);
-        if (id.isPluginRuntimeAction()) return activatePluginRuntimeAction(id);
-        if (id.isPluginAction()) return activatePluginAction(id);
-        if (id.isPluginSetting()) return activatePluginSetting(id);
         return switch (id.value()) {
             case "OPEN_DISPLAY" -> ConfigUiAction.open(ConfigPageId.DISPLAY);
             case "OPEN_NETWORK" -> ConfigUiAction.open(ConfigPageId.NETWORK);
-            case "OPEN_PLUGINS" -> ConfigUiAction.open(ConfigPageId.PLUGINS);
+            case "OPEN_PLUGINS" -> ConfigUiAction.openPluginManager();
             case "OPEN_ENTITY_UPLOAD" -> ConfigUiAction.open(ConfigPageId.ENTITY_UPLOAD);
             case "OPEN_ENTITY_FILTERS" -> ConfigUiAction.open(ConfigPageId.ENTITY_FILTERS);
             case "OPEN_COLOR" -> ConfigUiAction.open(ConfigPageId.COLOR);
@@ -180,44 +138,12 @@ public final class ConfigUiSession implements ConfigUiController {
             case "BATTLE_MAP_DEBUG" -> toggle(config.isBattleMapDebugEnabled(), config::setBattleMapDebugEnabled);
             case "PACKET_CAPTURE_START" -> startPacketCapture();
             case "PACKET_CAPTURE_STOP" -> stopPacketCapture();
-            case "PLUGIN_RESCAN" -> {
-                control.rescanIntegrationPlugins();
-                yield ConfigUiAction.stay();
-            }
-            case "PLUGIN_RUNTIME_CONFIRM" -> confirmPluginRuntimeAction();
-            case "PLUGIN_PREVIOUS" -> {
-                pluginListPage = Math.max(0, pluginListPage - 1);
-                yield ConfigUiAction.reload();
-            }
-            case "PLUGIN_NEXT" -> {
-                pluginListPage++;
-                yield ConfigUiAction.reload();
-            }
-            case "PLUGIN_OPEN_DISABLED" -> ConfigUiAction.open(ConfigPageId.DISABLED_PLUGINS);
-            case "DISABLED_PLUGIN_PREVIOUS" -> {
-                disabledPluginListPage = Math.max(0, disabledPluginListPage - 1);
-                yield ConfigUiAction.reload();
-            }
-            case "DISABLED_PLUGIN_NEXT" -> {
-                disabledPluginListPage++;
-                yield ConfigUiAction.reload();
-            }
-            case "PLUGIN_GUIDE_OPEN_DIRECTORY" -> {
-                openDirectoryFailed = copiedPluginPath == null
-                        || !control.openIntegrationPluginDirectory(copiedPluginPath);
-                yield ConfigUiAction.stay();
-            }
-            case "PLUGIN_GUIDE_RETURN_LIST" -> ConfigUiAction.open(ConfigPageId.PLUGINS);
             default -> ConfigUiAction.stay();
         };
     }
 
     @Override
     public ConfigUiAction close(ConfigPageId pageId) {
-        if (pageId == ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM) {
-            pendingRuntimePluginId = null;
-            pendingRuntimeActionId = null;
-        }
         if (pageId == ConfigPageId.ROOT) {
             cancelRoot();
         } else {
@@ -635,346 +561,6 @@ public final class ConfigUiSession implements ConfigUiController {
         return new ConfigPageView(ConfigPageId.PACKET_CAPTURE, tr("screen.mc_teamviewer.packet_capture.title"), start - 24, c);
     }
 
-    private ConfigPageView pluginsPage(int width, int height) {
-        List<PluginSnapshot> plugins = control.getIntegrationPlugins();
-        int pageSize = Math.max(4, Math.min(8, (height - 175) / 24));
-        int pageCount = Math.max(1, (plugins.size() + pageSize - 1) / pageSize);
-        pluginListPage = Math.min(pluginListPage, pageCount - 1);
-        int startIndex = pluginListPage * pageSize;
-        int endIndex = Math.min(plugins.size(), startIndex + pageSize);
-        int x = (width - 420) / 2;
-        int y = 54;
-        List<ConfigControlView> controls = new ArrayList<>();
-        for (int index = startIndex; index < endIndex; index++) {
-            PluginSnapshot plugin = plugins.get(index);
-            long available = plugin.capabilities().stream()
-                    .filter(capability -> capability.status() == IntegrationSupportStatus.AVAILABLE)
-                    .count();
-            controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.id(), "open"),
-                    new UiRect(x, y, 420, HEIGHT),
-                    t("screen.mc_teamviewer.integration_plugin.list_entry",
-                            tr(plugin.enabled()
-                                    ? "screen.mc_teamviewer.integration_plugin.enabled_short"
-                                    : "screen.mc_teamviewer.integration_plugin.disabled_short"),
-                            pluginName(plugin), runtimeStatusText(plugin.runtimeStatus()),
-                            UiText.literal(available + "/" + plugin.capabilities().size())),
-                    pluginDiagnostic(plugin), true));
-            y += 24;
-        }
-        if (plugins.isEmpty()) {
-            controls.add(ConfigControlView.text(PLUGIN_EMPTY_STATUS, new UiRect(x, y, 420, HEIGHT),
-                    tr("screen.mc_teamviewer.integration_plugin.none"), null, 0xFFAA00, true,
-                    ConfigControlView.TextAlignment.CENTER));
-            y += 24;
-        }
-        controls.add(ConfigControlView.button(PLUGIN_PREVIOUS, new UiRect(x, y, 90, HEIGHT),
-                UiText.literal("<"), null, pluginListPage > 0));
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x + 94, y, 232, HEIGHT),
-                UiText.literal((pluginListPage + 1) + " / " + pageCount), null, 0xFFFFFF, true,
-                ConfigControlView.TextAlignment.CENTER));
-        controls.add(ConfigControlView.button(PLUGIN_NEXT, new UiRect(x + 330, y, 90, HEIGHT),
-                UiText.literal(">"), null, pluginListPage + 1 < pageCount));
-        y += 26;
-        controls.add(ConfigControlView.button(PLUGIN_RESCAN, new UiRect(x, y, 132, HEIGHT),
-                tr("screen.mc_teamviewer.integration_plugin.rescan"), null, true));
-        controls.add(ConfigControlView.button(PLUGIN_OPEN_DISABLED, new UiRect(x + 144, y, 132, HEIGHT),
-                tr("screen.mc_teamviewer.integration_plugin.disabled_packages"), null, true));
-        controls.add(button(BACK, x + 288, y, 132, "screen.mc_teamviewer.config.back", null));
-        if (lastPluginOperation != null) {
-            y += 24;
-            controls.add(ConfigControlView.text(PLUGIN_OPERATION_STATUS, new UiRect(x, y, 420, HEIGHT),
-                    operationResultText(lastPluginOperation), operationDetail(lastPluginOperation),
-                    lastPluginOperation.succeeded() ? 0x55FF55 : 0xFF5555, true,
-                    ConfigControlView.TextAlignment.CENTER));
-        }
-        return new ConfigPageView(ConfigPageId.PLUGINS,
-                tr("screen.mc_teamviewer.integration_plugins.title"), 24, controls);
-    }
-
-    private ConfigPageView pluginDetailPage(int width) {
-        PluginSnapshot plugin = selectedPluginId == null ? null : control.getIntegrationPlugin(selectedPluginId);
-        int x = (width - 430) / 2;
-        int y = 46;
-        List<ConfigControlView> controls = new ArrayList<>();
-        if (plugin == null) {
-            controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 430, HEIGHT),
-                    tr("screen.mc_teamviewer.integration_plugin.unavailable"), null, 0xFF5555, true,
-                    ConfigControlView.TextAlignment.CENTER));
-            controls.add(button(BACK, x, y + 28, 430, "screen.mc_teamviewer.config.back", null));
-            return new ConfigPageView(ConfigPageId.PLUGIN_DETAIL,
-                    tr("screen.mc_teamviewer.integration_plugin.title"), 24, controls);
-        }
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 430, HEIGHT),
-                t("screen.mc_teamviewer.integration_plugin.detail_header",
-                        UiText.literal(plugin.id()), UiText.literal(plugin.version()),
-                        runtimeStatusText(plugin.runtimeStatus())),
-                pluginDiagnostic(plugin), statusColor(plugin), true,
-                ConfigControlView.TextAlignment.CENTER));
-        y += 22;
-        if (!plugin.description().isBlank()) {
-            controls.add(ConfigControlView.text(ConfigControlId.plugin(plugin.id(), "description"),
-                    new UiRect(x, y, 430, HEIGHT), pluginDescription(plugin), null, 0xAAAAAA, true,
-                    ConfigControlView.TextAlignment.CENTER));
-            y += 22;
-        }
-        if (!plugin.runtimeState().isEmpty()) {
-            controls.add(ConfigControlView.text(
-                    ConfigControlId.plugin(plugin.id(), "runtime-heading"),
-                    new UiRect(x, y, 430, 16),
-                    tr("screen.mc_teamviewer.integration_plugin.manager.runtime_state"),
-                    null, 0x42C6D7, true, ConfigControlView.TextAlignment.LEFT));
-            y += 18;
-        }
-        for (PluginRuntimeState state : plugin.runtimeState()) {
-            UiText value = PluginRuntimeStateText.value(state, System.currentTimeMillis());
-            controls.add(ConfigControlView.text(
-                    ConfigControlId.plugin(plugin.id(), "runtime:" + state.key()),
-                    new UiRect(x, y, 430, 16),
-                    UiText.literal(state.label() + ": " + Objects.requireNonNullElse(value.literal(), "")),
-                    UiText.literal(state.key()), 0x55FF55, true,
-                    ConfigControlView.TextAlignment.LEFT));
-            y += 18;
-        }
-        if (!plugin.runtimeState().isEmpty()) y += 4;
-        for (var capability : plugin.capabilities()) {
-            controls.add(ConfigControlView.text(new ConfigControlId("capability:" + capability.id()),
-                    new UiRect(x, y, 430, 12),
-                    t("screen.mc_teamviewer.integration_plugin.capability_entry",
-                            capabilityName(capability), roleText(capability.role()),
-                            supportStatusText(capability.status()), sourceText(capability.implementationSource())),
-                    capabilityDiagnostic(capability),
-                    capability.status() == IntegrationSupportStatus.AVAILABLE
-                            ? 0x55FF55 : 0xFFAA00,
-                    true, ConfigControlView.TextAlignment.LEFT));
-            y += 16;
-        }
-        y += 4;
-        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
-            ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
-            Object value = plugin.settings().get(definition.key());
-            UiText settingName = settingName(plugin, definition);
-            PluginSettingState state = plugin.settingState(definition.key());
-            UiText tooltip = settingTooltip(plugin, definition, state);
-            if ("boolean".equals(definition.type())) {
-                controls.add(ConfigControlView.checkbox(id, new UiRect(x, y, 430, HEIGHT),
-                        settingName, tooltip, Boolean.TRUE.equals(value), state.enabled()));
-            } else if ("enum".equals(definition.type())) {
-                controls.add(ConfigControlView.button(id, new UiRect(x, y, 430, HEIGHT),
-                        t("screen.mc_teamviewer.config.value", settingName,
-                                settingValue(plugin, definition, value)),
-                        tooltip, state.enabled()));
-            } else {
-                textValues.putIfAbsent(id, String.valueOf(value == null ? "" : value));
-                controls.add(ConfigControlView.textField(id, new UiRect(x, y, 430, HEIGHT),
-                        new UiRect(x, y - LABEL_SPACING, 430, LABEL_HEIGHT), settingName,
-                        null, tooltip, value(id), 256, state.enabled()));
-            }
-            y += "boolean".equals(definition.type()) || "enum".equals(definition.type()) ? 25 : 34;
-        }
-        for (PluginRuntimeAction runtimeAction : plugin.runtimeActions()) {
-            controls.add(ConfigControlView.button(
-                    ConfigControlId.pluginRuntimeAction(plugin.id(), runtimeAction.id()),
-                    new UiRect(x, y, 430, HEIGHT), UiText.literal(runtimeAction.label()),
-                    runtimeAction.tooltip().isEmpty() ? null : UiText.literal(runtimeAction.tooltip()),
-                    plugin.enabled() && runtimeAction.enabled()));
-            y += 25;
-        }
-        controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.id(), "toggle"),
-                new UiRect(x, y, 210, HEIGHT),
-                tr(plugin.enabled() ? "screen.mc_teamviewer.integration_plugin.disable"
-                        : "screen.mc_teamviewer.integration_plugin.enable"), null,
-                !plugin.pendingRemoval()));
-        if (plugin.builtIn()) {
-            controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.id(), "copy"),
-                    new UiRect(x + 220, y, 210, HEIGHT),
-                    tr("screen.mc_teamviewer.integration_plugin.copy_custom"), null, true));
-        } else {
-            controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.id(), "uninstall"),
-                    new UiRect(x + 220, y, 210, HEIGHT),
-                    tr(plugin.pendingRemoval()
-                            ? "screen.mc_teamviewer.integration_plugin.uninstall_pending"
-                            : "screen.mc_teamviewer.integration_plugin.uninstall"),
-                    tr("screen.mc_teamviewer.integration_plugin.uninstall.tooltip"),
-                    !plugin.pendingRemoval()));
-        }
-        y += 26;
-        controls.add(ConfigControlView.text(PLUGIN_OPERATION_STATUS, new UiRect(x, y, 430, HEIGHT),
-                lastPluginOperation == null ? UiText.literal("") : operationResultText(lastPluginOperation),
-                lastPluginOperation == null ? null : operationDetail(lastPluginOperation),
-                lastPluginOperation != null && lastPluginOperation.succeeded() ? 0x55FF55 : 0xFF5555,
-                lastPluginOperation != null, ConfigControlView.TextAlignment.CENTER));
-        y += lastPluginOperation == null ? 0 : 24;
-        controls.add(button(BACK, x, y, 430, "screen.mc_teamviewer.config.back", null));
-        return new ConfigPageView(ConfigPageId.PLUGIN_DETAIL, pluginName(plugin), 24, controls);
-    }
-
-    private ConfigPageView pluginRuntimeActionConfirmPage(int width, int height) {
-        PluginSnapshot plugin = pendingRuntimePluginId == null
-                ? null : control.getIntegrationPlugin(pendingRuntimePluginId);
-        PluginRuntimeAction action = plugin == null ? null : plugin.runtimeActions().stream()
-                .filter(value -> value.id().equals(pendingRuntimeActionId)).findFirst().orElse(null);
-        int x = (width - 430) / 2;
-        int y = height / 2 - 55;
-        List<ConfigControlView> controls = new ArrayList<>();
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 430, 40),
-                action == null
-                        ? tr("screen.mc_teamviewer.integration_plugin.runtime_action_unavailable")
-                        : UiText.literal(action.confirmation()),
-                null, 0xFF5555, true, ConfigControlView.TextAlignment.CENTER));
-        y += 48;
-        if (action != null && action.enabled()) {
-            controls.add(ConfigControlView.button(PLUGIN_RUNTIME_CONFIRM,
-                    new UiRect(x, y, 210, HEIGHT),
-                    tr("screen.mc_teamviewer.integration_plugin.runtime_action_confirm"), null, true));
-        }
-        controls.add(button(BACK, x + 220, y, 210, "screen.mc_teamviewer.config.cancel", null));
-        return new ConfigPageView(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM,
-                tr("screen.mc_teamviewer.integration_plugin.runtime_action_confirm_title"), 24, controls);
-    }
-
-    private ConfigPageView pluginCopyGuidePage(int width) {
-        int x = (width - 520) / 2;
-        int y = 48;
-        List<ConfigControlView> controls = new ArrayList<>();
-        controls.add(infoLine(x, y, 520, "screen.mc_teamviewer.integration_plugin.copy_success", 0x55FF55));
-        y += 22;
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 520, 24),
-                t("screen.mc_teamviewer.integration_plugin.copy_path",
-                        UiText.literal(copiedPluginPath == null ? "-" : copiedPluginPath.toAbsolutePath().toString())),
-                copiedPluginPath == null ? null : UiText.literal(copiedPluginPath.toAbsolutePath().toString()),
-                0xFFFFFF, true, ConfigControlView.TextAlignment.CENTER));
-        y += 30;
-        for (String key : List.of(
-                "screen.mc_teamviewer.integration_plugin.copy_step_manifest",
-                "screen.mc_teamviewer.integration_plugin.copy_step_lua",
-                "screen.mc_teamviewer.integration_plugin.copy_step_provides",
-                "screen.mc_teamviewer.integration_plugin.copy_step_restart",
-                "screen.mc_teamviewer.integration_plugin.copy_step_readme")) {
-            controls.add(infoLine(x, y, 520, key, 0xDDDDDD));
-            y += 20;
-        }
-        controls.add(ConfigControlView.text(PLUGIN_OPERATION_STATUS, new UiRect(x, y, 520, HEIGHT),
-                tr("screen.mc_teamviewer.integration_plugin.open_directory_failed"), null,
-                0xFF5555, openDirectoryFailed, ConfigControlView.TextAlignment.CENTER));
-        y += openDirectoryFailed ? 22 : 0;
-        controls.add(ConfigControlView.button(PLUGIN_GUIDE_OPEN_DIRECTORY, new UiRect(x, y, 250, HEIGHT),
-                tr("screen.mc_teamviewer.integration_plugin.open_directory"), null, copiedPluginPath != null));
-        controls.add(ConfigControlView.button(PLUGIN_GUIDE_RETURN_LIST, new UiRect(x + 270, y, 250, HEIGHT),
-                tr("screen.mc_teamviewer.integration_plugin.return_manager"), null, true));
-        return new ConfigPageView(ConfigPageId.PLUGIN_COPY_GUIDE,
-                tr("screen.mc_teamviewer.integration_plugin.copy_guide_title"), 24, controls);
-    }
-
-    private ConfigPageView disabledPluginsPage(int width, int height) {
-        List<DisabledPluginSnapshot> plugins = control.getDisabledIntegrationPlugins();
-        int pageSize = Math.max(4, Math.min(9, (height - 150) / 24));
-        int pageCount = Math.max(1, (plugins.size() + pageSize - 1) / pageSize);
-        disabledPluginListPage = Math.min(disabledPluginListPage, pageCount - 1);
-        int start = disabledPluginListPage * pageSize;
-        int end = Math.min(plugins.size(), start + pageSize);
-        int x = (width - 430) / 2;
-        int y = 52;
-        List<ConfigControlView> controls = new ArrayList<>();
-        for (int index = start; index < end; index++) {
-            DisabledPluginSnapshot plugin = plugins.get(index);
-            controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.storageId(), "disabled-open"),
-                    new UiRect(x, y, 430, HEIGHT),
-                    t("screen.mc_teamviewer.integration_plugin.disabled_entry",
-                            UiText.literal(plugin.name()), UiText.literal(plugin.version())), null, true));
-            y += 24;
-        }
-        if (plugins.isEmpty()) {
-            controls.add(ConfigControlView.text(DISABLED_PLUGIN_EMPTY_STATUS, new UiRect(x, y, 430, HEIGHT),
-                    tr("screen.mc_teamviewer.integration_plugin.disabled_none"), null, 0xAAAAAA, true,
-                    ConfigControlView.TextAlignment.CENTER));
-            y += 24;
-        }
-        controls.add(ConfigControlView.button(DISABLED_PLUGIN_PREVIOUS, new UiRect(x, y, 90, HEIGHT),
-                UiText.literal("<"), null, disabledPluginListPage > 0));
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x + 94, y, 242, HEIGHT),
-                UiText.literal((disabledPluginListPage + 1) + " / " + pageCount), null,
-                0xFFFFFF, true, ConfigControlView.TextAlignment.CENTER));
-        controls.add(ConfigControlView.button(DISABLED_PLUGIN_NEXT, new UiRect(x + 340, y, 90, HEIGHT),
-                UiText.literal(">"), null, disabledPluginListPage + 1 < pageCount));
-        y += 26;
-        if (lastPluginOperation != null) {
-            controls.add(ConfigControlView.text(PLUGIN_OPERATION_STATUS, new UiRect(x, y, 430, HEIGHT),
-                    operationResultText(lastPluginOperation), operationDetail(lastPluginOperation),
-                    lastPluginOperation.succeeded() ? 0x55FF55 : 0xFF5555, true,
-                    ConfigControlView.TextAlignment.CENTER));
-            y += 24;
-        }
-        controls.add(button(BACK, x, y, 430, "screen.mc_teamviewer.config.back", null));
-        return new ConfigPageView(ConfigPageId.DISABLED_PLUGINS,
-                tr("screen.mc_teamviewer.integration_plugin.disabled_title"), 24, controls);
-    }
-
-    private ConfigPageView disabledPluginDetailPage(int width) {
-        DisabledPluginSnapshot plugin = selectedDisabledPluginId == null
-                ? null : control.getDisabledIntegrationPlugin(selectedDisabledPluginId);
-        int x = (width - 460) / 2;
-        int y = 54;
-        List<ConfigControlView> controls = new ArrayList<>();
-        if (plugin == null) {
-            controls.add(infoLine(x, y, 460,
-                    "screen.mc_teamviewer.integration_plugin.disabled_unavailable", 0xFF5555));
-            controls.add(button(BACK, x, y + 28, 460, "screen.mc_teamviewer.config.back", null));
-            return new ConfigPageView(ConfigPageId.DISABLED_PLUGIN_DETAIL,
-                    tr("screen.mc_teamviewer.integration_plugin.disabled_detail_title"), 24, controls);
-        }
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 460, HEIGHT),
-                t("screen.mc_teamviewer.integration_plugin.disabled_header",
-                        UiText.literal(plugin.name()), UiText.literal(plugin.version())), null,
-                0xFFAA00, true, ConfigControlView.TextAlignment.CENTER));
-        y += 24;
-        controls.add(ConfigControlView.text(DISABLED_PLUGIN_PATH, new UiRect(x, y, 460, HEIGHT),
-                t("screen.mc_teamviewer.integration_plugin.disabled_path",
-                        UiText.literal(plugin.storagePath().toAbsolutePath().toString())),
-                UiText.literal(plugin.storagePath().toAbsolutePath().toString()), 0xDDDDDD, true,
-                ConfigControlView.TextAlignment.CENTER));
-        y += 30;
-        controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.storageId(), "disabled-restore"),
-                new UiRect(x, y, 145, HEIGHT), tr("screen.mc_teamviewer.integration_plugin.restore"), null, true));
-        controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.storageId(), "disabled-open-dir"),
-                new UiRect(x + 157, y, 145, HEIGHT), tr("screen.mc_teamviewer.integration_plugin.open_directory"), null, true));
-        controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.storageId(), "disabled-delete"),
-                new UiRect(x + 314, y, 146, HEIGHT), tr("screen.mc_teamviewer.integration_plugin.delete"),
-                tr("screen.mc_teamviewer.integration_plugin.delete.tooltip"), true));
-        y += 28;
-        controls.add(ConfigControlView.text(PLUGIN_OPERATION_STATUS, new UiRect(x, y, 460, HEIGHT),
-                lastPluginOperation == null ? UiText.literal("") : operationResultText(lastPluginOperation),
-                lastPluginOperation == null ? null : operationDetail(lastPluginOperation),
-                lastPluginOperation != null && lastPluginOperation.succeeded() ? 0x55FF55 : 0xFF5555,
-                lastPluginOperation != null, ConfigControlView.TextAlignment.CENTER));
-        y += lastPluginOperation == null ? 0 : 24;
-        controls.add(button(BACK, x, y, 460, "screen.mc_teamviewer.config.back", null));
-        return new ConfigPageView(ConfigPageId.DISABLED_PLUGIN_DETAIL,
-                tr("screen.mc_teamviewer.integration_plugin.disabled_detail_title"), 24, controls);
-    }
-
-    private ConfigPageView pluginDeleteConfirmPage(int width, int height) {
-        DisabledPluginSnapshot plugin = pendingDeleteDisabledPluginId == null
-                ? null : control.getDisabledIntegrationPlugin(pendingDeleteDisabledPluginId);
-        int x = (width - 430) / 2;
-        int y = height / 2 - 55;
-        List<ConfigControlView> controls = new ArrayList<>();
-        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 430, 40),
-                plugin == null ? tr("screen.mc_teamviewer.integration_plugin.disabled_unavailable")
-                        : t("screen.mc_teamviewer.integration_plugin.delete_confirm_message",
-                        UiText.literal(plugin.name())), null, 0xFF5555, true,
-                ConfigControlView.TextAlignment.CENTER));
-        y += 48;
-        if (plugin != null) {
-            controls.add(ConfigControlView.button(
-                    ConfigControlId.plugin(plugin.storageId(), "disabled-delete-confirm"),
-                    new UiRect(x, y, 210, HEIGHT),
-                    tr("screen.mc_teamviewer.integration_plugin.delete_confirm"), null, true));
-        }
-        controls.add(button(BACK, x + 220, y, 210, "screen.mc_teamviewer.config.cancel", null));
-        return new ConfigPageView(ConfigPageId.PLUGIN_DELETE_CONFIRM,
-                tr("screen.mc_teamviewer.integration_plugin.delete_confirm_title"), 24, controls);
-    }
-
     private void applyPageFields(ConfigPageId page) {
         switch (page) {
             case DISPLAY -> applyDisplayFields();
@@ -983,126 +569,8 @@ public final class ConfigUiSession implements ConfigUiController {
             case COLOR -> applyColorFields();
             case WAYPOINT -> applyWaypointFields();
             case WAYPOINT_SHAPE -> applyWaypointShapeFields();
-            case PLUGIN_DETAIL -> applyPluginFields();
             default -> { }
         }
-    }
-
-    private void applyPluginFields() {
-        PluginSnapshot plugin = selectedPluginId == null ? null : control.getIntegrationPlugin(selectedPluginId);
-        if (plugin == null) return;
-        for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
-            if ("boolean".equals(definition.type()) || "enum".equals(definition.type())) continue;
-            if (!plugin.settingState(definition.key()).enabled()) continue;
-            ConfigControlId id = ConfigControlId.setting(plugin.id(), definition.key());
-            control.setIntegrationPluginSetting(plugin.id(), definition.key(), value(id));
-        }
-    }
-
-    private ConfigUiAction activatePluginAction(ConfigControlId id) {
-        String action = id.pluginAction();
-        if ("disabled-open".equals(action)) {
-            selectedDisabledPluginId = id.pluginId();
-            lastPluginOperation = null;
-            return ConfigUiAction.open(ConfigPageId.DISABLED_PLUGIN_DETAIL);
-        }
-        if ("disabled-restore".equals(action)) {
-            lastPluginOperation = control.restoreIntegrationPlugin(id.pluginId());
-            return lastPluginOperation.succeeded()
-                    ? ConfigUiAction.open(ConfigPageId.DISABLED_PLUGINS) : ConfigUiAction.stay();
-        }
-        if ("disabled-open-dir".equals(action)) {
-            DisabledPluginSnapshot disabled = control.getDisabledIntegrationPlugin(id.pluginId());
-            boolean opened = disabled != null && control.openIntegrationPluginDirectory(disabled.storagePath());
-            if (!opened) {
-                lastPluginOperation = new PluginFileOperationResult(
-                        PluginFileOperationResult.Code.IO_ERROR,
-                        disabled == null ? null : disabled.storagePath(), "Unable to open directory");
-            }
-            return ConfigUiAction.stay();
-        }
-        if ("disabled-delete".equals(action)) {
-            pendingDeleteDisabledPluginId = id.pluginId();
-            return ConfigUiAction.open(ConfigPageId.PLUGIN_DELETE_CONFIRM);
-        }
-        if ("disabled-delete-confirm".equals(action)) {
-            lastPluginOperation = control.deleteDisabledIntegrationPlugin(id.pluginId());
-            pendingDeleteDisabledPluginId = null;
-            selectedDisabledPluginId = null;
-            return ConfigUiAction.open(ConfigPageId.DISABLED_PLUGINS);
-        }
-
-        PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
-        if ("open".equals(action)) {
-            selectedPluginId = id.pluginId();
-            lastPluginOperation = null;
-            if (plugin != null) {
-                plugin.settings().forEach((key, value) -> textValues.put(
-                        ConfigControlId.setting(plugin.id(), key), String.valueOf(value)));
-            }
-            return ConfigUiAction.open(ConfigPageId.PLUGIN_DETAIL);
-        }
-        if (plugin == null) return ConfigUiAction.stay();
-        if ("toggle".equals(action)) {
-            control.setIntegrationPluginEnabled(plugin.id(), !plugin.enabled());
-        } else if ("copy".equals(action)) {
-            lastPluginOperation = control.copyBuiltinIntegrationPluginResult(plugin.id());
-            if (lastPluginOperation.succeeded()) {
-                copiedPluginPath = lastPluginOperation.path();
-                openDirectoryFailed = false;
-                return ConfigUiAction.open(ConfigPageId.PLUGIN_COPY_GUIDE);
-            }
-        } else if ("uninstall".equals(action)) {
-            lastPluginOperation = control.uninstallIntegrationPlugin(plugin.id());
-            if (lastPluginOperation.succeeded()) return ConfigUiAction.open(ConfigPageId.PLUGINS);
-        }
-        return ConfigUiAction.stay();
-    }
-
-    private ConfigUiAction activatePluginRuntimeAction(ConfigControlId id) {
-        PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
-        PluginRuntimeAction action = plugin == null ? null : plugin.runtimeActions().stream()
-                .filter(value -> value.id().equals(id.pluginRuntimeActionId())).findFirst().orElse(null);
-        if (action == null || !plugin.enabled() || !action.enabled()) return ConfigUiAction.stay();
-        if (action.requiresConfirmation()) {
-            pendingRuntimePluginId = plugin.id();
-            pendingRuntimeActionId = action.id();
-            return ConfigUiAction.open(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM);
-        }
-        control.invokeIntegrationPluginAction(plugin.id(), action.id());
-        return ConfigUiAction.reload();
-    }
-
-    private ConfigUiAction confirmPluginRuntimeAction() {
-        if (pendingRuntimePluginId != null && pendingRuntimeActionId != null) {
-            control.invokeIntegrationPluginAction(pendingRuntimePluginId, pendingRuntimeActionId);
-        }
-        pendingRuntimePluginId = null;
-        pendingRuntimeActionId = null;
-        return ConfigUiAction.open(ConfigPageId.PLUGIN_DETAIL);
-    }
-
-    private ConfigUiAction activatePluginSetting(ConfigControlId id) {
-        PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
-        if (plugin == null) return ConfigUiAction.stay();
-        PluginManifest.SettingDefinition definition = plugin.settingDefinitions().stream()
-                .filter(value -> value.key().equals(id.settingKey())).findFirst().orElse(null);
-        if (definition == null || !"enum".equals(definition.type())
-                || !settingInteractive(plugin, definition.key())) return ConfigUiAction.stay();
-        String current = String.valueOf(plugin.settings().get(definition.key()));
-        int index = definition.options().indexOf(current);
-        String next = definition.options().get((index + 1 + definition.options().size()) % definition.options().size());
-        control.setIntegrationPluginSetting(plugin.id(), definition.key(), next);
-        return ConfigUiAction.stay();
-    }
-
-    private static int statusColor(PluginSnapshot plugin) {
-        return switch (plugin.runtimeStatus()) {
-            case ACTIVE -> 0x55FF55;
-            case DISABLED -> 0xAAAAAA;
-            case PENDING_RESTART -> 0xFFFF55;
-            default -> 0xFF5555;
-        };
     }
 
     private void applyDisplayFields() {
@@ -1335,25 +803,6 @@ public final class ConfigUiSession implements ConfigUiController {
                 tr(key), null, color, true, ConfigControlView.TextAlignment.CENTER);
     }
 
-    private static UiText pluginName(PluginSnapshot plugin) {
-        return switch (plugin.id()) {
-            case IntegrationIds.PLUGIN_NODEMC -> tr("screen.mc_teamviewer.integration_plugin.builtin.nodemc");
-            case IntegrationIds.PLUGIN_SIMMC -> tr("screen.mc_teamviewer.integration_plugin.builtin.simmc");
-            case IntegrationIds.PLUGIN_XAERO -> tr("screen.mc_teamviewer.integration_plugin.builtin.xaero");
-            case IntegrationIds.PLUGIN_JOURNEYMAP -> tr("screen.mc_teamviewer.integration_plugin.builtin.journeymap");
-            case IntegrationIds.PLUGIN_EXAMPLE -> tr("screen.mc_teamviewer.integration_plugin.builtin.example");
-            case IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS -> tr("screen.mc_teamviewer.integration_plugin.builtin.tab_label_relations");
-            default -> UiText.literal(plugin.name());
-        };
-    }
-
-    private static UiText pluginDescription(PluginSnapshot plugin) {
-        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())) {
-            return tr("screen.mc_teamviewer.integration_plugin.tab_label_relations.description");
-        }
-        return UiText.literal(plugin.description());
-    }
-
     private static UiText capabilityName(IntegrationCapability capability) {
         return switch (capability.id()) {
             case IntegrationIds.JOURNEYMAP_PLAYERS -> tr("screen.mc_teamviewer.integration_plugin.capability.journeymap_players");
@@ -1371,98 +820,15 @@ public final class ConfigUiSession implements ConfigUiController {
         };
     }
 
-    private static UiText settingName(PluginSnapshot plugin, PluginManifest.SettingDefinition setting) {
-        if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())) {
-            if ("show_beacons".equals(setting.key())) {
-                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_beacons");
-            }
-            if ("show_map_markers".equals(setting.key())) {
-                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_markers");
-            }
-            if ("show_remote_players".equals(setting.key())) {
-                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players");
-            }
-        }
-        if (IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id())) {
-            return tr("screen.mc_teamviewer.integration_plugin.setting.example_" + setting.key());
-        }
-        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())) {
-            return tr("screen.mc_teamviewer.integration_plugin.setting.tab_label_" + setting.key());
-        }
-        return UiText.literal(setting.name());
-    }
-
-    private static UiText settingValue(
-            PluginSnapshot plugin, PluginManifest.SettingDefinition setting, Object value) {
-        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())
-                && "relation_source_mode".equals(setting.key())) {
-            return tr("screen.mc_teamviewer.integration_plugin.setting.tab_label_relation_source_mode."
-                    + String.valueOf(value));
-        }
-        return UiText.literal(String.valueOf(value));
-    }
-
-    private static UiText runtimeStatusText(PluginRuntimeStatus status) {
-        return tr("screen.mc_teamviewer.integration_plugin.runtime." + status.name().toLowerCase(Locale.ROOT));
-    }
-
     private static UiText supportStatusText(IntegrationSupportStatus status) {
-        return tr("screen.mc_teamviewer.integration_plugin.support." + status.name().toLowerCase(Locale.ROOT));
-    }
-
-    private static UiText sourceText(IntegrationImplementationSource source) {
-        return tr("screen.mc_teamviewer.integration_plugin.source." + source.name().toLowerCase(Locale.ROOT));
-    }
-
-    private static UiText roleText(String role) {
-        return tr("screen.mc_teamviewer.integration_plugin.role." + role.replace('-', '_'));
-    }
-
-    private static UiText pluginDiagnostic(PluginSnapshot plugin) {
-        if (plugin.detail().isBlank()) return null;
-        return t("screen.mc_teamviewer.integration_plugin.technical_detail",
-                runtimeStatusText(plugin.runtimeStatus()), UiText.literal(plugin.detail()));
-    }
-
-    private static boolean settingInteractive(PluginSnapshot plugin, String key) {
-        if (plugin == null) return false;
-        PluginSettingState state = plugin.settingState(key);
-        return state.visible() && state.enabled();
-    }
-
-    private static UiText settingTooltip(
-            PluginSnapshot plugin, PluginManifest.SettingDefinition setting, PluginSettingState state) {
-        if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())
-                && "show_remote_players".equals(setting.key())) {
-            return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players.tooltip");
-        }
-        return state.detail().isBlank() ? null : UiText.literal(state.detail());
+        return tr("screen.mc_teamviewer.integration_plugin.support."
+                + status.name().toLowerCase(Locale.ROOT));
     }
 
     private static UiText capabilityDiagnostic(IntegrationCapability capability) {
         if (capability.detail().isBlank()) return null;
         return t("screen.mc_teamviewer.integration_plugin.technical_detail",
                 supportStatusText(capability.status()), UiText.literal(capability.detail()));
-    }
-
-    private static UiText operationResultText(PluginFileOperationResult result) {
-        String suffix = switch (result.code()) {
-            case SUCCESS -> "success";
-            case NOT_FOUND -> "not_found";
-            case BUILTIN_READ_ONLY -> "builtin_read_only";
-            case INVALID_SOURCE -> "invalid_source";
-            case TARGET_EXISTS -> "target_exists";
-            case INVALID_DISABLED_ENTRY -> "invalid_disabled_entry";
-            case IO_ERROR -> "io_error";
-        };
-        return tr("screen.mc_teamviewer.integration_plugin.operation." + suffix);
-    }
-
-    private static UiText operationDetail(PluginFileOperationResult result) {
-        if (result.detail().isBlank() && result.path() == null) return null;
-        return t("screen.mc_teamviewer.integration_plugin.operation_detail",
-                UiText.literal(result.path() == null ? "-" : result.path().toAbsolutePath().toString()),
-                UiText.literal(result.detail().isBlank() ? "-" : result.detail()));
     }
 
     private String value(ConfigControlId id) {

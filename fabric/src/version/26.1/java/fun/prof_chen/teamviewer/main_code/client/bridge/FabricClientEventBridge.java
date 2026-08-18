@@ -5,7 +5,7 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
 import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
-import fun.prof_chen.teamviewer.main_code.bridge.MinecraftClientUiCompat;
+import fun.prof_chen.teamviewer.minecraft.adapter.bridge.MinecraftClientUiCompat;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;

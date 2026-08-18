@@ -9,6 +9,8 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.AdapterRuntimeTck;
 import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSession;
+import fun.prof_chen.teamviewer.main_code.config.ui.ClientUiSession;
+import fun.prof_chen.teamviewer.main_code.config.ui.PluginManagerUiSession;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSessions;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
@@ -78,7 +80,7 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
                                 PluginNotificationSink.SERVICE_ID,
                                 () -> (PluginNotificationSink) coordinator::showActionBar)));
         coordinator.configurePluginManager(pluginManager);
-        ConfigUiSessions.install(() -> new ConfigUiSession(coordinator));
+        ConfigUiSessions.install(() -> createUiSession(coordinator));
     }
 
     public static <W, H> ClientApplication<W, H> start(ClientAdapterBundle<W, H> adapters) {
@@ -103,7 +105,13 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
 
     @Override
     public void onConfigRequested() {
-        if (!stopped.get()) adapters.configScreenHost().open(new ConfigUiSession(coordinator));
+        if (!stopped.get()) adapters.configScreenHost().open(createUiSession(coordinator));
+    }
+
+    private static ClientUiSession createUiSession(ClientCoordinator coordinator) {
+        return new ClientUiSession(
+                new ConfigUiSession(coordinator),
+                new PluginManagerUiSession(coordinator));
     }
 
     @Override

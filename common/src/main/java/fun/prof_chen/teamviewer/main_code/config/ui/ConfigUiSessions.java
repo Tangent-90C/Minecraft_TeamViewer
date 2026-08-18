@@ -6,18 +6,18 @@ import java.util.function.Supplier;
 
 /** SDK registry used by optional native config-menu entrypoints. */
 public final class ConfigUiSessions {
-    private static final AtomicReference<Supplier<ConfigUiController>> FACTORY = new AtomicReference<>();
+    private static final AtomicReference<Supplier<ClientUiSession>> FACTORY = new AtomicReference<>();
 
     private ConfigUiSessions() { }
 
-    public static void install(Supplier<ConfigUiController> factory) {
+    public static void install(Supplier<ClientUiSession> factory) {
         FACTORY.set(Objects.requireNonNull(factory, "factory"));
     }
 
-    public static ConfigUiController create() {
-        Supplier<ConfigUiController> factory = FACTORY.get();
+    public static ClientUiSession create() {
+        Supplier<ClientUiSession> factory = FACTORY.get();
         if (factory == null) throw new IllegalStateException("Configuration UI runtime is not initialized");
-        return Objects.requireNonNull(factory.get(), "configuration UI controller");
+        return Objects.requireNonNull(factory.get(), "client UI session");
     }
 
     public static void clear() {

@@ -246,10 +246,11 @@ def verifyNeoForgeAdapterCompleteness = tasks.register("verifyNeoForgeAdapterCom
                 throw new GradleException("${minecraftVersion} NeoForge adapter missing required port ${relative}")
             }
         }
-        def gameBridge = adapterSourceLayout.file(
-                "java/fun/prof_chen/teamviewer/neoforge/adapter/client/NeoForgeGameClientBridge.java")
-                .getText("UTF-8")
-        if (!gameBridge.contains("normalizeMarkTargetDistance(maxDistance)") || gameBridge.contains("crosshairTarget")) {
+        def gameClientSources = adapterSourceLayout.javaFiles.findAll { source ->
+            source.name.endsWith("GameClientBridge.java")
+        }.collect { it.getText("UTF-8") }.join("\n")
+        if (!gameClientSources.contains("normalizeMarkTargetDistance(maxDistance)") ||
+                gameClientSources.contains("crosshairTarget")) {
             throw new GradleException("NeoForge raycast must use the shared 512-block distance bound")
         }
         def service = adapterSourceLayout.file(

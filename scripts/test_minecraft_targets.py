@@ -163,7 +163,9 @@ class MinecraftTargetsTest(unittest.TestCase):
                 self.assertTrue(plan.entries, f"empty source plan for {loader}:{target}")
                 self.assertEqual(len(plan.entries), len(set(plan.entries)))
                 self.assertTrue(
-                    all(entry.origin == "shared" or entry.origin.startswith(("compat:", "version:"))
+                    all(entry.origin == "shared" or entry.origin.startswith(
+                        ("compat:", "native-version:", "version:")
+                    )
                         for entry in plan.entries.values())
                 )
 
@@ -190,7 +192,7 @@ class MinecraftTargetsTest(unittest.TestCase):
 
         for loader in ("fabric", "neoforge"):
             self.assertEqual(
-                "version:26.1",
+                "native-version:26.1",
                 minecraft_targets.source_plan(matrix, loader, "26.2").entries[screen].origin,
             )
 

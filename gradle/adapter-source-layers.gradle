@@ -76,6 +76,13 @@ ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
             }
         }
     }
+    def nativeVersionRoot = rootProject.file("minecraft-adapter/src/version/${adapter}")
+    if (nativeVersionRoot.isDirectory()) {
+        sourceFiles(nativeVersionRoot).each { relative, source ->
+            effective[relative] = source
+            origins[relative] = "native-version:${adapter}"
+        }
+    }
     sourceFiles(versionRoot).each { relative, source ->
         def previous = effective[relative]
         if (previous != null && java.util.Arrays.equals(previous.bytes, source.bytes)) {
@@ -86,7 +93,8 @@ ext.resolveAdapterSourceLayers = { File sourceRoot, String adapter ->
         origins[relative] = "version:${adapter}"
     }
 
-    def roots = [sharedRoot] + selectedLayers + [versionRoot]
+    def roots = [sharedRoot] + selectedLayers +
+            (nativeVersionRoot.isDirectory() ? [nativeVersionRoot] : []) + [versionRoot]
     def javaRoots = roots.collect { new File(it, "java") }.findAll { it.isDirectory() }
     def resourceRoots = roots.collect { new File(it, "resources") }.findAll { it.isDirectory() }
     def javaFiles = effective.findAll { relative, ignored -> relative.startsWith("java/") }

@@ -1,5 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.network.abstraction;
 
+import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
+
 import java.nio.file.Path;
 import java.awt.Desktop;
 import java.util.List;
@@ -48,13 +50,21 @@ public interface RuntimeGateway {
         }
     }
 
-    String getClientProtocolVersion();
+    default String getClientProtocolVersion() {
+        return TeamviewerModMetadata.MetaProtocol.CLIENT_PROTOCOL_VERSION;
+    }
 
-    String getClientMinCompatibleProtocolVersion();
+    default String getClientMinCompatibleProtocolVersion() {
+        return TeamviewerModMetadata.MetaProtocol.CLIENT_MIN_COMPATIBLE_PROTOCOL_VERSION;
+    }
 
-    String getServerProtocolFallbackVersion();
+    default String getServerProtocolFallbackVersion() {
+        return TeamviewerModMetadata.MetaProtocol.SERVER_PROTOCOL_VERSION_FALLBACK;
+    }
 
-    String getProgramVersionUnknown();
+    default String getProgramVersionUnknown() {
+        return TeamviewerModMetadata.PROGRAM_VERSION_UNKNOWN;
+    }
 
     Path getLogsDirectory();
 
