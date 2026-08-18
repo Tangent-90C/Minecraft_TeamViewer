@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.implementor;
 
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 
 import java.util.Map;
@@ -20,6 +21,14 @@ public interface RemotePlayerProjection {
 	}
 
 	void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled);
+
+	/** Relationship-aware extension point; existing projections remain source compatible. */
+	default void syncResolved(
+			Map<UUID, RemotePlayerInfo> players,
+			Map<UUID, PlayerRelationView> relations,
+			boolean enabled) {
+		sync(players, enabled);
+	}
 
 	default void clear() {
 		sync(Map.of(), false);

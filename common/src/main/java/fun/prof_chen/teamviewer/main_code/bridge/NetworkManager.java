@@ -364,7 +364,18 @@ public class NetworkManager {
 	 * 玩家标记状态记录类
 	 * 存储玩家的队伍归属、颜色标记和自定义标签
 	 */
-	private record PlayerMarkState(String team, Integer color, String label) {
+	private record PlayerMarkState(String team, Integer color, String label, String source) {
+	}
+
+	/** Immutable normalized backend mark, including its precedence-bearing source. */
+	public record PlayerMarkView(PlayerRelation relation, String source) {
+		public PlayerMarkView {
+			relation = relation == null ? PlayerRelation.NEUTRAL : relation;
+		}
+
+		public boolean automatic() {
+			return "auto".equals(source);
+		}
 	}
 
 	/**
@@ -1552,7 +1563,9 @@ public class NetworkManager {
 				if (label != null && label.isBlank()) {
 					label = null;
 				}
-				remotePlayerMarks.put(normalizedId, new PlayerMarkState(team, color, label));
+				String source = normalizeNullableText(mark.get("source"));
+				if (source != null) source = source.trim().toLowerCase(java.util.Locale.ROOT);
+				remotePlayerMarks.put(normalizedId, new PlayerMarkState(team, color, label, source));
 			} catch (Exception e) {
 				LOGGER.warn("Failed to parse player mark {}: {}", entry.getKey(), e.getMessage());
 			}
@@ -2203,6 +2216,13 @@ public class NetworkManager {
 		return mark == null ? null : mark.team();
 	}
 
+	public PlayerMarkView getPlayerMark(UUID playerId) {
+		if (playerId == null) return null;
+		PlayerMarkState mark = remotePlayerMarks.get(playerId.toString().toLowerCase());
+		if (mark == null) return null;
+		return new PlayerMarkView(relationFromTeam(mark.team()), mark.source());
+	}
+
 	/** Returns the latest immutable, loader-neutral remote-player snapshot. */
 	public List<RemotePlayerSnapshot> getRemotePlayerSnapshots() {
 		return publishedRemotePlayerSnapshots;
@@ -2266,14 +2286,18 @@ public class NetworkManager {
 		}
 
 		PlayerMarkState mark = remotePlayerMarks.get(playerId.toString().toLowerCase());
-		PlayerRelation relation = mark == null ? PlayerRelation.NEUTRAL : switch (mark.team()) {
+		PlayerRelation relation = mark == null ? PlayerRelation.NEUTRAL : relationFromTeam(mark.team());
+		return new RemotePlayerSnapshot(playerId, playerName, dimension, x, y, z,
+			velocityX, velocityY, velocityZ, health.floatValue(), maxHealth.floatValue(),
+			armor.floatValue(), riding, width.floatValue(), height.floatValue(), relation);
+	}
+
+	private static PlayerRelation relationFromTeam(String team) {
+		return switch (team == null ? "" : team) {
 			case "friendly" -> PlayerRelation.FRIENDLY;
 			case "enemy" -> PlayerRelation.ENEMY;
 			default -> PlayerRelation.NEUTRAL;
 		};
-		return new RemotePlayerSnapshot(playerId, playerName, dimension, x, y, z,
-			velocityX, velocityY, velocityZ, health.floatValue(), maxHealth.floatValue(),
-			armor.floatValue(), riding, width.floatValue(), height.floatValue(), relation);
 	}
 
 	private Double finite(double value) {

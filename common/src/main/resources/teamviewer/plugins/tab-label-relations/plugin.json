@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": "1",
+  "id": "teamviewer.tab-label-relations",
+  "name": "Tab Label Player Relations",
+  "version": "1.4.0",
+  "description": "Automatic-only by default. Run /town or /t to import relations, or change the source policy in plugin settings.",
+  "entry": "main.lua",
+  "documentation": "README.md",
+  "defaultEnabled": false,
+  "hotToggle": "managed",
+  "loaders": [],
+  "minecraftVersions": [],
+  "requiredMods": [],
+  "optionalMods": [],
+  "dependencies": [],
+  "provides": [
+    {"id": "tab-label-player-relations", "role": "player-relation", "name": "Tab Label Player Relations"}
+  ],
+  "settings": [
+    {"key": "relation_source_mode", "type": "enum", "name": "Relation source mode", "defaultValue": "automatic_only", "options": ["automatic_only", "manual_only", "manual_first", "automatic_first"], "restartRequired": false},
+    {"key": "friendly_tags", "type": "string", "name": "Friendly tags", "defaultValue": "饶州", "restartRequired": false},
+    {"key": "enemy_tags", "type": "string", "name": "Enemy tags", "defaultValue": "星辉", "restartRequired": false}
+  ]
+}

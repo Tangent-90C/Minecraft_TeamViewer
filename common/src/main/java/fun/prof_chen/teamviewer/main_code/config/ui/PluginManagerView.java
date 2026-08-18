@@ -47,7 +47,7 @@ public record PluginManagerView(
 
     public enum SettingKind { BOOLEAN, ENUM, TEXT }
 
-    public enum DialogKind { COPY_GUIDE, DELETE_CONFIRM }
+    public enum DialogKind { COPY_GUIDE, DELETE_CONFIRM, RUNTIME_ACTION_CONFIRM }
 
     public record ActionView(
             ConfigControlId id,
@@ -84,17 +84,22 @@ public record PluginManagerView(
             UiText diagnostic,
             int statusColor,
             UiText firstSectionTitle,
+            UiText runtimeSectionTitle,
+            int runtimeLineStartIndex,
             UiText secondSectionTitle,
             List<LineView> lines,
             List<SettingView> settings,
             List<ActionView> actions,
-            boolean disabledPlugin) {
+            boolean disabledPlugin,
+            TextBlockView description) {
         public DetailView {
             lines = List.copyOf(lines == null ? List.of() : lines);
             settings = List.copyOf(settings == null ? List.of() : settings);
             actions = List.copyOf(actions == null ? List.of() : actions);
         }
     }
+
+    public record TextBlockView(UiRect bounds, UiText text, int color) { }
 
     public record LineView(
             UiRect bounds,

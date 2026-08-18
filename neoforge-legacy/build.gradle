@@ -189,7 +189,14 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(targetJavaRelease)
+    // NeoForge's runtime tasks derive their launcher from this toolchain.  A
+    // newer Gradle JVM can still compile the adapter with --release 17, but
+    // asking Gradle for an exact Java 17 installation makes that valid setup
+    // fail before compilation starts.  Keep the target toolchain when Gradle
+    // already runs on it; otherwise use the current (newer) Gradle JVM.
+    def currentJavaRelease = JavaVersion.current().majorVersion.toInteger()
+    toolchain.languageVersion = JavaLanguageVersion.of(
+            Math.max(targetJavaRelease, currentJavaRelease))
     withSourcesJar()
 }
 tasks.named("sourcesJar") {

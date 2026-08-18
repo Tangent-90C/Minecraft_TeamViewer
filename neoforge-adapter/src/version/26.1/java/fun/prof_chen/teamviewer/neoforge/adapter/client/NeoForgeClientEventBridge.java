@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.neoforge.NeoForgeClientContext;
 import fun.prof_chen.teamviewer.neoforge.adapter.bridge.MinecraftClientUiCompat;
 import net.minecraft.client.KeyMapping;
@@ -11,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
@@ -50,6 +52,9 @@ public final class NeoForgeClientEventBridge
             }
         });
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut ignored) -> handler.onLeftPlaySession());
+        NeoForge.EVENT_BUS.addListener((ClientChatReceivedEvent.System event) ->
+                handler.onSystemChatMessage(new SystemChatMessageSnapshot(
+                        event.getMessage().getString(), event.isOverlay())));
         NeoForge.EVENT_BUS.addListener((ClientStoppingEvent ignored) -> handler.onClientStopping());
         NeoForge.EVENT_BUS.addListener((RenderGuiEvent.Post event) -> handler.onHudRender(event.getGuiGraphics()));
         // Gizmos must be emitted before LevelRenderer finalizes its per-frame collector.

@@ -83,16 +83,18 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color, presentat
   end
   state.object:setPos(x, y, z); state.object:setColor(color); state.object:setEnabled(true)
 end
-local function sync_players(managed, prefix, presentation, players, enabled, setting_enabled)
+local function sync_players(managed, prefix, presentation, players, enabled, setting_enabled, relations)
   if not enabled or not setting_enabled or probe().status ~= "AVAILABLE" then clear(managed); return end
   local world, active = snapshots.world(), {}
   for _, player in pairs(players or {}) do
     if player.position ~= nil and player.uuid ~= world.localPlayerId
         and (player.dimension == nil or player.dimension == "" or player.dimension == world.dimension) then
       local id = prefix .. player.uuid; active[id] = true
+      local relation = relations ~= nil and relations[player.uuid] or nil
+      local color = relation ~= nil and relation.resolved and relation.color or 0xFF5555
       upsert(managed, id, "[TV] " .. (player.name or "Player"),
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-          world.dimension, 0xFF5555, presentation)
+          world.dimension, color, presentation)
     end
   end
   local stale = {}; for id, _ in pairs(managed) do if not active[id] then table.insert(stale, id) end end
@@ -115,11 +117,11 @@ local function list_local()
 end
 -- 3. Capability registration / 能力注册
 tv.register_remote_player_projection({id = "journeymap-players", probe = probe,
-  sync = function(players, enabled) sync_players(managed_markers, "player-marker:", "marker", players,
-      enabled, settings.show_map_markers) end, clear = function() clear(managed_markers) end})
+  sync = function(players, enabled, relations) sync_players(managed_markers, "player-marker:", "marker", players,
+      enabled, settings.show_map_markers, relations) end, clear = function() clear(managed_markers) end})
 tv.register_remote_player_projection({id = "journeymap-player-beacons", probe = probe,
-  sync = function(players, enabled) sync_players(managed_beacons, "player-beacon:", "beacon", players,
-      enabled, settings.show_beacons) end, clear = function() clear(managed_beacons) end})
+  sync = function(players, enabled, relations) sync_players(managed_beacons, "player-beacon:", "beacon", players,
+      enabled, settings.show_beacons, relations) end, clear = function() clear(managed_beacons) end})
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe, list_local = list_local,
   upsert_remote = function(command) upsert(managed_waypoints, command.waypointId, command.name,
       command.x, command.y, command.z, command.dimension, command.color, "waypoint") end,

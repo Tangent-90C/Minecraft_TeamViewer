@@ -4,10 +4,12 @@ import com.mojang.blaze3d.platform.InputConstants;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.main_code.bridge.MinecraftClientUiCompat;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
@@ -48,6 +50,8 @@ public final class FabricClientEventBridge implements ClientEventBridge<LevelRen
             if (networkHandler != null && !networkHandler.getConnection().isMemoryConnection()) handler.onJoinedMultiplayer();
         });
         ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> handler.onLeftPlaySession());
+        ClientReceiveMessageEvents.GAME.register((message, overlay) ->
+                handler.onSystemChatMessage(new SystemChatMessageSnapshot(message.getString(), overlay)));
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> handler.onClientStopping());
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("team-view-relay", "network-status"),
                 (graphics, deltaTracker) -> handler.onHudRender(graphics));

@@ -161,9 +161,18 @@ public final class PluginManagerScreen extends Screen {
         context.enableScissor(detail.contentBounds().x(), detail.contentBounds().y(),
                 detail.contentBounds().x() + detail.contentBounds().width(),
                 detail.contentBounds().y() + detail.contentBounds().height());
-        if (!detail.lines().isEmpty() && detail.firstSectionTitle() != null) {
+        if (detail.description() != null) drawWrapped(context, toText(detail.description().text()), detail.description().bounds(), detail.description().color());
+        if (!detail.lines().isEmpty() && detail.firstSectionTitle() != null
+                && detail.runtimeLineStartIndex() != 0) {
             LineView first = detail.lines().get(0);
             drawClipped(context, toText(detail.firstSectionTitle()),
+                    new UiRect(first.bounds().x(), first.bounds().y() - 15, first.bounds().width(), 10),
+                    ACCENT, false);
+        }
+        if (detail.runtimeSectionTitle() != null && detail.runtimeLineStartIndex() >= 0
+                && detail.runtimeLineStartIndex() < detail.lines().size()) {
+            LineView first = detail.lines().get(detail.runtimeLineStartIndex());
+            drawClipped(context, toText(detail.runtimeSectionTitle()),
                     new UiRect(first.bounds().x(), first.bounds().y() - 15, first.bounds().width(), 10),
                     ACCENT, false);
         }
@@ -417,6 +426,16 @@ public final class PluginManagerScreen extends Screen {
             value = textRenderer.trimToWidth(value, Math.max(0, bounds.width() - textRenderer.getWidth("…"))) + "…";
         }
         context.drawText(textRenderer, value, bounds.x(), bounds.y(), color, shadow);
+    }
+
+    private void drawWrapped(DrawContext context, Text text, UiRect bounds, int color) {
+        String remaining = text.getString();
+        for (int y = bounds.y(); !remaining.isEmpty() && y + 9 <= bounds.y() + bounds.height(); y += 11) {
+            String line = textRenderer.trimToWidth(remaining, bounds.width());
+            if (line.isEmpty()) break;
+            context.drawText(textRenderer, line, bounds.x(), y, color, false);
+            remaining = remaining.substring(line.length()).stripLeading();
+        }
     }
 
     private void drawCentered(DrawContext context, UiText text, int centerX, int y, int color) {

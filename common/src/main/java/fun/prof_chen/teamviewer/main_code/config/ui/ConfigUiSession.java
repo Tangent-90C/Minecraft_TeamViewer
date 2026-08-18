@@ -14,6 +14,8 @@ import fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeState;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeAction;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -46,6 +48,8 @@ public final class ConfigUiSession implements ConfigUiController {
     private String selectedPluginId;
     private String selectedDisabledPluginId;
     private String pendingDeleteDisabledPluginId;
+    private String pendingRuntimePluginId;
+    private String pendingRuntimeActionId;
     private PluginFileOperationResult lastPluginOperation;
     private Path copiedPluginPath;
     private boolean openDirectoryFailed;
@@ -83,6 +87,7 @@ public final class ConfigUiSession implements ConfigUiController {
             case PACKET_CAPTURE -> packetCapturePage(width, height);
             case PLUGINS -> pluginsPage(width, height);
             case PLUGIN_DETAIL -> pluginDetailPage(width);
+            case PLUGIN_RUNTIME_ACTION_CONFIRM -> pluginRuntimeActionConfirmPage(width, height);
             case PLUGIN_COPY_GUIDE -> pluginCopyGuidePage(width);
             case DISABLED_PLUGINS -> disabledPluginsPage(width, height);
             case DISABLED_PLUGIN_DETAIL -> disabledPluginDetailPage(width);
@@ -115,6 +120,7 @@ public final class ConfigUiSession implements ConfigUiController {
             return ConfigUiAction.stay();
         }
         if (id.isEntityRuleAction()) return activateEntityRuleAction(id);
+        if (id.isPluginRuntimeAction()) return activatePluginRuntimeAction(id);
         if (id.isPluginAction()) return activatePluginAction(id);
         if (id.isPluginSetting()) return activatePluginSetting(id);
         return switch (id.value()) {
@@ -178,6 +184,7 @@ public final class ConfigUiSession implements ConfigUiController {
                 control.rescanIntegrationPlugins();
                 yield ConfigUiAction.stay();
             }
+            case "PLUGIN_RUNTIME_CONFIRM" -> confirmPluginRuntimeAction();
             case "PLUGIN_PREVIOUS" -> {
                 pluginListPage = Math.max(0, pluginListPage - 1);
                 yield ConfigUiAction.reload();
@@ -207,6 +214,10 @@ public final class ConfigUiSession implements ConfigUiController {
 
     @Override
     public ConfigUiAction close(ConfigPageId pageId) {
+        if (pageId == ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM) {
+            pendingRuntimePluginId = null;
+            pendingRuntimeActionId = null;
+        }
         if (pageId == ConfigPageId.ROOT) {
             cancelRoot();
         } else {
@@ -700,6 +711,31 @@ public final class ConfigUiSession implements ConfigUiController {
                 pluginDiagnostic(plugin), statusColor(plugin), true,
                 ConfigControlView.TextAlignment.CENTER));
         y += 22;
+        if (!plugin.description().isBlank()) {
+            controls.add(ConfigControlView.text(ConfigControlId.plugin(plugin.id(), "description"),
+                    new UiRect(x, y, 430, HEIGHT), pluginDescription(plugin), null, 0xAAAAAA, true,
+                    ConfigControlView.TextAlignment.CENTER));
+            y += 22;
+        }
+        if (!plugin.runtimeState().isEmpty()) {
+            controls.add(ConfigControlView.text(
+                    ConfigControlId.plugin(plugin.id(), "runtime-heading"),
+                    new UiRect(x, y, 430, 16),
+                    tr("screen.mc_teamviewer.integration_plugin.manager.runtime_state"),
+                    null, 0x42C6D7, true, ConfigControlView.TextAlignment.LEFT));
+            y += 18;
+        }
+        for (PluginRuntimeState state : plugin.runtimeState()) {
+            UiText value = PluginRuntimeStateText.value(state, System.currentTimeMillis());
+            controls.add(ConfigControlView.text(
+                    ConfigControlId.plugin(plugin.id(), "runtime:" + state.key()),
+                    new UiRect(x, y, 430, 16),
+                    UiText.literal(state.label() + ": " + Objects.requireNonNullElse(value.literal(), "")),
+                    UiText.literal(state.key()), 0x55FF55, true,
+                    ConfigControlView.TextAlignment.LEFT));
+            y += 18;
+        }
+        if (!plugin.runtimeState().isEmpty()) y += 4;
         for (var capability : plugin.capabilities()) {
             controls.add(ConfigControlView.text(new ConfigControlId("capability:" + capability.id()),
                     new UiRect(x, y, 430, 12),
@@ -724,7 +760,8 @@ public final class ConfigUiSession implements ConfigUiController {
                         settingName, tooltip, Boolean.TRUE.equals(value), state.enabled()));
             } else if ("enum".equals(definition.type())) {
                 controls.add(ConfigControlView.button(id, new UiRect(x, y, 430, HEIGHT),
-                        t("screen.mc_teamviewer.config.value", settingName, UiText.literal(String.valueOf(value))),
+                        t("screen.mc_teamviewer.config.value", settingName,
+                                settingValue(plugin, definition, value)),
                         tooltip, state.enabled()));
             } else {
                 textValues.putIfAbsent(id, String.valueOf(value == null ? "" : value));
@@ -733,6 +770,14 @@ public final class ConfigUiSession implements ConfigUiController {
                         null, tooltip, value(id), 256, state.enabled()));
             }
             y += "boolean".equals(definition.type()) || "enum".equals(definition.type()) ? 25 : 34;
+        }
+        for (PluginRuntimeAction runtimeAction : plugin.runtimeActions()) {
+            controls.add(ConfigControlView.button(
+                    ConfigControlId.pluginRuntimeAction(plugin.id(), runtimeAction.id()),
+                    new UiRect(x, y, 430, HEIGHT), UiText.literal(runtimeAction.label()),
+                    runtimeAction.tooltip().isEmpty() ? null : UiText.literal(runtimeAction.tooltip()),
+                    plugin.enabled() && runtimeAction.enabled()));
+            y += 25;
         }
         controls.add(ConfigControlView.button(ConfigControlId.plugin(plugin.id(), "toggle"),
                 new UiRect(x, y, 210, HEIGHT),
@@ -761,6 +806,30 @@ public final class ConfigUiSession implements ConfigUiController {
         y += lastPluginOperation == null ? 0 : 24;
         controls.add(button(BACK, x, y, 430, "screen.mc_teamviewer.config.back", null));
         return new ConfigPageView(ConfigPageId.PLUGIN_DETAIL, pluginName(plugin), 24, controls);
+    }
+
+    private ConfigPageView pluginRuntimeActionConfirmPage(int width, int height) {
+        PluginSnapshot plugin = pendingRuntimePluginId == null
+                ? null : control.getIntegrationPlugin(pendingRuntimePluginId);
+        PluginRuntimeAction action = plugin == null ? null : plugin.runtimeActions().stream()
+                .filter(value -> value.id().equals(pendingRuntimeActionId)).findFirst().orElse(null);
+        int x = (width - 430) / 2;
+        int y = height / 2 - 55;
+        List<ConfigControlView> controls = new ArrayList<>();
+        controls.add(ConfigControlView.text(PLUGIN_PAGE_STATUS, new UiRect(x, y, 430, 40),
+                action == null
+                        ? tr("screen.mc_teamviewer.integration_plugin.runtime_action_unavailable")
+                        : UiText.literal(action.confirmation()),
+                null, 0xFF5555, true, ConfigControlView.TextAlignment.CENTER));
+        y += 48;
+        if (action != null && action.enabled()) {
+            controls.add(ConfigControlView.button(PLUGIN_RUNTIME_CONFIRM,
+                    new UiRect(x, y, 210, HEIGHT),
+                    tr("screen.mc_teamviewer.integration_plugin.runtime_action_confirm"), null, true));
+        }
+        controls.add(button(BACK, x + 220, y, 210, "screen.mc_teamviewer.config.cancel", null));
+        return new ConfigPageView(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM,
+                tr("screen.mc_teamviewer.integration_plugin.runtime_action_confirm_title"), 24, controls);
     }
 
     private ConfigPageView pluginCopyGuidePage(int width) {
@@ -988,6 +1057,29 @@ public final class ConfigUiSession implements ConfigUiController {
             if (lastPluginOperation.succeeded()) return ConfigUiAction.open(ConfigPageId.PLUGINS);
         }
         return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction activatePluginRuntimeAction(ConfigControlId id) {
+        PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
+        PluginRuntimeAction action = plugin == null ? null : plugin.runtimeActions().stream()
+                .filter(value -> value.id().equals(id.pluginRuntimeActionId())).findFirst().orElse(null);
+        if (action == null || !plugin.enabled() || !action.enabled()) return ConfigUiAction.stay();
+        if (action.requiresConfirmation()) {
+            pendingRuntimePluginId = plugin.id();
+            pendingRuntimeActionId = action.id();
+            return ConfigUiAction.open(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM);
+        }
+        control.invokeIntegrationPluginAction(plugin.id(), action.id());
+        return ConfigUiAction.reload();
+    }
+
+    private ConfigUiAction confirmPluginRuntimeAction() {
+        if (pendingRuntimePluginId != null && pendingRuntimeActionId != null) {
+            control.invokeIntegrationPluginAction(pendingRuntimePluginId, pendingRuntimeActionId);
+        }
+        pendingRuntimePluginId = null;
+        pendingRuntimeActionId = null;
+        return ConfigUiAction.open(ConfigPageId.PLUGIN_DETAIL);
     }
 
     private ConfigUiAction activatePluginSetting(ConfigControlId id) {
@@ -1250,8 +1342,16 @@ public final class ConfigUiSession implements ConfigUiController {
             case IntegrationIds.PLUGIN_XAERO -> tr("screen.mc_teamviewer.integration_plugin.builtin.xaero");
             case IntegrationIds.PLUGIN_JOURNEYMAP -> tr("screen.mc_teamviewer.integration_plugin.builtin.journeymap");
             case IntegrationIds.PLUGIN_EXAMPLE -> tr("screen.mc_teamviewer.integration_plugin.builtin.example");
+            case IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS -> tr("screen.mc_teamviewer.integration_plugin.builtin.tab_label_relations");
             default -> UiText.literal(plugin.name());
         };
+    }
+
+    private static UiText pluginDescription(PluginSnapshot plugin) {
+        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())) {
+            return tr("screen.mc_teamviewer.integration_plugin.tab_label_relations.description");
+        }
+        return UiText.literal(plugin.description());
     }
 
     private static UiText capabilityName(IntegrationCapability capability) {
@@ -1266,6 +1366,7 @@ public final class ConfigUiSession implements ConfigUiController {
             case IntegrationIds.EXAMPLE_REMOTE_PLAYER -> tr("screen.mc_teamviewer.integration_plugin.capability.example_remote_player");
             case IntegrationIds.EXAMPLE_SHARED_WAYPOINT -> tr("screen.mc_teamviewer.integration_plugin.capability.example_shared_waypoint");
             case IntegrationIds.EXAMPLE_BATTLE_MAP -> tr("screen.mc_teamviewer.integration_plugin.capability.example_battle_map");
+            case IntegrationIds.TAB_LABEL_RELATIONS -> tr("screen.mc_teamviewer.integration_plugin.capability.tab_label_relations");
             default -> UiText.literal(capability.displayName());
         };
     }
@@ -1285,7 +1386,20 @@ public final class ConfigUiSession implements ConfigUiController {
         if (IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id())) {
             return tr("screen.mc_teamviewer.integration_plugin.setting.example_" + setting.key());
         }
+        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())) {
+            return tr("screen.mc_teamviewer.integration_plugin.setting.tab_label_" + setting.key());
+        }
         return UiText.literal(setting.name());
+    }
+
+    private static UiText settingValue(
+            PluginSnapshot plugin, PluginManifest.SettingDefinition setting, Object value) {
+        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())
+                && "relation_source_mode".equals(setting.key())) {
+            return tr("screen.mc_teamviewer.integration_plugin.setting.tab_label_relation_source_mode."
+                    + String.valueOf(value));
+        }
+        return UiText.literal(String.valueOf(value));
     }
 
     private static UiText runtimeStatusText(PluginRuntimeStatus status) {

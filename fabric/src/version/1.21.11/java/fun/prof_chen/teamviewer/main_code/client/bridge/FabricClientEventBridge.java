@@ -3,9 +3,11 @@ package fun.prof_chen.teamviewer.main_code.client.bridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
@@ -51,6 +53,8 @@ public final class FabricClientEventBridge implements ClientEventBridge<WorldExt
             if (networkHandler != null && !networkHandler.getConnection().isLocal()) handler.onJoinedMultiplayer();
         });
         ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> handler.onLeftPlaySession());
+        ClientReceiveMessageEvents.GAME.register((message, overlay) ->
+                handler.onSystemChatMessage(new SystemChatMessageSnapshot(message.getString(), overlay)));
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> handler.onClientStopping());
         WorldRenderEvents.END_EXTRACTION.register(handler::onWorldRender);
         HudRenderCallback.EVENT.register((context, tickDelta) -> handler.onHudRender(context));

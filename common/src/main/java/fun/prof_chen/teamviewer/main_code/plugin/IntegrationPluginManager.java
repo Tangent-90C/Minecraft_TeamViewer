@@ -13,6 +13,8 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
+import fun.prof_chen.teamviewer.main_code.client.sdk.PlayerRelationClassifier;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
@@ -52,6 +54,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -66,7 +69,8 @@ public final class IntegrationPluginManager {
             .registerTypeAdapterFactory(new LegacyRecordTypeAdapterFactory())
             .setPrettyPrinting()
             .create();
-    private static final List<String> BUILTIN_NAMES = List.of("nodemc", "simmc", "xaero", "journeymap", "example");
+    private static final List<String> BUILTIN_NAMES = List.of(
+            "nodemc", "simmc", "xaero", "journeymap", "tab-label-relations", "example");
     private static final String BUILTIN_ROOT = "teamviewer/plugins/";
     private static final String DISABLED_METADATA = "disabled-plugin.json";
     private static final DateTimeFormatter DISABLED_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
@@ -75,6 +79,7 @@ public final class IntegrationPluginManager {
     private final IntegrationRegistry integrations;
     private final Config config;
     private final PluginHostAccess hostAccess;
+    private final LongSupplier wallClock;
     private final Path pluginDirectory;
     private final Path disabledPluginDirectory;
     private final PluginStateStore stateStore;
@@ -89,10 +94,17 @@ public final class IntegrationPluginManager {
     public IntegrationPluginManager(
             RuntimeGateway platform, IntegrationRegistry integrations, Config config,
             PluginHostAccess hostAccess) {
+        this(platform, integrations, config, hostAccess, System::currentTimeMillis);
+    }
+
+    IntegrationPluginManager(
+            RuntimeGateway platform, IntegrationRegistry integrations, Config config,
+            PluginHostAccess hostAccess, LongSupplier wallClock) {
         this.platform = Objects.requireNonNull(platform, "platform");
         this.integrations = Objects.requireNonNull(integrations, "integrations");
         this.config = Objects.requireNonNull(config, "config");
         this.hostAccess = Objects.requireNonNull(hostAccess, "hostAccess");
+        this.wallClock = Objects.requireNonNull(wallClock, "wallClock");
         Path root = platform.getConfigDirectory().resolve("team-view-relay");
         this.pluginDirectory = root.resolve("plugins");
         this.disabledPluginDirectory = root.resolve("plugins-disabled");
@@ -109,6 +121,55 @@ public final class IntegrationPluginManager {
     public synchronized PluginSnapshot snapshot(String pluginId) {
         Descriptor descriptor = descriptors.get(pluginId);
         return descriptor == null ? null : snapshot(descriptor);
+    }
+
+    /** Dispatches an adapter-normalized system message to active Lua plugins. */
+    public synchronized boolean onSystemChatMessage(SystemChatMessageSnapshot message) {
+        if (message == null || runtimes.isEmpty()) return false;
+        LuaValue payload = LuaValueConverters.toLua(message);
+        boolean changed = false;
+        for (LuaPluginRuntime runtime : List.copyOf(runtimes.values())) {
+            changed |= runtime.systemChat(payload);
+        }
+        return changed;
+    }
+
+    /** Starts a new multiplayer session for active plugins. */
+    public synchronized void onPlaySessionStarted() {
+        descriptors.values().forEach(descriptor -> descriptor.runtimeState = List.of());
+        for (LuaPluginRuntime runtime : List.copyOf(runtimes.values())) {
+            runtime.playSessionStarted();
+        }
+    }
+
+    /** Ends the current multiplayer session for active plugins. */
+    public synchronized void onPlaySessionEnded() {
+        descriptors.values().forEach(descriptor -> descriptor.runtimeState = List.of());
+        for (LuaPluginRuntime runtime : List.copyOf(runtimes.values())) {
+            runtime.playSessionEnded();
+        }
+    }
+
+    /** Replaces bounded, in-memory status fields published by one plugin. */
+    public synchronized void setRuntimeState(String pluginId, List<PluginRuntimeState> state) {
+        Descriptor descriptor = descriptors.get(pluginId);
+        if (descriptor != null) descriptor.runtimeState = List.copyOf(state == null ? List.of() : state);
+    }
+
+    public synchronized void clearRuntimeState(String pluginId) {
+        setRuntimeState(pluginId, List.of());
+    }
+
+    /** Invokes one enabled action published by an active plugin. */
+    public synchronized boolean invokeRuntimeAction(String pluginId, String actionId) {
+        Descriptor descriptor = descriptors.get(pluginId);
+        LuaPluginRuntime runtime = runtimes.get(pluginId);
+        if (descriptor == null || runtime == null || descriptor.runtimeStatus != PluginRuntimeStatus.ACTIVE) {
+            return false;
+        }
+        PluginRuntimeAction action = descriptor.runtimeActions.stream()
+                .filter(value -> value.id().equals(actionId)).findFirst().orElse(null);
+        return action != null && action.enabled() && runtime.invokeRuntimeAction(actionId);
     }
 
     public synchronized boolean setEnabled(String pluginId, boolean enabled) {
@@ -378,6 +439,7 @@ public final class IntegrationPluginManager {
                             List.of("show_map_markers", "show_beacons"), true);
                 }
                 descriptor.settings.putAll(stateStore.settings(manifest));
+                descriptor.persistentState.putAll(stateStore.data(manifest.id()));
                 descriptors.put(manifest.id(), descriptor);
                 for (PluginManifest.CapabilityDeclaration capability : manifest.provides()) {
                     integrations.declare(capability.id(), capability.role(), manifest.id(), capability.name(),
@@ -651,9 +713,119 @@ public final class IntegrationPluginManager {
                 return LuaValue.TRUE;
             }
         });
+        tv.set("register_player_relation_classifier", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                LuaTable table = value.checktable();
+                String id = IntegrationIds.canonicalize(table.get("id").checkjstring());
+                PluginManifest.CapabilityDeclaration declaration = declaration(
+                        descriptor, id, IntegrationRole.PLAYER_RELATION);
+                PlayerRelationClassifier classifier = new LuaPlayerRelationClassifier(
+                        id, runtime, requireFunction(table, "classify"), table.get("probe"));
+                integrations.registerPluginImplementation(
+                        descriptor.manifest.id(), id, declaration.role(), classifier,
+                        IntegrationImplementationSource.LUA);
+                descriptor.registered.add(id);
+                return LuaValue.TRUE;
+            }
+        });
         tv.set("on_enable", callbackSetter(runtime::setOnEnable));
         tv.set("on_disable", callbackSetter(runtime::setOnDisable));
         tv.set("on_settings_changed", callbackSetter(runtime::setOnSettingsChanged));
+        tv.set("on_system_chat", callbackSetter(runtime::setOnSystemChat));
+        tv.set("on_play_session_started", callbackSetter(runtime::setOnPlaySessionStarted));
+        tv.set("on_play_session_ended", callbackSetter(runtime::setOnPlaySessionEnded));
+        tv.set("notify", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                PluginNotificationSink sink = notificationSink();
+                String message = notificationText(value);
+                if (sink == null || message.isEmpty()) return LuaValue.FALSE;
+                sink.showActionBar(message);
+                return LuaValue.TRUE;
+            }
+        });
+        tv.set("now_millis", new ZeroArgFunction() {
+            @Override public LuaValue call() {
+                return LuaValue.valueOf(wallClock.getAsLong());
+            }
+        });
+        tv.set("get_persistent_state", new ZeroArgFunction() {
+            @Override public LuaValue call() {
+                return LuaValueConverters.toLua(descriptor.persistentState);
+            }
+        });
+        tv.set("set_persistent_state", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                Map<String, Object> state = boundedPersistentState(value);
+                descriptor.persistentState.clear();
+                descriptor.persistentState.putAll(state);
+                stateStore.setData(descriptor.manifest.id(), state);
+                return LuaValue.TRUE;
+            }
+        });
+        tv.set("clear_persistent_state", new ZeroArgFunction() {
+            @Override public LuaValue call() {
+                descriptor.persistentState.clear();
+                stateStore.setData(descriptor.manifest.id(), Map.of());
+                return LuaValue.TRUE;
+            }
+        });
+        tv.set("set_runtime_state", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                LuaTable table = value.checktable();
+                List<PluginRuntimeState> state = new ArrayList<>();
+                Set<String> keys = new HashSet<>();
+                for (int index = 1; index <= 8; index++) {
+                    LuaValue entry = table.get(index);
+                    if (entry.isnil()) break;
+                    LuaTable item = entry.checktable();
+                    String key = boundedStateText(item.get("key").checkjstring(), 64);
+                    String label = boundedStateText(item.get("label").optjstring(key), 128);
+                    String stateValue = boundedStateText(item.get("value").optjstring(""), 4096);
+                    LuaValue observed = item.get("observed_at_millis");
+                    Long observedAtMillis = observed.isnil() ? null : observed.checklong();
+                    if (key.isEmpty() || !keys.add(key)) {
+                        throw new IllegalArgumentException("Runtime state keys must be unique and non-empty");
+                    }
+                    state.add(new PluginRuntimeState(key, label, stateValue, observedAtMillis));
+                }
+                if (!table.get(9).isnil()) {
+                    throw new IllegalArgumentException("A plugin may publish at most 8 runtime state fields");
+                }
+                descriptor.runtimeState = List.copyOf(state);
+                return LuaValue.TRUE;
+            }
+        });
+        tv.set("set_runtime_actions", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                LuaTable table = value.checktable();
+                List<PluginRuntimeAction> actions = new ArrayList<>();
+                Map<String, LuaValue> callbacks = new LinkedHashMap<>();
+                Set<String> ids = new HashSet<>();
+                for (int index = 1; index <= 8; index++) {
+                    LuaValue entry = table.get(index);
+                    if (entry.isnil()) break;
+                    LuaTable item = entry.checktable();
+                    String id = boundedStateText(item.get("id").checkjstring(), 64);
+                    String label = boundedStateText(item.get("label").optjstring(id), 128);
+                    String tooltip = boundedStateText(item.get("tooltip").optjstring(""), 256);
+                    String confirmation = boundedStateText(item.get("confirmation").optjstring(""), 256);
+                    if (id.isEmpty() || !ids.add(id)) {
+                        throw new IllegalArgumentException("Runtime action IDs must be unique and non-empty");
+                    }
+                    LuaValue callback = requireFunction(item, "callback");
+                    actions.add(new PluginRuntimeAction(id, label, tooltip,
+                            item.get("enabled").optboolean(true),
+                            item.get("danger").optboolean(false), confirmation));
+                    callbacks.put(id, callback);
+                }
+                if (!table.get(9).isnil()) {
+                    throw new IllegalArgumentException("A plugin may publish at most 8 runtime actions");
+                }
+                descriptor.runtimeActions = List.copyOf(actions);
+                runtime.setRuntimeActions(callbacks);
+                return LuaValue.TRUE;
+            }
+        });
         tv.set("configure_setting", new OneArgFunction() {
             @Override public LuaValue call(LuaValue value) {
                 LuaTable table = value.checktable();
@@ -706,6 +878,7 @@ public final class IntegrationPluginManager {
         snapshots.set("players", snapshotFunction("players"));
         snapshots.set("waypoints", snapshotFunction("waypoints"));
         snapshots.set("scoreboard", snapshotFunction("scoreboard"));
+        snapshots.set("tab_players", snapshotFunction("tab_players"));
         globals.set("snapshots", snapshots);
         LuaValue luaJava = globals.get("luajava");
         if (luaJava.istable()) {
@@ -868,6 +1041,8 @@ public final class IntegrationPluginManager {
     }
 
     private void disableDescriptor(Descriptor descriptor, PluginRuntimeStatus status, String detail) {
+        descriptor.runtimeState = List.of();
+        descriptor.runtimeActions = List.of();
         cleanupImplementations(descriptor.manifest.id());
         LuaPluginRuntime runtime = runtimes.remove(descriptor.manifest.id());
         if (runtime != null) runtime.disable();
@@ -914,7 +1089,79 @@ public final class IntegrationPluginManager {
                 descriptor.candidate.builtIn, descriptor.enabled, descriptor.manifest.managedHotToggle(),
                 descriptor.runtimeStatus, descriptor.detail, descriptor.candidate.source,
                 descriptor.settings, descriptor.manifest.settings(), descriptor.settingStates,
-                integrations.capabilitiesForPlugin(descriptor.manifest.id()), descriptor.disabledStorageId != null);
+                integrations.capabilitiesForPlugin(descriptor.manifest.id()), descriptor.disabledStorageId != null,
+                descriptor.manifest.description(), descriptor.runtimeState, descriptor.runtimeActions);
+    }
+
+    private static String boundedStateText(String value, int maximum) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.length() > maximum) {
+            throw new IllegalArgumentException("Runtime state value exceeds " + maximum + " characters");
+        }
+        return normalized;
+    }
+
+    private static Map<String, Object> boundedPersistentState(LuaValue value) {
+        if (value == null || !value.istable()) {
+            throw new IllegalArgumentException("Persistent plugin state must be a table");
+        }
+        PersistentStateBudget budget = new PersistentStateBudget();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> state = (Map<String, Object>) persistentValue(value, 0, budget);
+        return state;
+    }
+
+    private static Object persistentValue(LuaValue value, int depth, PersistentStateBudget budget) {
+        if (depth > 4) throw new IllegalArgumentException("Persistent plugin state is nested too deeply");
+        if (value == null || value.isnil()) return null;
+        if (value.isboolean()) return value.toboolean();
+        if (value.isint()) return value.toint();
+        if (value.isnumber()) {
+            double number = value.todouble();
+            if (!Double.isFinite(number)) {
+                throw new IllegalArgumentException("Persistent plugin state contains a non-finite number");
+            }
+            return number;
+        }
+        if (value.isstring()) {
+            String text = value.tojstring();
+            if (text.length() > 4096) {
+                throw new IllegalArgumentException("Persistent plugin state value exceeds 4096 characters");
+            }
+            budget.characters += text.length();
+            budget.check();
+            return text;
+        }
+        if (!value.istable()) {
+            throw new IllegalArgumentException("Persistent plugin state supports only tables and scalar values");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        LuaValue key = LuaValue.NIL;
+        while (true) {
+            Varargs next = value.next(key);
+            key = next.arg1();
+            if (key.isnil()) break;
+            String normalizedKey = key.tojstring();
+            if (normalizedKey.isBlank() || normalizedKey.length() > 64) {
+                throw new IllegalArgumentException("Persistent plugin state keys must contain 1-64 characters");
+            }
+            budget.entries++;
+            budget.characters += normalizedKey.length();
+            budget.check();
+            result.put(normalizedKey, persistentValue(next.arg(2), depth + 1, budget));
+        }
+        return result;
+    }
+
+    private static final class PersistentStateBudget {
+        private int entries;
+        private int characters;
+
+        private void check() {
+            if (entries > 2048 || characters > 65_536) {
+                throw new IllegalArgumentException("Persistent plugin state exceeds its size limit");
+            }
+        }
     }
 
     private static Object normalizeSetting(PluginManifest.SettingDefinition definition, Object rawValue) {
@@ -926,6 +1173,17 @@ public final class IntegrationPluginManager {
             return "integer".equals(definition.type()) ? (int) bounded : bounded;
         }
         return value;
+    }
+
+    private PluginNotificationSink notificationSink() {
+        Object service = hostAccess.service(PluginNotificationSink.SERVICE_ID);
+        return service instanceof PluginNotificationSink sink ? sink : null;
+    }
+
+    private static String notificationText(LuaValue value) {
+        if (value == null || !value.isstring()) return "";
+        String message = value.tojstring().replace('\n', ' ').replace('\r', ' ').trim();
+        return message.length() <= 160 ? message : message.substring(0, 160);
     }
 
     private PluginManifest.CapabilityDeclaration declaration(Descriptor descriptor, String id) {
@@ -1084,21 +1342,32 @@ public final class IntegrationPluginManager {
 
                 常用 API：`tv.use_native_capability`、`tv.register_remote_player_projection`、
                 `tv.register_shared_waypoint_adapter`、`tv.register_battle_map_source`、
-                `tv.on_enable`、`tv.on_disable`、`tv.on_settings_changed`、`mods.is_loaded`、
-                `snapshots.world/players/waypoints/scoreboard`、`java.type/method/field/new/proxy`。
+                `tv.register_player_relation_classifier`、
+                `tv.notify`、`tv.on_enable`、`tv.on_disable`、`tv.on_settings_changed`、`tv.on_system_chat`、
+                `tv.on_play_session_started/ended`、`mods.is_loaded`、
+                `snapshots.world/players/waypoints/scoreboard/tab_players`、`java.type/method/field/new/proxy`。
 
                 生命周期、设置与快照示例：
 
                 ```lua
-                tv.on_enable(function() tv.log.info("enabled") end)
+                tv.on_enable(function()
+                  tv.log.info("enabled")
+                  tv.notify("Plugin enabled")
+                end)
                 tv.on_disable(function() tv.log.info("disabled") end)
                 tv.on_settings_changed(function(key, value)
                   tv.log.info("setting " .. key .. " changed")
                 end)
+                tv.on_system_chat(function(message)
+                  return false -- return true after changing relation-classifier state
+                end)
+                tv.on_play_session_started(function() end)
+                tv.on_play_session_ended(function() end)
                 local enabled = settings.enabled_marker
                 local world = snapshots.world()
                 local players = snapshots.players()
                 local scoreboard = snapshots.scoreboard()
+                local tab_players = snapshots.tab_players()
                 -- 将自定义 provides ID 绑定到内置高频 Java 桥：
                 -- tv.use_native_capability("custom-capability-id", "nodemc-scoreboard-battle-map")
                 ```
@@ -1113,13 +1382,20 @@ public final class IntegrationPluginManager {
                 Lifecycle, settings, native bridge and snapshot APIs:
 
                 ```lua
-                tv.on_enable(function() tv.log.info("enabled") end)
+                tv.on_enable(function()
+                  tv.log.info("enabled")
+                  tv.notify("Plugin enabled")
+                end)
                 tv.on_disable(function() tv.log.info("disabled") end)
                 tv.on_settings_changed(function(key, value) end)
+                tv.on_system_chat(function(message) return false end)
+                tv.on_play_session_started(function() end)
+                tv.on_play_session_ended(function() end)
                 local enabled = settings.enabled_marker
                 local world = snapshots.world()
                 local players = snapshots.players()
                 local waypoints = snapshots.waypoints()
+                local tab_players = snapshots.tab_players()
                 -- tv.use_native_capability("custom-capability-id", "nodemc-scoreboard-battle-map")
                 ```
 
@@ -1203,11 +1479,14 @@ public final class IntegrationPluginManager {
         private final Candidate candidate;
         private final Map<String, Object> settings = new LinkedHashMap<>();
         private final Map<String, PluginSettingState> settingStates = new LinkedHashMap<>();
+        private final Map<String, Object> persistentState = new LinkedHashMap<>();
         private final Set<String> registered = new LinkedHashSet<>();
         private boolean enabled;
         private PluginRuntimeStatus runtimeStatus = PluginRuntimeStatus.DISABLED;
         private String detail = "";
         private String disabledStorageId;
+        private List<PluginRuntimeState> runtimeState = List.of();
+        private List<PluginRuntimeAction> runtimeActions = List.of();
 
         private Descriptor(PluginManifest manifest, Candidate candidate) {
             this.manifest = manifest;

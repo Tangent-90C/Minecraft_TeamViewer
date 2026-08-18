@@ -199,6 +199,10 @@ public final class IntegrationRegistry {
         return activeImplementations(IntegrationRole.BATTLE_MAP_SOURCE, BattleMapSource.class);
     }
 
+    public synchronized List<PlayerRelationClassifier> activePlayerRelationClassifiers() {
+        return activeImplementations(IntegrationRole.PLAYER_RELATION, PlayerRelationClassifier.class);
+    }
+
     public synchronized BattleMapSource activeBattleMapSource(String id) {
         Entry entry = entries.get(IntegrationIds.canonicalize(id));
         if (entry == null || !entry.runtimeAttached
@@ -252,6 +256,9 @@ public final class IntegrationRegistry {
         } else if (entry.implementation instanceof BattleMapSource source) {
             entry.supportStatus = source.supportStatus();
             entry.detail = defaultDetail(entry.supportStatus, source.supportDetail());
+        } else if (entry.implementation instanceof PlayerRelationClassifier classifier) {
+            entry.supportStatus = classifier.supportStatus();
+            entry.detail = defaultDetail(entry.supportStatus, classifier.supportDetail());
         }
     }
 

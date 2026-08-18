@@ -12,6 +12,8 @@ import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeAction;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeState;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
 import fun.prof_chen.teamviewer.main_code.plugin.DisabledPluginSnapshot;
@@ -373,6 +375,100 @@ class ConfigUiSessionTest {
     }
 
     @Test
+    void relationPluginShowsCurrentRecognitionWithoutOverwritingManualSettings() {
+        String pluginId = IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS;
+        List<PluginManifest.SettingDefinition> definitions = List.of(
+                new PluginManifest.SettingDefinition(
+                        "relation_source_mode", "enum", "Relation source mode", "automatic_only",
+                        null, null,
+                        List.of("automatic_only", "manual_only", "manual_first", "automatic_first"), false),
+                new PluginManifest.SettingDefinition(
+                        "friendly_tags", "string", "Friendly tags", "饶州",
+                        null, null, List.of(), false),
+                new PluginManifest.SettingDefinition(
+                        "enemy_tags", "string", "Enemy tags", "星辉",
+                        null, null, List.of(), false));
+        PluginSnapshot plugin = new PluginSnapshot(
+                pluginId, "Tab Label Player Relations", "1.4.0", true, true, true,
+                PluginRuntimeStatus.ACTIVE, "", null,
+                Map.of("relation_source_mode", "automatic_only",
+                        "friendly_tags", "饶州", "enemy_tags", "星辉"),
+                definitions, List.of(new IntegrationCapability(
+                        IntegrationIds.TAB_LABEL_RELATIONS, "player-relation",
+                        IntegrationSupportStatus.AVAILABLE, "", pluginId,
+                        IntegrationImplementationSource.LUA, PluginRuntimeStatus.ACTIVE)))
+                .withRuntimeState(List.of(
+                        new PluginRuntimeState("source.status", "导入状态", "已导入"),
+                        new PluginRuntimeState("effective.friendly", "当前 Tab 友军", "2 人: Alice, Bob")));
+        ConfigUiSession session = new ConfigUiSession(new FakeControl(new Config(), plugin));
+        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(pluginId, "open"));
+
+        Map<ConfigControlId, ConfigControlView> detailControls = session.page(
+                        ConfigPageId.PLUGIN_DETAIL, 854, 480).controls().stream()
+                .collect(Collectors.toMap(ConfigControlView::id, value -> value));
+        assertTrue(detailControls.containsKey(ConfigControlId.plugin(pluginId, "runtime-heading")));
+        assertEquals("饶州", detailControls.get(
+                ConfigControlId.setting(pluginId, "friendly_tags")).value());
+        assertEquals("星辉", detailControls.get(
+                ConfigControlId.setting(pluginId, "enemy_tags")).value());
+
+        PluginManagerView managerView = session.pluginManager().view(854, 480);
+        assertEquals("screen.mc_teamviewer.integration_plugin.manager.runtime_state",
+                managerView.detail().runtimeSectionTitle().translationKey());
+        int firstRuntime = managerView.detail().runtimeLineStartIndex();
+        assertEquals(1, firstRuntime);
+        assertEquals("导入状态", managerView.detail().lines().get(firstRuntime).primary().literal());
+        PluginManagerView.SettingView policy = managerView.detail().settings().stream()
+                .filter(value -> "relation_source_mode".equals(value.id().settingKey()))
+                .findFirst().orElseThrow();
+        assertEquals(
+                "screen.mc_teamviewer.integration_plugin.setting.tab_label_relation_source_mode.automatic_only",
+                policy.valueLabel().translationKey());
+    }
+
+    @Test
+    void pluginManagerWrapsDescriptionAndConfirmsRuntimeActionBeforeInvocation() {
+        String pluginId = IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS;
+        String description = "默认仅采用 /town 或 /t 的自动识别结果；可在下方切换手动标签与自动识别结果的采用关系。";
+        PluginSnapshot plugin = new PluginSnapshot(
+                pluginId, "Tab Label Player Relations", "1.4.0", true, true, true,
+                PluginRuntimeStatus.ACTIVE, "", null, Map.of(), List.of(), Map.of(),
+                List.of(), false, description, List.of(),
+                List.of(new PluginRuntimeAction(
+                        "clear_automatic_relations", "清空自动识别", "只清空自动结果",
+                        true, true, "确定清空当前自动识别结果吗？")));
+        FakeControl control = new FakeControl(new Config(), plugin);
+        ConfigUiSession session = new ConfigUiSession(control);
+        PluginManagerUiController manager = session.pluginManager();
+
+        PluginManagerView narrow = manager.view(320, 360);
+        assertNotNull(narrow.detail().description());
+        assertEquals("screen.mc_teamviewer.integration_plugin.tab_label_relations.description",
+                narrow.detail().description().text().translationKey());
+        assertTrue(narrow.detail().description().bounds().height() > 11,
+                "narrow plugin details must reserve more than one line for the description");
+        ConfigControlId clear = ConfigControlId.pluginRuntimeAction(
+                pluginId, "clear_automatic_relations");
+        assertTrue(narrow.detail().actions().stream().anyMatch(action -> clear.equals(action.id())));
+
+        manager.activate(clear);
+        assertEquals(0, control.invokedPluginActionCount);
+        assertEquals(PluginManagerView.DialogKind.RUNTIME_ACTION_CONFIRM,
+                manager.view(704, 360).dialog().kind());
+        manager.activate(ConfigControlId.PLUGIN_RUNTIME_CONFIRM);
+        assertEquals(1, control.invokedPluginActionCount);
+        assertEquals(pluginId, control.invokedPluginId);
+        assertEquals("clear_automatic_relations", control.invokedPluginActionId);
+
+        session.activate(ConfigPageId.PLUGINS, ConfigControlId.plugin(pluginId, "open"));
+        assertEquals(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM,
+                session.activate(ConfigPageId.PLUGIN_DETAIL, clear).targetPage());
+        assertEquals(1, control.invokedPluginActionCount);
+        session.activate(ConfigPageId.PLUGIN_RUNTIME_ACTION_CONFIRM, ConfigControlId.PLUGIN_RUNTIME_CONFIRM);
+        assertEquals(2, control.invokedPluginActionCount);
+    }
+
+    @Test
     void pluginManagerCommitsTextOnNavigationAndAppliesBooleanAndEnumImmediately() {
         PluginSnapshot plugin = pluginWithSettings("custom.settings");
         FakeControl control = new FakeControl(new Config(), plugin);
@@ -543,6 +639,9 @@ class ConfigUiSessionTest {
         private String uninstalledPluginId;
         private String restoredStorageId;
         private String deletedStorageId;
+        private String invokedPluginId;
+        private String invokedPluginActionId;
+        private int invokedPluginActionCount;
         private boolean enabled;
         private Boolean lastEnabledValue;
 
@@ -585,6 +684,13 @@ class ConfigUiSessionTest {
         @Override
         public boolean setIntegrationPluginSetting(String pluginId, String key, Object value) {
             changedSettings.put(key, value);
+            return true;
+        }
+        @Override
+        public boolean invokeIntegrationPluginAction(String pluginId, String actionId) {
+            invokedPluginId = pluginId;
+            invokedPluginActionId = actionId;
+            invokedPluginActionCount++;
             return true;
         }
         @Override

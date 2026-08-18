@@ -6,6 +6,7 @@ import org.luaj.vm2.Varargs;
 import org.slf4j.Logger;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -18,6 +19,10 @@ final class LuaPluginRuntime {
     private LuaValue onDisable = LuaValue.NIL;
     private LuaValue onEnable = LuaValue.NIL;
     private LuaValue onSettingsChanged = LuaValue.NIL;
+    private LuaValue onSystemChat = LuaValue.NIL;
+    private LuaValue onPlaySessionStarted = LuaValue.NIL;
+    private LuaValue onPlaySessionEnded = LuaValue.NIL;
+    private Map<String, LuaValue> runtimeActions = Map.of();
     private final Map<String, Integer> consecutiveFailures = new HashMap<>();
     private boolean suspended;
 
@@ -42,6 +47,27 @@ final class LuaPluginRuntime {
 
     void setOnSettingsChanged(LuaValue callback) {
         onSettingsChanged = callback == null ? LuaValue.NIL : callback;
+    }
+
+    void setOnSystemChat(LuaValue callback) {
+        onSystemChat = callback == null ? LuaValue.NIL : callback;
+    }
+
+    void setOnPlaySessionStarted(LuaValue callback) {
+        onPlaySessionStarted = callback == null ? LuaValue.NIL : callback;
+    }
+
+    void setOnPlaySessionEnded(LuaValue callback) {
+        onPlaySessionEnded = callback == null ? LuaValue.NIL : callback;
+    }
+
+    void setRuntimeActions(Map<String, LuaValue> actions) {
+        runtimeActions = Map.copyOf(actions == null ? Map.of() : new LinkedHashMap<>(actions));
+    }
+
+    boolean invokeRuntimeAction(String actionId) {
+        LuaValue callback = runtimeActions.get(actionId);
+        return invoke("runtime_action." + actionId, callback).toboolean();
     }
 
     LuaValue invoke(String callbackId, LuaValue function, LuaValue... arguments) {
@@ -82,5 +108,17 @@ final class LuaPluginRuntime {
     void settingsChanged(String key, Object value) {
         invoke("lifecycle.settings_changed", onSettingsChanged,
                 LuaValue.valueOf(key), LuaValueConverters.toLua(value));
+    }
+
+    boolean systemChat(LuaValue message) {
+        return invoke("lifecycle.system_chat", onSystemChat, message).toboolean();
+    }
+
+    void playSessionStarted() {
+        invoke("lifecycle.play_session_started", onPlaySessionStarted);
+    }
+
+    void playSessionEnded() {
+        invoke("lifecycle.play_session_ended", onPlaySessionEnded);
     }
 }

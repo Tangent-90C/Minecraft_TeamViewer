@@ -465,6 +465,36 @@ class MinecraftTargetsTest(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "requires a Java 25 Gradle runtime"):
                     minecraft_targets.java_home(matrix, "fabric", "26.1.2")
 
+    def test_java_home_accepts_newer_jdk_for_java17_target(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            newer_java = self._fake_jdk(pathlib.Path(temp_dir), 25)
+            with unittest.mock.patch.object(
+                minecraft_targets,
+                "java_home_candidates",
+                return_value=(newer_java,),
+            ):
+                self.assertEqual(
+                    newer_java.resolve(),
+                    minecraft_targets.java_home(matrix, "neoforge", "1.20.2"),
+                )
+
+    def test_java_home_prefers_exact_java17_after_newer_candidate(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = pathlib.Path(temp_dir)
+            newer_java = self._fake_jdk(root / "newer", 25)
+            exact_java = self._fake_jdk(root / "exact", 17)
+            with unittest.mock.patch.object(
+                minecraft_targets,
+                "java_home_candidates",
+                return_value=(newer_java, exact_java),
+            ):
+                self.assertEqual(
+                    exact_java.resolve(),
+                    minecraft_targets.java_home(matrix, "neoforge", "1.20.2"),
+                )
+
     @staticmethod
     def _fake_jdk(root: pathlib.Path, version: int) -> pathlib.Path:
         java_home = root / f"jdk-{version}"

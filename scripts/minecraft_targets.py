@@ -919,6 +919,7 @@ def java_home_candidates(required: str) -> tuple[str | pathlib.Path | None, ...]
 def java_home(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
     required = profile(matrix.properties, loader, target)["gradle_runtime_java"]
     preferred_name = f"JAVA{required}_HOME"
+    compatible_higher: list[pathlib.Path] = []
     for candidate in java_home_candidates(required):
         if not candidate:
             continue
@@ -928,11 +929,22 @@ def java_home(matrix: Matrix, loader: str, target: str) -> pathlib.Path:
         if not java.is_file() or not release.is_file():
             continue
         match = re.search(r'^JAVA_VERSION="(\d+)', release.read_text(encoding="utf-8"), re.MULTILINE)
-        if match and match.group(1) == required:
+        if not match:
+            continue
+        version = int(match.group(1))
+        if version == int(required):
             return home
+        # Java's --release flag makes a newer JDK a valid compiler for the
+        # Java 17 shared/legacy ABI.  Keep exact versions preferred, but allow
+        # this fallback when a machine deliberately provides only a newer JDK.
+        if required == "17" and version > int(required):
+            compatible_higher.append(home)
+    if compatible_higher:
+        return compatible_higher[0]
     raise SystemExit(
         f"Minecraft {target} ({loader}) requires a Java {required} Gradle runtime. "
-        f"Set {preferred_name} (preferred), JAVA_HOME_{required}_<ARCH>, or JAVA_HOME to that JDK."
+        f"Set {preferred_name} (preferred), JAVA_HOME_{required}_<ARCH>, or JAVA_HOME to that JDK "
+        "(a newer JDK is accepted only for Java 17 targets)."
     )
 
 

@@ -10,10 +10,23 @@ public record PluginHostAccess(
         Supplier<?> players,
         Supplier<?> waypoints,
         Supplier<?> scoreboard,
+        Supplier<?> tabPlayers,
         Map<String, Supplier<?>> services) {
     public PluginHostAccess(
             Supplier<?> world, Supplier<?> players, Supplier<?> waypoints, Supplier<?> scoreboard) {
-        this(world, players, waypoints, scoreboard, Map.of());
+        this(world, players, waypoints, scoreboard, () -> null, Map.of());
+    }
+
+    public PluginHostAccess(
+            Supplier<?> world, Supplier<?> players, Supplier<?> waypoints, Supplier<?> scoreboard,
+            Map<String, Supplier<?>> services) {
+        this(world, players, waypoints, scoreboard, () -> null, services);
+    }
+
+    public PluginHostAccess(
+            Supplier<?> world, Supplier<?> players, Supplier<?> waypoints, Supplier<?> scoreboard,
+            Supplier<?> tabPlayers) {
+        this(world, players, waypoints, scoreboard, tabPlayers, Map.of());
     }
 
     public PluginHostAccess {
@@ -21,11 +34,13 @@ public record PluginHostAccess(
         players = safe(players);
         waypoints = safe(waypoints);
         scoreboard = safe(scoreboard);
+        tabPlayers = safe(tabPlayers);
         services = Map.copyOf(services == null ? Map.of() : services);
     }
 
     public static PluginHostAccess empty() {
-        return new PluginHostAccess(() -> null, () -> null, () -> null, () -> null, Map.of());
+        return new PluginHostAccess(
+                () -> null, () -> null, () -> null, () -> null, () -> null, Map.of());
     }
 
     Object snapshot(String name) {
@@ -34,6 +49,7 @@ public record PluginHostAccess(
             case "players" -> players.get();
             case "waypoints" -> waypoints.get();
             case "scoreboard" -> scoreboard.get();
+            case "tab_players" -> tabPlayers.get();
             default -> null;
         };
     }

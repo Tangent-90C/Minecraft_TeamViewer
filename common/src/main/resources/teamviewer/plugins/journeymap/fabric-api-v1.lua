@@ -79,7 +79,7 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
   end
 end
 
-local function sync_players(players, enabled)
+local function sync_players(players, enabled, relations)
   if not enabled or not settings.show_remote_players or probe().status ~= "AVAILABLE" then
     clear(managed_players); return
   end
@@ -88,9 +88,11 @@ local function sync_players(players, enabled)
     if player.position ~= nil and player.uuid ~= world.localPlayerId
         and (player.dimension == nil or player.dimension == "" or player.dimension == world.dimension) then
       local id = "player:" .. player.uuid; active[id] = true
+      local relation = relations ~= nil and relations[player.uuid] or nil
+      local color = relation ~= nil and relation.resolved and relation.color or 0xFF5555
       upsert(managed_players, id, "[TV] " .. (player.name or "Player"),
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-          world.dimension, 0xFF5555)
+          world.dimension, color)
     end
   end
   local stale = {}; for id, _ in pairs(managed_players) do

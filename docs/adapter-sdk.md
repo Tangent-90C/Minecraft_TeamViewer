@@ -33,10 +33,11 @@ compile errors rather than runtime casts.
   Quick-mark targeting must resolve the first visible block/entity at the requested range. Versions
   whose prepared crosshair hit is interaction-limited perform their own native raycast, stop at the
   first block obstruction, and hard-limit traversal with `MARK_TARGET_MAX_DISTANCE`.
-- `ClientEventBridge<W,H>` registers tick, toggle/config/mark input, remote join, disconnect, stopping,
-  world render and HUD render exactly once. Callbacks run on the Loader's client/render threads and
-  must not retain render contexts after the callback returns. `registeredEvents()` must report
-  every `ClientEventType` after registration.
+- `ClientEventBridge<W,H>` registers tick, toggle/config/mark input, remote join, disconnect, system chat,
+  stopping, world render and HUD render exactly once. System chat forwards its plain text and overlay flag as
+  `SystemChatMessageSnapshot`; it does not alter native chat delivery. Callbacks run on the Loader's
+  client/render threads and must not retain render contexts after the callback returns. `registeredEvents()`
+  must report every `ClientEventType` after registration.
 - `WorldRenderSink<W>` and `HudRenderSink<H>` execute immutable common frames. They perform native
   coordinate/widget calls only and must not inspect config, repositories or network state.
 - `ConfigScreenHost` opens the native widget host. Page definitions, values, validation,
@@ -48,6 +49,10 @@ compile errors rather than runtime casts.
   returns `BattleMapSourceSnapshot`; `BattleMapCoordinator` exclusively owns source selection,
   history alignment, projection, semantic hashes, keepalive and conversion to the dedicated
   `battle_map_observation` packet.
+- `PlayerRelationClassifier` is the loader-neutral local relationship extension point. Common
+  captures and caches the Tab snapshot at most once per second, merges active classifier results,
+  and supplies the same effective relation to rendering, the public player API and projections.
+  Lua reads that cache through `snapshots.tab_players()`; plugins must not trigger adapter reads.
 - Platform factories do not link optional JourneyMap, Xaero or SimMC API classes. Lua adapters
   resolve them after probing the installed Mods. A high-frequency native provider may register a
   Java implementation and expose it through `tv.use_native_capability`.

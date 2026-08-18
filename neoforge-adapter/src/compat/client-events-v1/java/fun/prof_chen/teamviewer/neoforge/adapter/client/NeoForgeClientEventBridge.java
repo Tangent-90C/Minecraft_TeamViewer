@@ -4,11 +4,13 @@ import com.mojang.blaze3d.platform.InputConstants;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventBridge;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventType;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.neoforge.NeoForgeClientContext;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
@@ -49,6 +51,9 @@ public final class NeoForgeClientEventBridge
             }
         });
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut ignored) -> handler.onLeftPlaySession());
+        NeoForge.EVENT_BUS.addListener((ClientChatReceivedEvent.System event) ->
+                handler.onSystemChatMessage(new SystemChatMessageSnapshot(
+                        event.getMessage().getString(), event.isOverlay())));
         NeoForge.EVENT_BUS.addListener((GameShuttingDownEvent ignored) -> handler.onClientStopping());
         NeoForge.EVENT_BUS.addListener((RenderGuiEvent.Post event) -> handler.onHudRender(event.getGuiGraphics()));
         NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent event) -> {

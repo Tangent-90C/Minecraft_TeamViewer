@@ -3,7 +3,8 @@ package fun.prof_chen.teamviewer.main_code.client.sdk;
 public enum IntegrationRole {
     REMOTE_PLAYER("remote-player"),
     SHARED_WAYPOINT("shared-waypoint"),
-    BATTLE_MAP_SOURCE("battle-map-source");
+    BATTLE_MAP_SOURCE("battle-map-source"),
+    PLAYER_RELATION("player-relation");
 
     private final String id;
 

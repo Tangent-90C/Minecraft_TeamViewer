@@ -1,5 +1,9 @@
 package fun.prof_chen.teamviewer.main_code.client;
 
+import fun.prof_chen.teamviewer.api.PlayerRelation;
+import fun.prof_chen.teamviewer.api.Attackability;
+import fun.prof_chen.teamviewer.api.PlayerInteractionState;
+import fun.prof_chen.teamviewer.api.PlayerRelationOrigin;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.bridge.ClientControlGateway;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
@@ -7,6 +11,8 @@ import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureFrame;
 import fun.prof_chen.teamviewer.main_code.client.entity.EntityReportPipeline;
 import fun.prof_chen.teamviewer.main_code.client.entity.EntityUploadFilter;
@@ -57,13 +63,14 @@ public final class ClientCoordinator implements ClientControlGateway {
     private final GameClientBridge gameClient;
     private volatile boolean enabled;
     private int reportTickCounter;
-    private int tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+    private int tabRefreshTickCounter = TAB_REPORT_INTERVAL_TICKS;
     private int entityReportTickCounter;
     private int lastScannedEntityCount;
     private long lastEntityOutboundEpoch = Long.MIN_VALUE;
     private long lastEntityFilterRevision = Long.MIN_VALUE;
     private boolean entityUploadWasActive;
     private boolean tabConnectionObserved;
+    private volatile List<TabPlayerSnapshot> cachedTabPlayers = List.of();
     private int entityDeathTickCounter;
     private SharedWaypointRepository waypointRepository;
     private SharedWaypointSyncCoordinator waypointCoordinator;
@@ -78,6 +85,7 @@ public final class ClientCoordinator implements ClientControlGateway {
     private BattleMapCoordinator battleMapCoordinator;
     private IntegrationPluginManager pluginManager;
     private IntegrationRegistry integrationRegistry;
+    private PlayerRelationCoordinator playerRelationCoordinator;
     private final EntityReportPipeline entityReportPipeline;
 
     public ClientCoordinator(Config config, NetworkManager networkManager, GameClientBridge gameClient) {
@@ -98,7 +106,7 @@ public final class ClientCoordinator implements ClientControlGateway {
         }
         sendReportWhenDue();
         sendEntityReportWhenDue(tickWorld);
-        sendTabReportWhenDue(tickWorld);
+        refreshTabPlayersWhenDue(tickWorld);
         cancelWaypointsForDeadEntitiesWhenDue();
         handleMiddleMouseDoubleClick();
         updateLocalMarkedState(tickWorld);
@@ -111,6 +119,10 @@ public final class ClientCoordinator implements ClientControlGateway {
     }
 
     public void onJoinedMultiplayer() {
+        if (pluginManager != null) {
+            pluginManager.onPlaySessionStarted();
+            refreshPlayerRelations();
+        }
         if (!config.isAutoConnectOnMultiplayerJoin()) {
             return;
         }
@@ -121,15 +133,23 @@ public final class ClientCoordinator implements ClientControlGateway {
     }
 
     public void onLeftPlaySession() {
+        if (pluginManager != null) pluginManager.onPlaySessionEnded();
         enabled = false;
         networkManager.disconnect();
         clearRuntimeState();
         resetReportClock();
     }
 
+    /** Forwards adapter-normalized system chat to active plugins and refreshes changed relations. */
+    public void onSystemChatMessage(SystemChatMessageSnapshot message) {
+        if (message != null && pluginManager != null && pluginManager.onSystemChatMessage(message)) {
+            refreshPlayerRelations();
+        }
+    }
+
     public void resetReportClock() {
         reportTickCounter = 0;
-        tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+        tabRefreshTickCounter = cachedTabPlayers.isEmpty() ? TAB_REPORT_INTERVAL_TICKS : 0;
         tabConnectionObserved = false;
         entityDeathTickCounter = 0;
         entityReportTickCounter = 0;
@@ -186,7 +206,16 @@ public final class ClientCoordinator implements ClientControlGateway {
         this.remotePlayerRepository = Objects.requireNonNull(remotePlayerRepository, "remotePlayerRepository");
         this.remotePlayerProjectionCoordinator = Objects.requireNonNull(remotePlayerProjectionCoordinator, "remotePlayerProjectionCoordinator");
         configureWaypointSupport(sharedWaypointRepository, sharedWaypointSyncCoordinator);
-        this.worldRenderPlanner = new WorldRenderPlanner(config, networkManager::getPlayerMarkTeam, waypointGateway);
+        this.worldRenderPlanner = new WorldRenderPlanner(config, this::resolvePlayerRelation, waypointGateway);
+    }
+
+    public void configurePlayerRelationSupport(IntegrationRegistry integrations) {
+        if (playerRelationCoordinator != null) {
+            throw new IllegalStateException("Player-relation support is already configured");
+        }
+        playerRelationCoordinator = new PlayerRelationCoordinator(
+                Objects.requireNonNull(integrations, "integrations"));
+        playerRelationCoordinator.refresh(cachedTabPlayers);
     }
 
     /** Installs the native optional-mod port; NodeMC scoreboard parsing remains entirely in common. */
@@ -205,7 +234,8 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     @Override
     public List<PluginSnapshot> getIntegrationPlugins() {
-        return pluginManager == null ? List.of() : pluginManager.snapshots();
+        return pluginManager == null ? List.of() : pluginManager.snapshots().stream()
+                .map(this::decorateRelationPlugin).toList();
     }
 
     @Override
@@ -215,22 +245,51 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     @Override
     public PluginSnapshot getIntegrationPlugin(String pluginId) {
-        return pluginManager == null ? null : pluginManager.snapshot(pluginId);
+        PluginSnapshot snapshot = pluginManager == null ? null : pluginManager.snapshot(pluginId);
+        return decorateRelationPlugin(snapshot);
+    }
+
+    private PluginSnapshot decorateRelationPlugin(PluginSnapshot snapshot) {
+        return playerRelationCoordinator == null ? snapshot
+                : playerRelationCoordinator.decoratePluginSnapshot(snapshot, cachedTabPlayers);
     }
 
     @Override
     public boolean setIntegrationPluginEnabled(String pluginId, boolean enabled) {
-        return pluginManager != null && pluginManager.setEnabled(pluginId, enabled);
+        boolean changed = pluginManager != null && pluginManager.setEnabled(pluginId, enabled);
+        if (changed) {
+            refreshPlayerRelations();
+            if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.invalidate();
+        }
+        return changed;
     }
 
     @Override
     public boolean setIntegrationPluginSetting(String pluginId, String key, Object value) {
-        return pluginManager != null && pluginManager.setSetting(pluginId, key, value);
+        boolean changed = pluginManager != null && pluginManager.setSetting(pluginId, key, value);
+        if (changed) {
+            refreshPlayerRelations();
+            if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.invalidate();
+        }
+        return changed;
+    }
+
+    @Override
+    public boolean invokeIntegrationPluginAction(String pluginId, String actionId) {
+        boolean changed = pluginManager != null && pluginManager.invokeRuntimeAction(pluginId, actionId);
+        if (changed) {
+            refreshPlayerRelations();
+            if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.invalidate();
+        }
+        return changed;
     }
 
     @Override
     public boolean rescanIntegrationPlugins() {
-        return pluginManager != null && pluginManager.rescan();
+        boolean changed = pluginManager != null && pluginManager.rescan();
+        refreshPlayerRelations();
+        if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.invalidate();
+        return changed;
     }
 
     @Override
@@ -469,24 +528,41 @@ public final class ClientCoordinator implements ClientControlGateway {
         return negotiated;
     }
 
-    private void sendTabReportWhenDue(ClientWorldSnapshot world) {
+    private void refreshTabPlayersWhenDue(ClientWorldSnapshot world) {
+        if (world == null || !world.available() || world.localPlayerId() == null) {
+            clearTabState();
+            return;
+        }
+        boolean captured = false;
+        if (++tabRefreshTickCounter >= TAB_REPORT_INTERVAL_TICKS) {
+            tabRefreshTickCounter = 0;
+            List<TabPlayerSnapshot> capturedPlayers = gameClient.captureTabPlayerSnapshot();
+            cachedTabPlayers = List.copyOf(capturedPlayers == null ? List.of() : capturedPlayers);
+            refreshPlayerRelations();
+            captured = true;
+        }
+
         if (!networkManager.isConnected()) {
             tabConnectionObserved = false;
             return;
         }
-        if (!tabConnectionObserved) {
-            tabConnectionObserved = true;
-            tabReportTickCounter = TAB_REPORT_INTERVAL_TICKS;
+        boolean connectionStarted = !tabConnectionObserved;
+        tabConnectionObserved = true;
+        if (captured || connectionStarted) {
+            networkManager.sendTabPlayersUpdate(world.localPlayerId(), cachedTabPlayers.stream()
+                    .map(TabPlayerSnapshot::toProtocolMap)
+                    .toList());
         }
-        if (world == null || world.localPlayerId() == null
-                || ++tabReportTickCounter < TAB_REPORT_INTERVAL_TICKS) {
-            return;
+    }
+
+    public List<TabPlayerSnapshot> cachedTabPlayers() {
+        return cachedTabPlayers;
+    }
+
+    private void refreshPlayerRelations() {
+        if (playerRelationCoordinator != null) {
+            playerRelationCoordinator.refresh(cachedTabPlayers);
         }
-        tabReportTickCounter = 0;
-        List<Map<String, Object>> tabPlayers = gameClient.captureTabPlayerSnapshot().stream()
-                .map(TabPlayerSnapshot::toProtocolMap)
-                .toList();
-        networkManager.sendTabPlayersUpdate(world.localPlayerId(), tabPlayers);
     }
 
     private void handleMiddleMouseDoubleClick() {
@@ -648,6 +724,60 @@ public final class ClientCoordinator implements ClientControlGateway {
         gameClient.showActionBar(message);
     }
 
+    @Override
+    public PlayerRelationView resolvePlayerRelation(UUID playerId) {
+        NetworkManager.PlayerMarkView backend = networkManager.getPlayerMark(playerId);
+        if (backend != null && !backend.automatic()) {
+            return resolvedRelation(backend.relation());
+        }
+        PlayerRelation local = playerRelationCoordinator == null
+                ? null : playerRelationCoordinator.relation(playerId);
+        if (local != null) {
+            return resolvedRelation(local);
+        }
+        if (backend != null) {
+            return resolvedRelation(backend.relation());
+        }
+        return new PlayerRelationView(PlayerRelation.NEUTRAL, config.getNeutralTeamColor(), false);
+    }
+
+    @Override
+    public PlayerInteractionState playerInteraction(UUID playerId) {
+        if (playerId == null) return PlayerInteractionState.unresolved();
+        NetworkManager.PlayerMarkView backend = networkManager.getPlayerMark(playerId);
+        if (backend != null && !backend.automatic()) {
+            return interaction(backend.relation(), true, PlayerRelationOrigin.RELAY_MANUAL);
+        }
+        PlayerRelation local = playerRelationCoordinator == null
+                ? null : playerRelationCoordinator.relation(playerId);
+        if (local != null) {
+            return interaction(local, true, PlayerRelationOrigin.LOCAL_CLASSIFIER);
+        }
+        if (backend != null) {
+            return interaction(backend.relation(), true, PlayerRelationOrigin.RELAY_AUTOMATIC);
+        }
+        return PlayerInteractionState.unresolved();
+    }
+
+    private static PlayerInteractionState interaction(
+            PlayerRelation relation, boolean resolved, PlayerRelationOrigin origin) {
+        Attackability attackability = switch (relation == null ? PlayerRelation.NEUTRAL : relation) {
+            case FRIENDLY -> Attackability.BLOCKED;
+            case ENEMY -> Attackability.ALLOWED;
+            case NEUTRAL -> Attackability.UNKNOWN;
+        };
+        return new PlayerInteractionState(relation, resolved, origin, attackability);
+    }
+
+    private PlayerRelationView resolvedRelation(PlayerRelation relation) {
+        int color = switch (relation) {
+            case FRIENDLY -> config.getFriendlyTeamColor();
+            case ENEMY -> config.getEnemyTeamColor();
+            case NEUTRAL -> config.getNeutralTeamColor();
+        };
+        return new PlayerRelationView(relation, color, true);
+    }
+
     private void clearRuntimeState() {
         entityReportPipeline.discardPending();
         if (remotePlayerRepository != null) remotePlayerRepository.clear();
@@ -656,10 +786,18 @@ public final class ClientCoordinator implements ClientControlGateway {
         if (waypointCoordinator != null) waypointCoordinator.clear();
         if (worldRenderPlanner != null) worldRenderPlanner.clear();
         if (battleMapCoordinator != null) battleMapCoordinator.reset();
+        clearTabState();
         localMarkedState = LocalMarkedState.inactive();
         lastMarkedFingerprint = "";
         middlePressedLastTick = false;
         lastMiddleClickAt = 0L;
+    }
+
+    private void clearTabState() {
+        cachedTabPlayers = List.of();
+        tabRefreshTickCounter = TAB_REPORT_INTERVAL_TICKS;
+        tabConnectionObserved = false;
+        if (playerRelationCoordinator != null) playerRelationCoordinator.clear();
     }
 
     public void shutdown() {

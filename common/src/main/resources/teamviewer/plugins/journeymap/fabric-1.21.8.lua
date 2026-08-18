@@ -77,7 +77,7 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
   state.object:setPos(x, y, z); state.object:setColor(color); state.object:setEnabled(true)
 end
 
-local function sync_players(players, enabled)
+local function sync_players(players, enabled, relations)
   local managed = managed_players
   local prefix = "player:"
   local setting_enabled = settings.show_remote_players
@@ -87,9 +87,11 @@ local function sync_players(players, enabled)
     if player.position ~= nil and player.uuid ~= world.localPlayerId
         and (player.dimension == nil or player.dimension == "" or player.dimension == world.dimension) then
       local id = prefix .. player.uuid; active[id] = true
+      local relation = relations ~= nil and relations[player.uuid] or nil
+      local color = relation ~= nil and relation.resolved and relation.color or 0xFF5555
       upsert(managed, id, "[TV] " .. (player.name or "Player"),
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-          world.dimension, 0xFF5555)
+          world.dimension, color)
     end
   end
   local stale = {}; for id, _ in pairs(managed) do if not active[id] then table.insert(stale, id) end end
@@ -114,8 +116,8 @@ end
 
 -- 3. Capability registration / 能力注册
 tv.register_remote_player_projection({id = "journeymap-players",
-  probe = probe, sync = function(players, enabled)
-    sync_players(players, enabled)
+  probe = probe, sync = function(players, enabled, relations)
+    sync_players(players, enabled, relations)
   end, clear = function() clear(managed_players) end})
 tv.register_remote_player_projection({id = "journeymap-player-beacons",
   probe = probe, sync = function(players, enabled)

@@ -26,6 +26,10 @@ local function inspect_host_api()
   -- visible and enabled. / 可选的动态 UI 状态；不调用时默认可见、可编辑。
   tv.configure_setting({key = "enabled_marker", visible = true, enabled = true,
       detail = "Example runtime setting state"})
+  -- Up to eight read-only fields shown on the plugin page; these are never persisted.
+  tv.set_runtime_state({
+    {key = "example.status", label = "Example status", value = "Ready"}
+  })
   local loader = environment.loader_id()
   local minecraft = environment.minecraft_version()
   local mod_version = environment.mod_version("replace-with-external-mod-id")
@@ -43,12 +47,16 @@ local function inspect_host_api()
   local players = snapshots.players()
   local waypoints = snapshots.waypoints()
   local scoreboard = snapshots.scoreboard()
+  local tab_players = snapshots.tab_players()
+  -- System chat callbacks receive {text, overlay}; return true when a callback changed
+  -- relation state and needs the current Tab cache classified again.
 
   tv.log.info("informational message")
   tv.log.warn("warning message")
   tv.log.error("error message")
+  -- tv.notify("local action-bar message") -- returns false when the host has no notifier.
   return loader, minecraft, mod_version, installed, entrypoint_object,
-      world, players, waypoints, scoreboard
+      world, players, waypoints, scoreboard, tab_players
 end
 
 -- Java/LuaJ bridge examples. java.type/method/field cache their handles in the host.
@@ -78,9 +86,9 @@ tv.register_remote_player_projection({
   id = IDS.remote_player,
   probe = ready_probe,
 
-  -- players is keyed by UUID. Each value exposes uuid, name, dimension and position(x/y/z).
-  -- players 以 UUID 为键；值包含 uuid、name、dimension、position(x/y/z)。
-  sync = function(players, enabled)
+  -- players and relations are keyed by UUID. Older callbacks may omit the third argument.
+  -- players 与 relations 均以 UUID 为键；旧回调可以省略第三个参数。
+  sync = function(players, enabled, relations)
     -- Convert TeamViewRelay remote players into external-mod markers here.
     -- 在这里把 TeamViewRelay 远程玩家转换为外部 Mod 标记。
   end,
@@ -120,6 +128,15 @@ tv.register_battle_map_source({
   end
 })
 
+-- A player-relation classifier receives the common cached Tab snapshot and returns a table
+-- keyed by UUID with FRIENDLY, ENEMY or NEUTRAL values. Missing keys mean no decision.
+-- 玩家关系分类器接收 common 缓存的 Tab 快照；缺失的 UUID 表示不作决定。
+-- tv.register_player_relation_classifier({
+--   id = "declared-player-relation-capability",
+--   probe = ready_probe,
+--   classify = function(tab_players) return {} end
+-- })
+
 tv.on_enable(function()
   -- Allocate plugin-owned external objects here. / 在这里初始化插件拥有的外部对象。
 end)
@@ -133,4 +150,18 @@ tv.on_settings_changed(function(key, value)
   -- settings contains boolean/integer/number/string/enum/color values declared in plugin.json.
   -- settings 表包含清单声明的六种动态设置；value 是已经规范化的新值。
   local current = settings[key]
+end)
+
+tv.on_system_chat(function(message)
+  local text = message.text
+  local is_overlay = message.overlay
+  return false
+end)
+
+tv.on_play_session_started(function()
+  -- Clear any data scoped to one multiplayer server here.
+end)
+
+tv.on_play_session_ended(function()
+  -- Release session-scoped data here.
 end)

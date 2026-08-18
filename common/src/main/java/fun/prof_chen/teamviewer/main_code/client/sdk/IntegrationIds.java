@@ -14,12 +14,14 @@ public final class IntegrationIds {
     public static final String EXAMPLE_REMOTE_PLAYER = "teamviewer-example-remote-player";
     public static final String EXAMPLE_SHARED_WAYPOINT = "teamviewer-example-shared-waypoint";
     public static final String EXAMPLE_BATTLE_MAP = "teamviewer-example-battle-map";
+    public static final String TAB_LABEL_RELATIONS = "tab-label-player-relations";
 
     public static final String PLUGIN_JOURNEYMAP = "teamviewer.journeymap";
     public static final String PLUGIN_XAERO = "teamviewer.xaero";
     public static final String PLUGIN_NODEMC = "teamviewer.nodemc";
     public static final String PLUGIN_SIMMC = "teamviewer.simmc";
     public static final String PLUGIN_EXAMPLE = "teamviewer.example";
+    public static final String PLUGIN_TAB_LABEL_RELATIONS = "teamviewer.tab-label-relations";
 
     private IntegrationIds() { }
 
@@ -33,6 +35,7 @@ public final class IntegrationIds {
             case XAERO_WORLDMAP, XAERO_MINIMAP -> PLUGIN_XAERO;
             case NODEMC_BATTLE_MAP -> PLUGIN_NODEMC;
             case SIMMC_BATTLE_MAP -> PLUGIN_SIMMC;
+            case TAB_LABEL_RELATIONS -> PLUGIN_TAB_LABEL_RELATIONS;
             default -> "external";
         };
     }
@@ -45,6 +48,7 @@ public final class IntegrationIds {
                 XAERO_WORLDMAP, IntegrationRole.REMOTE_PLAYER.id(),
                 XAERO_MINIMAP, IntegrationRole.SHARED_WAYPOINT.id(),
                 NODEMC_BATTLE_MAP, IntegrationRole.BATTLE_MAP_SOURCE.id(),
-                SIMMC_BATTLE_MAP, IntegrationRole.BATTLE_MAP_SOURCE.id());
+                SIMMC_BATTLE_MAP, IntegrationRole.BATTLE_MAP_SOURCE.id(),
+                TAB_LABEL_RELATIONS, IntegrationRole.PLAYER_RELATION.id());
     }
 }

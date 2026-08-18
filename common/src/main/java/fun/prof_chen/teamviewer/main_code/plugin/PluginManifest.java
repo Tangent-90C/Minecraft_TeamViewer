@@ -28,7 +28,19 @@ public record PluginManifest(
         List<CapabilityDeclaration> provides,
         List<SettingDefinition> settings,
         List<EntrypointDefinition> entrypoints,
-        String documentation) {
+        String documentation,
+        String description) {
+
+    public PluginManifest(
+            int schemaVersion, String apiVersion, String id, String name, String version, String entry,
+            boolean defaultEnabled, String hotToggle, List<String> loaders, List<String> minecraftVersions,
+            List<String> requiredMods, List<String> optionalMods, List<String> dependencies,
+            List<CapabilityDeclaration> provides, List<SettingDefinition> settings,
+            List<EntrypointDefinition> entrypoints, String documentation) {
+        this(schemaVersion, apiVersion, id, name, version, entry, defaultEnabled, hotToggle, loaders,
+                minecraftVersions, requiredMods, optionalMods, dependencies, provides, settings, entrypoints,
+                documentation, "");
+    }
 
     public PluginManifest normalized() {
         String normalizedId = requireToken(id, "plugin id");
@@ -54,12 +66,14 @@ public record PluginManifest(
                 .map(EntrypointDefinition::normalized).toList();
         String normalizedDocumentation = documentation == null || documentation.isBlank()
                 ? null : requireSafeResource(documentation, "documentation");
+        String normalizedDescription = normalizeDescription(description);
         return new PluginManifest(1, "1", normalizedId,
                 name == null || name.isBlank() ? normalizedId : name.trim(),
                 version == null || version.isBlank() ? "0.0.0" : version.trim(), normalizedEntry,
                 defaultEnabled, normalizeHotToggle(hotToggle), lower(loaders), safeStrings(minecraftVersions),
                 lower(requiredMods), lower(optionalMods), safeStrings(dependencies),
-                normalizedProvides, normalizedSettings, normalizedEntrypoints, normalizedDocumentation);
+                normalizedProvides, normalizedSettings, normalizedEntrypoints,
+                normalizedDocumentation, normalizedDescription);
     }
 
     public boolean supports(String loader, String minecraftVersion) {
@@ -120,6 +134,13 @@ public record PluginManifest(
                 || normalized.equals("..")) {
             throw new IllegalArgumentException("Unsafe plugin " + label + " path: " + value);
         }
+        return normalized;
+    }
+
+    private static String normalizeDescription(String value) {
+        if (value == null || value.isBlank()) return "";
+        String normalized = value.replace('\n', ' ').replace('\r', ' ').trim();
+        if (normalized.length() > 256) throw new IllegalArgumentException("Plugin description is too long");
         return normalized;
     }
 

@@ -15,6 +15,10 @@ public final class PluginManagerPainter {
 
         void centered(UiText text, int centerX, int y, int color);
 
+        default void wrapped(UiText text, UiRect bounds, int color) {
+            text(text, bounds, color, false);
+        }
+
         void pushClip(UiRect bounds);
 
         void popClip();
@@ -100,11 +104,24 @@ public final class PluginManagerPainter {
                 detail.bounds().width(), 1), BORDER);
 
         canvas.pushClip(detail.contentBounds());
-        if (!detail.lines().isEmpty() && detail.firstSectionTitle() != null) {
+        if (detail.description() != null) {
+            canvas.wrapped(detail.description().text(), detail.description().bounds(),
+                    detail.description().color());
+        }
+        if (!detail.lines().isEmpty() && detail.firstSectionTitle() != null
+                && detail.runtimeLineStartIndex() != 0) {
             LineView first = detail.lines().get(0);
             canvas.text(detail.firstSectionTitle(),
                     new UiRect(first.bounds().x(), first.bounds().y() - 15,
                             first.bounds().width(), 10), ACCENT, false);
+        }
+        if (detail.runtimeSectionTitle() != null
+                && detail.runtimeLineStartIndex() >= 0
+                && detail.runtimeLineStartIndex() < detail.lines().size()) {
+            LineView firstRuntime = detail.lines().get(detail.runtimeLineStartIndex());
+            canvas.text(detail.runtimeSectionTitle(),
+                    new UiRect(firstRuntime.bounds().x(), firstRuntime.bounds().y() - 15,
+                            firstRuntime.bounds().width(), 10), ACCENT, false);
         }
         for (LineView line : detail.lines()) line(canvas, line);
         if (!detail.settings().isEmpty() && detail.secondSectionTitle() != null) {

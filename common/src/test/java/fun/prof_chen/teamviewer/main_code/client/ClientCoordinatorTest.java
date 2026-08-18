@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.client;
 
+import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
 import fun.prof_chen.teamviewer.main_code.client.entity.EntityCaptureTarget;
@@ -10,6 +11,14 @@ import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationImplementationSource;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
+import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
+import fun.prof_chen.teamviewer.main_code.client.sdk.PlayerRelationClassifier;
+import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
@@ -108,10 +117,62 @@ class ClientCoordinatorTest {
 
         network.connected = false;
         coordinator.onEndClientTick();
+        assertEquals(6, game.tabCaptureCount, "Tab capture continues while disconnected");
+        assertEquals(5, network.tabReports.size(), "disconnected snapshots stay local");
         network.connected = true;
         coordinator.onEndClientTick();
-        assertEquals(6, game.tabCaptureCount, "reconnection triggers an immediate fresh Tab snapshot");
+        assertEquals(6, game.tabCaptureCount, "reconnection reuses the current cached Tab snapshot");
         assertEquals(6, network.tabReports.size());
+    }
+
+    @Test
+    void composesManualLocalAndAutomaticRelationsWhileOffline() {
+        Config config = new Config();
+        config.setUploadEntities(false);
+        config.setFriendlyTeamColor(0xFF112233);
+        config.setEnemyTeamColor(0xFF445566);
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        UUID localId = UUID.randomUUID();
+        UUID remoteId = UUID.randomUUID();
+        FakeGameClientBridge game = new FakeGameClientBridge(snapshot(localId), null, List.of(
+                new TabPlayerSnapshot(remoteId.toString(), "Remote", "[Town]", "[Town]")));
+        IntegrationRegistry registry = new IntegrationRegistry();
+        PlayerRelationClassifier classifier = new PlayerRelationClassifier() {
+            @Override public String id() { return "test-local-relations"; }
+            @Override public Map<UUID, PlayerRelation> classify(List<TabPlayerSnapshot> players) {
+                return Map.of(remoteId, PlayerRelation.ENEMY);
+            }
+        };
+        registry.registerNative(new IntegrationCapability(
+                classifier.id(), IntegrationRole.PLAYER_RELATION.id(),
+                IntegrationSupportStatus.AVAILABLE, "", "test.local-relations",
+                IntegrationImplementationSource.JAVA_NATIVE, PluginRuntimeStatus.ACTIVE), classifier);
+        registry.setPluginRuntime("test.local-relations", PluginRuntimeStatus.ACTIVE, "");
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+        coordinator.configurePlayerRelationSupport(registry);
+
+        coordinator.setEnabled(true);
+        coordinator.onEndClientTick();
+        PlayerRelationView local = coordinator.resolvePlayerRelation(remoteId);
+        assertEquals(PlayerRelation.ENEMY, local.relation());
+        assertEquals(0xFF445566, local.color());
+        assertTrue(local.resolved());
+        assertEquals(1, game.tabCaptureCount, "offline classification uses the common Tab scheduler");
+
+        network.marks.put(remoteId, new NetworkManager.PlayerMarkView(PlayerRelation.FRIENDLY, "auto"));
+        assertEquals(PlayerRelation.ENEMY, coordinator.resolvePlayerRelation(remoteId).relation());
+
+        network.marks.put(remoteId, new NetworkManager.PlayerMarkView(PlayerRelation.FRIENDLY, null));
+        assertEquals(PlayerRelation.FRIENDLY, coordinator.resolvePlayerRelation(remoteId).relation());
+        assertEquals(0xFF112233, coordinator.resolvePlayerRelation(remoteId).color());
+
+        network.marks.put(remoteId, new NetworkManager.PlayerMarkView(PlayerRelation.NEUTRAL, "custom"));
+        assertEquals(PlayerRelation.NEUTRAL, coordinator.resolvePlayerRelation(remoteId).relation(),
+                "unknown sources are manual for backward compatibility");
+
+        coordinator.onLeftPlaySession();
+        network.marks.clear();
+        assertFalse(coordinator.resolvePlayerRelation(remoteId).resolved());
     }
 
     @Test
@@ -381,6 +442,7 @@ class ClientCoordinatorTest {
         private final List<Map<UUID, Map<String, Object>>> playerReports = new ArrayList<>();
         private final List<Map<String, Map<String, Object>>> entityReports = new CopyOnWriteArrayList<>();
         private final List<List<Map<String, Object>>> tabReports = new ArrayList<>();
+        private final Map<UUID, PlayerMarkView> marks = new HashMap<>();
 
         private RecordingNetworkManager() {
             super(new HashMap<UUID, RemotePlayerInfo>(), runtime(), noTransport());
@@ -399,6 +461,11 @@ class ClientCoordinatorTest {
         @Override
         public boolean isConnected() {
             return connected;
+        }
+
+        @Override
+        public PlayerMarkView getPlayerMark(UUID playerId) {
+            return marks.get(playerId);
         }
 
         @Override

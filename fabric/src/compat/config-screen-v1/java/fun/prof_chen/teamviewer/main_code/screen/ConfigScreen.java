@@ -189,6 +189,7 @@ public final class ConfigScreen extends Screen {
             case PACKET_CAPTURE -> "screen.mc_teamviewer.packet_capture.title";
             case PLUGINS -> "screen.mc_teamviewer.integration_plugins.title";
             case PLUGIN_DETAIL -> "screen.mc_teamviewer.integration_plugin.title";
+            case PLUGIN_RUNTIME_ACTION_CONFIRM -> "screen.mc_teamviewer.integration_plugin.runtime_action_confirm_title";
             case PLUGIN_COPY_GUIDE -> "screen.mc_teamviewer.integration_plugin.copy_guide_title";
             case DISABLED_PLUGINS -> "screen.mc_teamviewer.integration_plugin.disabled_title";
             case DISABLED_PLUGIN_DETAIL -> "screen.mc_teamviewer.integration_plugin.disabled_detail_title";

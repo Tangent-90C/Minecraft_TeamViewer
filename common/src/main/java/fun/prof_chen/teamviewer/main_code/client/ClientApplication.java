@@ -6,6 +6,7 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterBundle;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 import fun.prof_chen.teamviewer.main_code.client.sdk.ClientEventHandler;
 import fun.prof_chen.teamviewer.main_code.client.sdk.AdapterRuntimeTck;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSession;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSessions;
@@ -14,6 +15,7 @@ import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpTransportProcess;
 import fun.prof_chen.teamviewer.main_code.plugin.IntegrationPluginManager;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginHostAccess;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginNotificationSink;
 import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
 import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
@@ -46,23 +48,18 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
         IntegrationRegistry integrations = adapters.integrationRegistry();
         Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
         Map<String, SharedWaypointInfo> sharedWaypoints = new ConcurrentHashMap<>();
-        pluginManager = new IntegrationPluginManager(adapters.runtimeGateway(), integrations, config,
-                new PluginHostAccess(
-                        adapters.gameClientBridge()::captureWorldSnapshot,
-                        () -> adapters.gameClientBridge().captureReportSnapshot(false).players(),
-                        () -> Map.copyOf(sharedWaypoints),
-                        adapters.gameClientBridge()::captureScoreboardSnapshot));
         NetworkManager network = new NetworkManager(
                 remotePlayers, adapters.runtimeGateway(), new OkHttpTransportProcess());
         NetworkManager.setConfigGateway(config);
         coordinator = new ClientCoordinator(config, network, adapters.gameClientBridge());
+        coordinator.configurePlayerRelationSupport(integrations);
         ClientServices.install(coordinator);
 
         RemotePlayerRepository remoteRepository = new MapBackedRemotePlayerRepository(remotePlayers);
         SharedWaypointRepository waypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
         NetworkWaypointSyncGateway waypointGateway = new NetworkWaypointSyncGateway(network);
         RemotePlayerProjectionCoordinator projectionCoordinator =
-                new RemotePlayerProjectionCoordinator(integrations);
+                new RemotePlayerProjectionCoordinator(integrations, coordinator::resolvePlayerRelation);
         waypointCoordinator = new SharedWaypointSyncCoordinator(
                 waypointRepository, waypointGateway, integrations,
                 config, adapters.gameClientBridge());
@@ -70,6 +67,16 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
         coordinator.configureRuntimeSupport(
                 remoteRepository, waypointRepository, waypointCoordinator, waypointGateway, projectionCoordinator);
         coordinator.configureBattleMapSupport(integrations);
+        pluginManager = new IntegrationPluginManager(adapters.runtimeGateway(), integrations, config,
+                new PluginHostAccess(
+                        adapters.gameClientBridge()::captureWorldSnapshot,
+                        () -> adapters.gameClientBridge().captureReportSnapshot(false).players(),
+                        () -> Map.copyOf(sharedWaypoints),
+                        adapters.gameClientBridge()::captureScoreboardSnapshot,
+                        coordinator::cachedTabPlayers,
+                        Map.<String, java.util.function.Supplier<?>>of(
+                                PluginNotificationSink.SERVICE_ID,
+                                () -> (PluginNotificationSink) coordinator::showActionBar)));
         coordinator.configurePluginManager(pluginManager);
         ConfigUiSessions.install(() -> new ConfigUiSession(coordinator));
     }
@@ -112,6 +119,11 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
     @Override
     public void onLeftPlaySession() {
         if (!stopped.get()) coordinator.onLeftPlaySession();
+    }
+
+    @Override
+    public void onSystemChatMessage(SystemChatMessageSnapshot message) {
+        if (!stopped.get()) coordinator.onSystemChatMessage(message);
     }
 
     @Override

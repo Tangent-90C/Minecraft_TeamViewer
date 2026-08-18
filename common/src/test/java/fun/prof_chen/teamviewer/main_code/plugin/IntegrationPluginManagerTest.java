@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.plugin;
 
+import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSource;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSourceSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationCapability;
@@ -13,6 +14,9 @@ import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCoordinator;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.sdk.PlayerRelationClassifier;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMapAdapter;
@@ -28,6 +32,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,11 +63,15 @@ class IntegrationPluginManagerTest {
         IntegrationPluginManager manager = new IntegrationPluginManager(
                 new TestRuntime(temporary), registry, Config.load(temporary.resolve("config.json")));
 
-        assertEquals(5, manager.snapshots().stream().filter(PluginSnapshot::builtIn).count());
+        assertEquals(6, manager.snapshots().stream().filter(PluginSnapshot::builtIn).count());
         assertEquals(PluginRuntimeStatus.DISABLED,
                 manager.snapshot(IntegrationIds.PLUGIN_EXAMPLE).runtimeStatus());
+        assertEquals(PluginRuntimeStatus.DISABLED,
+                manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS).runtimeStatus());
         assertTrue(manager.snapshots().stream()
-                .filter(plugin -> !IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id()))
+                .filter(plugin -> !Set.of(
+                        IntegrationIds.PLUGIN_EXAMPLE,
+                        IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS).contains(plugin.id()))
                 .allMatch(plugin -> plugin.runtimeStatus() == PluginRuntimeStatus.ACTIVE));
         assertEquals(0, registry.activeRemotePlayerProjections().size());
         assertEquals(0, registry.activeSharedWaypointAdapters().size());
@@ -85,6 +94,210 @@ class IntegrationPluginManagerTest {
                 value.runtimeStatus() == PluginRuntimeStatus.PENDING_RESTART));
         assertEquals(0, registry.activeRemotePlayerProjections().size());
 
+        manager.shutdown();
+    }
+
+    @Test
+    void tabLabelRelationsMatchCachedFieldsAndUpdateSettingsWithoutReload() {
+        IntegrationRegistry registry = completeRegistry();
+        List<String> notifications = new ArrayList<>();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new TestRuntime(temporary), registry, Config.load(temporary.resolve("config.json")),
+                new PluginHostAccess(null, null, null, null, List::of,
+                        Map.<String, java.util.function.Supplier<?>>of(
+                                PluginNotificationSink.SERVICE_ID,
+                                () -> (PluginNotificationSink) notifications::add)));
+        PluginSnapshot disabled = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS);
+        assertFalse(disabled.enabled());
+        assertEquals("automatic_only", disabled.settings().get("relation_source_mode"));
+        assertEquals("饶州", disabled.settings().get("friendly_tags"));
+        assertEquals("星辉", disabled.settings().get("enemy_tags"));
+
+        assertTrue(manager.setEnabled(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, true));
+        assertTrue(manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS)
+                .settingState("friendly_tags").detail().contains("/town"));
+        assertEquals(6, manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS).runtimeState().size());
+        PlayerRelationClassifier classifier = registry.activePlayerRelationClassifiers().stream()
+                .filter(value -> IntegrationIds.TAB_LABEL_RELATIONS.equals(value.id()))
+                .findFirst().orElseThrow();
+        UUID defaultIgnoredManual = UUID.randomUUID();
+        assertEquals(PlayerRelation.NEUTRAL, classifier.classify(List.of(
+                new TabPlayerSnapshot(defaultIgnoredManual.toString(), "Player", "[饶州]", "")))
+                .get(defaultIgnoredManual));
+        assertTrue(manager.setSetting(
+                IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, "relation_source_mode", "manual_first"));
+        UUID friendly = UUID.randomUUID();
+        UUID enemy = UUID.randomUUID();
+        UUID fallback = UUID.randomUUID();
+        UUID both = UUID.randomUUID();
+        UUID unmatched = UUID.randomUUID();
+        Map<UUID, PlayerRelation> relations = classifier.classify(List.of(
+                new TabPlayerSnapshot(friendly.toString(), "Player", "[饶州]", ""),
+                new TabPlayerSnapshot(enemy.toString(), "Player", "[星辉]", ""),
+                new TabPlayerSnapshot(fallback.toString(), "饶州Player", "NoTown", ""),
+                new TabPlayerSnapshot(both.toString(), "Player", "[星辉饶州]", ""),
+                new TabPlayerSnapshot(unmatched.toString(), "Player", "[Other]", ""),
+                new TabPlayerSnapshot(null, "饶州Missing", "", "")));
+
+        assertEquals(PlayerRelation.FRIENDLY, relations.get(friendly));
+        assertEquals(PlayerRelation.ENEMY, relations.get(enemy));
+        assertEquals(PlayerRelation.FRIENDLY, relations.get(fallback));
+        assertEquals(PlayerRelation.FRIENDLY, relations.get(both));
+        assertEquals(PlayerRelation.NEUTRAL, relations.get(unmatched));
+        assertEquals(5, relations.size());
+
+        UUID secondFriendly = UUID.randomUUID();
+        assertTrue(manager.setSetting(
+                IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, "friendly_tags", "极乐净土,饶州"));
+        Map<UUID, PlayerRelation> multipleFriendlyTags = classifier.classify(List.of(
+                new TabPlayerSnapshot(friendly.toString(), "Player", "[饶州]", ""),
+                new TabPlayerSnapshot(secondFriendly.toString(), "Player", "[极乐净土]", "")));
+        assertEquals(PlayerRelation.FRIENDLY, multipleFriendlyTags.get(friendly));
+        assertEquals(PlayerRelation.FRIENDLY, multipleFriendlyTags.get(secondFriendly));
+
+        assertTrue(manager.setSetting(
+                IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, "friendly_tags", "新城， 第二城;第三城"));
+        Map<UUID, PlayerRelation> updated = classifier.classify(List.of(
+                new TabPlayerSnapshot(friendly.toString(), "Player", "[饶州]", ""),
+                new TabPlayerSnapshot(fallback.toString(), "Player", "[第二城]", "")));
+        assertEquals(PlayerRelation.NEUTRAL, updated.get(friendly));
+        assertEquals(PlayerRelation.FRIENDLY, updated.get(fallback));
+
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b§l城镇 马德里:", true)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b§l城镇 马德里:", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b- 关系§f: §a[你]", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b- 盟友§f: 罗马, 赫尔辛基", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b- 敌对§f: 汉城", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b- 正在交战§f: 东京", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b- 领袖§f: H14_M1dori", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("§b- 官员[2]§f: PeterPG_, H14_M1dori", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot(
+                "§b- 居民[2]§f: §fWlxfg, §aprofessor_chen§f", false)));
+        assertTrue(manager.onSystemChatMessage(new SystemChatMessageSnapshot(
+                "§b输入 \"/town help\" 查看指令", false)));
+        assertEquals(1, notifications.size());
+        assertTrue(notifications.get(0).contains("马德里"));
+        assertTrue(notifications.get(0).contains("友军 4 人"));
+        Map<String, String> importedState = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS)
+                .runtimeState().stream().collect(java.util.stream.Collectors.toMap(
+                        PluginRuntimeState::key, PluginRuntimeState::value));
+        assertEquals("马德里", importedState.get("source.local_town"));
+        assertTrue(importedState.get("source.friendly_towns").contains("罗马"));
+        assertTrue(importedState.get("source.enemy_towns").contains("汉城"));
+        assertTrue(importedState.get("source.members").contains("4 人"));
+
+        UUID localTown = UUID.randomUUID();
+        UUID ally = UUID.randomUUID();
+        UUID hostile = UUID.randomUUID();
+        UUID war = UUID.randomUUID();
+        UUID internalFallback = UUID.randomUUID();
+        UUID resident = UUID.randomUUID();
+        UUID neutral = UUID.randomUUID();
+        Map<UUID, PlayerRelation> townRelations = classifier.classify(List.of(
+                new TabPlayerSnapshot(localTown.toString(), "Player", "[马德里]", "", "汉城"),
+                new TabPlayerSnapshot(ally.toString(), "Player", "[罗马]", "", "汉城"),
+                new TabPlayerSnapshot(hostile.toString(), "Player", "[汉城]", "", "罗马"),
+                new TabPlayerSnapshot(war.toString(), "Player", "[东京]", "", "罗马"),
+                new TabPlayerSnapshot(internalFallback.toString(), "Player", "NoTown", "", "罗马"),
+                new TabPlayerSnapshot(resident.toString(), "wLxFg", "", "", ""),
+                new TabPlayerSnapshot(neutral.toString(), "Other", "[Other]", "", ""),
+                new TabPlayerSnapshot(null, "Player", "[汉城]", "", "")));
+        assertEquals(PlayerRelation.FRIENDLY, townRelations.get(localTown));
+        assertEquals(PlayerRelation.FRIENDLY, townRelations.get(ally));
+        assertEquals(PlayerRelation.ENEMY, townRelations.get(hostile));
+        assertEquals(PlayerRelation.ENEMY, townRelations.get(war));
+        assertEquals(PlayerRelation.FRIENDLY, townRelations.get(internalFallback));
+        assertEquals(PlayerRelation.FRIENDLY, townRelations.get(resident));
+        assertEquals(PlayerRelation.NEUTRAL, townRelations.get(neutral));
+        assertEquals(7, townRelations.size());
+
+        UUID sourceConflict = UUID.randomUUID();
+        TabPlayerSnapshot conflictingPlayer = new TabPlayerSnapshot(
+                sourceConflict.toString(), "第二城Player", "[汉城]", "");
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS,
+                "relation_source_mode", "automatic_only"));
+        assertEquals(PlayerRelation.ENEMY,
+                classifier.classify(List.of(conflictingPlayer)).get(sourceConflict));
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS,
+                "relation_source_mode", "manual_only"));
+        assertEquals(PlayerRelation.FRIENDLY,
+                classifier.classify(List.of(conflictingPlayer)).get(sourceConflict));
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS,
+                "relation_source_mode", "manual_first"));
+        assertEquals(PlayerRelation.FRIENDLY,
+                classifier.classify(List.of(conflictingPlayer)).get(sourceConflict));
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS,
+                "relation_source_mode", "automatic_first"));
+        assertEquals(PlayerRelation.ENEMY,
+                classifier.classify(List.of(conflictingPlayer)).get(sourceConflict));
+
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("城镇 罗马:", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 关系: [中立]", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 敌对: 极乐净土", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("输入 \"/town help\" 查看指令", false)));
+        assertEquals(1, notifications.size());
+        assertEquals(PlayerRelation.FRIENDLY, classifier.classify(List.of(
+                new TabPlayerSnapshot(localTown.toString(), "Player", "[马德里]", ""))).get(localTown));
+
+        String manyEnemies = java.util.stream.IntStream.range(0, 130)
+                .mapToObj(index -> "敌城" + index)
+                .collect(java.util.stream.Collectors.joining(","));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("城镇 马德里:", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 关系: [你]", false)));
+        assertFalse(manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 敌对: " + manyEnemies, false)));
+        assertTrue(manager.onSystemChatMessage(new SystemChatMessageSnapshot("输入 \"/town help\" 查看指令", false)));
+        UUID retainedEnemy = UUID.randomUUID();
+        UUID cappedEnemy = UUID.randomUUID();
+        Map<UUID, PlayerRelation> cappedRelations = classifier.classify(List.of(
+                new TabPlayerSnapshot(retainedEnemy.toString(), "Player", "[敌城127]", ""),
+                new TabPlayerSnapshot(cappedEnemy.toString(), "Player", "[敌城128]", "")));
+        assertEquals(PlayerRelation.ENEMY, cappedRelations.get(retainedEnemy));
+        assertEquals(PlayerRelation.NEUTRAL, cappedRelations.get(cappedEnemy));
+
+        manager.onPlaySessionEnded();
+        assertFalse(manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS).runtimeState().isEmpty());
+        UUID manualFriendly = UUID.randomUUID();
+        Map<UUID, PlayerRelation> afterSessionEnd = classifier.classify(List.of(
+                new TabPlayerSnapshot(localTown.toString(), "Player", "[马德里]", ""),
+                new TabPlayerSnapshot(hostile.toString(), "Player", "[汉城]", ""),
+                new TabPlayerSnapshot(war.toString(), "Player", "[东京]", ""),
+                new TabPlayerSnapshot(retainedEnemy.toString(), "Player", "[敌城127]", ""),
+                new TabPlayerSnapshot(manualFriendly.toString(), "Player", "[第二城]", "")));
+        assertEquals(PlayerRelation.FRIENDLY, afterSessionEnd.get(localTown));
+        assertEquals(PlayerRelation.NEUTRAL, afterSessionEnd.get(hostile));
+        assertEquals(PlayerRelation.NEUTRAL, afterSessionEnd.get(war));
+        assertEquals(PlayerRelation.ENEMY, afterSessionEnd.get(retainedEnemy));
+        assertEquals(PlayerRelation.FRIENDLY, afterSessionEnd.get(manualFriendly));
+        manager.onPlaySessionStarted();
+        manager.shutdown();
+    }
+
+    @Test
+    void tabRelationsPersistAndClearThroughGenericRuntimeAction() {
+        IntegrationRegistry registry = completeRegistry();
+        PluginHostAccess host = new PluginHostAccess(null, null, null, null, List::of,
+                Map.<String, java.util.function.Supplier<?>>of(
+                        PluginNotificationSink.SERVICE_ID,
+                        () -> (PluginNotificationSink) ignored -> { }));
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new TestRuntime(temporary), registry, Config.load(temporary.resolve("config.json")), host);
+        assertTrue(manager.setEnabled(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, true));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("城镇 马德里:", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 关系: [你]", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 盟友: 罗马", false));
+        assertTrue(manager.onSystemChatMessage(new SystemChatMessageSnapshot("输入 \"/town help\" 查看指令", false)));
+        PluginSnapshot imported = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS);
+        assertEquals(1, imported.runtimeActions().size());
+        assertTrue(imported.runtimeActions().get(0).enabled());
+        assertTrue(imported.runtimeState().stream().anyMatch(state ->
+                "source.collected_at".equals(state.key()) && state.observedAtMillis() != null));
+        assertTrue(manager.invokeRuntimeAction(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS,
+                "clear_automatic_relations"));
+        PluginSnapshot cleared = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS);
+        assertTrue(cleared.runtimeState().stream().anyMatch(state ->
+                "未采集".equals(state.value()) && "source.collected_at".equals(state.key())));
+        assertFalse(cleared.runtimeActions().get(0).enabled());
+        assertEquals("automatic_only", cleared.settings().get("relation_source_mode"));
         manager.shutdown();
     }
 
@@ -365,12 +578,16 @@ class IntegrationPluginManagerTest {
         for (String token : List.of(
                 "environment.loader_id", "environment.minecraft_version", "environment.mod_version",
                 "services.get", "mods.is_loaded", "snapshots.world", "snapshots.players",
-                "snapshots.waypoints", "snapshots.scoreboard", "java.type", "java.method",
+                "snapshots.waypoints", "snapshots.scoreboard", "snapshots.tab_players",
+                "java.type", "java.method",
                 "java.field", "java[\"new\"]", "java.proxy", "tv.log.info", "tv.log.warn",
                 "tv.log.error", "tv.register_remote_player_projection",
                 "tv.register_shared_waypoint_adapter", "tv.register_battle_map_source",
+                "tv.register_player_relation_classifier",
+                "tv.notify", "tv.set_runtime_state",
                 "tv.register_unavailable_capability", "tv.use_native_capability", "tv.on_enable",
-                "tv.on_disable", "tv.on_settings_changed", "probe")) {
+                "tv.on_disable", "tv.on_settings_changed", "tv.on_system_chat",
+                "tv.on_play_session_started", "tv.on_play_session_ended", "probe")) {
             assertTrue(script.contains(token), "example is missing " + token);
         }
 
@@ -442,6 +659,26 @@ class IntegrationPluginManagerTest {
 
         assertEquals(PluginRuntimeStatus.SUSPENDED, manager.snapshot("custom.suspends").runtimeStatus());
         assertNull(registry.activeBattleMapSource("custom-suspending-map"));
+        manager.shutdown();
+    }
+
+    @Test
+    void systemChatCallbackFailuresAreIsolatedAndSuspendThePlugin() throws Exception {
+        writePlugin("custom.chat-suspends", List.of(), """
+                tv.register_battle_map_source({id="custom-chat-suspends-map", capture=function() return nil end})
+                tv.on_system_chat(function(message) error("intentional chat callback failure") end)
+                """, "custom-chat-suspends-map");
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new TestRuntime(temporary), completeRegistry(), Config.load(temporary.resolve("config.json")));
+
+        SystemChatMessageSnapshot message = new SystemChatMessageSnapshot("test", false);
+        assertFalse(manager.onSystemChatMessage(message));
+        assertFalse(manager.onSystemChatMessage(message));
+        assertFalse(manager.onSystemChatMessage(message));
+
+        assertEquals(PluginRuntimeStatus.SUSPENDED,
+                manager.snapshot("custom.chat-suspends").runtimeStatus());
+        assertFalse(manager.onSystemChatMessage(message));
         manager.shutdown();
     }
 

@@ -234,8 +234,9 @@ public final class NeoForgeGameClientBridge implements GameClientBridge {
             if (team == null && client.level != null) team = client.level.getScoreboard().getPlayersTeam(name);
             result.add(new TabPlayerSnapshot(
                     entry.getProfile().getId() == null ? null : entry.getProfile().getId().toString(), name,
-                    team == null ? null : team.getName(),
-                    team == null ? null : team.getPlayerPrefix().getString()));
+                    team == null ? null : team.getPlayerPrefix().getString(),
+                    team == null ? null : team.getPlayerPrefix().getString(),
+                    team == null ? null : team.getName()));
         }
         return result;
     }

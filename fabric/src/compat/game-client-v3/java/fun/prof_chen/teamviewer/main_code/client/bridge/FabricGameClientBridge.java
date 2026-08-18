@@ -260,8 +260,9 @@ public final class FabricGameClientBridge implements GameClientBridge {
             result.add(new TabPlayerSnapshot(
                     entry.getProfile().getId() == null ? null : entry.getProfile().getId().toString(),
                     profileName,
-                    team == null ? null : team.getName(),
-                    team == null ? null : team.getPrefix().getString()));
+                    team == null ? null : team.getPrefix().getString(),
+                    team == null ? null : team.getPrefix().getString(),
+                    team == null ? null : team.getName()));
         }
         return result;
     }

@@ -58,6 +58,18 @@ class PluginManifestTest {
         assertThrows(IllegalArgumentException.class, unsafeDocumentation::normalized);
     }
 
+    @Test
+    void normalizesOptionalDescriptionToOneBoundedLine() {
+        PluginManifest manifest = new PluginManifest(
+                1, "1", "custom.manifest", "Manifest", "1.0.0", "legacy.lua", true,
+                "managed", List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(new PluginManifest.CapabilityDeclaration(
+                        "custom-manifest-map", "battle-map-source", "Manifest map")),
+                List.of(), List.of(), "README.md", "  Run /town\nwhen ready.  ").normalized();
+
+        assertEquals("Run /town when ready.", manifest.description());
+    }
+
     private static PluginManifest manifest(List<PluginManifest.EntrypointDefinition> entrypoints) {
         return new PluginManifest(
                 1, "1", "custom.manifest", "Manifest", "1.0.0", "legacy.lua", true,

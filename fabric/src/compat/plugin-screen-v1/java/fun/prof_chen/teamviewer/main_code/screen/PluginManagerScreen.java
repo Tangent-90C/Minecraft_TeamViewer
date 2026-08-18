@@ -159,9 +159,18 @@ public final class PluginManagerScreen extends Screen {
                 detail.bounds().x() + detail.bounds().width(), detail.bounds().y() + 67, BORDER);
 
         beginScissor(detail.contentBounds());
-        if (!detail.lines().isEmpty() && detail.firstSectionTitle() != null) {
+        if (detail.description() != null) drawWrapped(context, toText(detail.description().text()), detail.description().bounds(), detail.description().color());
+        if (!detail.lines().isEmpty() && detail.firstSectionTitle() != null
+                && detail.runtimeLineStartIndex() != 0) {
             LineView first = detail.lines().get(0);
             drawClipped(context, toText(detail.firstSectionTitle()),
+                    new UiRect(first.bounds().x(), first.bounds().y() - 15, first.bounds().width(), 10),
+                    ACCENT, false);
+        }
+        if (detail.runtimeSectionTitle() != null && detail.runtimeLineStartIndex() >= 0
+                && detail.runtimeLineStartIndex() < detail.lines().size()) {
+            LineView first = detail.lines().get(detail.runtimeLineStartIndex());
+            drawClipped(context, toText(detail.runtimeSectionTitle()),
                     new UiRect(first.bounds().x(), first.bounds().y() - 15, first.bounds().width(), 10),
                     ACCENT, false);
         }
@@ -418,6 +427,16 @@ public final class PluginManagerScreen extends Screen {
             textRenderer.drawWithShadow(context, value, bounds.x(), bounds.y(), color);
         } else {
             textRenderer.draw(context, value, bounds.x(), bounds.y(), color);
+        }
+    }
+
+    private void drawWrapped(MatrixStack context, Text text, UiRect bounds, int color) {
+        String remaining = text.getString();
+        for (int y = bounds.y(); !remaining.isEmpty() && y + 9 <= bounds.y() + bounds.height(); y += 11) {
+            String line = textRenderer.trimToWidth(remaining, bounds.width());
+            if (line.isEmpty()) break;
+            textRenderer.draw(context, line, bounds.x(), y, color);
+            remaining = remaining.substring(line.length()).stripLeading();
         }
     }
 

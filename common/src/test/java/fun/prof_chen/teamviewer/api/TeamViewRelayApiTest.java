@@ -3,6 +3,7 @@ package fun.prof_chen.teamviewer.api;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.ClientServices;
 import fun.prof_chen.teamviewer.main_code.client.bridge.ClientControlGateway;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
@@ -24,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TeamViewRelayApiTest {
     private ClientControlGateway installedControl;
+    private final Map<UUID, PlayerRelationView> effectiveRelations = new HashMap<>();
+    private final Map<UUID, PlayerInteractionState> interactions = new HashMap<>();
 
     @AfterEach
     void clearServices() {
@@ -55,6 +58,8 @@ class TeamViewRelayApiTest {
         assertEquals(0.25, player.velocityX());
         assertEquals(20F, player.health());
         assertEquals(PlayerRelation.ENEMY, player.relation());
+        assertFalse(manager.getPlayerMark(playerId).automatic(),
+                "marks without source retain manual precedence");
         assertThrows(UnsupportedOperationException.class, () -> first.players().clear());
 
         ProtocolPackets.PatchInboundPacket patch = new ProtocolPackets.PatchInboundPacket();
@@ -72,6 +77,34 @@ class TeamViewRelayApiTest {
         delete.players = Map.of("delete", java.util.List.of(playerId.toString()));
         invoke(manager, "applyPatch", ProtocolPackets.PatchInboundPacket.class, delete);
         assertTrue(TeamViewRelayApi.remotePlayers().players().isEmpty());
+    }
+
+    @Test
+    void appliesTheControlGatewaysEffectiveRelationToPublicSnapshots() throws Exception {
+        NetworkManager manager = manager();
+        install(manager);
+        UUID playerId = UUID.randomUUID();
+        ProtocolPackets.SnapshotFullInboundPacket full = new ProtocolPackets.SnapshotFullInboundPacket();
+        full.players = Map.of(playerId.toString(), Map.of("data", playerData(playerId, 4D)));
+        full.playerMarks = Map.of(playerId.toString(), Map.of("data", Map.of(
+                "team", "hostile", "source", "auto")));
+        invoke(manager, "applySnapshot", ProtocolPackets.SnapshotFullInboundPacket.class, full);
+        setField(manager, "isConnected", true);
+        effectiveRelations.put(playerId,
+                new PlayerRelationView(PlayerRelation.FRIENDLY, 0xFF123456, true));
+
+        assertTrue(manager.getPlayerMark(playerId).automatic());
+        assertEquals(PlayerRelation.FRIENDLY,
+                TeamViewRelayApi.remotePlayers().players().get(0).relation());
+        interactions.put(playerId, new PlayerInteractionState(
+                PlayerRelation.FRIENDLY, true, PlayerRelationOrigin.LOCAL_CLASSIFIER,
+                Attackability.BLOCKED));
+        RemotePlayerViewBatch views = TeamViewRelayApi.remotePlayerViews();
+        assertTrue(views.connected());
+        assertEquals(PlayerRelationOrigin.LOCAL_CLASSIFIER,
+                views.players().get(0).interaction().origin());
+        assertEquals(Attackability.BLOCKED,
+                TeamViewRelayApi.playerInteraction(playerId).attackability());
     }
 
     @Test
@@ -106,6 +139,12 @@ class TeamViewRelayApiTest {
             @Override public void setEnabled(boolean enabled) { }
             @Override public void reconnect() { }
             @Override public void showActionBar(String message) { }
+            @Override public PlayerRelationView resolvePlayerRelation(UUID playerId) {
+                return effectiveRelations.get(playerId);
+            }
+            @Override public PlayerInteractionState playerInteraction(UUID playerId) {
+                return interactions.getOrDefault(playerId, PlayerInteractionState.unresolved());
+            }
         };
         ClientServices.install(installedControl);
     }

@@ -2,6 +2,7 @@ package fun.prof_chen.teamviewer.main_code.plugin;
 
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import org.luaj.vm2.LuaValue;
 
 import java.util.Map;
@@ -39,6 +40,16 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) {
         runtime.invoke("remote.sync." + id, sync,
                 LuaValueConverters.toLua(players), LuaValue.valueOf(enabled));
+    }
+
+    @Override
+    public void syncResolved(
+            Map<UUID, RemotePlayerInfo> players,
+            Map<UUID, PlayerRelationView> relations,
+            boolean enabled) {
+        runtime.invoke("remote.sync." + id, sync,
+                LuaValueConverters.toLua(players), LuaValue.valueOf(enabled),
+                LuaValueConverters.toLua(relations));
     }
 
     @Override

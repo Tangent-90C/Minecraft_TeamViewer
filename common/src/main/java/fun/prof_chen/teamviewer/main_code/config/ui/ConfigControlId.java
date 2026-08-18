@@ -7,6 +7,7 @@ import java.util.Base64;
 /** Stable string control key; plugin controls can carry a plugin ID and setting key. */
 public record ConfigControlId(String value) {
     private static final String PLUGIN_PREFIX = "plugin:";
+    private static final String PLUGIN_RUNTIME_PREFIX = "plugin-runtime:";
     private static final String SETTING_PREFIX = "setting:";
     private static final String ENTITY_RULE_PREFIX = "entity-rule:";
 
@@ -20,6 +21,10 @@ public record ConfigControlId(String value) {
 
     public static ConfigControlId setting(String pluginId, String key) {
         return new ConfigControlId(SETTING_PREFIX + pluginId + ":" + key);
+    }
+
+    public static ConfigControlId pluginRuntimeAction(String pluginId, String actionId) {
+        return new ConfigControlId(PLUGIN_RUNTIME_PREFIX + encode(pluginId) + ":" + encode(actionId));
     }
 
     public static ConfigControlId entityRule(String action, String kind, String value) {
@@ -56,6 +61,7 @@ public record ConfigControlId(String value) {
     }
 
     public boolean isPluginAction() { return value.startsWith(PLUGIN_PREFIX); }
+    public boolean isPluginRuntimeAction() { return value.startsWith(PLUGIN_RUNTIME_PREFIX); }
     public boolean isPluginSetting() { return value.startsWith(SETTING_PREFIX); }
 
     public String pluginAction() {
@@ -65,6 +71,10 @@ public record ConfigControlId(String value) {
     }
 
     public String pluginId() {
+        if (isPluginRuntimeAction()) {
+            int separator = value.indexOf(':', PLUGIN_RUNTIME_PREFIX.length());
+            return separator < 0 ? "" : decode(value.substring(PLUGIN_RUNTIME_PREFIX.length(), separator));
+        }
         if (isPluginAction()) {
             int separator = value.indexOf(':', PLUGIN_PREFIX.length());
             return separator < 0 ? "" : value.substring(separator + 1);
@@ -76,10 +86,29 @@ public record ConfigControlId(String value) {
         return "";
     }
 
+    public String pluginRuntimeActionId() {
+        if (!isPluginRuntimeAction()) return "";
+        int separator = value.indexOf(':', PLUGIN_RUNTIME_PREFIX.length());
+        return separator < 0 ? "" : decode(value.substring(separator + 1));
+    }
+
     public String settingKey() {
         if (!isPluginSetting()) return "";
         int separator = value.indexOf(':', SETTING_PREFIX.length());
         return separator < 0 ? "" : value.substring(separator + 1);
+    }
+
+    private static String encode(String value) {
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(Objects.requireNonNullElse(value, "").getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String decode(String value) {
+        try {
+            return new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ignored) {
+            return "";
+        }
     }
 
     private static ConfigControlId fixed(String value) { return new ConfigControlId(value); }
@@ -158,6 +187,7 @@ public record ConfigControlId(String value) {
     public static final ConfigControlId PLUGIN_TAB_DISABLED = fixed("PLUGIN_TAB_DISABLED");
     public static final ConfigControlId PLUGIN_COMPACT_BACK = fixed("PLUGIN_COMPACT_BACK");
     public static final ConfigControlId PLUGIN_DIALOG_CLOSE = fixed("PLUGIN_DIALOG_CLOSE");
+    public static final ConfigControlId PLUGIN_RUNTIME_CONFIRM = fixed("PLUGIN_RUNTIME_CONFIRM");
     public static final ConfigControlId PLUGIN_PREVIOUS = fixed("PLUGIN_PREVIOUS");
     public static final ConfigControlId PLUGIN_NEXT = fixed("PLUGIN_NEXT");
     public static final ConfigControlId PLUGIN_PAGE_STATUS = fixed("PLUGIN_PAGE_STATUS");

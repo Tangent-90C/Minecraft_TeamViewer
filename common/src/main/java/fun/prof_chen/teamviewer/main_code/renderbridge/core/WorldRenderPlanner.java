@@ -3,6 +3,7 @@ package fun.prof_chen.teamviewer.main_code.renderbridge.core;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
@@ -22,13 +23,16 @@ import java.util.function.Function;
 /** All TeamViewRelay world-render decisions, independent of Minecraft rendering APIs. */
 public final class WorldRenderPlanner {
     private final Config config;
-    private final Function<UUID, String> teamResolver;
+    private final Function<UUID, PlayerRelationView> relationResolver;
     private final WaypointSyncGateway waypointGateway;
     private final Map<String, Position3D> trackedEntityWaypointLastPositions = new HashMap<>();
 
-    public WorldRenderPlanner(Config config, Function<UUID, String> teamResolver, WaypointSyncGateway waypointGateway) {
+    public WorldRenderPlanner(
+            Config config,
+            Function<UUID, PlayerRelationView> relationResolver,
+            WaypointSyncGateway waypointGateway) {
         this.config = config;
-        this.teamResolver = teamResolver == null ? ignored -> null : teamResolver;
+        this.relationResolver = relationResolver == null ? ignored -> null : relationResolver;
         this.waypointGateway = waypointGateway;
     }
 
@@ -67,9 +71,9 @@ public final class WorldRenderPlanner {
                     || distance(world.localPlayerPosition(), remote.position()) > config.getRenderDistance()) {
                 continue;
             }
-            String team = teamResolver.apply(remote.uuid());
-            int boxColor = teamColor(team, config.getBoxColor());
-            int lineColor = teamColor(team, config.getLineColor());
+            PlayerRelationView relation = relationResolver.apply(remote.uuid());
+            int boxColor = relationColor(relation, config.getBoxColor());
+            int lineColor = relationColor(relation, config.getLineColor());
             Position3D position = remote.position();
             if (config.isShowBoxes()) {
                 commands.add(new WorldRenderCommand.Box(new AxisAlignedBox3D(
@@ -205,14 +209,8 @@ public final class WorldRenderPlanner {
                 || (!isBlank(world.localPlayerName()) && world.localPlayerName().equalsIgnoreCase(waypoint.targetEntityName()));
     }
 
-    private int teamColor(String team, int fallback) {
-        if (isBlank(team)) return fallback;
-        return switch (team.trim().toLowerCase()) {
-            case "friendly", "friend", "ally" -> config.getFriendlyTeamColor();
-            case "enemy", "hostile" -> config.getEnemyTeamColor();
-            case "neutral" -> config.getNeutralTeamColor();
-            default -> fallback;
-        };
+    private int relationColor(PlayerRelationView relation, int fallback) {
+        return relation == null || !relation.resolved() ? fallback : relation.color();
     }
 
     private static boolean isTactical(SharedWaypointInfo waypoint) {

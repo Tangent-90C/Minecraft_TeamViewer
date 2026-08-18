@@ -11,6 +11,8 @@ import fun.prof_chen.teamviewer.main_code.plugin.PluginFileOperationResult;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginManifest;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginSettingState;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeState;
+import fun.prof_chen.teamviewer.main_code.plugin.PluginRuntimeAction;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 import static fun.prof_chen.teamviewer.main_code.config.ui.ConfigControlId.*;
 import static fun.prof_chen.teamviewer.main_code.config.ui.PluginManagerView.*;
@@ -34,6 +37,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
     private static final int MESSAGE_HEIGHT = 22;
 
     private final ClientControlGateway control;
+    private final LongSupplier wallClock;
     private final Map<ConfigControlId, String> textValues = new HashMap<>();
     private PluginManagerTab tab = PluginManagerTab.INSTALLED;
     private String selectedPluginId;
@@ -47,10 +51,17 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
     private PluginFileOperationResult lastOperation;
     private DialogKind dialogKind;
     private String pendingDeleteStorageId;
+    private String pendingRuntimePluginId;
+    private String pendingRuntimeActionId;
     private Path copiedPluginPath;
 
     public PluginManagerUiSession(ClientControlGateway control) {
+        this(control, System::currentTimeMillis);
+    }
+
+    PluginManagerUiSession(ClientControlGateway control, LongSupplier wallClock) {
         this.control = Objects.requireNonNull(control, "control");
+        this.wallClock = Objects.requireNonNull(wallClock, "wallClock");
     }
 
     @Override
@@ -169,7 +180,8 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         return new DetailView(bounds, contentBounds(bounds),
                 compactBack(bounds, compact), title, UiText.literal(""),
                 UiText.literal(""), UiText.literal(""), null, MUTED,
-                null, null, List.of(), List.of(), List.of(), tab == PluginManagerTab.DISABLED);
+                null, null, -1, null, List.of(), List.of(), List.of(),
+                tab == PluginManagerTab.DISABLED, null);
     }
 
     private DetailView installedDetail(UiRect bounds, boolean compact, PluginSnapshot plugin) {
@@ -178,19 +190,34 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             textValues.putIfAbsent(id, String.valueOf(plugin.settings().getOrDefault(definition.key(), "")));
         }
         UiRect content = contentBounds(bounds);
+        UiText descriptionText = plugin.description().isBlank() ? null : pluginDescription(plugin);
+        int descriptionHeight = descriptionText == null ? 0
+                : estimatedWrappedHeight(plugin.description(), Math.max(40, content.width() - 20));
         int contentHeight = 26
+                + descriptionHeight + (descriptionText == null ? 0 : 8)
                 + (plugin.capabilities().isEmpty() ? 0 : 18)
                 + plugin.capabilities().size() * 28
                 + (plugin.capabilities().isEmpty() ? 0 : 8)
+                + (plugin.runtimeState().isEmpty() ? 0 : 18)
+                + plugin.runtimeState().size() * 28
+                + (plugin.runtimeState().isEmpty() ? 0 : 8)
                 + (plugin.visibleSettingDefinitions().isEmpty() ? 0 : 18)
                 + plugin.visibleSettingDefinitions().stream().mapToInt(this::settingHeight).sum()
                 + (plugin.visibleSettingDefinitions().isEmpty() ? 0 : 8)
+                + plugin.runtimeActions().size() * 26
+                + (plugin.runtimeActions().isEmpty() ? 0 : 8)
                 + 30;
         detailScrollMaximum = Math.max(0, contentHeight - content.height());
         detailScroll = clamp(detailScroll, 0, detailScrollMaximum);
         int x = content.x() + 10;
         int width = content.width() - 20;
         int y = content.y() - detailScroll;
+        TextBlockView description = null;
+        if (descriptionText != null) {
+            description = new TextBlockView(new UiRect(x, y, width, descriptionHeight),
+                    descriptionText, MUTED);
+            y += descriptionHeight + 8;
+        }
         List<LineView> lines = new ArrayList<>();
         if (!plugin.capabilities().isEmpty()) y += 18;
         for (IntegrationCapability capability : plugin.capabilities()) {
@@ -203,6 +230,15 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             y += 28;
         }
         if (!lines.isEmpty()) y += 8;
+        int runtimeLineStartIndex = lines.size();
+        if (!plugin.runtimeState().isEmpty()) y += 18;
+        for (PluginRuntimeState state : plugin.runtimeState()) {
+            lines.add(new LineView(new UiRect(x, y, width, 27),
+                    UiText.literal(state.label()), runtimeStateValue(state),
+                    UiText.literal(""), UiText.literal(state.value()), SUCCESS));
+            y += 28;
+        }
+        if (!plugin.runtimeState().isEmpty()) y += 8;
         List<SettingView> settings = new ArrayList<>();
         if (!plugin.visibleSettingDefinitions().isEmpty()) y += 18;
         for (PluginManifest.SettingDefinition definition : plugin.visibleSettingDefinitions()) {
@@ -217,7 +253,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             PluginSettingState state = plugin.settingState(definition.key());
             settings.add(new SettingView(id, new UiRect(x, y, width, height - 2),
                     settingName(plugin, definition),
-                    kind == SettingKind.ENUM ? UiText.literal(String.valueOf(raw)) : null,
+                    kind == SettingKind.ENUM ? settingValue(plugin, definition, raw) : null,
                     settingTooltip(plugin, definition, state), kind,
                     textValues.getOrDefault(id, String.valueOf(raw == null ? "" : raw)),
                     256, Boolean.TRUE.equals(raw), state.enabled()));
@@ -225,6 +261,15 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         }
         if (!settings.isEmpty()) y += 8;
         List<ActionView> actions = new ArrayList<>();
+        for (PluginRuntimeAction runtimeAction : plugin.runtimeActions()) {
+            actions.add(action(ConfigControlId.pluginRuntimeAction(plugin.id(), runtimeAction.id()),
+                    new UiRect(x, y, Math.min(220, width), 22),
+                    UiText.literal(runtimeAction.label()),
+                    runtimeAction.tooltip().isEmpty() ? null : UiText.literal(runtimeAction.tooltip()),
+                    plugin.enabled() && runtimeAction.enabled(), false, runtimeAction.danger()));
+            y += 26;
+        }
+        if (!plugin.runtimeActions().isEmpty()) y += 8;
         if (plugin.builtIn()) {
             actions.add(action(ConfigControlId.plugin(plugin.id(), "copy"),
                     new UiRect(x, y, Math.min(180, width), 22),
@@ -240,18 +285,21 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         }
         long available = plugin.capabilities().stream()
                 .filter(value -> value.status() == IntegrationSupportStatus.AVAILABLE).count();
+        UiText summary = t("screen.mc_teamviewer.integration_plugin.manager.capability_summary",
+                UiText.literal(String.valueOf(available)),
+                UiText.literal(String.valueOf(plugin.capabilities().size())));
         return new DetailView(bounds, content, compactBack(bounds, compact),
                 pluginName(plugin),
                 t("screen.mc_teamviewer.integration_plugin.manager.subtitle",
                         UiText.literal(plugin.id()), UiText.literal(plugin.version())),
                 runtimeStatusText(plugin.runtimeStatus()),
-                t("screen.mc_teamviewer.integration_plugin.manager.capability_summary",
-                        UiText.literal(String.valueOf(available)),
-                        UiText.literal(String.valueOf(plugin.capabilities().size()))),
+                summary,
                 pluginDiagnostic(plugin), statusColor(plugin.runtimeStatus()),
                 tr("screen.mc_teamviewer.integration_plugin.manager.capabilities"),
+                tr("screen.mc_teamviewer.integration_plugin.manager.runtime_state"),
+                plugin.runtimeState().isEmpty() ? -1 : runtimeLineStartIndex,
                 tr("screen.mc_teamviewer.integration_plugin.manager.settings"),
-                lines, settings, actions, false);
+                lines, settings, actions, false, description);
     }
 
     private DetailView disabledDetail(UiRect bounds, boolean compact, DisabledPluginSnapshot plugin) {
@@ -284,18 +332,18 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
                 tr("screen.mc_teamviewer.integration_plugin.manager.recoverable"),
                 plugin.storagePath() == null ? null : UiText.literal(plugin.storagePath().toAbsolutePath().toString()),
                 WARNING, tr("screen.mc_teamviewer.integration_plugin.manager.disabled_location"),
-                null,
+                null, -1, null,
                 plugin.storagePath() == null ? List.of() : List.of(new LineView(
                         new UiRect(x, lineY, width, 27),
                         UiText.literal(plugin.storagePath().toAbsolutePath().toString()),
                         UiText.literal(plugin.originalFileName()), UiText.literal(""), null, MUTED)),
-                List.of(), actions, true);
+                List.of(), actions, true, null);
     }
 
     private DialogView buildDialog(UiRect frame) {
         if (dialogKind == null) return null;
         int width = Math.min(470, frame.width() - 34);
-        int height = dialogKind == DialogKind.COPY_GUIDE ? 196 : 112;
+        int height = dialogKind == DialogKind.COPY_GUIDE ? 196 : 122;
         int x = frame.x() + (frame.width() - width) / 2;
         int y = frame.y() + (frame.height() - height) / 2;
         UiRect bounds = new UiRect(x, y, width, height);
@@ -320,6 +368,29 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
                                             (width - 29) / 2, 21),
                                     tr("screen.mc_teamviewer.integration_plugin.return_manager"),
                                     null, true, false, false)));
+        }
+        if (dialogKind == DialogKind.RUNTIME_ACTION_CONFIRM) {
+            PluginSnapshot plugin = pendingRuntimePluginId == null
+                    ? null : control.getIntegrationPlugin(pendingRuntimePluginId);
+            PluginRuntimeAction runtimeAction = plugin == null ? null : plugin.runtimeActions().stream()
+                    .filter(value -> value.id().equals(pendingRuntimeActionId)).findFirst().orElse(null);
+            UiText message = runtimeAction == null
+                    ? tr("screen.mc_teamviewer.integration_plugin.runtime_action_unavailable")
+                    : UiText.literal(runtimeAction.confirmation());
+            List<ActionView> actions = new ArrayList<>();
+            if (runtimeAction != null && runtimeAction.enabled()) {
+                actions.add(action(PLUGIN_RUNTIME_CONFIRM,
+                        new UiRect(x + 12, y + height - 32, (width - 29) / 2, 21),
+                        tr("screen.mc_teamviewer.integration_plugin.runtime_action_confirm"),
+                        null, true, false, runtimeAction.danger()));
+            }
+            actions.add(action(PLUGIN_DIALOG_CLOSE,
+                    new UiRect(x + 17 + (width - 29) / 2, y + height - 32,
+                            (width - 29) / 2, 21),
+                    tr("screen.mc_teamviewer.config.cancel"), null, true, false, false));
+            return new DialogView(DialogKind.RUNTIME_ACTION_CONFIRM, bounds,
+                    tr("screen.mc_teamviewer.integration_plugin.runtime_action_confirm_title"),
+                    List.of(message), actions);
         }
         DisabledPluginSnapshot disabled = pendingDeleteStorageId == null
                 ? null : control.getDisabledIntegrationPlugin(pendingDeleteStorageId);
@@ -377,6 +448,17 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         if (PLUGIN_DIALOG_CLOSE.equals(id)) {
             dialogKind = null;
             pendingDeleteStorageId = null;
+            pendingRuntimePluginId = null;
+            pendingRuntimeActionId = null;
+            return ConfigUiAction.stay();
+        }
+        if (PLUGIN_RUNTIME_CONFIRM.equals(id)) {
+            if (pendingRuntimePluginId != null && pendingRuntimeActionId != null) {
+                control.invokeIntegrationPluginAction(pendingRuntimePluginId, pendingRuntimeActionId);
+            }
+            dialogKind = null;
+            pendingRuntimePluginId = null;
+            pendingRuntimeActionId = null;
             return ConfigUiAction.stay();
         }
         if (PLUGIN_GUIDE_OPEN_DIRECTORY.equals(id)) {
@@ -387,6 +469,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             return ConfigUiAction.stay();
         }
         if (id.isPluginSetting()) return activateSetting(id);
+        if (id.isPluginRuntimeAction()) return activateRuntimeAction(id);
         if (!id.isPluginAction()) return ConfigUiAction.stay();
         String action = id.pluginAction();
         if ("manager-select".equals(action)) {
@@ -424,6 +507,21 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
                 compactDetail = false;
                 syncSelection();
             }
+        }
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction activateRuntimeAction(ConfigControlId id) {
+        PluginSnapshot plugin = control.getIntegrationPlugin(id.pluginId());
+        PluginRuntimeAction action = plugin == null ? null : plugin.runtimeActions().stream()
+                .filter(value -> value.id().equals(id.pluginRuntimeActionId())).findFirst().orElse(null);
+        if (action == null || !plugin.enabled() || !action.enabled()) return ConfigUiAction.stay();
+        if (action.requiresConfirmation()) {
+            pendingRuntimePluginId = plugin.id();
+            pendingRuntimeActionId = action.id();
+            dialogKind = DialogKind.RUNTIME_ACTION_CONFIRM;
+        } else {
+            control.invokeIntegrationPluginAction(plugin.id(), action.id());
         }
         return ConfigUiAction.stay();
     }
@@ -633,6 +731,14 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         return "boolean".equals(definition.type()) || "enum".equals(definition.type()) ? 28 : 34;
     }
 
+    private static int estimatedWrappedHeight(String source, int width) {
+        int codePoints = Math.max(1, source == null ? 0 : source.codePointCount(0, source.length()));
+        int charactersPerLine = Math.max(8, width / 7);
+        int lines = Math.max(1, Math.min(12,
+                (codePoints + charactersPerLine - 1) / charactersPerLine));
+        return lines * 11;
+    }
+
     private static ActionView action(ConfigControlId id, UiRect bounds, UiText label, UiText tooltip,
                                      boolean active, boolean selected, boolean danger) {
         return new ActionView(id, bounds, label, tooltip, active, selected, danger);
@@ -666,8 +772,16 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             case IntegrationIds.PLUGIN_XAERO -> tr("screen.mc_teamviewer.integration_plugin.builtin.xaero");
             case IntegrationIds.PLUGIN_JOURNEYMAP -> tr("screen.mc_teamviewer.integration_plugin.builtin.journeymap");
             case IntegrationIds.PLUGIN_EXAMPLE -> tr("screen.mc_teamviewer.integration_plugin.builtin.example");
+            case IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS -> tr("screen.mc_teamviewer.integration_plugin.builtin.tab_label_relations");
             default -> UiText.literal(plugin.name());
         };
+    }
+
+    private static UiText pluginDescription(PluginSnapshot plugin) {
+        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())) {
+            return tr("screen.mc_teamviewer.integration_plugin.tab_label_relations.description");
+        }
+        return UiText.literal(plugin.description());
     }
 
     private static UiText capabilityName(IntegrationCapability capability) {
@@ -682,6 +796,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
             case IntegrationIds.EXAMPLE_REMOTE_PLAYER -> tr("screen.mc_teamviewer.integration_plugin.capability.example_remote_player");
             case IntegrationIds.EXAMPLE_SHARED_WAYPOINT -> tr("screen.mc_teamviewer.integration_plugin.capability.example_shared_waypoint");
             case IntegrationIds.EXAMPLE_BATTLE_MAP -> tr("screen.mc_teamviewer.integration_plugin.capability.example_battle_map");
+            case IntegrationIds.TAB_LABEL_RELATIONS -> tr("screen.mc_teamviewer.integration_plugin.capability.tab_label_relations");
             default -> UiText.literal(capability.displayName());
         };
     }
@@ -701,12 +816,29 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
         if (IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id())) {
             return tr("screen.mc_teamviewer.integration_plugin.setting.example_" + setting.key());
         }
+        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())) {
+            return tr("screen.mc_teamviewer.integration_plugin.setting.tab_label_" + setting.key());
+        }
         return UiText.literal(setting.name());
+    }
+
+    private static UiText settingValue(
+            PluginSnapshot plugin, PluginManifest.SettingDefinition setting, Object value) {
+        if (IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS.equals(plugin.id())
+                && "relation_source_mode".equals(setting.key())) {
+            return tr("screen.mc_teamviewer.integration_plugin.setting.tab_label_relation_source_mode."
+                    + String.valueOf(value));
+        }
+        return UiText.literal(String.valueOf(value));
     }
 
     private static UiText runtimeStatusText(PluginRuntimeStatus status) {
         return tr("screen.mc_teamviewer.integration_plugin.runtime."
                 + status.name().toLowerCase(Locale.ROOT));
+    }
+
+    private UiText runtimeStateValue(PluginRuntimeState state) {
+        return PluginRuntimeStateText.value(state, wallClock.getAsLong());
     }
 
     private static boolean settingInteractive(PluginSnapshot plugin, String key) {

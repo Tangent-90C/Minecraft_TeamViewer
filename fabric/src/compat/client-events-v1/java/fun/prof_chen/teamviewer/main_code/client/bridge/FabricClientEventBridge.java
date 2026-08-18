@@ -27,6 +27,7 @@ public final class FabricClientEventBridge implements ClientEventBridge<WorldRen
     public void register(ClientEventHandler<WorldRenderContext, MatrixStack> handler) {
         Objects.requireNonNull(handler, "handler");
         if (!registered.compareAndSet(false, true)) throw new IllegalStateException("Client events already registered");
+        FabricSystemChatForwarder.setHandler(handler);
         KeyBinding toggle = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mc_teamviewer.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN,
                 "category.mc_teamviewer.general"));
@@ -48,7 +49,10 @@ public final class FabricClientEventBridge implements ClientEventBridge<WorldRen
             if (networkHandler != null && !networkHandler.getConnection().isLocal()) handler.onJoinedMultiplayer();
         });
         ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> handler.onLeftPlaySession());
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> handler.onClientStopping());
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            FabricSystemChatForwarder.setHandler(null);
+            handler.onClientStopping();
+        });
         WorldRenderEvents.LAST.register(handler::onWorldRender);
         HudRenderCallback.EVENT.register((context, tickDelta) -> handler.onHudRender(context));
     }

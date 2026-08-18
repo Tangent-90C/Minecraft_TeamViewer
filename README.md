@@ -122,14 +122,21 @@ task build JOBS=1
 各自的 `build/parallel-project-cache/`，防止不同版本的同名 Gradle 任务互相清理输出。
 使用 `minecraft_targets.py list-*` 命令查询当前数量和范围，避免文档复制易过期的版本表。
 
-本机需要 JDK 17、21、25。任务会优先读取 `JAVA17_HOME`、`JAVA21_HOME`、
-`JAVA25_HOME`，也会自动检查当前 `JAVA_HOME` 和常见系统 JDK 目录。例如：
+本机至少需要 JDK 21、25；JDK 17 是可选的。Java 17 目标会优先使用精确的 JDK 17，
+找不到时可由更高版本 JDK 运行 Gradle，并通过 `--release 17` 保持产物兼容 Java 17。
+任务会优先读取 `JAVA17_HOME`、`JAVA21_HOME`、`JAVA25_HOME`，也会自动检查当前
+`JAVA_HOME` 和常见系统 JDK 目录。例如：
 
 ```bash
-JAVA17_HOME=/path/to/jdk-17 \
 JAVA21_HOME=/path/to/jdk-21 \
 JAVA25_HOME=/path/to/jdk-25 \
 task build
+```
+
+若系统已经能自动发现 JDK 21，也可以只把当前环境切到 JDK 25：
+
+```bash
+JAVA_HOME=/path/to/jdk-25 task build
 ```
 
 所需 Gradle JDK 版本由同一份 Minecraft 目标清单生成，CI 也使用该命令安装对应的 JDK：

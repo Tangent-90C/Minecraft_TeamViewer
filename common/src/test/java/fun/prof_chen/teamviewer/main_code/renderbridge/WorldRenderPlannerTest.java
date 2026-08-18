@@ -1,6 +1,8 @@
 package fun.prof_chen.teamviewer.main_code.renderbridge;
 
+import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
@@ -27,7 +29,9 @@ class WorldRenderPlannerTest {
         config.setShowLines(true);
         config.setFriendlyTeamColor(0xFF123456);
         config.setXrayMarkersAndBoxes(false);
-        WorldRenderPlanner planner = new WorldRenderPlanner(config, ignored -> "friendly", null);
+        WorldRenderPlanner planner = new WorldRenderPlanner(config,
+                ignored -> new PlayerRelationView(PlayerRelation.FRIENDLY, config.getFriendlyTeamColor(), true),
+                null);
         RemotePlayerInfo player = new RemotePlayerInfo(REMOTE, new Position3D(10, 64, 10),
                 "minecraft:overworld", "remote");
 
@@ -50,6 +54,26 @@ class WorldRenderPlannerTest {
         config.setWaypointUiStyle(Config.WAYPOINT_UI_PIN);
         assertTrue(planner.plan(true, world(), Map.of(), Map.of("waypoint", waypoint)).commands().stream()
                 .anyMatch(WorldRenderCommand.Line.class::isInstance));
+    }
+
+    @Test
+    void distinguishesExplicitNeutralFromUnresolvedPlayers() {
+        Config config = new Config();
+        config.setShowBoxes(true);
+        config.setBoxColor(0x80112233);
+        config.setNeutralTeamColor(0xFF445566);
+        RemotePlayerInfo player = new RemotePlayerInfo(REMOTE, new Position3D(10, 64, 10),
+                "minecraft:overworld", "remote");
+
+        WorldRenderPlanner unresolved = new WorldRenderPlanner(config,
+                ignored -> new PlayerRelationView(PlayerRelation.NEUTRAL, config.getNeutralTeamColor(), false), null);
+        assertEquals(0x80112233, unresolved.plan(true, world(), Map.of(REMOTE, player), Map.of())
+                .commands().get(0).color());
+
+        WorldRenderPlanner neutral = new WorldRenderPlanner(config,
+                ignored -> new PlayerRelationView(PlayerRelation.NEUTRAL, config.getNeutralTeamColor(), true), null);
+        assertEquals(0xFF445566, neutral.plan(true, world(), Map.of(REMOTE, player), Map.of())
+                .commands().get(0).color());
     }
 
     private static ClientWorldSnapshot world() {

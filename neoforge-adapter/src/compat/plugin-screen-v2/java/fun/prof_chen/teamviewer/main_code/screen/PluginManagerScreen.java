@@ -168,6 +168,17 @@ public final class PluginManagerScreen extends Screen {
         }
 
         @Override
+        public void wrapped(UiText text, UiRect bounds, int color) {
+            String remaining = toComponent(text).getString();
+            for (int y = bounds.y(); !remaining.isEmpty() && y + 9 <= bounds.y() + bounds.height(); y += 11) {
+                String line = font.plainSubstrByWidth(remaining, bounds.width());
+                if (line.isEmpty()) break;
+                graphics.drawString(font, line, bounds.x(), y, color, false);
+                remaining = remaining.substring(line.length()).stripLeading();
+            }
+        }
+
+        @Override
         public void centered(UiText text, int centerX, int y, int color) {
             Component component = toComponent(text);
             graphics.drawString(font, component, centerX - font.width(component) / 2, y, color, false);

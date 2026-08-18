@@ -50,7 +50,13 @@ The example declares all setting types: `boolean`, `integer`, `number`, `string`
   services inside `probe()` or each operation; do not assume they exist when Lua first loads.
 - `services.get("minecraft.client_objects")` supplies `blockPosition(x,y,z)` and
   `dimensionKey(id)`. Use it instead of hard-coding mapped `net.minecraft.*` class names.
-- `snapshots.world/players/waypoints/scoreboard()` provide read-only, loader-neutral tables.
+- `snapshots.world/players/waypoints/scoreboard/tab_players()` provide read-only,
+  loader-neutral tables. `tab_players()` returns common's cache and never reads the adapter.
+- `tv.on_system_chat(callback)` receives `{text, overlay}` for system messages. Return `true`
+  when the callback changed a player-relation classifier's state and needs an immediate refresh.
+- `tv.notify(message)` shows a local action-bar message when the host exposes notifications. It
+  returns `false` when notifications are unavailable.
+- `tv.on_play_session_started/ended(callback)` delimit multiplayer-session state.
 - `tv.log.info/warn/error(message)` writes plugin-scoped diagnostics.
 
 - `environment.loader_id()`、`minecraft_version()`、`mod_version(id)` 描述当前环境。
@@ -59,7 +65,12 @@ The example declares all setting types: `boolean`, `integer`, `number`, `string`
   不能假定 Lua 加载时入口已经就绪。
 - `services.get("minecraft.client_objects")` 提供 `blockPosition(x,y,z)` 与
   `dimensionKey(id)`；不要硬编码经过映射的 `net.minecraft.*` 类名。
-- `snapshots.world/players/waypoints/scoreboard()` 提供只读、与加载器无关的表。
+- `snapshots.world/players/waypoints/scoreboard/tab_players()` 提供只读、与加载器无关的表；
+  `tab_players()` 只返回 common 缓存，不会触发 adapter 读取。
+- `tv.on_system_chat(callback)` 接收系统消息 `{text, overlay}`；关系分类状态改变时返回
+  `true`，宿主会立即重算当前 Tab。
+- `tv.notify(message)` 会在宿主提供通知能力时显示本地动作栏消息；通知不可用时返回 `false`。
+- `tv.on_play_session_started/ended(callback)` 用于划分多人会话状态。
 - `tv.log.info/warn/error(message)` 输出带插件范围的诊断日志。
 
 ## 4. Reflection bridge / 反射桥
@@ -85,12 +96,13 @@ JVM system classpath 中。
 
 ## 5. Adapter contracts / Adapter 契约
 
-`register_remote_player_projection` receives `sync(players, enabled)`. `players` is keyed by
-UUID and each value contains `uuid`, `name`, `dimension`, and `position{x,y,z}`. `clear()` must
-remove only objects owned by this plugin.
+`register_remote_player_projection` receives `sync(players, enabled, relations)`. `players` and
+`relations` are keyed by UUID; each relation contains `relation`, `color`, and `resolved`.
+Older callbacks may omit the third argument. `clear()` must remove only objects owned by this plugin.
 
-`register_remote_player_projection` 的 `sync(players, enabled)` 接收以 UUID 为键的玩家表；
-每项含 `uuid`、`name`、`dimension`、`position{x,y,z}`。`clear()` 只能清理本插件对象。
+`register_remote_player_projection` 的 `sync(players, enabled, relations)` 接收以 UUID 为键的
+玩家表和关系表；关系项包含 `relation`、`color`、`resolved`。旧回调可省略第三个参数；
+`clear()` 只能清理本插件对象。
 
 `register_shared_waypoint_adapter` returns local waypoints from `list_local()` as
 `{nativeId,name,symbol,x,y,z,dimension,color}`. Its write callbacks receive the common command
@@ -115,6 +127,15 @@ prevent synchronization loops.
 
 战局地图没有观测时返回 `nil`；有数据时按上表返回。相对坐标使用
 `relative_to_player`，绝对区块坐标使用 `absolute_chunk`。
+
+`register_player_relation_classifier.classify(tabPlayers)` returns a UUID-keyed table whose
+values are `FRIENDLY`, `ENEMY`, or `NEUTRAL`; omitted UUIDs mean no decision. Remote-player
+projection callbacks may accept a third `relations` argument keyed by UUID. Older two-argument
+Lua callbacks remain valid.
+
+`register_player_relation_classifier.classify(tabPlayers)` 返回以 UUID 为键、值为
+`FRIENDLY`、`ENEMY` 或 `NEUTRAL` 的表；省略 UUID 表示不作决定。远程玩家投影回调可接收
+第三个 `relations` 参数，旧的双参数 Lua 回调继续有效。
 
 Every adapter may expose `probe()` returning `{status, detail}`. Supported states are
 `AVAILABLE`, `MOD_NOT_INSTALLED`, `UNSUPPORTED_VERSION`, `NOT_IMPLEMENTED`,
@@ -147,6 +168,27 @@ Plugins that do not call it retain the compatible default: every declared settin
 Adapter 可对清单中已声明的设置调用
 `tv.configure_setting({key, visible, enabled, detail})`。它只改变运行时 UI 状态，不会覆盖已保存的值。
 未调用的第三方插件保持向后兼容：所有声明设置均可见、可编辑。
+
+`tv.set_runtime_state({...})` publishes up to eight bounded, read-only fields on the plugin page.
+The host keeps them only in memory and clears them when the plugin or play session stops; it never
+stores them with plugin settings. `tv.set_runtime_state({})` clears them explicitly.
+An entry may include `observed_at_millis = tv.now_millis()` so the host renders a live relative age.
+
+`tv.get_persistent_state()`, `tv.set_persistent_state(table)` and
+`tv.clear_persistent_state()` manage one bounded private state table stored separately from user
+settings. `tv.set_runtime_actions({...})` publishes up to eight plugin-owned detail-page actions;
+each action declares `id`, `label`, optional `tooltip`, `enabled`, `danger`, `confirmation`, and a
+`callback` returning whether capability output changed.
+
+`tv.set_runtime_state({...})` 可在插件页发布最多八个受限的只读状态字段。宿主仅在内存中
+保存这些状态，并在插件或游戏会话停止时清除；它们不会与插件设置一起持久化。
+`tv.set_runtime_state({})` 可主动清空状态。
+状态项可设置 `observed_at_millis = tv.now_millis()`，由宿主动态显示距采集时间。
+
+`tv.get_persistent_state()`、`tv.set_persistent_state(table)` 和
+`tv.clear_persistent_state()` 用于读写与用户设置分离的受限插件私有数据。
+`tv.set_runtime_actions({...})` 可发布最多八个插件自有操作；每项声明 `id`、`label`、可选的
+`tooltip`、`enabled`、`danger`、`confirmation` 和返回能力结果是否变化的 `callback`。
 
 `main.lua` registers three no-op adapters. Enabling this example returns empty collections or
 `nil`, creates no map object, reads no external data and uploads nothing. Replace its IDs and
