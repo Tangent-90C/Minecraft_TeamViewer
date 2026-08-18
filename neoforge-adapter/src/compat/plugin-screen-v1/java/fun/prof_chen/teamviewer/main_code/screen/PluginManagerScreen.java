@@ -62,7 +62,7 @@ public final class PluginManagerScreen extends Screen {
         PluginManagerPainter.paint(view, new Canvas(graphics), mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, delta);
         UiText tooltip = PluginManagerPainter.tooltipAt(view, mouseX, mouseY);
-        if (tooltip != null) graphics.renderTooltip(font, toComponent(tooltip), mouseX, mouseY);
+        if (tooltip != null) PluginManagerTooltipCompat.show(graphics, font, toComponent(tooltip), mouseX, mouseY);
     }
 
     @Override

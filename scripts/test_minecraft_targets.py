@@ -167,6 +167,33 @@ class MinecraftTargetsTest(unittest.TestCase):
                         for entry in plan.entries.values())
                 )
 
+    def test_plugin_manager_screen_uses_api_family_layers(self) -> None:
+        matrix = minecraft_targets.load_manifest()
+        screen = pathlib.Path(
+            "java/fun/prof_chen/teamviewer/main_code/screen/PluginManagerScreen.java"
+        )
+        tooltip = pathlib.Path(
+            "java/fun/prof_chen/teamviewer/main_code/screen/PluginManagerTooltipCompat.java"
+        )
+
+        fabric_120 = minecraft_targets.source_plan(matrix, "fabric", "1.20.1")
+        fabric_121 = minecraft_targets.source_plan(matrix, "fabric", "1.21.8")
+        self.assertEqual(fabric_120.entries[screen].path, fabric_121.entries[screen].path)
+        self.assertEqual("compat:plugin-screen-v2", fabric_121.entries[screen].origin)
+
+        neoforge_120 = minecraft_targets.source_plan(matrix, "neoforge", "1.20.2")
+        neoforge_121 = minecraft_targets.source_plan(matrix, "neoforge", "1.21.8")
+        self.assertEqual(neoforge_120.entries[screen].path, neoforge_121.entries[screen].path)
+        self.assertEqual("compat:plugin-screen-v1", neoforge_121.entries[screen].origin)
+        self.assertEqual("compat:plugin-screen-tooltip-v1", neoforge_120.entries[tooltip].origin)
+        self.assertEqual("version:1.21.8", neoforge_121.entries[tooltip].origin)
+
+        for loader in ("fabric", "neoforge"):
+            self.assertEqual(
+                "version:26.1",
+                minecraft_targets.source_plan(matrix, loader, "26.2").entries[screen].origin,
+            )
+
     def test_neoforge_build_frontends_share_one_source_family(self) -> None:
         matrix = minecraft_targets.load_manifest()
         legacy = minecraft_targets.source_plan(matrix, "neoforge", "1.20.6")
