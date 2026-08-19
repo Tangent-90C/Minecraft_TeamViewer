@@ -422,6 +422,7 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.waypoints = decodeWaypointDataMap(message.getWaypointsMap());
 		packet.battleChunks = decodeBattleChunkSnapshot(message.getBattleChunksList());
 		packet.playerMarks = decodePlayerMarkFullMap(message.getPlayerMarksMap());
+		packet.lastSeenPlayers = decodeLastSeenPlayerDataMap(message.getLastSeenPlayersMap());
 		return packet;
 	}
 
@@ -433,6 +434,8 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.waypoints = message.hasWaypoints() ? decodeWaypointPatchScope(message.getWaypoints()) : null;
 		packet.battleChunks = message.hasBattleChunks() ? decodeBattleChunkPatchScope(message.getBattleChunks()) : null;
 		packet.playerMarks = message.hasPlayerMarks() ? decodePlayerMarkPatchScope(message.getPlayerMarks()) : null;
+		packet.lastSeenPlayers = message.hasLastSeenPlayers()
+				? decodeLastSeenPlayerPatchScope(message.getLastSeenPlayers()) : null;
 		packet.meta = null;
 		return packet;
 	}
@@ -446,6 +449,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.hashes.put("waypoints", message.getWaypoints());
 		if (message.hasBattleChunks()) {
 			packet.hashes.put("battleChunks", message.getBattleChunks());
+		}
+		if (message.hasLastSeenPlayers()) {
+			packet.hashes.put("lastSeenPlayers", message.getLastSeenPlayers());
 		}
 		return packet;
 	}
@@ -497,6 +503,14 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		Map<String, Object> mapped = new LinkedHashMap<>();
 		for (Map.Entry<String, PlayerMark> entry : raw.entrySet()) {
 			mapped.put(entry.getKey(), playerMarkToMap(entry.getValue()));
+		}
+		return mapped;
+	}
+
+	private Map<String, Object> decodeLastSeenPlayerDataMap(Map<String, LastSeenPlayerData> raw) {
+		Map<String, Object> mapped = new LinkedHashMap<>();
+		for (Map.Entry<String, LastSeenPlayerData> entry : raw.entrySet()) {
+			mapped.put(entry.getKey(), lastSeenPlayerDataToMap(entry.getValue()));
 		}
 		return mapped;
 	}
@@ -570,6 +584,33 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		patch.put("upsert", upsert);
 		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
 		return patch;
+	}
+
+	private Map<String, Object> decodeLastSeenPlayerPatchScope(LastSeenPlayerPatchScope scope) {
+		Map<String, Object> patch = new LinkedHashMap<>();
+		Map<String, Object> upsert = new LinkedHashMap<>();
+		for (LastSeenPlayerUpsert item : scope.getUpsertList()) {
+			if (!item.getId().isBlank()) {
+				upsert.put(item.getId(), lastSeenPlayerDataToMap(item.getData()));
+			}
+		}
+		patch.put("upsert", upsert);
+		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
+		return patch;
+	}
+
+	private Map<String, Object> lastSeenPlayerDataToMap(LastSeenPlayerData value) {
+		Map<String, Object> mapped = new LinkedHashMap<>();
+		mapped.put("x", value.getX());
+		mapped.put("y", value.getY());
+		mapped.put("z", value.getZ());
+		mapped.put("dimension", value.getDimension());
+		mapped.put("playerName", value.getPlayerName());
+		mapped.put("playerUUID", value.getPlayerUuid());
+		mapped.put("lastSeenAtUtcMs", value.getLastSeenAtUtcMs());
+		mapped.put("positionObservedAtUtcMs", value.getPositionObservedAtUtcMs());
+		mapped.put("offlineDetectedAtUtcMs", value.getOfflineDetectedAtUtcMs());
+		return mapped;
 	}
 
 	private Map<String, Object> decodeBattleChunkSnapshot(List<BattleChunkEntry> entries) {

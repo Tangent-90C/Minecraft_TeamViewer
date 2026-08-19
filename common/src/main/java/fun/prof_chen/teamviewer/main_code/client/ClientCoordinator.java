@@ -21,11 +21,14 @@ import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
+import fun.prof_chen.teamviewer.main_code.sync.api.LastSeenPlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncPayload;
 import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
 import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedLastSeenPlayerRepository;
 import fun.prof_chen.teamviewer.main_code.renderbridge.core.WorldRenderPlanner;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderFrame;
 import fun.prof_chen.teamviewer.main_code.hud.core.HudPlanner;
@@ -75,6 +78,7 @@ public final class ClientCoordinator implements ClientControlGateway {
     private SharedWaypointRepository waypointRepository;
     private SharedWaypointSyncCoordinator waypointCoordinator;
     private RemotePlayerRepository remotePlayerRepository;
+    private LastSeenPlayerRepository lastSeenPlayerRepository;
     private RemotePlayerProjectionCoordinator remotePlayerProjectionCoordinator;
     private WorldRenderPlanner worldRenderPlanner;
     private final HudPlanner hudPlanner = new HudPlanner();
@@ -111,7 +115,8 @@ public final class ClientCoordinator implements ClientControlGateway {
         handleMiddleMouseDoubleClick();
         updateLocalMarkedState(tickWorld);
         if (remotePlayerProjectionCoordinator != null && remotePlayerRepository != null) {
-            remotePlayerProjectionCoordinator.tick(remotePlayerRepository, true, tickWorld);
+            remotePlayerProjectionCoordinator.tick(remotePlayerRepository, lastSeenPlayerRepository,
+                    true, config.isShowLastSeenPlayers(), tickWorld);
         }
         if (waypointCoordinator != null) {
             waypointCoordinator.tick(true, tickWorld);
@@ -203,7 +208,21 @@ public final class ClientCoordinator implements ClientControlGateway {
             SharedWaypointSyncCoordinator sharedWaypointSyncCoordinator,
             fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway waypointGateway,
             RemotePlayerProjectionCoordinator remotePlayerProjectionCoordinator) {
+        configureRuntimeSupport(remotePlayerRepository,
+                new MapBackedLastSeenPlayerRepository(new java.util.HashMap<>()),
+                sharedWaypointRepository, sharedWaypointSyncCoordinator, waypointGateway,
+                remotePlayerProjectionCoordinator);
+    }
+
+    public void configureRuntimeSupport(
+            RemotePlayerRepository remotePlayerRepository,
+            LastSeenPlayerRepository lastSeenPlayerRepository,
+            SharedWaypointRepository sharedWaypointRepository,
+            SharedWaypointSyncCoordinator sharedWaypointSyncCoordinator,
+            fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway waypointGateway,
+            RemotePlayerProjectionCoordinator remotePlayerProjectionCoordinator) {
         this.remotePlayerRepository = Objects.requireNonNull(remotePlayerRepository, "remotePlayerRepository");
+        this.lastSeenPlayerRepository = Objects.requireNonNull(lastSeenPlayerRepository, "lastSeenPlayerRepository");
         this.remotePlayerProjectionCoordinator = Objects.requireNonNull(remotePlayerProjectionCoordinator, "remotePlayerProjectionCoordinator");
         configureWaypointSupport(sharedWaypointRepository, sharedWaypointSyncCoordinator);
         this.worldRenderPlanner = new WorldRenderPlanner(config, this::resolvePlayerRelation, waypointGateway);
@@ -360,21 +379,26 @@ public final class ClientCoordinator implements ClientControlGateway {
             return WorldRenderFrame.empty();
         }
         boolean renderPlayers = config.isShowBoxes() || config.isShowLines();
+        boolean renderLastSeen = config.isShowLastSeenPlayers()
+                && (config.isShowLastSeenBoxes() || config.isShowLastSeenLines());
         boolean renderWaypoints = config.isShowSharedWaypoints();
-        if (!renderPlayers && !renderWaypoints) {
+        if (!renderPlayers && !renderLastSeen && !renderWaypoints) {
             return WorldRenderFrame.empty();
         }
         Map<String, SharedWaypointInfo> waypoints =
                 renderWaypoints ? waypointRepository.snapshot() : Map.of();
         renderWaypoints = renderWaypoints && !waypoints.isEmpty();
-        if (!renderPlayers && !renderWaypoints) {
+        if (!renderPlayers && !renderLastSeen && !renderWaypoints) {
             return WorldRenderFrame.empty();
         }
         boolean includeEntities = renderWaypoints && waypoints.values().stream()
                 .anyMatch(value -> value != null && "entity".equalsIgnoreCase(value.targetType()));
         Map<UUID, RemotePlayerInfo> players =
                 renderPlayers ? remotePlayerRepository.snapshot() : Map.of();
-        return worldRenderPlanner.plan(true, gameClient.captureWorldSnapshot(includeEntities), players, waypoints);
+        Map<UUID, LastSeenPlayerInfo> lastSeenPlayers = renderLastSeen && lastSeenPlayerRepository != null
+                ? lastSeenPlayerRepository.snapshot() : Map.of();
+        return worldRenderPlanner.plan(true, gameClient.captureWorldSnapshot(includeEntities),
+                players, lastSeenPlayers, waypoints);
     }
 
     public HudFrame buildHudFrame() {
@@ -794,6 +818,7 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     private void clearRelayDerivedRuntimeState() {
         if (remotePlayerRepository != null) remotePlayerRepository.clear();
+        if (lastSeenPlayerRepository != null) lastSeenPlayerRepository.clear();
         if (waypointRepository != null) waypointRepository.clear();
         if (remotePlayerProjectionCoordinator != null) remotePlayerProjectionCoordinator.clear();
         if (waypointCoordinator != null) waypointCoordinator.clear();

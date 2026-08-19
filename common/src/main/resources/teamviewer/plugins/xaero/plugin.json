@@ -20,7 +20,8 @@
   "dependencies": [],
   "provides": [
     {"id": "xaero-worldmap", "role": "remote-player", "name": "Xaero World Map Players"},
-    {"id": "xaero-minimap", "role": "shared-waypoint", "name": "Xaero Minimap Waypoints"}
+    {"id": "xaero-minimap", "role": "shared-waypoint", "name": "Xaero Minimap Waypoints"},
+    {"id": "xaero-last-seen-minimap", "role": "remote-player", "name": "Xaero Minimap Last-seen Players"}
   ],
   "settings": []
 }

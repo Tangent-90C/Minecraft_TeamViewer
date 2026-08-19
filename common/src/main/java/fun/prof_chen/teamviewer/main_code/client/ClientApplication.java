@@ -13,16 +13,19 @@ import fun.prof_chen.teamviewer.main_code.config.ui.ClientUiSession;
 import fun.prof_chen.teamviewer.main_code.config.ui.PluginManagerUiSession;
 import fun.prof_chen.teamviewer.main_code.config.ui.ConfigUiSessions;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.network.transport.OkHttpTransportProcess;
 import fun.prof_chen.teamviewer.main_code.plugin.IntegrationPluginManager;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginHostAccess;
 import fun.prof_chen.teamviewer.main_code.plugin.PluginNotificationSink;
 import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
+import fun.prof_chen.teamviewer.main_code.sync.api.LastSeenPlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.api.SharedWaypointRepository;
 import fun.prof_chen.teamviewer.main_code.sync.core.RemotePlayerProjectionCoordinator;
 import fun.prof_chen.teamviewer.main_code.sync.core.SharedWaypointSyncCoordinator;
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePlayerRepository;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedLastSeenPlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedSharedWaypointRepository;
 
 import java.util.Map;
@@ -49,15 +52,17 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
         Config config = Config.load(adapters.runtimeGateway().getConfigDirectory().resolve(CONFIG_FILE_NAME));
         IntegrationRegistry integrations = adapters.integrationRegistry();
         Map<UUID, RemotePlayerInfo> remotePlayers = new ConcurrentHashMap<>();
+        Map<UUID, LastSeenPlayerInfo> lastSeenPlayers = new ConcurrentHashMap<>();
         Map<String, SharedWaypointInfo> sharedWaypoints = new ConcurrentHashMap<>();
         NetworkManager network = new NetworkManager(
-                remotePlayers, adapters.runtimeGateway(), new OkHttpTransportProcess());
+                remotePlayers, lastSeenPlayers, adapters.runtimeGateway(), new OkHttpTransportProcess());
         NetworkManager.setConfigGateway(config);
         coordinator = new ClientCoordinator(config, network, adapters.gameClientBridge());
         coordinator.configurePlayerRelationSupport(integrations);
         ClientServices.install(coordinator);
 
         RemotePlayerRepository remoteRepository = new MapBackedRemotePlayerRepository(remotePlayers);
+        LastSeenPlayerRepository lastSeenRepository = new MapBackedLastSeenPlayerRepository(lastSeenPlayers);
         SharedWaypointRepository waypointRepository = new MapBackedSharedWaypointRepository(sharedWaypoints);
         NetworkWaypointSyncGateway waypointGateway = new NetworkWaypointSyncGateway(network);
         RemotePlayerProjectionCoordinator projectionCoordinator =
@@ -67,7 +72,8 @@ public final class ClientApplication<W, H> implements ClientEventHandler<W, H> {
                 config, adapters.gameClientBridge());
         waypointCoordinator.start();
         coordinator.configureRuntimeSupport(
-                remoteRepository, waypointRepository, waypointCoordinator, waypointGateway, projectionCoordinator);
+                remoteRepository, lastSeenRepository, waypointRepository, waypointCoordinator,
+                waypointGateway, projectionCoordinator);
         coordinator.configureBattleMapSupport(integrations);
         pluginManager = new IntegrationPluginManager(adapters.runtimeGateway(), integrations, config,
                 new PluginHostAccess(

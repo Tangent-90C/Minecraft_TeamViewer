@@ -2,6 +2,7 @@ package fun.prof_chen.teamviewer.main_code.plugin;
 
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import org.luaj.vm2.LuaValue;
 
@@ -14,17 +15,19 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     private final LuaValue sync;
     private final LuaValue clear;
     private final LuaValue needsReconcile;
+    private final LuaValue syncLastSeen;
     private final LuaCapabilityProbe probe;
     private volatile LuaCapabilityProbe.Result lastProbe;
 
     LuaRemotePlayerProjection(
             String id, LuaPluginRuntime runtime, LuaValue sync, LuaValue clear,
-            LuaValue needsReconcile, LuaValue probe) {
+            LuaValue needsReconcile, LuaValue probe, LuaValue syncLastSeen) {
         this.id = id;
         this.runtime = runtime;
         this.sync = sync;
         this.clear = clear;
         this.needsReconcile = needsReconcile;
+        this.syncLastSeen = syncLastSeen;
         this.probe = new LuaCapabilityProbe(id, runtime, probe);
     }
 
@@ -59,6 +62,14 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
     public void clear() {
         if (clear != null && clear.isfunction()) runtime.invoke("remote.clear." + id, clear);
         else RemotePlayerProjection.super.clear();
+    }
+
+    @Override
+    public void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
+        if (syncLastSeen != null && syncLastSeen.isfunction()) {
+            runtime.invoke("remote.sync_last_seen." + id, syncLastSeen,
+                    LuaValueConverters.toLua(players), LuaValue.valueOf(enabled));
+        }
     }
 
     @Override

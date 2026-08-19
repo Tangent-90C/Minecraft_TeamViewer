@@ -289,6 +289,12 @@
   "screen.mc_teamviewer.entity_upload.name_hint": "Exact custom entity name",
   "screen.mc_teamviewer.entity_upload.save_rule": "Save rule",
   
+  "screen.mc_teamviewer.config.show_last_seen_players": "Show Last-seen Player Positions",
+  "screen.mc_teamviewer.config.show_last_seen_players.tooltip": "Off by default. Shows authoritative last positions and UTC times in world rendering and supported maps.",
+  "screen.mc_teamviewer.config.show_last_seen_boxes": "Last-seen Position Boxes",
+  "screen.mc_teamviewer.config.show_last_seen_boxes.tooltip": "Draw orange boxes at offline players' last positions.",
+  "screen.mc_teamviewer.config.show_last_seen_lines": "Last-seen Tracer Lines",
+  "screen.mc_teamviewer.config.show_last_seen_lines.tooltip": "Draw orange tracer lines to offline players' last positions.",
   "connection.status.connected": "Connected",
   "connection.status.connecting": "Connecting",
   "connection.status.failed": "Failed",

@@ -104,6 +104,9 @@ public final class ConfigUiSession implements ConfigUiController {
             case "DISCONNECT" -> disconnect();
             case "SHOW_BOXES" -> toggle(config.isShowBoxes(), config::setShowBoxes);
             case "SHOW_LINES" -> toggle(config.isShowLines(), config::setShowLines);
+            case "SHOW_LAST_SEEN_PLAYERS" -> toggleAndSave(config.isShowLastSeenPlayers(), config::setShowLastSeenPlayers);
+            case "SHOW_LAST_SEEN_BOXES" -> toggleAndSave(config.isShowLastSeenBoxes(), config::setShowLastSeenBoxes);
+            case "SHOW_LAST_SEEN_LINES" -> toggleAndSave(config.isShowLastSeenLines(), config::setShowLastSeenLines);
             case "TRACER_START_MODE" -> cycleTracerMode();
             case "XRAY_MARKERS_AND_BOXES" -> toggle(config.isXrayMarkersAndBoxes(), config::setXrayMarkersAndBoxes);
             case "SHOW_NETWORK_TRAFFIC_HUD" -> toggle(config.isShowNetworkTrafficHud(), config::setShowNetworkTrafficHud);
@@ -269,7 +272,7 @@ public final class ConfigUiSession implements ConfigUiController {
     }
 
     private ConfigPageView displayPage(int width, int height) {
-        int start = (height - (30 * 3 + 25 * 6)) / 2;
+        int start = (height - (30 * 3 + 25 * 8)) / 2;
         int y = start + 30;
         int left = (width - 346) / 2;
         int right = left + 176;
@@ -297,6 +300,14 @@ public final class ConfigUiSession implements ConfigUiController {
         c.add(button(OPEN_WAYPOINT, right, y, 170, "screen.mc_teamviewer.config.waypoint_settings", "screen.mc_teamviewer.config.waypoint_settings.tooltip"));
         y += 25;
         c.add(toggleButtonWithTooltip(SHOW_NETWORK_TRAFFIC_HUD, left, y, 170, "screen.mc_teamviewer.config.show_network_traffic_hud", config.isShowNetworkTrafficHud()));
+        y += 25;
+        c.add(toggleButtonWithTooltip(SHOW_LAST_SEEN_PLAYERS, left, y, 346,
+                "screen.mc_teamviewer.config.show_last_seen_players", config.isShowLastSeenPlayers()));
+        y += 25;
+        c.add(toggleButtonWithTooltip(SHOW_LAST_SEEN_BOXES, left, y, 170,
+                "screen.mc_teamviewer.config.show_last_seen_boxes", config.isShowLastSeenBoxes()));
+        c.add(toggleButtonWithTooltip(SHOW_LAST_SEEN_LINES, right, y, 170,
+                "screen.mc_teamviewer.config.show_last_seen_lines", config.isShowLastSeenLines()));
         y += 25;
         c.add(button(BACK, left, y, 346, "screen.mc_teamviewer.config.back", null));
         return new ConfigPageView(ConfigPageId.DISPLAY, tr("screen.mc_teamviewer.display_config.title"), start - 30, c);
@@ -773,6 +784,12 @@ public final class ConfigUiSession implements ConfigUiController {
 
     private ConfigUiAction toggle(boolean current, BooleanSetter setter) {
         setter.set(!current);
+        return ConfigUiAction.stay();
+    }
+
+    private ConfigUiAction toggleAndSave(boolean current, BooleanSetter setter) {
+        setter.set(!current);
+        config.save();
         return ConfigUiAction.stay();
     }
 

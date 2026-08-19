@@ -44,6 +44,7 @@ public final class ProtocolPackets {
 		public Map<String, Object> waypoints;
 		public Map<String, Object> battleChunks;
 		public Map<String, Object> playerMarks;
+		public Map<String, Object> lastSeenPlayers;
 	}
 
 	public static class PatchInboundPacket extends BaseInboundPacket {
@@ -52,6 +53,7 @@ public final class ProtocolPackets {
 		public Map<String, Object> waypoints;
 		public Map<String, Object> battleChunks;
 		public Map<String, Object> playerMarks;
+		public Map<String, Object> lastSeenPlayers;
 		public Map<String, Object> meta;
 	}
 

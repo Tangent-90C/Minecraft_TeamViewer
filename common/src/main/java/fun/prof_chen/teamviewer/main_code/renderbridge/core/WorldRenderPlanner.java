@@ -7,6 +7,7 @@ import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.AxisAlignedBox3D;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderCommand;
@@ -18,10 +19,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.function.Function;
 
 /** All TeamViewRelay world-render decisions, independent of Minecraft rendering APIs. */
 public final class WorldRenderPlanner {
+    private static final int LAST_SEEN_BOX_COLOR = 0xBFFF9A26;
+    private static final int LAST_SEEN_LINE_COLOR = 0xFFFFB347;
+    private static final double LAST_SEEN_LABEL_DISTANCE = 512D;
+    private static final DateTimeFormatter LAST_SEEN_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC);
     private final Config config;
     private final Function<UUID, PlayerRelationView> relationResolver;
     private final WaypointSyncGateway waypointGateway;
@@ -41,14 +50,65 @@ public final class WorldRenderPlanner {
             ClientWorldSnapshot world,
             Map<UUID, RemotePlayerInfo> remotePlayers,
             Map<String, SharedWaypointInfo> sharedWaypoints) {
+        return plan(enabled, world, remotePlayers, Map.of(), sharedWaypoints);
+    }
+
+    public WorldRenderFrame plan(
+            boolean enabled,
+            ClientWorldSnapshot world,
+            Map<UUID, RemotePlayerInfo> remotePlayers,
+            Map<UUID, LastSeenPlayerInfo> lastSeenPlayers,
+            Map<String, SharedWaypointInfo> sharedWaypoints) {
         if (!enabled || world == null || !world.available()) {
             return WorldRenderFrame.empty();
         }
         List<WorldRenderCommand> commands = new ArrayList<>();
         boolean depthTest = !config.isXrayMarkersAndBoxes();
         planPlayers(world, remotePlayers == null ? Map.of() : remotePlayers, depthTest, commands);
+        planLastSeenPlayers(world, remotePlayers == null ? Map.of() : remotePlayers,
+                lastSeenPlayers == null ? Map.of() : lastSeenPlayers, depthTest, commands);
         planWaypoints(world, sharedWaypoints == null ? Map.of() : sharedWaypoints, depthTest, commands);
         return new WorldRenderFrame(world.cameraPosition(), commands);
+    }
+
+    private void planLastSeenPlayers(
+            ClientWorldSnapshot world,
+            Map<UUID, RemotePlayerInfo> remotePlayers,
+            Map<UUID, LastSeenPlayerInfo> lastSeenPlayers,
+            boolean depthTest,
+            List<WorldRenderCommand> commands) {
+        if (!config.isShowLastSeenPlayers() || lastSeenPlayers.isEmpty()) return;
+        for (LastSeenPlayerInfo player : lastSeenPlayers.values()) {
+            if (player == null || player.position() == null || player.uuid() == null
+                    || player.uuid().equals(world.localPlayerId()) || remotePlayers.containsKey(player.uuid())
+                    || !sameDimension(world.dimension(), player.dimension())
+                    || distance(world.localPlayerPosition(), player.position()) > config.getRenderDistance()) {
+                continue;
+            }
+            Position3D position = player.position();
+            double playerDistance = distance(world.localPlayerPosition(), position);
+            if (config.isShowLastSeenBoxes()) {
+                commands.add(new WorldRenderCommand.Box(new AxisAlignedBox3D(
+                        position.x() - 0.35, position.y(), position.z() - 0.35,
+                        position.x() + 0.35, position.y() + 1.8, position.z() + 0.35),
+                        LAST_SEEN_BOX_COLOR, depthTest));
+            }
+            if (config.isShowLastSeenLines()) {
+                Position3D start = add(world.cameraPosition(), multiply(normalize(world.lookDirection()), 0.6));
+                if (config.isTracerStartTop()) {
+                    start = add(start, multiply(normalize(world.cameraUpDirection()), config.getTracerTopOffset()));
+                }
+                commands.add(new WorldRenderCommand.Line(start,
+                        add(position, new Position3D(0, 1, 0)), LAST_SEEN_LINE_COLOR, depthTest, 1.0F));
+            }
+            if (playerDistance <= LAST_SEEN_LABEL_DISTANCE) {
+                String name = player.name().length() > 16 ? player.name().substring(0, 16) : player.name();
+                String time = LAST_SEEN_TIME_FORMAT.format(Instant.ofEpochMilli(player.lastSeenAtUtcMs()));
+                WorldLabelVectorizer.append(commands, name + "\n" + time,
+                        add(position, new Position3D(0, 2.15, 0)), world.lookDirection(),
+                        world.cameraUpDirection(), playerDistance, LAST_SEEN_LINE_COLOR, depthTest);
+            }
+        }
     }
 
     public void clear() {

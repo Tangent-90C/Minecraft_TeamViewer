@@ -10,7 +10,7 @@ import java.util.List;
  * TeamViewRelay's remote-player state.
  */
 public final class TeamViewRelayApi {
-    public static final int API_VERSION = 1;
+    public static final int API_VERSION = 2;
 
     private TeamViewRelayApi() {
     }
@@ -66,6 +66,19 @@ public final class TeamViewRelayApi {
             return ClientServices.control().playerInteraction(playerId);
         } catch (RuntimeException | LinkageError ignored) {
             return PlayerInteractionState.unresolved();
+        }
+    }
+
+    /** Returns authoritative last-known positions for players that are currently offline. */
+    public static LastSeenPlayerBatch lastSeenPlayers() {
+        try {
+            NetworkManager network = ClientServices.control().getNetworkManager();
+            if (network == null || !network.isConnected()) {
+                return new LastSeenPlayerBatch(API_VERSION, false, List.of());
+            }
+            return new LastSeenPlayerBatch(API_VERSION, true, network.getLastSeenPlayerSnapshots());
+        } catch (RuntimeException | LinkageError ignored) {
+            return new LastSeenPlayerBatch(API_VERSION, false, List.of());
         }
     }
 

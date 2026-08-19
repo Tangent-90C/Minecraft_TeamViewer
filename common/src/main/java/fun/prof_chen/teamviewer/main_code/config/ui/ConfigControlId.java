@@ -131,6 +131,9 @@ public record ConfigControlId(String value) {
     public static final ConfigControlId TRACER_TOP_OFFSET = fixed("TRACER_TOP_OFFSET");
     public static final ConfigControlId SHOW_BOXES = fixed("SHOW_BOXES");
     public static final ConfigControlId SHOW_LINES = fixed("SHOW_LINES");
+    public static final ConfigControlId SHOW_LAST_SEEN_PLAYERS = fixed("SHOW_LAST_SEEN_PLAYERS");
+    public static final ConfigControlId SHOW_LAST_SEEN_BOXES = fixed("SHOW_LAST_SEEN_BOXES");
+    public static final ConfigControlId SHOW_LAST_SEEN_LINES = fixed("SHOW_LAST_SEEN_LINES");
     public static final ConfigControlId TRACER_START_MODE = fixed("TRACER_START_MODE");
     public static final ConfigControlId XRAY_MARKERS_AND_BOXES = fixed("XRAY_MARKERS_AND_BOXES");
     public static final ConfigControlId OPEN_COLOR = fixed("OPEN_COLOR");

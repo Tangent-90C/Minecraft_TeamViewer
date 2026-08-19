@@ -1,7 +1,7 @@
 # TeamViewRelay Mod
 
 TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。
-当前发布版本为 `v0.6.0-proto0.6.2`。实际验证的运行范围如下：
+当前发布版本为 `v0.6.1-proto0.6.4`。实际验证的运行范围如下：
 
 | 安装产物 | Loader | 可运行的 Minecraft 版本 |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ Fabric 和 NeoForge 玩家都可选择对应 Loader 的 All-in-One，或选择�
 这个 Mod 面向“团队协同作战”场景，核心能力包括：
 
 - 共享队友位置、实体信息、战局区块和共享路标
+- 可选显示权威外部源记录的离线玩家最后位置与 UTC 时间，支持世界方框、追踪线、JourneyMap 和 Xaero
 - 快速报点，支持按键触发、中键双击、取消、超时清理、数量上限
 - 房间号（`roomCode`）隔离，不同房间互不干扰
 - 可选联动 Xaero Minimap、Xaero World Map、JourneyMap
@@ -172,6 +173,16 @@ Loader 公开 Mod ID 分别为：Fabric `team-view-relay`、NeoForge `team_view_
 
 ## 配置或使用说明
 
+### 离线玩家最后位置
+
+协议 `0.6.4` 可接收由权威外部数据源维护的离线玩家最后位置。此功能默认关闭，可在配置页单独启用；
+世界渲染中的方框和追踪线可分别控制，玩家名称与 UTC 时间标签只在最后位置 512 方块内绘制，以限制
+远距离玩家较多时的渲染开销。开启总开关后，已支持的 JourneyMap、Xaero Minimap 和 Xaero World Map
+也会使用独立标记显示这些记录。玩家重新上线、功能关闭、断线或切换世界时会清理对应历史标记。
+
+其他 Mod 可通过 Common SDK API v2 的 `TeamViewRelayApi.lastSeenPlayers()` 读取当前可见的不可变历史快照；
+旧协议客户端不会收到该数据范围，原有实时玩家同步不受影响。
+
 ### 首次配置
 
 配置文件路径：
@@ -281,8 +292,8 @@ task check-fabric-runtime RUNTIME=1.21
 
 - Minecraft 支持范围以 `gradle/minecraft-versions.properties` 为唯一来源；运行
   `python3 scripts/minecraft_targets.py list-fabric`、`list-neoforge` 或 `list-official` 查询
-- Mod：`v0.6.0-proto0.6.2`
-- 协议版本：`0.6.2`
+- Mod：`v0.6.1-proto0.6.4`
+- 协议版本：`0.6.4`
 - 最低兼容协议版本：`0.6.1`
 
 子模块与协议仓库：
@@ -295,12 +306,12 @@ task check-fabric-runtime RUNTIME=1.21
 
 ```bash
 git -C third_party/TeamViewRelay-Protocol fetch --tags
-git -C third_party/TeamViewRelay-Protocol checkout proto/v0.6.2
+git -C third_party/TeamViewRelay-Protocol checkout proto/v0.6.4
 git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-版本号采用“双版本号”约定，例如当前的 `v0.6.0-proto0.6.2`：
+版本号采用“双版本号”约定，例如当前的 `v0.6.1-proto0.6.4`：
 
 - 前半段是程序版本号，用于表示 Mod 自身功能迭代
 - 后半段是网络协议版本号，用于表示可与哪些配套组件互通

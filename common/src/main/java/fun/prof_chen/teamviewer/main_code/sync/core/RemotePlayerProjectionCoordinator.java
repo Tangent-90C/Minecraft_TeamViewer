@@ -1,11 +1,13 @@
 package fun.prof_chen.teamviewer.main_code.sync.core;
 
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 import fun.prof_chen.teamviewer.main_code.sync.api.RemotePlayerRepository;
+import fun.prof_chen.teamviewer.main_code.sync.api.LastSeenPlayerRepository;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,17 +46,28 @@ public final class RemotePlayerProjectionCoordinator {
 	}
 
 	public void tick(RemotePlayerRepository repository, boolean enabled, ClientWorldSnapshot world) {
+		tick(repository, null, enabled, false, world);
+	}
+
+	public void tick(
+			RemotePlayerRepository repository,
+			LastSeenPlayerRepository lastSeenRepository,
+			boolean enabled,
+			boolean lastSeenEnabled,
+			ClientWorldSnapshot world) {
 		List<RemotePlayerProjection> projections = projections();
 		if (projections.isEmpty()) return;
 		Map<UUID, RemotePlayerInfo> players = repository.snapshot();
 		Map<UUID, RemotePlayerInfo> filtered = filter(players, world);
+		Map<UUID, LastSeenPlayerInfo> filteredLastSeen = filterLastSeen(
+				lastSeenRepository == null ? Map.of() : lastSeenRepository.snapshot(), filtered, world);
 		Map<UUID, PlayerRelationView> relations = new LinkedHashMap<>();
 		for (UUID playerId : filtered.keySet()) {
 			PlayerRelationView relation = relationResolver.apply(playerId);
 			if (relation != null) relations.put(playerId, relation);
 		}
 		relations = Map.copyOf(relations);
-		ProjectionState state = new ProjectionState(filtered, relations, enabled,
+		ProjectionState state = new ProjectionState(filtered, filteredLastSeen, relations, enabled, lastSeenEnabled,
 				world != null && world.available(), world == null ? null : world.dimension(),
 				world == null ? null : world.localPlayerId());
 		boolean stateChanged = !state.equals(lastState);
@@ -70,9 +83,27 @@ public final class RemotePlayerProjectionCoordinator {
 			}
 			if (!stateChanged && !projection.needsReconcile()) continue;
 			projection.syncResolved(filtered, relations, enabled);
+			projection.syncLastSeen(filteredLastSeen, enabled && lastSeenEnabled);
 			if (!stateChanged) retried = true;
 		}
 		if (stateChanged || retried) lastReconcileRetryNanos = now;
+	}
+
+	private Map<UUID, LastSeenPlayerInfo> filterLastSeen(
+			Map<UUID, LastSeenPlayerInfo> players,
+			Map<UUID, RemotePlayerInfo> onlinePlayers,
+			ClientWorldSnapshot world) {
+		if (world == null || !world.available() || players == null || players.isEmpty()) return Map.of();
+		Map<UUID, LastSeenPlayerInfo> result = new LinkedHashMap<>();
+		for (Map.Entry<UUID, LastSeenPlayerInfo> entry : players.entrySet()) {
+			LastSeenPlayerInfo value = entry.getValue();
+			if (value == null || value.uuid() == null || value.position() == null
+					|| value.uuid().equals(world.localPlayerId()) || onlinePlayers.containsKey(value.uuid())
+					|| (value.dimension() != null && !value.dimension().isBlank()
+					&& !value.dimension().equals(world.dimension()))) continue;
+			result.put(entry.getKey(), value);
+		}
+		return Map.copyOf(result);
 	}
 
 	private Map<UUID, RemotePlayerInfo> filter(
@@ -93,6 +124,7 @@ public final class RemotePlayerProjectionCoordinator {
 	public void clear() {
 		for (RemotePlayerProjection projection : projections()) {
 			projection.clear();
+			projection.syncLastSeen(Map.of(), false);
 		}
 		invalidate();
 	}
@@ -111,7 +143,10 @@ public final class RemotePlayerProjectionCoordinator {
 			List<RemotePlayerProjection> previous = cachedProjections;
 			List<RemotePlayerProjection> current = integrations.activeRemotePlayerProjections();
 			for (RemotePlayerProjection projection : previous) {
-				if (!current.contains(projection)) projection.clear();
+				if (!current.contains(projection)) {
+					projection.clear();
+					projection.syncLastSeen(Map.of(), false);
+				}
 			}
 			cachedProjections = current;
 			lastAvailabilityProbeNanos = now;
@@ -122,13 +157,16 @@ public final class RemotePlayerProjectionCoordinator {
 
 	private record ProjectionState(
 			Map<UUID, RemotePlayerInfo> players,
+			Map<UUID, LastSeenPlayerInfo> lastSeenPlayers,
 			Map<UUID, PlayerRelationView> relations,
 			boolean enabled,
+			boolean lastSeenEnabled,
 			boolean worldAvailable,
 			String dimension,
 			UUID localPlayerId) {
 		private ProjectionState {
 			players = Map.copyOf(players);
+			lastSeenPlayers = Map.copyOf(lastSeenPlayers);
 			relations = Map.copyOf(relations);
 		}
 	}

@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.mapbridge.implementor;
 
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 
@@ -28,6 +29,10 @@ public interface RemotePlayerProjection {
 			Map<UUID, PlayerRelationView> relations,
 			boolean enabled) {
 		sync(players, enabled);
+	}
+
+	/** Optional authoritative offline-player projection; legacy integrations remain unchanged. */
+	default void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
 	}
 
 	default void clear() {

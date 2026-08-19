@@ -44,6 +44,9 @@ public class Config implements ConfigGateway {
     private int renderDistance = 128000;
     private boolean showLines = false;
     private boolean showBoxes = false;
+    private boolean showLastSeenPlayers = false;
+    private boolean showLastSeenBoxes = true;
+    private boolean showLastSeenLines = true;
     private int boxColor = 0x80FF0000;
     private int lineColor = 0xFFFF0000;
     private int friendlyTeamColor = DEFAULT_FRIENDLY_TEAM_COLOR;
@@ -199,6 +202,30 @@ public class Config implements ConfigGateway {
 
     public void setShowBoxes(boolean showBoxes) {
         this.showBoxes = showBoxes;
+    }
+
+    public boolean isShowLastSeenPlayers() {
+        return showLastSeenPlayers;
+    }
+
+    public void setShowLastSeenPlayers(boolean showLastSeenPlayers) {
+        this.showLastSeenPlayers = showLastSeenPlayers;
+    }
+
+    public boolean isShowLastSeenBoxes() {
+        return showLastSeenBoxes;
+    }
+
+    public void setShowLastSeenBoxes(boolean showLastSeenBoxes) {
+        this.showLastSeenBoxes = showLastSeenBoxes;
+    }
+
+    public boolean isShowLastSeenLines() {
+        return showLastSeenLines;
+    }
+
+    public void setShowLastSeenLines(boolean showLastSeenLines) {
+        this.showLastSeenLines = showLastSeenLines;
     }
 
     public int getBoxColor() {

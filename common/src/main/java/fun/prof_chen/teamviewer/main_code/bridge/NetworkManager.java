@@ -4,6 +4,7 @@ package fun.prof_chen.teamviewer.main_code.bridge;
 
 import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.api.RemotePlayerSnapshot;
+import fun.prof_chen.teamviewer.api.LastSeenPlayerSnapshot;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -11,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
@@ -220,12 +222,15 @@ public class NetworkManager {
 	
 	// 远程玩家信息缓存 - 存储其他客户端玩家的位置和维度信息
 	private final Map<UUID, RemotePlayerInfo> remotePlayers;
+	private final Map<UUID, LastSeenPlayerInfo> lastSeenPlayers;
 	
 	// 远程玩家数据缓存 - 存储玩家的完整属性数据
 	private final Map<UUID, Map<String, Object>> remotePlayerDataCache = new HashMap<>();
 
 	// Immutable external view, published only after a complete inbound update.
 	private volatile List<RemotePlayerSnapshot> publishedRemotePlayerSnapshots = List.of();
+	private volatile List<LastSeenPlayerSnapshot> publishedLastSeenPlayerSnapshots = List.of();
+	private final Map<String, Map<String, Object>> lastSeenPlayerDataCache = new HashMap<>();
 	
 	// 远程实体数据缓存 - 存储世界中实体的位置和属性
 	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
@@ -388,7 +393,17 @@ public class NetworkManager {
 			RuntimeGateway runtimeGateway,
 			TransportProcess transport
 	) {
+		this(remotePlayers, new HashMap<>(), runtimeGateway, transport);
+	}
+
+	public NetworkManager(
+			Map<UUID, RemotePlayerInfo> remotePlayers,
+			Map<UUID, LastSeenPlayerInfo> lastSeenPlayers,
+			RuntimeGateway runtimeGateway,
+			TransportProcess transport
+	) {
 		this.remotePlayers = remotePlayers;
+		this.lastSeenPlayers = lastSeenPlayers;
 		this.runtimeGateway = runtimeGateway;
 		this.transport = transport;
 		resetNegotiationState();
@@ -1399,7 +1414,12 @@ public class NetworkManager {
 			replacePlayerMarks(playerMarks);
 		}
 
+		if (packet.lastSeenPlayers != null) {
+			replaceLastSeenPlayers(objectMap(packet.lastSeenPlayers));
+		}
+
 		publishRemotePlayerSnapshots();
+		publishLastSeenPlayerSnapshots();
 	}
 
 	/**
@@ -1526,7 +1546,13 @@ public class NetworkManager {
 			}
 		}
 
+		Map<String, Object> lastSeenPatch = objectMap(packet.lastSeenPlayers);
+		if (!lastSeenPatch.isEmpty()) {
+			applyLastSeenPlayerPatch(lastSeenPatch);
+		}
+
 		publishRemotePlayerSnapshots();
+		publishLastSeenPlayerSnapshots();
 	}
 
 	private void replacePlayerMarks(Map<String, Object> marks) {
@@ -1666,11 +1692,13 @@ public class NetworkManager {
 		String serverEntityHash = packet.hashes.get("entities");
 		String serverWaypointHash = packet.hashes.get("waypoints");
 		String serverBattleChunkHash = packet.hashes.get("battleChunks");
+		String serverLastSeenPlayersHash = packet.hashes.get("lastSeenPlayers");
 
 		String localPlayerHash = computePlayersDigest();
 		String localEntityHash = computeEntitiesDigest();
 		String localWaypointHash = computeWaypointDigest();
 		String localBattleChunkHash = computeBattleChunkDigest();
+		String localLastSeenPlayersHash = computeLastSeenPlayersDigest();
 
 		List<String> mismatchedScopes = new ArrayList<>();
 		if (!Objects.equals(serverPlayerHash, localPlayerHash)) {
@@ -1685,22 +1713,28 @@ public class NetworkManager {
 		if (serverBattleChunkHash != null && !Objects.equals(serverBattleChunkHash, localBattleChunkHash)) {
 			mismatchedScopes.add("battleChunks");
 		}
+		if (serverLastSeenPlayersHash != null
+				&& !Objects.equals(serverLastSeenPlayersHash, localLastSeenPlayersHash)) {
+			mismatchedScopes.add("lastSeenPlayers");
+		}
 
 		if (mismatchedScopes.isEmpty()) {
 			return;
 		}
 
 		LOGGER.warn(
-				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}}} battleChunkDigestKey=digest_uses_dimension|chunkX|chunkZ_without_room_prefix",
+				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} battleChunkDigestKey=digest_uses_dimension|chunkX|chunkZ_without_room_prefix",
 				mismatchedScopes,
 				serverPlayerHash,
 				serverEntityHash,
 				serverWaypointHash,
 				serverBattleChunkHash,
+				serverLastSeenPlayersHash,
 				localPlayerHash,
 				localEntityHash,
 				localWaypointHash,
-				localBattleChunkHash
+				localBattleChunkHash,
+				localLastSeenPlayersHash
 		);
 
 		long now = System.currentTimeMillis();
@@ -2231,6 +2265,11 @@ public class NetworkManager {
 		return publishedRemotePlayerSnapshots;
 	}
 
+	/** Returns the latest immutable authoritative offline-player snapshot. */
+	public List<LastSeenPlayerSnapshot> getLastSeenPlayerSnapshots() {
+		return publishedLastSeenPlayerSnapshots;
+	}
+
 	private void publishRemotePlayerSnapshots() {
 		List<RemotePlayerSnapshot> snapshots = new ArrayList<>();
 		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
@@ -2244,6 +2283,20 @@ public class NetworkManager {
 		}
 		snapshots.sort(Comparator.comparing(snapshot -> snapshot.uuid().toString()));
 		publishedRemotePlayerSnapshots = List.copyOf(snapshots);
+	}
+
+	private void publishLastSeenPlayerSnapshots() {
+		List<LastSeenPlayerSnapshot> snapshots = new ArrayList<>();
+		for (LastSeenPlayerInfo player : lastSeenPlayers.values()) {
+			if (player == null || remotePlayers.containsKey(player.uuid())) continue;
+			Position3D position = player.position();
+			snapshots.add(new LastSeenPlayerSnapshot(
+					player.uuid(), player.name(), player.dimension(),
+					position.x(), position.y(), position.z(), player.lastSeenAtUtcMs(),
+					player.positionObservedAtUtcMs(), player.offlineDetectedAtUtcMs()));
+		}
+		snapshots.sort(Comparator.comparing(snapshot -> snapshot.uuid().toString()));
+		publishedLastSeenPlayerSnapshots = List.copyOf(snapshots);
 	}
 
 	private RemotePlayerSnapshot buildRemotePlayerSnapshot(UUID playerId, RemotePlayerInfo info,
@@ -2747,10 +2800,69 @@ public class NetworkManager {
 
 				remotePlayerDataCache.put(playerId, mergedData);
 				remotePlayers.put(playerId, info);
+				lastSeenPlayers.remove(playerId);
+				lastSeenPlayerDataCache.remove(playerId.toString());
 			} catch (Exception e) {
 				LOGGER.error("TeamViewRelay Network - Error applying player patch: {}", e.getMessage());
 			}
 		}
+	}
+
+	private void replaceLastSeenPlayers(Map<String, Object> players) {
+		lastSeenPlayers.clear();
+		lastSeenPlayerDataCache.clear();
+		for (Map.Entry<String, Object> entry : players.entrySet()) {
+			upsertLastSeenPlayer(entry.getKey(), entry.getValue());
+		}
+	}
+
+	private void applyLastSeenPlayerPatch(Map<String, Object> patch) {
+		for (Object rawId : objectList(patch.get("delete"))) {
+			try {
+				UUID playerId = UUID.fromString(String.valueOf(rawId));
+				lastSeenPlayers.remove(playerId);
+				lastSeenPlayerDataCache.remove(playerId.toString());
+			} catch (IllegalArgumentException ignored) {
+			}
+		}
+		for (Map.Entry<String, Object> entry : objectMap(patch.get("upsert")).entrySet()) {
+			upsertLastSeenPlayer(entry.getKey(), entry.getValue());
+		}
+	}
+
+	private void upsertLastSeenPlayer(String rawId, Object rawValue) {
+		try {
+			UUID playerId = UUID.fromString(rawId);
+			if (remotePlayers.containsKey(playerId)) return;
+			Map<String, Object> data = extractDataMap(objectMap(rawValue));
+			LastSeenPlayerInfo player = parseLastSeenPlayer(playerId, data);
+			if (player == null) return;
+			lastSeenPlayers.put(playerId, player);
+			lastSeenPlayerDataCache.put(playerId.toString(), new HashMap<>(data));
+		} catch (IllegalArgumentException error) {
+			LOGGER.debug("Ignoring invalid last-seen player {}: {}", rawId, error.getMessage());
+		}
+	}
+
+	private LastSeenPlayerInfo parseLastSeenPlayer(UUID playerId, Map<String, Object> data) {
+		if (data == null || data.isEmpty()) return null;
+		String reportedId = normalizeNullableText(data.get("playerUUID"));
+		String name = normalizeNullableText(data.get("playerName"));
+		String dimension = normalizeNullableText(data.get("dimension"));
+		Double x = finite(getAsDouble(data.get("x")));
+		Double y = finite(getAsDouble(data.get("y")));
+		Double z = finite(getAsDouble(data.get("z")));
+		long lastSeenAt = longValue(data.get("lastSeenAtUtcMs"), -1L);
+		long positionObservedAt = longValue(data.get("positionObservedAtUtcMs"), -1L);
+		long offlineDetectedAt = longValue(data.get("offlineDetectedAtUtcMs"), -1L);
+		if (reportedId == null || !playerId.equals(UUID.fromString(reportedId))
+				|| name == null || dimension == null || x == null || y == null || z == null
+				|| positionObservedAt < 0 || lastSeenAt < positionObservedAt
+				|| offlineDetectedAt < lastSeenAt) {
+			return null;
+		}
+		return new LastSeenPlayerInfo(playerId, new Position3D(x, y, z), dimension, name,
+				lastSeenAt, positionObservedAt, offlineDetectedAt);
 	}
 
 	private RemotePlayerInfo buildRemotePlayerInfo(UUID playerId, Map<String, Object> mergedData,
@@ -3086,6 +3198,10 @@ public class NetworkManager {
 			digestState.put(entry.getKey(), normalizeBattleChunkCoreData(entry.getValue()));
 		}
 		return stateDigest(digestState);
+	}
+
+	private String computeLastSeenPlayersDigest() {
+		return stateDigest(lastSeenPlayerDataCache);
 	}
 
 	private Map<String, Object> normalizeBattleChunkCoreData(Map<String, Object> source) {
@@ -3505,7 +3621,10 @@ public class NetworkManager {
 		remoteWaypointDataCache.clear();
 		remoteBattleChunkDataCache.clear();
 		remotePlayerMarks.clear();
+		lastSeenPlayers.clear();
+		lastSeenPlayerDataCache.clear();
 		publishedRemotePlayerSnapshots = List.of();
+		publishedLastSeenPlayerSnapshots = List.of();
 		if (!removedWaypointIds.isEmpty()) {
 			notifyWaypointsDeleted(removedWaypointIds);
 		}

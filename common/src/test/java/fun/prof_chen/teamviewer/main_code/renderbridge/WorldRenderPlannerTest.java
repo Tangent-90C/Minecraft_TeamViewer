@@ -6,6 +6,7 @@ import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
 import fun.prof_chen.teamviewer.main_code.renderbridge.core.WorldRenderPlanner;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderCommand;
@@ -74,6 +75,23 @@ class WorldRenderPlannerTest {
                 ignored -> new PlayerRelationView(PlayerRelation.NEUTRAL, config.getNeutralTeamColor(), true), null);
         assertEquals(0xFF445566, neutral.plan(true, world(), Map.of(REMOTE, player), Map.of())
                 .commands().get(0).color());
+    }
+
+    @Test
+    void lastSeenRenderingIsOptInAndIncludesUtcVectorLabel() {
+        Config config = new Config();
+        LastSeenPlayerInfo player = new LastSeenPlayerInfo(REMOTE, new Position3D(10, 64, 10),
+                "minecraft:overworld", "remote", 1_700_000_004_000L,
+                1_700_000_000_000L, 1_700_000_005_000L);
+        WorldRenderPlanner planner = new WorldRenderPlanner(config, ignored -> null, null);
+
+        assertTrue(planner.plan(true, world(), Map.of(), Map.of(REMOTE, player), Map.of())
+                .commands().isEmpty());
+        config.setShowLastSeenPlayers(true);
+        var commands = planner.plan(true, world(), Map.of(), Map.of(REMOTE, player), Map.of()).commands();
+        assertTrue(commands.stream().anyMatch(WorldRenderCommand.Box.class::isInstance));
+        assertTrue(commands.stream().filter(WorldRenderCommand.Line.class::isInstance).count() > 2,
+                "tracer plus vectorized name/UTC time should be present");
     }
 
     private static ClientWorldSnapshot world() {

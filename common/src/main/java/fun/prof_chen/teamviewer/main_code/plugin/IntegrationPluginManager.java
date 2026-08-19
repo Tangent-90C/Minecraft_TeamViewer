@@ -679,7 +679,7 @@ public final class IntegrationPluginManager {
                 // Legacy "kind" is accepted as an ignored table member for API v1 compatibility.
                 LuaRemotePlayerProjection projection = new LuaRemotePlayerProjection(id, runtime,
                         requireFunction(table, "sync"), table.get("clear"),
-                        table.get("needs_reconcile"), table.get("probe"));
+                        table.get("needs_reconcile"), table.get("probe"), table.get("sync_last_seen"));
                 integrations.registerPluginImplementation(descriptor.manifest.id(), id, declaration.role(), projection,
                         IntegrationImplementationSource.LUA);
                 descriptor.registered.add(id);

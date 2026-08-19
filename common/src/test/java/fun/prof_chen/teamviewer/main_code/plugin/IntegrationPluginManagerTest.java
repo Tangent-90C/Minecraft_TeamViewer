@@ -87,7 +87,7 @@ class IntegrationPluginManagerTest {
         PluginSnapshot xaero = manager.snapshot(IntegrationIds.PLUGIN_XAERO);
         assertNotNull(xaero);
         assertEquals(PluginRuntimeStatus.PENDING_RESTART, xaero.runtimeStatus());
-        assertEquals(2, xaero.capabilities().size());
+        assertEquals(3, xaero.capabilities().size());
         assertTrue(xaero.capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.MOD_NOT_INSTALLED));
         assertTrue(xaero.capabilities().stream().allMatch(value ->

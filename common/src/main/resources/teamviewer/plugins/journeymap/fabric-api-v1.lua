@@ -3,7 +3,7 @@
 
 local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil
-local managed_players, managed_waypoints = {}, {}
+local managed_players, managed_last_seen, managed_waypoints = {}, {}, {}
 local client_objects = services.get("minecraft.client_objects")
 
 local function configure_settings(available)
@@ -20,6 +20,7 @@ local function initialize()
   local ok, value = pcall(function()
     return {
       Waypoint = java.type("journeymap.client.api.display.Waypoint"),
+      Instant = java.type("java.time.Instant"),
       iterableIterator = java.method("java.lang.Iterable", "iterator"),
       iteratorHasNext = java.method("java.util.Iterator", "hasNext"),
       iteratorNext = java.method("java.util.Iterator", "next")
@@ -136,6 +137,25 @@ local function sync_players(players, enabled, relations)
   for _, id in ipairs(stale) do remove(managed_players, id) end
 end
 
+local function sync_last_seen(players, enabled)
+  if not enabled or probe().status ~= "AVAILABLE" then clear(managed_last_seen); return end
+  local world, active = snapshots.world(), {}
+  for _, player in pairs(players or {}) do
+    if player.position ~= nil and (player.dimension == nil or player.dimension == ""
+        or player.dimension == world.dimension) then
+      local id = "last-seen:" .. player.uuid; active[id] = true
+      local utc = tostring(handles.Instant:ofEpochMilli(player.lastSeenAtUtcMs))
+      upsert(managed_last_seen, id, "[TV Last] " .. (player.name or "Player") .. " @ " .. utc,
+          math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
+          world.dimension, 0xFF9A26)
+    end
+  end
+  local stale = {}; for id, _ in pairs(managed_last_seen) do
+    if not active[id] then table.insert(stale, id) end
+  end
+  for _, id in ipairs(stale) do remove(managed_last_seen, id) end
+end
+
 local function list_local()
   local client = api(); if client == nil then return {} end
   local result = {}
@@ -153,8 +173,8 @@ local function list_local()
 end
 
 tv.register_remote_player_projection({id = "journeymap-players", probe = probe,
-  sync = sync_players, clear = function() clear(managed_players) end,
-  needs_reconcile = function() return has_pending(managed_players) end})
+  sync = sync_players, sync_last_seen = sync_last_seen, clear = function() clear(managed_players) end,
+  needs_reconcile = function() return has_pending(managed_players) or has_pending(managed_last_seen) end})
 tv.register_remote_player_projection({id = "journeymap-player-beacons", probe = probe,
   sync = function(players, enabled) end, clear = function() end})
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe,
@@ -166,7 +186,7 @@ tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe =
   needs_reconcile = function() return has_pending(managed_waypoints) end})
 
 tv.on_enable(function() initialize() end)
-tv.on_disable(function() clear(managed_players); clear(managed_waypoints) end)
+tv.on_disable(function() clear(managed_players); clear(managed_last_seen); clear(managed_waypoints) end)
 tv.on_settings_changed(function(key, value)
   if key == "show_remote_players" and not value then clear(managed_players) end
 end)

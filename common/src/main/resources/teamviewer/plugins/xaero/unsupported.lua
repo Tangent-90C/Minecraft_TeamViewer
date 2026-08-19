@@ -1,6 +1,7 @@
 for _, capability in ipairs({
   {id = "xaero-worldmap", mod = "xaeroworldmap"},
-  {id = "xaero-minimap", mod = "xaerominimap"}
+  {id = "xaero-minimap", mod = "xaerominimap"},
+  {id = "xaero-last-seen-minimap", mod = "xaerominimap"}
 }) do
   tv.register_unavailable_capability({
     id = capability.id,

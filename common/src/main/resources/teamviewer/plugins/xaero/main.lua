@@ -2,12 +2,14 @@
 -- Xaero 世界地图/小地图 Lua Adapter；两个能力分别探测各自的可选 Mod。
 
 local WORLD_ID, MINIMAP_ID = "xaero-worldmap", "xaero-minimap"
-local TRACKER_ID, WAYPOINT_PREFIX = "teamviewer_remote_players", "[TV] "
+local TRACKER_ID, LAST_SEEN_TRACKER_ID, WAYPOINT_PREFIX =
+    "teamviewer_remote_players", "teamviewer_last_seen_players", "[TV] "
 local world_handles, minimap_handles = nil, nil
 local world_handle_error, minimap_handle_error = nil, nil
 local world_runtime_error, minimap_runtime_error = nil, nil
-local tracked_players, managed_waypoints = nil, {}
+local tracked_players, tracked_last_seen, managed_waypoints, managed_last_seen = nil, nil, {}, {}
 local tracker_registered = false
+local last_seen_minimap_reconcile = false
 local client_objects = services.get("minecraft.client_objects")
 
 -- 1. Cache external API handles / 缓存外部 API 句柄
@@ -32,6 +34,7 @@ local function load_minimap_handles()
     return {
       Session = java.type("xaero.common.XaeroMinimapSession"),
       Waypoint = java.type("xaero.common.minimap.waypoints.Waypoint"),
+      Instant = java.type("java.time.Instant"),
       iterableIterator = java.method("java.lang.Iterable", "iterator"),
       iteratorHasNext = java.method("java.util.Iterator", "hasNext"),
       iteratorNext = java.method("java.util.Iterator", "next")
@@ -90,6 +93,7 @@ local function install_tracker()
     local manager = world_handles.WorldMap.playerTrackerSystemManager
     if manager == nil then return end
     tracked_players = java["new"](world_handles.ArrayList)
+    tracked_last_seen = java["new"](world_handles.ArrayList)
     local reader = java.proxy("xaero.map.radar.tracker.system.ITrackedPlayerReader", {
       getId = function(player) return player:uuid() end,
       getX = function(player) return player:position():x() end,
@@ -97,14 +101,34 @@ local function install_tracker()
       getZ = function(player) return player:position():z() end,
       getDimension = function(player) return dimension_key(player:dimension()) end
     })
-    local system = java.proxy("xaero.map.radar.tracker.system.IPlayerTrackerSystem", {
-      getReader = function() return reader end,
-      getTrackedPlayerIterator = function() return tracked_players:iterator() end
-    })
-    manager:register(TRACKER_ID, system)
+    local function register(id, values)
+      local system = java.proxy("xaero.map.radar.tracker.system.IPlayerTrackerSystem", {
+        getReader = function() return reader end,
+        getTrackedPlayerIterator = function() return values:iterator() end
+      })
+      manager:register(id, system)
+    end
+    register(LAST_SEEN_TRACKER_ID, tracked_last_seen)
+    register(TRACKER_ID, tracked_players)
     tracker_registered = true
   end)
   if not ok then world_runtime_error = "Xaero tracker registration failed: " .. tostring(error_value) end
+end
+
+local function sync_last_seen_world_map(players, enabled)
+  install_tracker()
+  if tracked_last_seen == nil then return end
+  tracked_last_seen:clear()
+  if not enabled then return end
+  for _, player in pairs(players or {}) do
+    if player.position ~= nil then
+      local uuid = world_handles.UUID:fromString(player.uuid)
+      local position = java["new"](world_handles.Position3D,
+          player.position.x, player.position.y, player.position.z)
+      tracked_last_seen:add(java["new"](world_handles.RemotePlayerInfo,
+          uuid, position, player.dimension, "[Last] " .. player.name))
+    end
+  end
 end
 
 -- 3. TeamViewRelay players -> Xaero tracker records / 玩家数据 -> Xaero tracker 记录
@@ -147,7 +171,50 @@ end
 
 local function is_managed(value)
   for _, managed in pairs(managed_waypoints) do if managed == value then return true end end
+  for _, managed in pairs(managed_last_seen) do if managed.object == value then return true end end
   return false
+end
+
+local function clear_last_seen_minimap()
+  local context = current_waypoint_context()
+  if context == nil then last_seen_minimap_reconcile = next(managed_last_seen) ~= nil; return end
+  for _, state in pairs(managed_last_seen) do context.set:remove(state.object) end
+  managed_last_seen = {}
+  last_seen_minimap_reconcile = false
+  save_context(context)
+end
+
+local function sync_last_seen_minimap(players, enabled)
+  if not enabled then clear_last_seen_minimap(); return end
+  local context = current_waypoint_context()
+  if context == nil then last_seen_minimap_reconcile = true; return end
+  local active, changed = {}, false
+  for _, player in pairs(players or {}) do
+    if player.position ~= nil then
+      local id = "last-seen:" .. player.uuid
+      local utc = tostring(minimap_handles.Instant:ofEpochMilli(player.lastSeenAtUtcMs))
+      local name = "[TV Last] " .. (player.name or "Player") .. " @ " .. utc
+      local signature = name .. ":" .. player.position.x .. ":" .. player.position.y .. ":" .. player.position.z
+      active[id] = true
+      local state = managed_last_seen[id]
+      if state == nil or state.signature ~= signature then
+        if state ~= nil then context.set:remove(state.object) end
+        local object = java["new"](minimap_handles.Waypoint,
+            math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
+            name, "L", 0xFF9A26)
+        pcall(function() object:setYIncluded(true) end)
+        context.set:add(object)
+        managed_last_seen[id] = {object = object, signature = signature}
+        changed = true
+      end
+    end
+  end
+  local stale = {}; for id, _ in pairs(managed_last_seen) do if not active[id] then table.insert(stale, id) end end
+  for _, id in ipairs(stale) do
+    context.set:remove(managed_last_seen[id].object); managed_last_seen[id] = nil; changed = true
+  end
+  last_seen_minimap_reconcile = false
+  if changed then save_context(context) end
 end
 
 local function list_local()
@@ -205,12 +272,20 @@ end
 -- 5. Capability registration and cleanup / 能力注册与清理
 tv.register_remote_player_projection({
   id = WORLD_ID, probe = world_probe,
-  sync = sync_world_map, clear = function() sync_world_map({}, false) end
+  sync = sync_world_map, sync_last_seen = sync_last_seen_world_map,
+  clear = function() sync_world_map({}, false) end
+})
+tv.register_remote_player_projection({
+  id = "xaero-last-seen-minimap", probe = minimap_probe,
+  sync = function(players, enabled) end, sync_last_seen = sync_last_seen_minimap,
+  clear = clear_last_seen_minimap,
+  needs_reconcile = function() return last_seen_minimap_reconcile end
 })
 tv.register_shared_waypoint_adapter({
   id = MINIMAP_ID, probe = minimap_probe, list_local = list_local,
   upsert_remote = upsert_remote, delete_remote = delete_remote, clear_remote = clear_remote
 })
 tv.on_enable(function() install_tracker() end)
-tv.on_disable(function() sync_world_map({}, false); clear_remote() end)
+tv.on_disable(function() sync_world_map({}, false); sync_last_seen_world_map({}, false);
+  clear_last_seen_minimap(); clear_remote() end)
 tv.on_settings_changed(function(key, value) end)

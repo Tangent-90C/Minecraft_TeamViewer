@@ -289,6 +289,12 @@
   "screen.mc_teamviewer.entity_upload.name_hint": "实体的精确自定义名称",
   "screen.mc_teamviewer.entity_upload.save_rule": "保存规则",
   
+  "screen.mc_teamviewer.config.show_last_seen_players": "显示离线玩家最后位置",
+  "screen.mc_teamviewer.config.show_last_seen_players.tooltip": "默认关闭。启用后在世界渲染和已支持的小地图中显示权威外部源记录的最后位置与 UTC 时间。",
+  "screen.mc_teamviewer.config.show_last_seen_boxes": "离线位置方框",
+  "screen.mc_teamviewer.config.show_last_seen_boxes.tooltip": "在离线玩家最后位置绘制橙色方框。",
+  "screen.mc_teamviewer.config.show_last_seen_lines": "离线位置追踪线",
+  "screen.mc_teamviewer.config.show_last_seen_lines.tooltip": "从视角向离线玩家最后位置绘制橙色追踪线。",
   "connection.status.connected": "已连接",
   "connection.status.connecting": "正在连接",
   "connection.status.failed": "连接失败",
