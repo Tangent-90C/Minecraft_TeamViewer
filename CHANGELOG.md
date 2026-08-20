@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.0-proto0.6.5 - 2026-08-20
+
+- 公共 API 增加远程玩家坐标来源、来源类型、显示名称和位置分辨率。
+- 网络协议升级为 `0.6.5`，最低兼容版本仍为 `0.6.1`。
+- 完整快照和增量更新均解码并保留来源元数据，供 AimAssist 等客户端判断数据可信度。
+- `TeamViewRelayApi.API_VERSION` 升级为 3，同时保留旧的 `RemotePlayerSnapshot` 构造器兼容二进制调用。
+
 本文件记录 TeamViewRelay Mod 的用户可见变更。版本号格式为
 `v<Mod 版本>-proto<协议版本>`；协议版本未变化时，后端和网页脚本不需要跟随 Mod 一起发布。
 

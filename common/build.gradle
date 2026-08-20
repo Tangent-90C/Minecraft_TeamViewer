@@ -42,6 +42,8 @@ sourceSets {
             exclude("fun/prof_chen/teamviewer/api/Attackability.java")
             exclude("fun/prof_chen/teamviewer/api/PlayerInteractionState.java")
             exclude("fun/prof_chen/teamviewer/api/RemotePlayerSnapshot.java")
+            exclude("fun/prof_chen/teamviewer/api/RemotePlayerPositionSource.java")
+            exclude("fun/prof_chen/teamviewer/api/RemotePlayerPositionSourceKind.java")
             exclude("fun/prof_chen/teamviewer/api/RemotePlayerView.java")
             exclude("fun/prof_chen/teamviewer/api/RemotePlayerViewBatch.java")
             exclude("fun/prof_chen/teamviewer/api/RemotePlayerBatch.java")

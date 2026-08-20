@@ -1,9 +1,13 @@
 package fun.prof_chen.teamviewer.main_code.network.protocol;
 
 import fun.prof_chen.teamviewer.main_code.network.proto.WireEnvelope;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerData;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerPositionSourceKind;
+import fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,6 +19,33 @@ class ProtobufRuntimeCompatibilityTest {
     void generatedMessagesLoadWithPackagedRuntime() {
         WireEnvelope envelope = assertDoesNotThrow(WireEnvelope::getDefaultInstance);
         assertEquals(WireEnvelope.PayloadCase.PAYLOAD_NOT_SET, envelope.getPayloadCase());
+    }
+
+    @Test
+    void decodesPlayerPositionSourceMetadata() {
+        UUID playerId = UUID.randomUUID();
+        PlayerData player = PlayerData.newBuilder()
+                .setX(1.0).setY(64.0).setZ(2.0)
+                .setDimension("minecraft:overworld")
+                .setPositionSourceId("squaremap-source")
+                .setPositionSourceKind(PlayerPositionSourceKind.PLAYER_POSITION_SOURCE_KIND_EXTERNAL_SOURCE)
+                .setPositionSourceDisplayName("Squaremap")
+                .setPositionResolution(1.0)
+                .build();
+        WireEnvelope envelope = WireEnvelope.newBuilder()
+                .setSnapshotFull(SnapshotFull.newBuilder().putPlayers(playerId.toString(), player))
+                .build();
+
+        ProtocolPackets.DecodedInboundMessage decoded =
+                new ProtobufMessageCodec().decode(envelope.toByteArray());
+        ProtocolPackets.SnapshotFullInboundPacket snapshot =
+                (ProtocolPackets.SnapshotFullInboundPacket) decoded.packet;
+        Map<?, ?> data = (Map<?, ?>) snapshot.players.get(playerId.toString());
+
+        assertEquals("squaremap-source", data.get("positionSourceId"));
+        assertEquals("PLAYER_POSITION_SOURCE_KIND_EXTERNAL_SOURCE", data.get("positionSourceKind"));
+        assertEquals("Squaremap", data.get("positionSourceDisplayName"));
+        assertEquals(1.0, data.get("positionResolution"));
     }
 
     @Test

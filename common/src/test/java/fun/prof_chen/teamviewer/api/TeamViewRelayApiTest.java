@@ -58,6 +58,10 @@ class TeamViewRelayApiTest {
         assertEquals(0.25, player.velocityX());
         assertEquals(20F, player.health());
         assertEquals(PlayerRelation.ENEMY, player.relation());
+        assertEquals(RemotePlayerPositionSourceKind.EXTERNAL_SOURCE, player.positionSource().kind());
+        assertEquals("squaremap-source", player.positionSource().sourceId());
+        assertEquals("Squaremap", player.positionSource().displayName());
+        assertEquals(1.0, player.positionSource().positionResolution());
         assertFalse(manager.getPlayerMark(playerId).automatic(),
                 "marks without source retain manual precedence");
         assertThrows(UnsupportedOperationException.class, () -> first.players().clear());
@@ -158,7 +162,11 @@ class TeamViewRelayApiTest {
                 Map.entry("playerUUID", playerId.toString()),
                 Map.entry("health", 20F), Map.entry("maxHealth", 20F),
                 Map.entry("armor", 8F), Map.entry("isRiding", false),
-                Map.entry("width", 0.6F), Map.entry("height", 1.8F));
+                Map.entry("width", 0.6F), Map.entry("height", 1.8F),
+                Map.entry("positionSourceId", "squaremap-source"),
+                Map.entry("positionSourceKind", "PLAYER_POSITION_SOURCE_KIND_EXTERNAL_SOURCE"),
+                Map.entry("positionSourceDisplayName", "Squaremap"),
+                Map.entry("positionResolution", 1.0));
     }
 
     private static void invoke(NetworkManager manager, String name, Class<?> argumentType, Object argument)

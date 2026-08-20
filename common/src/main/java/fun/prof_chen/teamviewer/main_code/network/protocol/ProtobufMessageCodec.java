@@ -653,6 +653,10 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		if (value.hasIsRiding()) mapped.put("isRiding", value.getIsRiding());
 		if (value.hasWidth()) mapped.put("width", value.getWidth());
 		if (value.hasHeight()) mapped.put("height", value.getHeight());
+		if (value.hasPositionSourceId()) mapped.put("positionSourceId", value.getPositionSourceId());
+		if (value.hasPositionSourceKind()) mapped.put("positionSourceKind", value.getPositionSourceKind().name());
+		if (value.hasPositionSourceDisplayName()) mapped.put("positionSourceDisplayName", value.getPositionSourceDisplayName());
+		if (value.hasPositionResolution()) mapped.put("positionResolution", value.getPositionResolution());
 		return mapped;
 	}
 
@@ -673,6 +677,10 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		if (value.hasIsRiding()) mapped.put("isRiding", value.getIsRiding());
 		if (value.hasWidth()) mapped.put("width", value.getWidth());
 		if (value.hasHeight()) mapped.put("height", value.getHeight());
+		if (value.hasPositionSourceId()) mapped.put("positionSourceId", value.getPositionSourceId());
+		if (value.hasPositionSourceKind()) mapped.put("positionSourceKind", value.getPositionSourceKind().name());
+		if (value.hasPositionSourceDisplayName()) mapped.put("positionSourceDisplayName", value.getPositionSourceDisplayName());
+		if (value.hasPositionResolution()) mapped.put("positionResolution", value.getPositionResolution());
 		return mapped;
 	}
 

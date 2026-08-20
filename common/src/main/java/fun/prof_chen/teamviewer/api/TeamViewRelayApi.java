@@ -10,7 +10,7 @@ import java.util.List;
  * TeamViewRelay's remote-player state.
  */
 public final class TeamViewRelayApi {
-    public static final int API_VERSION = 2;
+    public static final int API_VERSION = 3;
 
     private TeamViewRelayApi() {
     }
@@ -35,7 +35,7 @@ public final class TeamViewRelayApi {
                                 player.x(), player.y(), player.z(),
                                 player.velocityX(), player.velocityY(), player.velocityZ(),
                                 player.health(), player.maxHealth(), player.armor(), player.riding(),
-                                player.width(), player.height(), relation.relation());
+                                player.width(), player.height(), relation.relation(), player.positionSource());
                     })
                     .toList();
             return new RemotePlayerBatch(API_VERSION, true, players);

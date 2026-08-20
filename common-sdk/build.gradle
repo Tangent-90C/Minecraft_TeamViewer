@@ -18,6 +18,8 @@ sourceSets {
             include("fun/prof_chen/teamviewer/api/Attackability.java")
             include("fun/prof_chen/teamviewer/api/PlayerInteractionState.java")
             include("fun/prof_chen/teamviewer/api/RemotePlayerSnapshot.java")
+            include("fun/prof_chen/teamviewer/api/RemotePlayerPositionSource.java")
+            include("fun/prof_chen/teamviewer/api/RemotePlayerPositionSourceKind.java")
             include("fun/prof_chen/teamviewer/api/RemotePlayerView.java")
             include("fun/prof_chen/teamviewer/api/RemotePlayerViewBatch.java")
             include("fun/prof_chen/teamviewer/api/RemotePlayerBatch.java")

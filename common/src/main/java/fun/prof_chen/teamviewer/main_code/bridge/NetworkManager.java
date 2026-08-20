@@ -3,6 +3,8 @@
 package fun.prof_chen.teamviewer.main_code.bridge;
 
 import fun.prof_chen.teamviewer.api.PlayerRelation;
+import fun.prof_chen.teamviewer.api.RemotePlayerPositionSource;
+import fun.prof_chen.teamviewer.api.RemotePlayerPositionSourceKind;
 import fun.prof_chen.teamviewer.api.RemotePlayerSnapshot;
 import fun.prof_chen.teamviewer.api.LastSeenPlayerSnapshot;
 
@@ -2343,9 +2345,25 @@ public class NetworkManager {
 
 		PlayerMarkState mark = remotePlayerMarks.get(playerId.toString().toLowerCase());
 		PlayerRelation relation = mark == null ? PlayerRelation.NEUTRAL : relationFromTeam(mark.team());
+		RemotePlayerPositionSource positionSource = remotePlayerPositionSource(data);
 		return new RemotePlayerSnapshot(playerId, playerName, dimension, x, y, z,
 			velocityX, velocityY, velocityZ, health.floatValue(), maxHealth.floatValue(),
-			armor.floatValue(), riding, width.floatValue(), height.floatValue(), relation);
+			armor.floatValue(), riding, width.floatValue(), height.floatValue(), relation, positionSource);
+	}
+
+	private RemotePlayerPositionSource remotePlayerPositionSource(Map<String, Object> data) {
+		String sourceId = normalizeNullableText(data.get("positionSourceId"));
+		String displayName = normalizeNullableText(data.get("positionSourceDisplayName"));
+		Double resolution = finite(getAsDouble(data.get("positionResolution")));
+		if (resolution != null && resolution <= 0.0) resolution = null;
+		String rawKind = normalizeNullableText(data.get("positionSourceKind"));
+		RemotePlayerPositionSourceKind kind = switch (rawKind == null ? "" : rawKind) {
+			case "PLAYER_POSITION_SOURCE_KIND_SELF_REPORT" -> RemotePlayerPositionSourceKind.SELF_REPORT;
+			case "PLAYER_POSITION_SOURCE_KIND_PLAYER_REPORT" -> RemotePlayerPositionSourceKind.PLAYER_REPORT;
+			case "PLAYER_POSITION_SOURCE_KIND_EXTERNAL_SOURCE" -> RemotePlayerPositionSourceKind.EXTERNAL_SOURCE;
+			default -> RemotePlayerPositionSourceKind.UNKNOWN;
+		};
+		return new RemotePlayerPositionSource(kind, sourceId, displayName, resolution);
 	}
 
 	private static PlayerRelation relationFromTeam(String team) {
