@@ -2,7 +2,10 @@ package fun.prof_chen.teamviewer.main_code.network.protocol;
 
 import fun.prof_chen.teamviewer.main_code.network.proto.WireEnvelope;
 import fun.prof_chen.teamviewer.main_code.network.proto.PlayerData;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerDelta;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerUpsert;
 import fun.prof_chen.teamviewer.main_code.network.proto.PlayerPositionSourceKind;
+import fun.prof_chen.teamviewer.main_code.network.proto.Patch;
 import fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull;
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +49,30 @@ class ProtobufRuntimeCompatibilityTest {
         assertEquals("PLAYER_POSITION_SOURCE_KIND_EXTERNAL_SOURCE", data.get("positionSourceKind"));
         assertEquals("Squaremap", data.get("positionSourceDisplayName"));
         assertEquals(1.0, data.get("positionResolution"));
+    }
+
+    @Test
+    void decodesClearFieldsAsExplicitNulls() {
+        UUID playerId = UUID.randomUUID();
+        WireEnvelope envelope = WireEnvelope.newBuilder()
+                .setPatch(Patch.newBuilder().setPlayers(
+                        fun.prof_chen.teamviewer.main_code.network.proto.PlayerPatchScope.newBuilder()
+                                .addUpsert(PlayerUpsert.newBuilder()
+                                        .setId(playerId.toString())
+                                        .setData(PlayerDelta.newBuilder().setX(2.0))
+                                        .addClearFields("positionSourceId"))))
+                .build();
+
+        ProtocolPackets.DecodedInboundMessage decoded =
+                new ProtobufMessageCodec().decode(envelope.toByteArray());
+        ProtocolPackets.PatchInboundPacket patch =
+                (ProtocolPackets.PatchInboundPacket) decoded.packet;
+        Map<?, ?> scope = (Map<?, ?>) patch.players.get("upsert");
+        Map<?, ?> data = (Map<?, ?>) scope.get(playerId.toString());
+
+        assertEquals(2.0, data.get("x"));
+        assertTrue(data.containsKey("positionSourceId"));
+        assertEquals(null, data.get("positionSourceId"));
     }
 
     @Test

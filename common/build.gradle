@@ -26,7 +26,7 @@ def protoModuleDir = rootProject.file("third_party/TeamViewRelay-Protocol")
 def protoInputDir = new File(protoModuleDir, "proto")
 def bufTemplateFile = file("buf.gen.yaml")
 def generatedProtoJavaDir = file("${buildDir}/generated/source/proto/main/java")
-def resolvedBufBinary = System.getenv("BUF_BIN") ?: (file("/tmp/buf/bin/buf").exists() ? "/tmp/buf/bin/buf" : "buf")
+def resolvedBufBinary = System.getenv("BUF_BIN") ?: (file("/tmp/buf/bin/buf").isFile() ? "/tmp/buf/bin/buf" : "buf")
 def protoSources = project.fileTree(protoInputDir) {
     include("**/*.proto")
 }

@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -76,6 +77,22 @@ class TeamViewRelayApiTest {
         RemotePlayerSnapshot patched = TeamViewRelayApi.remotePlayers().players().get(0);
         assertEquals(11.25, patched.x());
         assertEquals(PlayerRelation.FRIENDLY, patched.relation());
+
+        Map<String, Object> clearSource = new HashMap<>();
+        clearSource.put("positionSourceId", null);
+        clearSource.put("positionSourceKind", null);
+        clearSource.put("positionSourceDisplayName", null);
+        clearSource.put("positionResolution", null);
+        ProtocolPackets.PatchInboundPacket clearPatch = new ProtocolPackets.PatchInboundPacket();
+        clearPatch.players = Map.of("upsert", Map.of(
+                playerId.toString(), Map.of("data", clearSource)));
+        invoke(manager, "applyPatch", ProtocolPackets.PatchInboundPacket.class, clearPatch);
+
+        RemotePlayerPositionSource cleared = TeamViewRelayApi.remotePlayers().players().get(0).positionSource();
+        assertEquals(RemotePlayerPositionSourceKind.UNKNOWN, cleared.kind());
+        assertNull(cleared.sourceId());
+        assertNull(cleared.displayName());
+        assertNull(cleared.positionResolution());
 
         ProtocolPackets.PatchInboundPacket delete = new ProtocolPackets.PatchInboundPacket();
         delete.players = Map.of("delete", java.util.List.of(playerId.toString()));

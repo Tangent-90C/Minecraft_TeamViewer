@@ -522,7 +522,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 			if (item.getId().isBlank()) {
 				continue;
 			}
-			upsert.put(item.getId(), playerDeltaToMap(item.getData()));
+			Map<String, Object> data = playerDeltaToMap(item.getData());
+			applyClearFields(data, item.getClearFieldsList());
+			upsert.put(item.getId(), data);
 		}
 		patch.put("upsert", upsert);
 		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
@@ -536,7 +538,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 			if (item.getId().isBlank()) {
 				continue;
 			}
-			upsert.put(item.getId(), entityDeltaToMap(item.getData()));
+			Map<String, Object> data = entityDeltaToMap(item.getData());
+			applyClearFields(data, item.getClearFieldsList());
+			upsert.put(item.getId(), data);
 		}
 		patch.put("upsert", upsert);
 		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
@@ -550,7 +554,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 			if (item.getId().isBlank()) {
 				continue;
 			}
-			upsert.put(item.getId(), waypointDeltaToMap(item.getData()));
+			Map<String, Object> data = waypointDeltaToMap(item.getData());
+			applyClearFields(data, item.getClearFieldsList());
+			upsert.put(item.getId(), data);
 		}
 		patch.put("upsert", upsert);
 		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
@@ -565,7 +571,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 			if (chunkId == null) {
 				continue;
 			}
-			upsert.put(chunkId, battleChunkValueToMap(item.getData(), item.getRef()));
+			Map<String, Object> data = battleChunkValueToMap(item.getData(), item.getRef());
+			applyClearFields(data, item.getClearFieldsList());
+			upsert.put(chunkId, data);
 		}
 		patch.put("upsert", upsert);
 		patch.put("delete", decodeBattleChunkDeleteRefs(scope.getDeleteList()));
@@ -579,7 +587,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 			if (item.getId().isBlank()) {
 				continue;
 			}
-			upsert.put(item.getId(), playerMarkToMap(item.getData()));
+			Map<String, Object> data = playerMarkToMap(item.getData());
+			applyClearFields(data, item.getClearFieldsList());
+			upsert.put(item.getId(), data);
 		}
 		patch.put("upsert", upsert);
 		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
@@ -591,12 +601,25 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		Map<String, Object> upsert = new LinkedHashMap<>();
 		for (LastSeenPlayerUpsert item : scope.getUpsertList()) {
 			if (!item.getId().isBlank()) {
-				upsert.put(item.getId(), lastSeenPlayerDataToMap(item.getData()));
+				Map<String, Object> data = lastSeenPlayerDataToMap(item.getData());
+				applyClearFields(data, item.getClearFieldsList());
+				upsert.put(item.getId(), data);
 			}
 		}
 		patch.put("upsert", upsert);
 		patch.put("delete", new ArrayList<>(scope.getDeleteList()));
 		return patch;
+	}
+
+	private void applyClearFields(Map<String, Object> data, List<String> clearFields) {
+		if (data == null || clearFields == null) {
+			return;
+		}
+		for (String fieldName : clearFields) {
+			if (fieldName != null && !fieldName.isBlank()) {
+				data.put(fieldName, null);
+			}
+		}
 	}
 
 	private Map<String, Object> lastSeenPlayerDataToMap(LastSeenPlayerData value) {

@@ -2809,7 +2809,7 @@ public class NetworkManager {
 					mergedData.putAll(existing);
 				}
 
-				mergedData.putAll(data);
+				applyDeltaFields(mergedData, data);
 
 				RemotePlayerInfo info = buildRemotePlayerInfo(playerId, mergedData, fallbackDimension, entry.getKey());
 				if (info == null) {
@@ -2822,6 +2822,19 @@ public class NetworkManager {
 				lastSeenPlayerDataCache.remove(playerId.toString());
 			} catch (Exception e) {
 				LOGGER.error("TeamViewRelay Network - Error applying player patch: {}", e.getMessage());
+			}
+		}
+	}
+
+	private void applyDeltaFields(Map<String, Object> target, Map<String, Object> delta) {
+		if (target == null || delta == null) {
+			return;
+		}
+		for (Map.Entry<String, Object> entry : delta.entrySet()) {
+			if (entry.getValue() == null) {
+				target.remove(entry.getKey());
+			} else {
+				target.put(entry.getKey(), entry.getValue());
 			}
 		}
 	}
@@ -3108,11 +3121,16 @@ public class NetworkManager {
 		for (Map.Entry<String, Object> entry : waypoints.entrySet()) {
 			try {
 				String waypointId = entry.getKey();
-				Map<String, Object> data = extractDataMap(objectMap(entry.getValue()));
-				if (data.isEmpty()) {
+				Map<String, Object> delta = extractDataMap(objectMap(entry.getValue()));
+				if (delta.isEmpty()) {
 					continue;
 				}
-
+				Map<String, Object> data = new HashMap<>();
+				Map<String, Object> existing = remoteWaypointDataCache.get(waypointId);
+				if (existing != null) {
+					data.putAll(existing);
+				}
+				applyDeltaFields(data, delta);
 				remoteWaypointDataCache.put(waypointId, new HashMap<>(data));
 
 				if (!data.containsKey("x") || !data.containsKey("y") || !data.containsKey("z")) {
@@ -3266,7 +3284,7 @@ public class NetworkManager {
 				if (existing != null) {
 					merged.putAll(existing);
 				}
-				merged.putAll(data);
+				applyDeltaFields(merged, data);
 				remoteEntityDataCache.put(entityId, merged);
 			} catch (Exception e) {
 				LOGGER.error("TeamViewRelay Network - Error applying entity patch: {}", e.getMessage());
@@ -3287,7 +3305,7 @@ public class NetworkManager {
 				if (existing != null) {
 					merged.putAll(normalizeBattleChunkCoreData(existing));
 				}
-				merged.putAll(normalizeBattleChunkCoreData(data));
+				applyDeltaFields(merged, normalizeBattleChunkCoreData(data));
 				if (!merged.isEmpty()) {
 					remoteBattleChunkDataCache.put(chunkId, merged);
 				}
