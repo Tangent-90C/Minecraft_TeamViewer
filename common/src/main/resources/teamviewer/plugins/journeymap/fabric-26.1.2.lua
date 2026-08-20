@@ -20,7 +20,7 @@ local function initialize()
   local ok, value = pcall(function()
     return {
       WaypointFactory = java.type("journeymap.api.v2.common.waypoint.WaypointFactory"),
-      Instant = java.type("java.time.Instant"),
+      LastSeenTimeFormatter = java.type("fun.prof_chen.teamviewer.main_code.time.LastSeenTimeFormatter"),
       iterableIterator = java.method("java.lang.Iterable", "iterator"),
       iteratorHasNext = java.method("java.util.Iterator", "hasNext"),
       iteratorNext = java.method("java.util.Iterator", "next")
@@ -134,8 +134,8 @@ local function sync_last_seen(players, enabled)
     if player.position ~= nil and (player.dimension == nil or player.dimension == ""
         or player.dimension == world.dimension) then
       local id = "last-seen-marker:" .. player.uuid; active[id] = true
-      local utc = tostring(handles.Instant:ofEpochMilli(player.lastSeenAtUtcMs))
-      upsert(managed_last_seen, id, "[TV Last] " .. (player.name or "Player") .. " @ " .. utc,
+      local local_time = handles.LastSeenTimeFormatter:format(player.lastSeenAtUtcMs)
+      upsert(managed_last_seen, id, "[TV Last] " .. (player.name or "Player") .. " @ " .. local_time,
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
           world.dimension, 0xFF9A26, "marker")
     end

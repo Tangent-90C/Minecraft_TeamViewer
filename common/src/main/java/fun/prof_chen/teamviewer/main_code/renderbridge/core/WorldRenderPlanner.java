@@ -13,15 +13,13 @@ import fun.prof_chen.teamviewer.main_code.renderbridge.model.AxisAlignedBox3D;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderCommand;
 import fun.prof_chen.teamviewer.main_code.renderbridge.model.WorldRenderFrame;
 import fun.prof_chen.teamviewer.main_code.sync.api.WaypointSyncGateway;
+import fun.prof_chen.teamviewer.main_code.time.LastSeenTimeFormatter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.function.Function;
 
 /** All TeamViewRelay world-render decisions, independent of Minecraft rendering APIs. */
@@ -29,8 +27,6 @@ public final class WorldRenderPlanner {
     private static final int LAST_SEEN_BOX_COLOR = 0xBFFF9A26;
     private static final int LAST_SEEN_LINE_COLOR = 0xFFFFB347;
     private static final double LAST_SEEN_LABEL_DISTANCE = 512D;
-    private static final DateTimeFormatter LAST_SEEN_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC);
     private final Config config;
     private final Function<UUID, PlayerRelationView> relationResolver;
     private final WaypointSyncGateway waypointGateway;
@@ -103,7 +99,7 @@ public final class WorldRenderPlanner {
             }
             if (playerDistance <= LAST_SEEN_LABEL_DISTANCE) {
                 String name = player.name().length() > 16 ? player.name().substring(0, 16) : player.name();
-                String time = LAST_SEEN_TIME_FORMAT.format(Instant.ofEpochMilli(player.lastSeenAtUtcMs()));
+                String time = LastSeenTimeFormatter.format(player.lastSeenAtUtcMs());
                 WorldLabelVectorizer.append(commands, name + "\n" + time,
                         add(position, new Position3D(0, 2.15, 0)), world.lookDirection(),
                         world.cameraUpDirection(), playerDistance, LAST_SEEN_LINE_COLOR, depthTest);

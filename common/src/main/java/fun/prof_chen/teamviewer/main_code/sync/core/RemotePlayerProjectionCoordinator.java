@@ -98,7 +98,8 @@ public final class RemotePlayerProjectionCoordinator {
 		for (Map.Entry<UUID, LastSeenPlayerInfo> entry : players.entrySet()) {
 			LastSeenPlayerInfo value = entry.getValue();
 			if (value == null || value.uuid() == null || value.position() == null
-					|| value.uuid().equals(world.localPlayerId()) || onlinePlayers.containsKey(value.uuid())
+					|| value.uuid().equals(world.localPlayerId()) || entry.getKey().equals(world.localPlayerId())
+					|| onlinePlayers.containsKey(value.uuid()) || onlinePlayers.containsKey(entry.getKey())
 					|| (value.dimension() != null && !value.dimension().isBlank()
 					&& !value.dimension().equals(world.dimension()))) continue;
 			result.put(entry.getKey(), value);

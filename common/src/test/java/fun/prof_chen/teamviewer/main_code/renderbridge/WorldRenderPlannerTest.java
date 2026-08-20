@@ -78,7 +78,7 @@ class WorldRenderPlannerTest {
     }
 
     @Test
-    void lastSeenRenderingIsOptInAndIncludesUtcVectorLabel() {
+    void lastSeenRenderingIsOptInAndIncludesLocalTimeVectorLabel() {
         Config config = new Config();
         LastSeenPlayerInfo player = new LastSeenPlayerInfo(REMOTE, new Position3D(10, 64, 10),
                 "minecraft:overworld", "remote", 1_700_000_004_000L,
@@ -91,7 +91,7 @@ class WorldRenderPlannerTest {
         var commands = planner.plan(true, world(), Map.of(), Map.of(REMOTE, player), Map.of()).commands();
         assertTrue(commands.stream().anyMatch(WorldRenderCommand.Box.class::isInstance));
         assertTrue(commands.stream().filter(WorldRenderCommand.Line.class::isInstance).count() > 2,
-                "tracer plus vectorized name/UTC time should be present");
+                "tracer plus vectorized name/local time should be present");
     }
 
     private static ClientWorldSnapshot world() {

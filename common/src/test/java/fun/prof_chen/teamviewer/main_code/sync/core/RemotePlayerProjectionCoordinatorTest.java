@@ -10,8 +10,10 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRole;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationSupportStatus;
 import fun.prof_chen.teamviewer.main_code.client.sdk.PluginRuntimeStatus;
 import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.RemotePlayerProjection;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedLastSeenPlayerRepository;
 import fun.prof_chen.teamviewer.main_code.sync.impl.repository.MapBackedRemotePlayerRepository;
 import org.junit.jupiter.api.Test;
 
@@ -103,6 +105,38 @@ class RemotePlayerProjectionCoordinatorTest {
         assertTrue(!projection.needsReconcile());
     }
 
+    @Test
+    void filtersLocalLastSeenRecordsAndClearsNativeHistory() {
+        UUID localId = UUID.randomUUID();
+        UUID remoteId = UUID.randomUUID();
+        UUID aliasId = UUID.randomUUID();
+        Map<UUID, LastSeenPlayerInfo> history = new HashMap<>();
+        history.put(localId, lastSeen(remoteId, "Remote under local key"));
+        history.put(aliasId, lastSeen(localId, "Local under alias key"));
+        history.put(remoteId, lastSeen(remoteId, "Remote"));
+        IntegrationRegistry registry = new IntegrationRegistry();
+        LastSeenProjection projection = new LastSeenProjection();
+        register(registry, projection.id(), "plugin.last-seen", projection);
+        RemotePlayerProjectionCoordinator coordinator = new RemotePlayerProjectionCoordinator(registry);
+        ClientWorldSnapshot world = new ClientWorldSnapshot(localId, "Local", true,
+                "minecraft:overworld", -64, new Position3D(0, 64, 0), new Position3D(0, 65.6, 0),
+                new Position3D(0, 0, 1), new Position3D(0, 1, 0), List.of(), List.of());
+
+        coordinator.tick(new MapBackedRemotePlayerRepository(new HashMap<>()),
+                new MapBackedLastSeenPlayerRepository(history), true, true, world);
+
+        assertEquals(Map.of(remoteId, history.get(remoteId)), projection.lastSeen);
+        coordinator.clear();
+        assertTrue(projection.lastSeen.isEmpty());
+        assertTrue(!projection.lastSeenEnabled);
+    }
+
+    private static LastSeenPlayerInfo lastSeen(UUID id, String name) {
+        return new LastSeenPlayerInfo(id, new Position3D(4, 65, 8),
+                "minecraft:overworld", name, 1_700_000_004_000L,
+                1_700_000_000_000L, 1_700_000_005_000L);
+    }
+
     private static void register(
             IntegrationRegistry registry, String id, String pluginId, RemotePlayerProjection projection) {
         registry.registerNative(new IntegrationCapability(
@@ -163,5 +197,18 @@ class RemotePlayerProjectionCoordinatorTest {
             }
         }
         @Override public boolean needsReconcile() { return pending; }
+    }
+
+    private static final class LastSeenProjection implements RemotePlayerProjection {
+        private Map<UUID, LastSeenPlayerInfo> lastSeen = Map.of();
+        private boolean lastSeenEnabled;
+
+        @Override public String id() { return "last-seen"; }
+        @Override public boolean isAvailable() { return true; }
+        @Override public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) { }
+        @Override public void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
+            lastSeen = Map.copyOf(players);
+            lastSeenEnabled = enabled;
+        }
     }
 }

@@ -2,11 +2,11 @@
 -- Xaero 旧版路标会话适配器（1.19.3 与 1.20.3 固定工件）。
 
 local WORLD_ID, MINIMAP_ID = "xaero-worldmap", "xaero-minimap"
-local TRACKER_ID, LAST_SEEN_TRACKER_ID, WAYPOINT_PREFIX =
-    "teamviewer_remote_players", "teamviewer_last_seen_players", "[TV] "
+local TRACKER_ID, LAST_SEEN_TRACKER_ID, WAYPOINT_PREFIX, LAST_SEEN_WAYPOINT_PREFIX =
+    "teamviewer_remote_players", "teamviewer_last_seen_players", "[TV] ", "[TV Last] "
 local world_handles, minimap_handles, world_error, minimap_error = nil, nil, nil, nil
 local tracked_players, tracked_last_seen, managed_waypoints, managed_last_seen = nil, nil, {}, {}
-local tracker_registered, last_seen_minimap_reconcile = false, false
+local tracker_registered, last_seen_minimap_reconcile, last_seen_context_list = false, false, nil
 local client_objects = services.get("minecraft.client_objects")
 
 local function load_world()
@@ -26,7 +26,7 @@ local function load_minimap()
   local ok, value = pcall(function() return {
     Session = java.type("xaero.common.XaeroMinimapSession"),
     Waypoint = java.type("xaero.common.minimap.waypoints.Waypoint"),
-    Instant = java.type("java.time.Instant"),
+    LastSeenTimeFormatter = java.type("fun.prof_chen.teamviewer.main_code.time.LastSeenTimeFormatter"),
     iterableIterator = java.method("java.lang.Iterable", "iterator"),
     iteratorHasNext = java.method("java.util.Iterator", "hasNext"),
     iteratorNext = java.method("java.util.Iterator", "next")
@@ -123,6 +123,26 @@ local function changed(value)
   pcall(function() value.manager:updateWaypoints() end)
 end
 
+local function remove_stored_last_seen(value)
+  local stale, iterator = {}, minimap_handles.iterableIterator:invoke(value.list, nil)
+  while minimap_handles.iteratorHasNext:invoke(iterator, nil) == true do
+    local waypoint = minimap_handles.iteratorNext:invoke(iterator, nil)
+    local name = tostring(waypoint:getName() or "")
+    if string.sub(name, 1, #LAST_SEEN_WAYPOINT_PREFIX) == LAST_SEEN_WAYPOINT_PREFIX then
+      table.insert(stale, waypoint)
+    end
+  end
+  for _, waypoint in ipairs(stale) do value.list:remove(waypoint) end
+  return #stale > 0
+end
+
+local function reconcile_last_seen_context(value)
+  if last_seen_context_list == value.list then return false end
+  managed_last_seen = {}
+  last_seen_context_list = value.list
+  return remove_stored_last_seen(value)
+end
+
 local function is_managed(value)
   for _, managed in pairs(managed_waypoints) do if managed == value then return true end end
   for _, managed in pairs(managed_last_seen) do if managed.object == value then return true end end
@@ -131,21 +151,26 @@ end
 
 local function clear_last_seen_minimap()
   local value = context()
-  if value == nil then last_seen_minimap_reconcile = next(managed_last_seen) ~= nil; return end
+  if value == nil then last_seen_minimap_reconcile = true; return end
+  local dirty = reconcile_last_seen_context(value)
   for _, state in pairs(managed_last_seen) do value.list:remove(state.object) end
-  managed_last_seen = {}; last_seen_minimap_reconcile = false; changed(value)
+  if remove_stored_last_seen(value) then dirty = true end
+  if next(managed_last_seen) ~= nil then dirty = true end
+  managed_last_seen = {}; last_seen_minimap_reconcile = false
+  if dirty then changed(value) end
 end
 
 local function sync_last_seen_minimap(players, enabled)
   if not enabled then clear_last_seen_minimap(); return end
   local value = context()
   if value == nil then last_seen_minimap_reconcile = true; return end
-  local active, dirty = {}, false
+  local active, dirty = {}, reconcile_last_seen_context(value)
+  if next(managed_last_seen) == nil and remove_stored_last_seen(value) then dirty = true end
   for _, player in pairs(players or {}) do
     if player.position ~= nil then
       local id = "last-seen:" .. player.uuid
-      local utc = tostring(minimap_handles.Instant:ofEpochMilli(player.lastSeenAtUtcMs))
-      local name = "[TV Last] " .. (player.name or "Player") .. " @ " .. utc
+      local local_time = minimap_handles.LastSeenTimeFormatter:format(player.lastSeenAtUtcMs)
+      local name = LAST_SEEN_WAYPOINT_PREFIX .. (player.name or "Player") .. " @ " .. local_time
       local signature = name .. ":" .. player.position.x .. ":" .. player.position.y .. ":" .. player.position.z
       active[id] = true
       local state = managed_last_seen[id]
@@ -170,7 +195,8 @@ local function list_local()
   while minimap_handles.iteratorHasNext:invoke(iterator, nil) == true do
     local waypoint = minimap_handles.iteratorNext:invoke(iterator, nil)
     local name = tostring(waypoint:getName() or "")
-    if not is_managed(waypoint) and string.sub(name, 1, #WAYPOINT_PREFIX) ~= WAYPOINT_PREFIX then
+    if not is_managed(waypoint) and string.sub(name, 1, #WAYPOINT_PREFIX) ~= WAYPOINT_PREFIX
+        and string.sub(name, 1, #LAST_SEEN_WAYPOINT_PREFIX) ~= LAST_SEEN_WAYPOINT_PREFIX then
       table.insert(result, {nativeId = name, name = name, symbol = tostring(waypoint:getSymbol() or "W"),
         x = waypoint:getX(), y = waypoint:getY(), z = waypoint:getZ(), dimension = "",
         color = waypoint:getColor()})
