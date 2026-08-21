@@ -435,8 +435,14 @@ public final class IntegrationPluginManager {
                 Descriptor descriptor = new Descriptor(manifest, candidate);
                 descriptor.enabled = stateStore.enabled(manifest);
                 if (candidate.builtIn && IntegrationIds.PLUGIN_JOURNEYMAP.equals(manifest.id())) {
+                    stateStore.migrateBooleanFirst(manifest.id(), "show_online_map_markers",
+                            List.of("show_map_markers", "show_remote_players"), true);
+                    stateStore.migrateBooleanFirst(manifest.id(), "show_online_world_beacons",
+                            List.of("show_beacons", "show_remote_players"), true);
                     stateStore.migrateBooleanOr(manifest.id(), "show_remote_players",
-                            List.of("show_map_markers", "show_beacons"), true);
+                            List.of("show_online_map_markers", "show_online_world_beacons"), true);
+                    stateStore.migrateBooleanOr(manifest.id(), "show_last_seen_players",
+                            List.of("show_offline_map_markers", "show_offline_world_beacons"), true);
                 }
                 descriptor.settings.putAll(stateStore.settings(manifest));
                 descriptor.persistentState.putAll(stateStore.data(manifest.id()));

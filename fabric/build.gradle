@@ -389,6 +389,16 @@ def verifyMapPluginContracts = tasks.register("verifyMapPluginContracts") {
                 }
                 requireTokens(factory, "JourneyMap ${minecraftTargetVersion} WaypointFactory",
                         [minecraftTargetVersion == "26.2" ? "createWaypoint" : "createClientWaypoint"])
+                if (["26.1.2", "26.2"].contains(minecraftTargetVersion)) {
+                    def group = requireClass(jar, "journeymap/api/v2/common/waypoint/WaypointGroup.class")
+                    requireTokens(requireClass(jar, "journeymap/api/v2/client/IClientAPI.class"),
+                            "JourneyMap ${minecraftTargetVersion} waypoint groups",
+                            ["getWaypointGroupByName", "addWaypointGroup"])
+                    requireTokens(factory, "JourneyMap ${minecraftTargetVersion} WaypointFactory groups",
+                            ["createWaypointGroup"])
+                    requireTokens(group, "JourneyMap ${minecraftTargetVersion} WaypointGroup",
+                            ["setTag", "setPersistent", "addWaypoint"])
+                }
             }
         }
 

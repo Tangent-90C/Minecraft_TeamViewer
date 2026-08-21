@@ -91,6 +91,25 @@ final class PluginStateStore {
         save();
     }
 
+    synchronized void migrateBooleanFirst(
+            String pluginId, String targetKey, List<String> sourceKeys, boolean defaultValue) {
+        Entry entry = entries.computeIfAbsent(pluginId,
+                ignored -> new Entry(true, new LinkedHashMap<>(), new LinkedHashMap<>()));
+        entry.normalize();
+        if (entry.settings.containsKey(targetKey)) return;
+        for (String sourceKey : sourceKeys) {
+            if (!entry.settings.containsKey(sourceKey)) continue;
+            Object raw = entry.settings.get(sourceKey);
+            boolean value = raw instanceof Boolean booleanValue
+                    ? booleanValue : Boolean.parseBoolean(String.valueOf(raw));
+            entry.settings.put(targetKey, value);
+            save();
+            return;
+        }
+        entry.settings.put(targetKey, defaultValue);
+        save();
+    }
+
     private void load() {
         if (!Files.isRegularFile(path)) return;
         try {

@@ -9,8 +9,12 @@ local client_objects = services.get("minecraft.client_objects")
 local function configure_settings(available)
   tv.configure_setting({key = "show_remote_players", visible = available, enabled = available,
     detail = "Map and world visibility follow JourneyMap's global waypoint settings"})
-  tv.configure_setting({key = "show_map_markers", visible = false, enabled = false})
-  tv.configure_setting({key = "show_beacons", visible = false, enabled = false})
+  tv.configure_setting({key = "show_last_seen_players", visible = available, enabled = available,
+    detail = "Map and world visibility follow JourneyMap's global waypoint settings"})
+  tv.configure_setting({key = "show_online_map_markers", visible = false, enabled = false})
+  tv.configure_setting({key = "show_online_world_beacons", visible = false, enabled = false})
+  tv.configure_setting({key = "show_offline_map_markers", visible = false, enabled = false})
+  tv.configure_setting({key = "show_offline_world_beacons", visible = false, enabled = false})
 end
 
 configure_settings(mods.is_loaded(MOD_ID))
@@ -138,7 +142,7 @@ local function sync_players(players, enabled, relations)
 end
 
 local function sync_last_seen(players, enabled, relations)
-  if not enabled or probe().status ~= "AVAILABLE" then clear(managed_last_seen); return end
+  if not enabled or not settings.show_last_seen_players or probe().status ~= "AVAILABLE" then clear(managed_last_seen); return end
   local world, active = snapshots.world(), {}
   for _, player in pairs(players or {}) do
     if player.position ~= nil and (player.dimension == nil or player.dimension == ""
@@ -191,4 +195,5 @@ tv.on_enable(function() initialize() end)
 tv.on_disable(function() clear(managed_players); clear(managed_last_seen); clear(managed_waypoints) end)
 tv.on_settings_changed(function(key, value)
   if key == "show_remote_players" and not value then clear(managed_players) end
+  if key == "show_last_seen_players" and not value then clear(managed_last_seen) end
 end)

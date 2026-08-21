@@ -9,6 +9,16 @@ local tracked_players, tracked_last_seen, managed_waypoints, managed_last_seen =
 local tracker_registered, last_seen_minimap_reconcile, last_seen_context_list = false, false, nil
 local client_objects = services.get("minecraft.client_objects")
 
+local function configure_settings()
+  local world_available = mods.is_loaded("xaeroworldmap")
+  local minimap_available = mods.is_loaded("xaerominimap")
+  tv.configure_setting({key = "show_online_world_map", visible = world_available, enabled = world_available})
+  tv.configure_setting({key = "show_offline_world_map", visible = world_available, enabled = world_available})
+  tv.configure_setting({key = "show_offline_minimap", visible = minimap_available, enabled = minimap_available})
+end
+
+configure_settings()
+
 local function load_world()
   if world_handles ~= nil or world_error ~= nil then return world_handles ~= nil end
   local ok, value = pcall(function() return {
@@ -230,10 +240,16 @@ local function clear_remote()
 end
 
 tv.register_remote_player_projection({id = WORLD_ID, probe = world_probe,
-  sync = sync_players, sync_last_seen = sync_last_seen_world,
+  sync = function(players, enabled) sync_players(players, enabled and settings.show_online_world_map) end,
+  sync_last_seen = function(players, enabled)
+    sync_last_seen_world(players, enabled and settings.show_offline_world_map)
+  end,
   clear = function() sync_players({}, false) end})
 tv.register_remote_player_projection({id = "xaero-last-seen-minimap", probe = minimap_probe,
-  sync = function(players, enabled) end, sync_last_seen = sync_last_seen_minimap,
+  sync = function(players, enabled) end,
+  sync_last_seen = function(players, enabled)
+    sync_last_seen_minimap(players, enabled and settings.show_offline_minimap)
+  end,
   clear = clear_last_seen_minimap,
   needs_reconcile = function() return last_seen_minimap_reconcile end})
 tv.register_shared_waypoint_adapter({id = MINIMAP_ID, probe = minimap_probe,
@@ -242,4 +258,8 @@ tv.register_shared_waypoint_adapter({id = MINIMAP_ID, probe = minimap_probe,
 tv.on_enable(function() install_tracker() end)
 tv.on_disable(function() sync_players({}, false); sync_last_seen_world({}, false);
   clear_last_seen_minimap(); clear_remote() end)
-tv.on_settings_changed(function(key, value) end)
+tv.on_settings_changed(function(key, value)
+  if key == "show_online_world_map" and not value then sync_players({}, false) end
+  if key == "show_offline_world_map" and not value then sync_last_seen_world({}, false) end
+  if key == "show_offline_minimap" and not value then clear_last_seen_minimap() end
+end)

@@ -12,6 +12,16 @@ local tracker_registered = false
 local last_seen_minimap_reconcile, last_seen_context_set = false, nil
 local client_objects = services.get("minecraft.client_objects")
 
+local function configure_settings()
+  local world_available = mods.is_loaded("xaeroworldmap")
+  local minimap_available = mods.is_loaded("xaerominimap")
+  tv.configure_setting({key = "show_online_world_map", visible = world_available, enabled = world_available})
+  tv.configure_setting({key = "show_offline_world_map", visible = world_available, enabled = world_available})
+  tv.configure_setting({key = "show_offline_minimap", visible = minimap_available, enabled = minimap_available})
+end
+
+configure_settings()
+
 -- 1. Cache external API handles / 缓存外部 API 句柄
 local function load_world_handles()
   if world_handles ~= nil or world_handle_error ~= nil then return world_handles ~= nil end
@@ -299,12 +309,18 @@ end
 -- 5. Capability registration and cleanup / 能力注册与清理
 tv.register_remote_player_projection({
   id = WORLD_ID, probe = world_probe,
-  sync = sync_world_map, sync_last_seen = sync_last_seen_world_map,
+  sync = function(players, enabled) sync_world_map(players, enabled and settings.show_online_world_map) end,
+  sync_last_seen = function(players, enabled)
+    sync_last_seen_world_map(players, enabled and settings.show_offline_world_map)
+  end,
   clear = function() sync_world_map({}, false) end
 })
 tv.register_remote_player_projection({
   id = "xaero-last-seen-minimap", probe = minimap_probe,
-  sync = function(players, enabled) end, sync_last_seen = sync_last_seen_minimap,
+  sync = function(players, enabled) end,
+  sync_last_seen = function(players, enabled, relations)
+    sync_last_seen_minimap(players, enabled and settings.show_offline_minimap, relations)
+  end,
   clear = clear_last_seen_minimap,
   needs_reconcile = function() return last_seen_minimap_reconcile end
 })
@@ -315,4 +331,8 @@ tv.register_shared_waypoint_adapter({
 tv.on_enable(function() install_tracker() end)
 tv.on_disable(function() sync_world_map({}, false); sync_last_seen_world_map({}, false);
   clear_last_seen_minimap(); clear_remote() end)
-tv.on_settings_changed(function(key, value) end)
+tv.on_settings_changed(function(key, value)
+  if key == "show_online_world_map" and not value then sync_world_map({}, false) end
+  if key == "show_offline_world_map" and not value then sync_last_seen_world_map({}, false) end
+  if key == "show_offline_minimap" and not value then clear_last_seen_minimap() end
+end)

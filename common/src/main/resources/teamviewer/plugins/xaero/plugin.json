@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "teamviewer.xaero",
   "name": "Xaero Map Integration",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "entry": "main.lua",
   "documentation": "README.md",
   "entrypoints": [
@@ -23,5 +23,9 @@
     {"id": "xaero-minimap", "role": "shared-waypoint", "name": "Xaero Minimap Waypoints"},
     {"id": "xaero-last-seen-minimap", "role": "remote-player", "name": "Xaero Minimap Last-seen Players"}
   ],
-  "settings": []
+  "settings": [
+    {"key": "show_online_world_map", "type": "boolean", "name": "Show online Relay players on the World Map", "defaultValue": true, "restartRequired": false},
+    {"key": "show_offline_world_map", "type": "boolean", "name": "Show offline Relay players on the World Map", "defaultValue": true, "restartRequired": false},
+    {"key": "show_offline_minimap", "type": "boolean", "name": "Show offline Relay players on the Minimap", "defaultValue": true, "restartRequired": false}
+  ]
 }

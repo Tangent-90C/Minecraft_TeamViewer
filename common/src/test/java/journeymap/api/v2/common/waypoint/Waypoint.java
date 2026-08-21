@@ -10,6 +10,7 @@ public class Waypoint {
     private final String modId;
     private String name;
     private String primaryDimension;
+    private String groupId;
     private BlockPos position;
     private int color;
     private boolean enabled;
@@ -27,9 +28,11 @@ public class Waypoint {
     public String getName() { return name; }
     public BlockPos getBlockPos() { return position; }
     public String getPrimaryDimension() { return primaryDimension; }
+    public String getGroupId() { return groupId; }
     public int getColor() { return color; }
     public void setPos(int x, int y, int z) { position = new BlockPos(x, y, z); }
     public void setColor(int value) { color = value; }
     public void setEnabled(boolean value) { enabled = value; }
     public void setPersistent(boolean value) { persistent = value; }
+    public void setGroupId(String value) { groupId = value; }
 }

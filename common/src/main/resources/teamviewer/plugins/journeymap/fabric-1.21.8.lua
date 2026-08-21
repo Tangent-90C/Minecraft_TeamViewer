@@ -5,12 +5,21 @@ local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil
 local managed_players, managed_last_seen, managed_waypoints = {}, {}, {}
 local client_objects = services.get("minecraft.client_objects")
+local group_definitions = {
+  online = {name = "TeamViewRelay Online Players", tag = "[TV] Online"},
+  offline = {name = "TeamViewRelay Offline Players", tag = "[TV] Offline"}
+}
+local managed_groups, group_support = {}, nil
 
 local function configure_settings(available)
   tv.configure_setting({key = "show_remote_players", visible = available, enabled = available,
     detail = "Map and world visibility follow JourneyMap's global waypoint settings"})
-  tv.configure_setting({key = "show_map_markers", visible = false, enabled = false})
-  tv.configure_setting({key = "show_beacons", visible = false, enabled = false})
+  tv.configure_setting({key = "show_last_seen_players", visible = available, enabled = available,
+    detail = "Map and world visibility follow JourneyMap's global waypoint settings"})
+  tv.configure_setting({key = "show_online_map_markers", visible = false, enabled = false})
+  tv.configure_setting({key = "show_online_world_beacons", visible = false, enabled = false})
+  tv.configure_setting({key = "show_offline_map_markers", visible = false, enabled = false})
+  tv.configure_setting({key = "show_offline_world_beacons", visible = false, enabled = false})
 end
 
 configure_settings(mods.is_loaded(MOD_ID))
@@ -32,6 +41,7 @@ local function initialize()
 end
 
 local function api() return services.get("journeymap.client_api") end
+local ensure_groups
 local function probe()
   if not mods.is_loaded(MOD_ID) then
     return {status = "MOD_NOT_INSTALLED", detail = "journeymap is not installed"}
@@ -42,11 +52,55 @@ local function probe()
     return {status = "UNSUPPORTED_VERSION", detail = handle_error}
   end
   if api() == nil then return {status = "ENTRYPOINT_NOT_READY", detail = "JourneyMap IClientAPI is not initialized"} end
+  ensure_groups()
   return {status = "AVAILABLE", detail = ""}
 end
 
 local function dimension(id)
   return client_objects:dimensionKey(id)
+end
+
+local function disable_groups(detail)
+  if group_support == false then return end
+  group_support, managed_groups = false, {}
+  tv.log.warn("JourneyMap waypoint groups are unavailable; using default waypoints: " .. tostring(detail))
+end
+
+ensure_groups = function()
+  if group_support == false then return end
+  local client = api()
+  if client == nil or handles == nil then return end
+  for key, definition in pairs(group_definitions) do
+    if managed_groups[key] == nil then
+      local created, value = pcall(function()
+        local group = client:getWaypointGroupByName(JM_MOD_ID, definition.name)
+        if group == nil then
+          group = handles.WaypointFactory:createWaypointGroup(JM_MOD_ID, definition.name)
+          if group == nil then error("JourneyMap did not create " .. definition.name) end
+          group:setTag(definition.tag)
+          group:setPersistent(true)
+          client:addWaypointGroup(group)
+        end
+        return group
+      end)
+      if not created then
+        disable_groups(value)
+        return
+      end
+      managed_groups[key] = value
+    end
+  end
+  group_support = true
+end
+
+local function assign_group(object, key)
+  if key == nil then return true end
+  ensure_groups()
+  local group = group_support == true and managed_groups[key] or nil
+  if group == nil then return false end
+  local assigned, assignment_error = pcall(function() group:addWaypoint(object) end)
+  if not assigned then disable_groups(assignment_error) end
+  return assigned
 end
 
 local function deletion_failed(state, id, detail)
@@ -85,7 +139,7 @@ local function clear(managed)
 end
 
 -- 2. Common object -> JourneyMap object / common 对象 -> JourneyMap 对象
-local function upsert(managed, id, name, x, y, z, dimension_id, color)
+local function upsert(managed, id, name, x, y, z, dimension_id, color, group_key)
   local client = api(); if client == nil then return end
   local state = managed[id]
   if state ~= nil and state.name ~= name then
@@ -102,6 +156,7 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
     client:addWaypoint(JM_MOD_ID, object)
     state = {object = object, name = name}; managed[id] = state
   end
+  if state.group ~= group_key and assign_group(state.object, group_key) then state.group = group_key end
   state.pending_delete = false
   state.object:setPos(x, y, z); state.object:setColor(color); state.object:setEnabled(true)
 end
@@ -120,7 +175,7 @@ local function sync_players(players, enabled, relations)
       local color = relation ~= nil and relation.resolved and relation.color or 0xFF5555
       upsert(managed, id, "[TV] " .. (player.name or "Player"),
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-          world.dimension, color)
+          world.dimension, color, "online")
     end
   end
   local stale = {}; for id, _ in pairs(managed) do if not active[id] then table.insert(stale, id) end end
@@ -128,7 +183,7 @@ local function sync_players(players, enabled, relations)
 end
 
 local function sync_last_seen(players, enabled, relations)
-  if not enabled or probe().status ~= "AVAILABLE" then clear(managed_last_seen); return end
+  if not enabled or not settings.show_last_seen_players or probe().status ~= "AVAILABLE" then clear(managed_last_seen); return end
   local world, active = snapshots.world(), {}
   for _, player in pairs(players or {}) do
     if player.position ~= nil and (player.dimension == nil or player.dimension == ""
@@ -139,7 +194,7 @@ local function sync_last_seen(players, enabled, relations)
       local color = relation ~= nil and relation.resolved and relation.color or 0xFF9A26
       upsert(managed_last_seen, id, "[TV Last] " .. (player.name or "Player") .. " @ " .. local_time,
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-          world.dimension, color)
+          world.dimension, color, "offline")
     end
   end
   local stale = {}; for id, _ in pairs(managed_last_seen) do if not active[id] then table.insert(stale, id) end end
@@ -176,13 +231,14 @@ tv.register_remote_player_projection({id = "journeymap-player-beacons",
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe,
   list_local = list_local,
   upsert_remote = function(command) upsert(managed_waypoints, command.waypointId, command.name,
-      command.x, command.y, command.z, command.dimension, command.color) end,
+      command.x, command.y, command.z, command.dimension, command.color, nil) end,
   delete_remote = function(id) remove(managed_waypoints, id) end,
   clear_remote = function() clear(managed_waypoints) end,
   needs_reconcile = function() return has_pending(managed_waypoints) end})
 -- 4. Lifecycle cleanup / 生命周期清理
-tv.on_enable(function() initialize() end)
+tv.on_enable(function() if initialize() then ensure_groups() end end)
 tv.on_disable(function() clear(managed_players); clear(managed_last_seen); clear(managed_waypoints) end)
 tv.on_settings_changed(function(key, value)
   if key == "show_remote_players" and not value then clear(managed_players) end
+  if key == "show_last_seen_players" and not value then clear(managed_last_seen) end
 end)

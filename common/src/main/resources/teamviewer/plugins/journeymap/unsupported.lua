@@ -1,4 +1,5 @@
-for _, key in ipairs({"show_remote_players", "show_map_markers", "show_beacons"}) do
+for _, key in ipairs({"show_remote_players", "show_last_seen_players", "show_online_map_markers",
+    "show_online_world_beacons", "show_offline_map_markers", "show_offline_world_beacons"}) do
   tv.configure_setting({key = key, visible = false, enabled = false})
 end
 for _, id in ipairs({"journeymap-players", "journeymap-player-beacons", "journeymap-shared-waypoints"}) do

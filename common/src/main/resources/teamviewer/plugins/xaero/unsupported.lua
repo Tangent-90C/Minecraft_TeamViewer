@@ -1,3 +1,6 @@
+for _, key in ipairs({"show_online_world_map", "show_offline_world_map", "show_offline_minimap"}) do
+  tv.configure_setting({key = key, visible = false, enabled = false})
+end
 for _, capability in ipairs({
   {id = "xaero-worldmap", mod = "xaeroworldmap"},
   {id = "xaero-minimap", mod = "xaerominimap"},

@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "teamviewer.journeymap",
   "name": "JourneyMap Integration",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "entry": "main.lua",
   "documentation": "README.md",
   "entrypoints": [
@@ -25,8 +25,11 @@
     {"id": "journeymap-shared-waypoints", "role": "shared-waypoint", "name": "JourneyMap Shared Waypoints"}
   ],
   "settings": [
-    {"key": "show_remote_players", "type": "boolean", "name": "Show remote player waypoints", "defaultValue": true, "restartRequired": false},
-    {"key": "show_beacons", "type": "boolean", "name": "Show remote player beacons", "defaultValue": true, "restartRequired": false},
-    {"key": "show_map_markers", "type": "boolean", "name": "Show remote player map markers", "defaultValue": true, "restartRequired": false}
+    {"key": "show_remote_players", "type": "boolean", "name": "Show online Relay player waypoints", "defaultValue": true, "restartRequired": false},
+    {"key": "show_last_seen_players", "type": "boolean", "name": "Show offline Relay player waypoints", "defaultValue": true, "restartRequired": false},
+    {"key": "show_online_map_markers", "type": "boolean", "name": "Show online Relay player map markers", "defaultValue": true, "restartRequired": false},
+    {"key": "show_online_world_beacons", "type": "boolean", "name": "Show online Relay player world beacons", "defaultValue": true, "restartRequired": false},
+    {"key": "show_offline_map_markers", "type": "boolean", "name": "Show offline Relay player map markers", "defaultValue": true, "restartRequired": false},
+    {"key": "show_offline_world_beacons", "type": "boolean", "name": "Show offline Relay player world beacons", "defaultValue": true, "restartRequired": false}
   ]
 }

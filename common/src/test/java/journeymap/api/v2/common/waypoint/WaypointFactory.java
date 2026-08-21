@@ -18,4 +18,8 @@ public final class WaypointFactory {
             String modId, BlockPos position, String name, World.Key dimension, boolean persistent) {
         return createClientWaypoint(modId, position, name, dimension, persistent);
     }
+
+    public static WaypointGroup createWaypointGroup(String modId, String name) {
+        return new WaypointGroup(modId, name);
+    }
 }

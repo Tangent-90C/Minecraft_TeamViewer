@@ -462,8 +462,10 @@ class IntegrationPluginManagerTest {
                 new TestRuntime(temporary), completeRegistry(), config);
 
         PluginSnapshot journeyMap = manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
-        assertEquals(true, journeyMap.settings().get("show_beacons"));
-        assertEquals(false, journeyMap.settings().get("show_map_markers"));
+        assertEquals(true, journeyMap.settings().get("show_online_world_beacons"));
+        assertEquals(false, journeyMap.settings().get("show_online_map_markers"));
+        assertEquals(true, journeyMap.settings().get("show_offline_map_markers"));
+        assertEquals(true, journeyMap.settings().get("show_offline_world_beacons"));
         assertEquals(true, journeyMap.settings().get("show_remote_players"));
         assertEquals(IntegrationIds.NODEMC_BATTLE_MAP, config.getBattleMapSourceId());
         assertFalse(Files.readString(statePath).contains("$migrations"));
@@ -478,7 +480,8 @@ class IntegrationPluginManagerTest {
         assertTrue(savedConfig.contains(IntegrationIds.NODEMC_BATTLE_MAP));
         IntegrationPluginManager reloaded = new IntegrationPluginManager(
                 new TestRuntime(temporary), completeRegistry(), Config.load(configPath));
-        assertEquals(true, reloaded.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).settings().get("show_beacons"));
+        assertEquals(true, reloaded.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).settings()
+                .get("show_online_world_beacons"));
         reloaded.shutdown();
     }
 
@@ -1004,7 +1007,7 @@ class IntegrationPluginManagerTest {
                 registry, Config.load(temporary.resolve("config.json")), host);
 
         PluginSnapshot pendingJourneyMap = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
-        assertEquals(List.of("show_remote_players"), pendingJourneyMap.visibleSettingDefinitions().stream()
+        assertEquals(List.of("show_remote_players", "show_last_seen_players"), pendingJourneyMap.visibleSettingDefinitions().stream()
                 .map(PluginManifest.SettingDefinition::key).toList());
         assertTrue(pendingJourneyMap.capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.ENTRYPOINT_NOT_READY));
@@ -1012,6 +1015,17 @@ class IntegrationPluginManagerTest {
         service.set(api);
         assertTrue(pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        assertEquals(2, api.waypointGroups().size());
+        journeymap.api.v2.common.waypoint.WaypointGroup onlineGroup = api.getWaypointGroupByName(
+                "teamviewer", "TeamViewRelay Online Players");
+        journeymap.api.v2.common.waypoint.WaypointGroup offlineGroup = api.getWaypointGroupByName(
+                "teamviewer", "TeamViewRelay Offline Players");
+        assertNotNull(onlineGroup);
+        assertNotNull(offlineGroup);
+        assertEquals("[TV] Online", onlineGroup.getTag());
+        assertEquals("[TV] Offline", offlineGroup.getTag());
+        assertTrue(onlineGroup.isPersistent());
+        assertTrue(offlineGroup.isPersistent());
 
         UUID remoteId = UUID.randomUUID();
         Map<UUID, RemotePlayerInfo> players = Map.of(remoteId,
@@ -1022,6 +1036,7 @@ class IntegrationPluginManagerTest {
                 .forEach(value -> value.sync(players, true));
         assertEquals(1, api.waypoints().size(),
                 "the merged API family must project each player to one native waypoint");
+        assertEquals(onlineGroup.getGuid(), api.waypoints().get(0).getGroupId());
         LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(remoteId, new Position3D(10.8, 70.2, -3.1),
                 "minecraft:overworld", "Remote", 1_700_000_004_000L,
                 1_700_000_000_000L, 1_700_000_005_000L);
@@ -1034,6 +1049,9 @@ class IntegrationPluginManagerTest {
         assertEquals(offlineEnemy.color(), api.waypoints().stream()
                 .filter(value -> value.getName().startsWith("[TV Last]"))
                 .findFirst().orElseThrow().getColor());
+        assertEquals(offlineGroup.getGuid(), api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("[TV Last]"))
+                .findFirst().orElseThrow().getGroupId());
 
         SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
                 .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
@@ -1053,6 +1071,54 @@ class IntegrationPluginManagerTest {
 
         pluginManager.shutdown();
         assertEquals(1, api.waypoints().size(), "disable must leave the user's local waypoint alone");
+        assertEquals(2, api.waypointGroups().size(), "persistent Relay groups retain their user settings");
+    }
+
+    @Test
+    void journeyMapV2WithoutGroupApiFallsBackToDefaultWaypoints() {
+        JourneyMapNoGroupApiStub api = new JourneyMapNoGroupApiStub();
+        UUID localId = UUID.randomUUID();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(localId, "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("no-group-config.json")), host);
+
+        assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        assertEquals(Set.of("show_online_map_markers", "show_online_world_beacons",
+                        "show_offline_map_markers", "show_offline_world_beacons"),
+                manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).visibleSettingDefinitions().stream()
+                        .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
+        UUID remoteId = UUID.randomUUID();
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.sync(Map.of(remoteId,
+                        new RemotePlayerInfo(remoteId, new Position3D(8, 70, -4),
+                                "minecraft:overworld", "Fallback Remote")), true));
+        assertEquals(2, api.waypoints().size());
+        assertTrue(api.waypoints().stream().allMatch(value -> value.getGroupId() == null));
+
+        LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(remoteId, new Position3D(8, 70, -4),
+                "minecraft:overworld", "Fallback Remote", 1_700_000_004_000L,
+                1_700_000_000_000L, 1_700_000_005_000L);
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.syncLastSeenResolved(Map.of(remoteId, lastSeen), Map.of(), true));
+        assertEquals(4, api.waypoints().size());
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_offline_map_markers", false));
+        assertEquals(3, api.waypoints().size());
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_offline_world_beacons", false));
+        assertEquals(2, api.waypoints().size());
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_online_map_markers", false));
+        assertEquals(1, api.waypoints().size());
+        assertTrue(manager.setSetting(IntegrationIds.PLUGIN_JOURNEYMAP, "show_online_world_beacons", false));
+        assertTrue(api.waypoints().isEmpty());
+
+        manager.shutdown();
+        assertTrue(api.waypoints().isEmpty());
     }
 
     @Test
@@ -1108,7 +1174,7 @@ class IntegrationPluginManagerTest {
         assertEquals(offlineFriendly.color(), api.waypoints().stream()
                 .filter(value -> value.getName().startsWith("[TV Last]"))
                 .findFirst().orElseThrow().getColor());
-        assertEquals(List.of("show_remote_players"), manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP)
+        assertEquals(List.of("show_remote_players", "show_last_seen_players"), manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP)
                 .visibleSettingDefinitions().stream().map(PluginManifest.SettingDefinition::key).toList());
         manager.shutdown();
         assertTrue(api.waypoints().isEmpty());
@@ -1145,7 +1211,8 @@ class IntegrationPluginManagerTest {
                 .filter(value -> value.getName().startsWith("[TV Last]"))
                 .findFirst().orElseThrow().getColor());
         PluginSnapshot snapshot = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
-        assertEquals(Set.of("show_map_markers", "show_beacons"), snapshot.visibleSettingDefinitions().stream()
+        assertEquals(Set.of("show_online_map_markers", "show_online_world_beacons",
+                        "show_offline_map_markers", "show_offline_world_beacons"), snapshot.visibleSettingDefinitions().stream()
                 .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
         assertTrue(snapshot.capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
@@ -1224,12 +1291,16 @@ class IntegrationPluginManagerTest {
         PluginSnapshot xaeroPlugin = pluginManager.snapshot(IntegrationIds.PLUGIN_XAERO);
         assertTrue(xaeroPlugin.capabilities().stream().allMatch(value ->
                 value.status() == IntegrationSupportStatus.AVAILABLE), xaeroPlugin.capabilities().toString());
+        assertEquals(Set.of("show_online_world_map", "show_offline_world_map", "show_offline_minimap"),
+                xaeroPlugin.visibleSettingDefinitions().stream()
+                        .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
         UUID remoteId = UUID.randomUUID();
         RemotePlayerInfo player = new RemotePlayerInfo(remoteId, new Position3D(8.5, 64, -2.25),
                 "minecraft:overworld", "Xaero Remote");
-        registry.activeRemotePlayerProjections().stream()
+        RemotePlayerProjection worldProjection = registry.activeRemotePlayerProjections().stream()
                 .filter(value -> IntegrationIds.XAERO_WORLDMAP.equals(value.id()))
-                .findFirst().orElseThrow().sync(Map.of(remoteId, player), true);
+                .findFirst().orElseThrow();
+        worldProjection.sync(Map.of(remoteId, player), true);
         xaero.map.radar.tracker.system.IPlayerTrackerSystem tracker =
                 xaero.map.WorldMap.playerTrackerSystemManager.system();
         assertNotNull(tracker);
@@ -1241,6 +1312,11 @@ class IntegrationPluginManagerTest {
         LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(remoteId, new Position3D(8.5, 64, -2.25),
                 "minecraft:overworld", "Xaero Remote", 1_700_000_004_000L,
                 1_700_000_000_000L, 1_700_000_005_000L);
+        worldProjection.syncLastSeenResolved(Map.of(remoteId, lastSeen), Map.of(remoteId, offlineFriendly), true);
+        xaero.map.radar.tracker.system.IPlayerTrackerSystem offlineTracker =
+                xaero.map.WorldMap.playerTrackerSystemManager.system("teamviewer_last_seen_players");
+        assertNotNull(offlineTracker);
+        assertTrue(offlineTracker.getTrackedPlayerIterator().hasNext());
         registry.activeRemotePlayerProjections().stream()
                 .filter(value -> "xaero-last-seen-minimap".equals(value.id()))
                 .findFirst().orElseThrow()
@@ -1257,6 +1333,17 @@ class IntegrationPluginManagerTest {
                 .filter(value -> value.getName().startsWith("[TV Last]"))
                 .findFirst().orElseThrow().getColor());
 
+        assertTrue(pluginManager.setSetting(IntegrationIds.PLUGIN_XAERO, "show_online_world_map", false));
+        assertFalse(tracker.getTrackedPlayerIterator().hasNext());
+        assertTrue(offlineTracker.getTrackedPlayerIterator().hasNext());
+        assertTrue(pluginManager.setSetting(IntegrationIds.PLUGIN_XAERO, "show_offline_world_map", false));
+        assertFalse(offlineTracker.getTrackedPlayerIterator().hasNext());
+        assertTrue(xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().stream()
+                .anyMatch(value -> value.getName().startsWith("[TV Last]")));
+        assertTrue(pluginManager.setSetting(IntegrationIds.PLUGIN_XAERO, "show_offline_minimap", false));
+        assertFalse(xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().stream()
+                .anyMatch(value -> value.getName().startsWith("[TV Last]")));
+
         SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
                 .filter(value -> IntegrationIds.XAERO_MINIMAP.equals(value.id()))
                 .findFirst().orElseThrow();
@@ -1266,7 +1353,7 @@ class IntegrationPluginManagerTest {
         adapter.upsertRemoteWaypoint(new MapWaypointCommand(
                 "relay-xaero", "Relay Xaero", "R", 3, 71, 4,
                 "minecraft:overworld", 0x55FF55));
-        assertEquals(3, xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().size());
+        assertEquals(2, xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().size());
         List<NativeMapWaypointSnapshot> listed = adapter.listLocalWaypoints();
         assertEquals(1, listed.size());
         assertEquals("Local Xaero", listed.get(0).name());

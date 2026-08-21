@@ -803,15 +803,19 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
 
     private static UiText settingName(PluginSnapshot plugin, PluginManifest.SettingDefinition setting) {
         if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())) {
-            if ("show_beacons".equals(setting.key())) {
-                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_beacons");
-            }
-            if ("show_map_markers".equals(setting.key())) {
-                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_markers");
-            }
-            if ("show_remote_players".equals(setting.key())) {
-                return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players");
-            }
+            return switch (setting.key()) {
+                case "show_remote_players", "show_last_seen_players", "show_online_map_markers",
+                        "show_online_world_beacons", "show_offline_map_markers", "show_offline_world_beacons" ->
+                        tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_" + setting.key());
+                default -> UiText.literal(setting.name());
+            };
+        }
+        if (IntegrationIds.PLUGIN_XAERO.equals(plugin.id())) {
+            return switch (setting.key()) {
+                case "show_online_world_map", "show_offline_world_map", "show_offline_minimap" ->
+                        tr("screen.mc_teamviewer.integration_plugin.setting.xaero_" + setting.key());
+                default -> UiText.literal(setting.name());
+            };
         }
         if (IntegrationIds.PLUGIN_EXAMPLE.equals(plugin.id())) {
             return tr("screen.mc_teamviewer.integration_plugin.setting.example_" + setting.key());
@@ -850,7 +854,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
     private static UiText settingTooltip(
             PluginSnapshot plugin, PluginManifest.SettingDefinition setting, PluginSettingState state) {
         if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())
-                && "show_remote_players".equals(setting.key())) {
+                && ("show_remote_players".equals(setting.key()) || "show_last_seen_players".equals(setting.key()))) {
             return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_show_remote_players.tooltip");
         }
         return state.detail().isBlank() ? null : UiText.literal(state.detail());

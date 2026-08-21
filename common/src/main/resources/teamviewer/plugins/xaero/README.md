@@ -35,12 +35,24 @@ Lua 一次性解析 Xaero tracker 接口与 common Java record 类，创建
 
 A missing tracker class is `UNSUPPORTED_VERSION`; a registration/API invocation failure becomes
 `FAILED` and retains the exception. Xaero exposes `register` but no matching `unregister`, so the
-plugin deliberately uses `hotToggle: restart`. Toggle changes show `PENDING_RESTART` and apply on
+plugin deliberately uses `hotToggle: restart`: enabling or disabling the plugin itself applies on
 the next client start instead of leaving a stale proxy behind.
 
 缺少 tracker 类时登记 `UNSUPPORTED_VERSION`；注册或 API 调用失败时登记 `FAILED` 并保留
 异常。Xaero 只提供 `register`，没有对应 `unregister`，所以本插件明确使用
-`hotToggle: restart`；启停显示 `PENDING_RESTART` 并在下次启动生效，避免遗留旧 proxy。
+`hotToggle: restart`；插件本身的启停显示 `PENDING_RESTART` 并在下次启动生效，避免遗留旧 proxy。
+
+## Display settings / 显示开关
+
+The game UI provides three immediate settings matching Xaero's actual outputs: online players on
+the World Map, offline players on the World Map, and offline last-seen players on the Minimap.
+Turning a World Map setting off clears its tracker list; turning the Minimap setting off removes
+only TeamViewRelay-owned `[TV Last]` waypoints. Shared Relay waypoints and user waypoints are not
+affected.
+
+游戏内提供三个即时生效、与 Xaero 实际输出对应的开关：世界地图中的在线玩家、世界地图中的离线玩家、
+以及小地图中的离线最后位置。关闭世界地图开关会清空相应 tracker；关闭小地图开关只移除
+TeamViewRelay 管理的 `[TV Last]` 路标，不会影响共享 Relay 路标或用户自己的路标。
 
 ## Minimap waypoint bridge / 小地图路标桥
 

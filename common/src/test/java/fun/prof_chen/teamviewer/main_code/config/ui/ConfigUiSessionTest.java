@@ -176,38 +176,51 @@ class ConfigUiSessionTest {
     }
 
     @Test
-    void journeyMapMergedSettingsAreIdenticalAndSafeInBothLayouts() {
+    void journeyMapLegacySettingsAreIdenticalAndSafeInBothLayouts() {
         List<PluginManifest.SettingDefinition> definitions = List.of(
                 new PluginManifest.SettingDefinition("show_remote_players", "boolean",
                         "Show remote players", true, null, null, List.of(), false),
-                new PluginManifest.SettingDefinition("show_map_markers", "boolean",
-                        "Show map markers", true, null, null, List.of(), false),
-                new PluginManifest.SettingDefinition("show_beacons", "boolean",
-                        "Show beacons", true, null, null, List.of(), false));
+                new PluginManifest.SettingDefinition("show_last_seen_players", "boolean",
+                        "Show last-seen players", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition("show_online_map_markers", "boolean",
+                        "Show online map markers", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition("show_online_world_beacons", "boolean",
+                        "Show online world beacons", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition("show_offline_map_markers", "boolean",
+                        "Show offline map markers", true, null, null, List.of(), false),
+                new PluginManifest.SettingDefinition("show_offline_world_beacons", "boolean",
+                        "Show offline world beacons", true, null, null, List.of(), false));
         PluginSnapshot plugin = new PluginSnapshot(
                 IntegrationIds.PLUGIN_JOURNEYMAP, "JourneyMap", "1.1.0", true, true, true,
                 PluginRuntimeStatus.ACTIVE, "", null,
-                Map.of("show_remote_players", true, "show_map_markers", true, "show_beacons", true),
+                Map.of("show_remote_players", true, "show_last_seen_players", true,
+                        "show_online_map_markers", true, "show_online_world_beacons", true,
+                        "show_offline_map_markers", true, "show_offline_world_beacons", true),
                 definitions, Map.of(
                         "show_remote_players", new PluginSettingState(true, true,
                                 "Map and world visibility follow JourneyMap's global waypoint settings"),
-                        "show_map_markers", new PluginSettingState(false, false, ""),
-                        "show_beacons", new PluginSettingState(false, false, "")), List.of());
+                        "show_last_seen_players", new PluginSettingState(true, true,
+                                "Map and world visibility follow JourneyMap's global waypoint settings"),
+                        "show_online_map_markers", new PluginSettingState(false, false, ""),
+                        "show_online_world_beacons", new PluginSettingState(false, false, ""),
+                        "show_offline_map_markers", new PluginSettingState(false, false, ""),
+                        "show_offline_world_beacons", new PluginSettingState(false, false, "")), List.of());
         FakeControl control = new FakeControl(new Config(), plugin);
         PluginManagerUiController manager = new PluginManagerUiSession(control);
 
-        ConfigControlId combined = ConfigControlId.setting(plugin.id(), "show_remote_players");
-        ConfigControlId marker = ConfigControlId.setting(plugin.id(), "show_map_markers");
+        ConfigControlId online = ConfigControlId.setting(plugin.id(), "show_remote_players");
+        ConfigControlId offline = ConfigControlId.setting(plugin.id(), "show_last_seen_players");
+        ConfigControlId marker = ConfigControlId.setting(plugin.id(), "show_online_map_markers");
         PluginManagerView wide = manager.view(854, 480);
-        assertEquals(List.of(combined), wide.detail().settings().stream()
+        assertEquals(List.of(online, offline), wide.detail().settings().stream()
                 .map(PluginManagerView.SettingView::id).toList());
         manager.activate(marker);
-        assertFalse(control.changedSettings.containsKey("show_map_markers"));
+        assertFalse(control.changedSettings.containsKey("show_online_map_markers"));
 
         PluginManagerView compactList = manager.view(640, 360);
         manager.activate(compactList.items().get(0).selectId());
         PluginManagerView compactDetail = manager.view(640, 360);
-        assertEquals(List.of(combined), compactDetail.detail().settings().stream()
+        assertEquals(List.of(online, offline), compactDetail.detail().settings().stream()
                 .map(PluginManagerView.SettingView::id).toList());
     }
 
