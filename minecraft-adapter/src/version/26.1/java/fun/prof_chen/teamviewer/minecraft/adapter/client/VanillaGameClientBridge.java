@@ -4,6 +4,8 @@ import fun.prof_chen.teamviewer.main_code.client.model.ClientReportSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntitySnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.EntityTargetSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.FormattedTextSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.FormattedTextSpanSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.PlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.bridge.GameClientBridge;
@@ -269,14 +271,42 @@ public class VanillaGameClientBridge implements GameClientBridge {
             if (team == null && client.level != null) {
                 team = client.level.getScoreboard().getPlayersTeam(profileName);
             }
+            FormattedTextSnapshot prefix = formatted(team == null ? null : team.getPlayerPrefix());
+            FormattedTextSnapshot suffix = formatted(team == null ? null : team.getPlayerSuffix());
+            FormattedTextSnapshot explicitDisplay = formatted(entry.getTabListDisplayName());
+            FormattedTextSnapshot display = explicitDisplay == null
+                    ? FormattedTextSnapshot.concat(prefix, FormattedTextSnapshot.plain(profileName), suffix)
+                    : explicitDisplay;
+            Integer teamColor = team == null || team.getColor() == null ? null : team.getColor().getColor();
             result.add(new TabPlayerSnapshot(
                     entry.getProfile().id() == null ? null : entry.getProfile().id().toString(),
                     profileName,
-                    team == null ? null : team.getPlayerPrefix().getString(),
-                    team == null ? null : team.getPlayerPrefix().getString(),
-                    team == null ? null : team.getName()));
+                    prefix == null ? null : prefix.plainText(),
+                    display.plainText(),
+                    team == null ? null : team.getName(),
+                    suffix == null ? null : suffix.plainText(),
+                    teamColor,
+                    display.plainText(),
+                    display,
+                    prefix,
+                    suffix));
         }
         return result;
+    }
+
+    private static FormattedTextSnapshot formatted(Component component) {
+        if (component == null) return null;
+        List<FormattedTextSpanSnapshot> spans = new ArrayList<>();
+        component.visit((style, content) -> {
+            if (content != null && !content.isEmpty()) {
+                Integer color = style.getColor() == null ? null : 0xFF000000 | style.getColor().getValue();
+                spans.add(new FormattedTextSpanSnapshot(
+                        content, color, null, style.isBold(), style.isItalic(), style.isUnderlined(),
+                        style.isStrikethrough(), style.isObfuscated(), null));
+            }
+            return Optional.empty();
+        }, Style.EMPTY);
+        return new FormattedTextSnapshot(component.getString(), spans);
     }
 
     private static List<PlayerSnapshot> collectPlayers(Minecraft client) {
