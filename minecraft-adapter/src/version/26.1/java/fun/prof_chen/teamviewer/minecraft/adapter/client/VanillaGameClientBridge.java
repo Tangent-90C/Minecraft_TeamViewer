@@ -277,7 +277,7 @@ public class VanillaGameClientBridge implements GameClientBridge {
             FormattedTextSnapshot display = explicitDisplay == null
                     ? FormattedTextSnapshot.concat(prefix, FormattedTextSnapshot.plain(profileName), suffix)
                     : explicitDisplay;
-            Integer teamColor = team == null || team.getColor() == null ? null : team.getColor().getColor();
+            Integer teamColor = firstColor(prefix);
             result.add(new TabPlayerSnapshot(
                     entry.getProfile().id() == null ? null : entry.getProfile().id().toString(),
                     profileName,
@@ -307,6 +307,14 @@ public class VanillaGameClientBridge implements GameClientBridge {
             return Optional.empty();
         }, Style.EMPTY);
         return new FormattedTextSnapshot(component.getString(), spans);
+    }
+
+    private static Integer firstColor(FormattedTextSnapshot text) {
+        if (text == null) return null;
+        for (FormattedTextSpanSnapshot span : text.spans()) {
+            if (span.colorArgb() != null) return span.colorArgb() & 0xFFFFFF;
+        }
+        return null;
     }
 
     private static List<PlayerSnapshot> collectPlayers(Minecraft client) {
