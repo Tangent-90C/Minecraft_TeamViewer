@@ -122,6 +122,42 @@ public final class ProtobufMessageCodec implements MessageCodec {
 				);
 				return envelope.build().toByteArray();
 			}
+			if (packet instanceof ProtocolPackets.TabHistorySubscribePacket subscribe) {
+				TabHistorySubscribeRequest.Builder builder = TabHistorySubscribeRequest.newBuilder()
+						.setEnabled(subscribe.enabled);
+				if (subscribe.knownRevision != null) builder.setKnownRevision(subscribe.knownRevision);
+				if (subscribe.knownDigestSha256 != null) {
+					builder.setKnownDigestSha256(com.google.protobuf.ByteString.copyFrom(subscribe.knownDigestSha256));
+				}
+				envelope.setTabHistorySubscribeRequest(builder.build());
+				return envelope.build().toByteArray();
+			}
+			if (packet instanceof ProtocolPackets.TabHistorySyncRequestPacket sync) {
+				TabHistorySyncRequest.Builder builder = TabHistorySyncRequest.newBuilder()
+						.setRequestId(defaultString(sync.requestId))
+						.setPreferredMode(tabHistorySyncMode(sync.preferredMode))
+						.setAllowFullFallback(sync.allowFullFallback);
+				if (sync.baseRevision != null) builder.setBaseRevision(sync.baseRevision);
+				if (sync.baseDigestSha256 != null) {
+					builder.setBaseDigestSha256(com.google.protobuf.ByteString.copyFrom(sync.baseDigestSha256));
+				}
+				setOptionalInt(builder::setMaxChunkEntries, sync.maxChunkEntries);
+				envelope.setTabHistorySyncRequest(builder.build());
+				return envelope.build().toByteArray();
+			}
+			if (packet instanceof ProtocolPackets.TabHistoryLookupRequestPacket lookup) {
+				TabHistoryLookupRequest.Builder builder = TabHistoryLookupRequest.newBuilder()
+						.setRequestId(defaultString(lookup.requestId));
+				for (String uuid : cleanStringList(lookup.uuids)) {
+					builder.addSelectors(TabHistoryLookupSelector.newBuilder().setUuid(uuid).build());
+				}
+				for (String name : cleanStringList(lookup.names)) {
+					builder.addSelectors(TabHistoryLookupSelector.newBuilder().setName(name).build());
+				}
+				setOptionalInt(builder::setMaxChunkEntries, lookup.maxChunkEntries);
+				envelope.setTabHistoryLookupRequest(builder.build());
+				return envelope.build().toByteArray();
+			}
 			throw new IllegalArgumentException("Unsupported protobuf packet type: " + packet);
 		} catch (Exception e) {
 			throw new IllegalArgumentException("Failed to encode protobuf payload", e);
@@ -205,6 +241,12 @@ public final class ProtobufMessageCodec implements MessageCodec {
 						"report_rate_hint",
 						decodeReportRateHint(envelope.getReportRateHint())
 				);
+				case TAB_HISTORY_DIGEST -> new ProtocolPackets.DecodedInboundMessage(
+						"tab_history_digest", decodeTabHistoryDigest(envelope.getTabHistoryDigest()));
+				case TAB_HISTORY_SYNC_CHUNK -> new ProtocolPackets.DecodedInboundMessage(
+						"tab_history_sync_chunk", decodeTabHistorySyncChunk(envelope.getTabHistorySyncChunk()));
+				case TAB_HISTORY_LOOKUP_CHUNK -> new ProtocolPackets.DecodedInboundMessage(
+						"tab_history_lookup_chunk", decodeTabHistoryLookupChunk(envelope.getTabHistoryLookupChunk()));
 				default -> throw new IllegalArgumentException("Unsupported protobuf payload case: " + envelope.getPayloadCase());
 			};
 		} catch (Exception e) {
@@ -391,6 +433,45 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		setOptionalString(builder::setName, normalizeText(value.get("name")));
 		setOptionalString(builder::setDisplayName, normalizeText(value.get("displayName")));
 		setOptionalString(builder::setPrefixedName, normalizeText(value.get("prefixedName")));
+		setOptionalString(builder::setScoreboardTeamId, normalizeText(value.get("scoreboardTeamId")));
+		setOptionalString(builder::setScoreboardPrefix, normalizeText(value.get("scoreboardPrefix")));
+		setOptionalString(builder::setScoreboardSuffix, normalizeText(value.get("scoreboardSuffix")));
+		Integer color = toIntegerOrNull(value.get("scoreboardColorRgb"));
+		if (color != null) builder.setScoreboardColorRgb(color & 0xFFFFFF);
+		FormattedText formattedDisplay = buildFormattedText(value.get("formattedDisplayName"));
+		if (formattedDisplay != null) builder.setFormattedDisplayName(formattedDisplay);
+		FormattedText formattedPrefix = buildFormattedText(value.get("formattedScoreboardPrefix"));
+		if (formattedPrefix != null) builder.setFormattedScoreboardPrefix(formattedPrefix);
+		FormattedText formattedSuffix = buildFormattedText(value.get("formattedScoreboardSuffix"));
+		if (formattedSuffix != null) builder.setFormattedScoreboardSuffix(formattedSuffix);
+		return builder.build();
+	}
+
+	private FormattedText buildFormattedText(Object raw) {
+		Map<String, Object> value = safeObjectMap(raw);
+		if (value.isEmpty()) return null;
+		FormattedText.Builder builder = FormattedText.newBuilder()
+				.setPlainText(defaultString(normalizeText(value.get("plainText"))));
+		Object spansValue = value.get("spans");
+		if (spansValue instanceof List<?> spans) {
+			for (Object rawSpan : spans) {
+				Map<String, Object> span = safeObjectMap(rawSpan);
+				String text = normalizeText(span.get("text"));
+				if (text == null) continue;
+				FormattedTextSpan.Builder spanBuilder = FormattedTextSpan.newBuilder().setText(text);
+				Integer color = toIntegerOrNull(span.get("colorArgb"));
+				if (color != null) spanBuilder.setColorArgb(color);
+				Integer shadow = toIntegerOrNull(span.get("shadowColorArgb"));
+				if (shadow != null) spanBuilder.setShadowColorArgb(shadow);
+				setOptionalBool(spanBuilder::setBold, toBooleanOrNull(span.get("bold")));
+				setOptionalBool(spanBuilder::setItalic, toBooleanOrNull(span.get("italic")));
+				setOptionalBool(spanBuilder::setUnderlined, toBooleanOrNull(span.get("underlined")));
+				setOptionalBool(spanBuilder::setStrikethrough, toBooleanOrNull(span.get("strikethrough")));
+				setOptionalBool(spanBuilder::setObfuscated, toBooleanOrNull(span.get("obfuscated")));
+				setOptionalString(spanBuilder::setFontId, normalizeText(span.get("fontId")));
+				builder.addSpans(spanBuilder.build());
+			}
+		}
 		return builder.build();
 	}
 
@@ -411,7 +492,102 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.playerTimeoutSec = message.hasPlayerTimeoutSec() ? message.getPlayerTimeoutSec() : null;
 		packet.entityTimeoutSec = message.hasEntityTimeoutSec() ? message.getEntityTimeoutSec() : null;
 		packet.battleChunkTimeoutSec = message.hasBattleChunkTimeoutSec() ? message.getBattleChunkTimeoutSec() : null;
+		packet.tabHistory = message.hasTabHistory() ? tabHistoryCapabilitiesToMap(message.getTabHistory()) : null;
 		return packet;
+	}
+
+	private ProtocolPackets.TabHistoryDigestInboundPacket decodeTabHistoryDigest(TabHistoryDigest message) {
+		ProtocolPackets.TabHistoryDigestInboundPacket packet = new ProtocolPackets.TabHistoryDigestInboundPacket();
+		packet.type = "tab_history_digest";
+		packet.head = message.hasHead() ? tabHistoryHeadToMap(message.getHead()) : Map.of();
+		return packet;
+	}
+
+	private ProtocolPackets.TabHistorySyncChunkInboundPacket decodeTabHistorySyncChunk(TabHistorySyncChunk message) {
+		ProtocolPackets.TabHistorySyncChunkInboundPacket packet = new ProtocolPackets.TabHistorySyncChunkInboundPacket();
+		packet.type = "tab_history_sync_chunk";
+		packet.requestId = message.getRequestId();
+		packet.mode = message.getMode().name();
+		packet.head = message.hasHead() ? tabHistoryHeadToMap(message.getHead()) : Map.of();
+		packet.upsert = message.getUpsertList().stream().map(this::tabHistoryEntryToMap).toList();
+		packet.deleteUuids = new ArrayList<>(message.getDeleteUuidsList());
+		packet.chunkIndex = message.getChunkIndex();
+		packet.chunkCount = message.getChunkCount();
+		packet.finalChunk = message.getFinal();
+		packet.resetReason = message.hasResetReason() ? message.getResetReason().name() : null;
+		packet.errorCode = message.hasErrorCode() ? message.getErrorCode().name() : null;
+		return packet;
+	}
+
+	private ProtocolPackets.TabHistoryLookupChunkInboundPacket decodeTabHistoryLookupChunk(TabHistoryLookupChunk message) {
+		ProtocolPackets.TabHistoryLookupChunkInboundPacket packet = new ProtocolPackets.TabHistoryLookupChunkInboundPacket();
+		packet.type = "tab_history_lookup_chunk";
+		packet.requestId = message.getRequestId();
+		packet.head = message.hasHead() ? tabHistoryHeadToMap(message.getHead()) : Map.of();
+		packet.results = new ArrayList<>();
+		for (TabHistoryLookupResult result : message.getResultsList()) {
+			Map<String, Object> value = new LinkedHashMap<>();
+			value.put("selectorIndex", result.getSelectorIndex());
+			value.put("entries", result.getEntriesList().stream().map(this::tabHistoryEntryToMap).toList());
+			packet.results.add(value);
+		}
+		packet.chunkIndex = message.getChunkIndex();
+		packet.chunkCount = message.getChunkCount();
+		packet.finalChunk = message.getFinal();
+		packet.errorCode = message.hasErrorCode() ? message.getErrorCode().name() : null;
+		return packet;
+	}
+
+	private Map<String, Object> tabHistoryCapabilitiesToMap(TabHistoryCapabilities value) {
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("supported", value.getSupported());
+		result.put("syncModes", value.getSyncModesList().stream().map(Enum::name).toList());
+		result.put("defaultChunkEntries", value.getDefaultChunkEntries());
+		result.put("maxChunkEntries", value.getMaxChunkEntries());
+		result.put("maxChunkBytes", value.getMaxChunkBytes());
+		result.put("maxLookupSelectors", value.getMaxLookupSelectors());
+		result.put("retentionDays", value.getRetentionDays());
+		result.put("deltaRetentionDays", value.getDeltaRetentionDays());
+		return result;
+	}
+
+	private Map<String, Object> tabHistoryHeadToMap(TabHistoryHead value) {
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("revision", value.getRevision());
+		result.put("digestSha256", value.getDigestSha256().toByteArray());
+		result.put("recordCount", value.getRecordCount());
+		result.put("generatedAtUtcMs", value.getGeneratedAtUtcMs());
+		result.put("oldestAvailableDeltaRevision", value.getOldestAvailableDeltaRevision());
+		return result;
+	}
+
+	private Map<String, Object> tabHistoryEntryToMap(TabHistoryEntry value) {
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("player", tabPlayerEntryToMap(value.getPlayer()));
+		result.put("labelFirstObservedAtUtcMs", value.getLabelFirstObservedAtUtcMs());
+		result.put("lastObservedAtUtcMs", value.getLastObservedAtUtcMs());
+		result.put("revision", value.getRevision());
+		result.put("etagSha256", value.getEtagSha256().toByteArray());
+		return result;
+	}
+
+	private Map<String, Object> tabPlayerEntryToMap(TabPlayerEntry value) {
+		Map<String, Object> result = new LinkedHashMap<>();
+		if (value.hasUuid()) result.put("uuid", value.getUuid());
+		if (value.hasName()) result.put("name", value.getName());
+		if (value.hasDisplayName()) result.put("displayName", value.getDisplayName());
+		if (value.hasPrefixedName()) result.put("prefixedName", value.getPrefixedName());
+		if (value.hasScoreboardTeamId()) result.put("scoreboardTeamId", value.getScoreboardTeamId());
+		if (value.hasScoreboardPrefix()) result.put("scoreboardPrefix", value.getScoreboardPrefix());
+		if (value.hasScoreboardSuffix()) result.put("scoreboardSuffix", value.getScoreboardSuffix());
+		if (value.hasScoreboardColorRgb()) result.put("scoreboardColorRgb", value.getScoreboardColorRgb());
+		return result;
+	}
+
+	private TabHistorySyncMode tabHistorySyncMode(String value) {
+		return "TAB_HISTORY_SYNC_MODE_DELTA".equals(value)
+				? TabHistorySyncMode.TAB_HISTORY_SYNC_MODE_DELTA
+				: TabHistorySyncMode.TAB_HISTORY_SYNC_MODE_FULL;
 	}
 
 	private ProtocolPackets.SnapshotFullInboundPacket decodeSnapshotFull(SnapshotFull message) {
@@ -866,6 +1042,13 @@ public final class ProtobufMessageCodec implements MessageCodec {
 
 	private static Map<String, Object> safeObjectMap(Map<String, Object> value) {
 		return value == null ? Map.of() : value;
+	}
+
+	private static Map<String, Object> safeObjectMap(Object value) {
+		if (!(value instanceof Map<?, ?> raw)) return Map.of();
+		Map<String, Object> result = new LinkedHashMap<>();
+		raw.forEach((key, item) -> result.put(String.valueOf(key), item));
+		return result;
 	}
 
 	@SuppressWarnings("unchecked")

@@ -29,6 +29,9 @@ public class Config implements ConfigGateway {
     public static final String ENTITY_FILTER_DENY_NAME = "deny_name";
     public static final int MAX_ENTITY_FILTER_RULES = 512;
     public static final int MAX_ENTITY_FILTER_VALUE_LENGTH = 128;
+    public static final String TAB_HISTORY_OFF = "off";
+    public static final String TAB_HISTORY_ON_DEMAND = "on_demand";
+    public static final String TAB_HISTORY_FULL = "full";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int DEFAULT_FRIENDLY_TEAM_COLOR = 0xFF3B82F6;
@@ -92,6 +95,7 @@ public class Config implements ConfigGateway {
     private int battleMapKeepaliveIntervalSeconds = 30;
     private int battleMapCacheRetentionSeconds = 7200;
     private boolean battleMapDebugEnabled = false;
+    private String tabHistorySyncMode = TAB_HISTORY_ON_DEMAND;
 
     public static Config load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -722,6 +726,18 @@ public class Config implements ConfigGateway {
     @Override
     public int getUpdateIntervalTicks() {
         return getUpdateInterval();
+    }
+
+    @Override
+    public String getTabHistorySyncMode() {
+        if (TAB_HISTORY_OFF.equals(tabHistorySyncMode) || TAB_HISTORY_FULL.equals(tabHistorySyncMode)) {
+            return tabHistorySyncMode;
+        }
+        return TAB_HISTORY_ON_DEMAND;
+    }
+
+    public void setTabHistorySyncMode(String mode) {
+        tabHistorySyncMode = mode;
     }
 
     public boolean isPreferLocalDataForRender() {

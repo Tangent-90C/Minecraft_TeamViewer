@@ -345,8 +345,8 @@ end
 
 local function manual_relation(player, friendly_tags, enemy_tags)
   local name = tostring(player.name or "")
-  local prefix_text = tostring(player.prefixText or "")
-  local prefix_colored = tostring(player.prefixColored or "")
+  local prefix_text = tostring(player.scoreboardPrefix or player.prefixText or "")
+  local prefix_colored = tostring(player.displayName or player.prefixColored or "")
   local visible = strip_format(prefix_text) .. " " .. strip_format(prefix_colored)
   local full_name = visible .. " " .. name
 
@@ -357,14 +357,14 @@ end
 
 local function automatic_relation(player)
   local name = tostring(player.name or "")
-  local prefix_text = tostring(player.prefixText or "")
-  local prefix_colored = tostring(player.prefixColored or "")
+  local prefix_text = tostring(player.scoreboardPrefix or player.prefixText or "")
+  local prefix_colored = tostring(player.displayName or player.prefixColored or "")
 
   if member_friendly[normalized(name)] then return "FRIENDLY" end
 
   local visible_relation = visible_town_relation(prefix_text, prefix_colored)
   if visible_relation ~= nil then return visible_relation end
-  local fallback_relation = team_id_relation(player.teamId)
+  local fallback_relation = team_id_relation(player.scoreboardTeamId or player.teamId)
   if fallback_relation ~= nil then return fallback_relation end
 
   return nil

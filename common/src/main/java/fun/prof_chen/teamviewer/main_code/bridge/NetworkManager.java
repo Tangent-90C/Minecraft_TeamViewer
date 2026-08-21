@@ -16,6 +16,7 @@ import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.SocketProcess;
@@ -233,6 +234,14 @@ public class NetworkManager {
 	private volatile List<RemotePlayerSnapshot> publishedRemotePlayerSnapshots = List.of();
 	private volatile List<LastSeenPlayerSnapshot> publishedLastSeenPlayerSnapshots = List.of();
 	private final Map<String, Map<String, Object>> lastSeenPlayerDataCache = new HashMap<>();
+	private final Map<UUID, Map<String, Object>> tabHistoryCache = new HashMap<>();
+	private final Map<String, TabHistorySyncAccumulator> tabHistorySyncs = new HashMap<>();
+	private final Map<String, Set<UUID>> tabHistoryLookupRequests = new HashMap<>();
+	private long tabHistoryRevision;
+	private byte[] tabHistoryDigest = new byte[0];
+	private long tabHistoryRequestSequence;
+	private int tabHistoryMaxLookupSelectors = 128;
+	private boolean tabHistorySupported;
 	
 	// 远程实体数据缓存 - 存储世界中实体的位置和属性
 	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
@@ -373,6 +382,20 @@ public class NetworkManager {
 	 * 存储玩家的队伍归属、颜色标记和自定义标签
 	 */
 	private record PlayerMarkState(String team, Integer color, String label, String source) {
+	}
+
+	private static final class TabHistorySyncAccumulator {
+		final boolean full;
+		final long revision;
+		final byte[] digest;
+		final Map<UUID, Map<String, Object>> upsert = new HashMap<>();
+		final Set<UUID> delete = new HashSet<>();
+
+		TabHistorySyncAccumulator(boolean full, long revision, byte[] digest) {
+			this.full = full;
+			this.revision = revision;
+			this.digest = digest == null ? new byte[0] : digest.clone();
+		}
 	}
 
 	/** Immutable normalized backend mark, including its precedence-bearing source. */
@@ -1332,6 +1355,21 @@ public class NetworkManager {
 				ProtocolPackets.ReportRateHintInboundPacket packet =
 						(ProtocolPackets.ReportRateHintInboundPacket) decoded.packet;
 				handleReportRateHint(packet);
+				return;
+			}
+
+			if ("tab_history_digest".equals(decoded.type)) {
+				handleTabHistoryDigest((ProtocolPackets.TabHistoryDigestInboundPacket) decoded.packet);
+				return;
+			}
+
+			if ("tab_history_sync_chunk".equals(decoded.type)) {
+				handleTabHistorySyncChunk((ProtocolPackets.TabHistorySyncChunkInboundPacket) decoded.packet);
+				return;
+			}
+
+			if ("tab_history_lookup_chunk".equals(decoded.type)) {
+				handleTabHistoryLookupChunk((ProtocolPackets.TabHistoryLookupChunkInboundPacket) decoded.packet);
 				return;
 			}
 
@@ -2299,6 +2337,7 @@ public class NetworkManager {
 		}
 		snapshots.sort(Comparator.comparing(snapshot -> snapshot.uuid().toString()));
 		publishedLastSeenPlayerSnapshots = List.copyOf(snapshots);
+		requestMissingTabHistory(snapshots.stream().map(LastSeenPlayerSnapshot::uuid).toList());
 	}
 
 	private RemotePlayerSnapshot buildRemotePlayerSnapshot(UUID playerId, RemotePlayerInfo info,
@@ -2604,6 +2643,8 @@ public class NetworkManager {
 			battleChunkKeepaliveIntervalMs = calculateKeepaliveIntervalMs(advertisedBattleChunkTimeoutSec);
 		}
 
+		initializeTabHistory(packet);
+
 		LOGGER.info(
 				"Handshake completed: protocol={}, serverProgramVersion={}, digestInterval={}s, playerKeepalive={}ms(playerTimeout={}s), entityKeepalive={}ms(entityTimeout={}s), battleChunkKeepalive={}ms(battleChunkTimeout={}s)",
 				serverProtocolVersion,
@@ -2616,6 +2657,175 @@ public class NetworkManager {
 				battleChunkKeepaliveIntervalMs,
 				advertisedBattleChunkTimeoutSec
 		);
+	}
+
+	private void initializeTabHistory(ProtocolPackets.HandshakeAckInboundPacket packet) {
+		Map<String, Object> capabilities = objectMap(packet.tabHistory);
+		tabHistorySupported = Boolean.TRUE.equals(capabilities.get("supported"));
+		if (!tabHistorySupported) return;
+		tabHistoryMaxLookupSelectors = Math.max(1, Math.min(
+				toIntegerOrNull(capabilities.get("maxLookupSelectors")) == null
+						? 128 : toIntegerOrNull(capabilities.get("maxLookupSelectors")), 512));
+		String mode = configGateway == null ? "on_demand" : configGateway.getTabHistorySyncMode();
+		if ("off".equals(mode)) return;
+		if ("full".equals(mode)) {
+			ProtocolPackets.TabHistorySubscribePacket subscribe = new ProtocolPackets.TabHistorySubscribePacket();
+			subscribe.enabled = true;
+			if (tabHistoryRevision > 0) {
+				subscribe.knownRevision = tabHistoryRevision;
+				subscribe.knownDigestSha256 = tabHistoryDigest.clone();
+			}
+			sendPacket(subscribe);
+			requestTabHistorySync(tabHistoryRevision > 0);
+		} else {
+			requestMissingTabHistory(lastSeenPlayers.keySet());
+		}
+	}
+
+	private void handleTabHistoryDigest(ProtocolPackets.TabHistoryDigestInboundPacket packet) {
+		if (packet == null || configGateway == null || !"full".equals(configGateway.getTabHistorySyncMode())) return;
+		Map<String, Object> head = objectMap(packet.head);
+		long revision = longValue(head.get("revision"), 0L);
+		byte[] digest = bytesValue(head.get("digestSha256"));
+		if (revision != tabHistoryRevision || !java.util.Arrays.equals(digest, tabHistoryDigest)) {
+			requestTabHistorySync(tabHistoryRevision > 0);
+		}
+	}
+
+	private void requestTabHistorySync(boolean delta) {
+		ProtocolPackets.TabHistorySyncRequestPacket request = new ProtocolPackets.TabHistorySyncRequestPacket();
+		request.requestId = "mod-sync-" + (++tabHistoryRequestSequence);
+		request.preferredMode = delta ? "TAB_HISTORY_SYNC_MODE_DELTA" : "TAB_HISTORY_SYNC_MODE_FULL";
+		request.allowFullFallback = true;
+		request.maxChunkEntries = 256;
+		if (delta) {
+			request.baseRevision = tabHistoryRevision;
+			request.baseDigestSha256 = tabHistoryDigest.clone();
+		}
+		sendPacket(request);
+	}
+
+	public void requestTabHistoryByUuids(Collection<UUID> playerIds) {
+		requestMissingTabHistory(playerIds);
+	}
+
+	private void requestMissingTabHistory(Collection<UUID> playerIds) {
+		if (!isConnected || !tabHistorySupported || playerIds == null || configGateway == null
+				|| "off".equals(configGateway.getTabHistorySyncMode())) return;
+		Set<UUID> alreadyPending = new HashSet<>();
+		for (Set<UUID> pending : tabHistoryLookupRequests.values()) alreadyPending.addAll(pending);
+		List<UUID> missing = playerIds.stream()
+				.filter(Objects::nonNull)
+				.filter(id -> !tabHistoryCache.containsKey(id) && !alreadyPending.contains(id))
+				.sorted(Comparator.comparing(UUID::toString))
+				.toList();
+		for (int offset = 0; offset < missing.size(); offset += tabHistoryMaxLookupSelectors) {
+			List<UUID> batch = missing.subList(offset, Math.min(missing.size(), offset + tabHistoryMaxLookupSelectors));
+			String requestId = "mod-lookup-" + (++tabHistoryRequestSequence);
+			ProtocolPackets.TabHistoryLookupRequestPacket request = new ProtocolPackets.TabHistoryLookupRequestPacket();
+			request.requestId = requestId;
+			request.uuids = batch.stream().map(UUID::toString).toList();
+			request.names = List.of();
+			request.maxChunkEntries = 256;
+			tabHistoryLookupRequests.put(requestId, Set.copyOf(batch));
+			sendPacket(request);
+		}
+	}
+
+	private void handleTabHistoryLookupChunk(ProtocolPackets.TabHistoryLookupChunkInboundPacket packet) {
+		if (packet == null || packet.errorCode != null) {
+			if (packet != null) tabHistoryLookupRequests.remove(packet.requestId);
+			return;
+		}
+		for (Map<String, Object> result : packet.results == null ? List.<Map<String, Object>>of() : packet.results) {
+			Object entries = result.get("entries");
+			if (!(entries instanceof Collection<?> collection)) continue;
+			for (Object entry : collection) applyTabHistoryEntry(entry, tabHistoryCache);
+		}
+		if (Boolean.TRUE.equals(packet.finalChunk)) tabHistoryLookupRequests.remove(packet.requestId);
+	}
+
+	private void handleTabHistorySyncChunk(ProtocolPackets.TabHistorySyncChunkInboundPacket packet) {
+		if (packet == null || packet.requestId == null || packet.errorCode != null) return;
+		Map<String, Object> head = objectMap(packet.head);
+		long revision = longValue(head.get("revision"), 0L);
+		byte[] digest = bytesValue(head.get("digestSha256"));
+		boolean full = "TAB_HISTORY_SYNC_MODE_FULL".equals(packet.mode);
+		TabHistorySyncAccumulator accumulator = tabHistorySyncs.computeIfAbsent(
+				packet.requestId, ignored -> new TabHistorySyncAccumulator(full, revision, digest));
+		if (accumulator.full != full || accumulator.revision != revision
+				|| !java.util.Arrays.equals(accumulator.digest, digest)) {
+			tabHistorySyncs.remove(packet.requestId);
+			requestTabHistorySync(false);
+			return;
+		}
+		for (Map<String, Object> entry : packet.upsert == null ? List.<Map<String, Object>>of() : packet.upsert) {
+			applyTabHistoryEntry(entry, accumulator.upsert);
+		}
+		for (String rawId : packet.deleteUuids == null ? List.<String>of() : packet.deleteUuids) {
+			try { accumulator.delete.add(UUID.fromString(rawId)); } catch (IllegalArgumentException ignored) { }
+		}
+		if (!Boolean.TRUE.equals(packet.finalChunk)) return;
+
+		Map<UUID, Map<String, Object>> candidate = full ? new HashMap<>() : new HashMap<>(tabHistoryCache);
+		candidate.putAll(accumulator.upsert);
+		accumulator.delete.forEach(candidate::remove);
+		tabHistorySyncs.remove(packet.requestId);
+		if (!java.util.Arrays.equals(computeTabHistoryDigest(candidate), digest)) {
+			LOGGER.warn("Rejected Tab history sync with mismatched SHA-256 digest request={}", packet.requestId);
+			requestTabHistorySync(false);
+			return;
+		}
+		tabHistoryCache.clear();
+		tabHistoryCache.putAll(candidate);
+		tabHistoryRevision = revision;
+		tabHistoryDigest = digest.clone();
+	}
+
+	private void applyTabHistoryEntry(Object raw, Map<UUID, Map<String, Object>> target) {
+		Map<String, Object> entry = objectMap(raw);
+		Map<String, Object> player = objectMap(entry.get("player"));
+		String uuid = normalizeUuidText(player.get("uuid"));
+		if (uuid == null) return;
+		try {
+			Map<String, Object> stored = new HashMap<>(entry);
+			stored.put("player", new HashMap<>(player));
+			target.put(UUID.fromString(uuid), stored);
+		} catch (IllegalArgumentException ignored) { }
+	}
+
+	private byte[] computeTabHistoryDigest(Map<UUID, Map<String, Object>> entries) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			entries.keySet().stream().sorted(Comparator.comparing(UUID::toString)).forEach(playerId -> {
+				digest.update(UuidBinaryCodec.toBytes(playerId));
+				digest.update(bytesValue(entries.get(playerId).get("etagSha256")));
+			});
+			return digest.digest();
+		} catch (Exception error) {
+			return new byte[0];
+		}
+	}
+
+	private static byte[] bytesValue(Object value) {
+		return value instanceof byte[] bytes ? bytes.clone() : new byte[0];
+	}
+
+	public List<TabPlayerSnapshot> getTabHistoryPlayers() {
+		List<TabPlayerSnapshot> result = new ArrayList<>();
+		for (Map.Entry<UUID, Map<String, Object>> cached : tabHistoryCache.entrySet()) {
+			Map<String, Object> player = objectMap(cached.getValue().get("player"));
+			result.add(new TabPlayerSnapshot(
+					cached.getKey().toString(), normalizeNullableText(player.get("name")),
+					normalizeNullableText(player.get("scoreboardPrefix")),
+					normalizeNullableText(player.get("displayName")),
+					normalizeNullableText(player.get("scoreboardTeamId")),
+					normalizeNullableText(player.get("scoreboardSuffix")),
+					toIntegerOrNull(player.get("scoreboardColorRgb")),
+					normalizeNullableText(player.get("displayName")), null, null, null));
+		}
+		result.sort(Comparator.comparing(TabPlayerSnapshot::playerId));
+		return List.copyOf(result);
 	}
 
 	private long calculateKeepaliveIntervalMs(int timeoutSec) {
@@ -3534,10 +3744,13 @@ public class NetworkManager {
 				continue;
 			}
 
-			String playerId = normalizeUuidText(raw.get("playerUUID"));
+			String playerId = normalizeUuidText(raw.get("uuid"));
+			if (playerId == null) playerId = normalizeUuidText(raw.get("playerUUID"));
 			String name = normalizeNullableText(raw.get("name"));
-			String displayName = normalizeNullableText(raw.get("prefixColored"));
-			String prefixedName = normalizeNullableText(raw.get("prefixText"));
+			String displayName = normalizeNullableText(raw.get("displayName"));
+			if (displayName == null) displayName = normalizeNullableText(raw.get("prefixColored"));
+			String prefixedName = normalizeNullableText(raw.get("prefixedName"));
+			if (prefixedName == null) prefixedName = normalizeNullableText(raw.get("prefixText"));
 
 			String entryKey = buildTabPlayerEntryKey(playerId, name, displayName, prefixedName);
 			if (entryKey == null) {
@@ -3546,11 +3759,18 @@ public class NetworkManager {
 
 			Map<String, Object> snapshotEntry = new HashMap<>(8);
 			if (playerId != null) {
-				snapshotEntry.put("id", playerId);
+				snapshotEntry.put("uuid", playerId);
 			}
 			snapshotEntry.put("name", name);
 			snapshotEntry.put("displayName", displayName);
 			snapshotEntry.put("prefixedName", prefixedName);
+			snapshotEntry.put("scoreboardTeamId", raw.get("scoreboardTeamId"));
+			snapshotEntry.put("scoreboardPrefix", raw.get("scoreboardPrefix"));
+			snapshotEntry.put("scoreboardSuffix", raw.get("scoreboardSuffix"));
+			snapshotEntry.put("scoreboardColorRgb", raw.get("scoreboardColorRgb"));
+			snapshotEntry.put("formattedDisplayName", raw.get("formattedDisplayName"));
+			snapshotEntry.put("formattedScoreboardPrefix", raw.get("formattedScoreboardPrefix"));
+			snapshotEntry.put("formattedScoreboardSuffix", raw.get("formattedScoreboardSuffix"));
 			snapshot.put(entryKey, snapshotEntry);
 		}
 		return snapshot;
@@ -3600,6 +3820,9 @@ public class NetworkManager {
 		lastResyncRequestMs = 0L;
 		lastPlayersPacketSentMs = 0L;
 		lastEntitiesPacketSentMs = 0L;
+		tabHistorySyncs.clear();
+		tabHistoryLookupRequests.clear();
+		tabHistorySupported = false;
 	}
 
 	public int getNegotiatedReportIntervalTicks() {
@@ -3659,6 +3882,11 @@ public class NetworkManager {
 		remotePlayerMarks.clear();
 		lastSeenPlayers.clear();
 		lastSeenPlayerDataCache.clear();
+		tabHistoryCache.clear();
+		tabHistoryRevision = 0L;
+		tabHistoryDigest = new byte[0];
+		tabHistorySyncs.clear();
+		tabHistoryLookupRequests.clear();
 		publishedRemotePlayerSnapshots = List.of();
 		publishedLastSeenPlayerSnapshots = List.of();
 		if (!removedWaypointIds.isEmpty()) {

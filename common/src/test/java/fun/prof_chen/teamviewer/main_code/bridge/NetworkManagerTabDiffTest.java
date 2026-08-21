@@ -158,6 +158,9 @@ class NetworkManagerTabDiffTest {
         manager.sendTabPlayersUpdate(submitPlayerId, baseline);
         assertEquals(1, socket.payloads.size());
         assertEquals(800, lastTabPatch(socket).getUpsertCount());
+        assertTrue(lastTabPatch(socket).getUpsert(0).getData().hasUuid());
+        assertEquals(lastTabPatch(socket).getUpsert(0).getKey(),
+                lastTabPatch(socket).getUpsert(0).getData().getUuid());
 
         manager.sendTabPlayersUpdate(submitPlayerId, baseline);
         assertEquals(1, socket.payloads.size(), "unchanged 800-player list must not be resent");

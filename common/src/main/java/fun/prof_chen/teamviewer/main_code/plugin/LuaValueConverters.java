@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.plugin;
 
+import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.lib.jse.CoerceJavaToLua;
@@ -37,6 +38,20 @@ final class LuaValueConverters {
             for (int index = 0; index < length; index++) {
                 table.set(index + 1, toLua(java.lang.reflect.Array.get(value, index)));
             }
+            return table;
+        }
+        if (value instanceof TabPlayerSnapshot player) {
+            LuaTable table = new LuaTable();
+            for (java.lang.reflect.RecordComponent component : value.getClass().getRecordComponents()) {
+                try {
+                    table.set(component.getName(), toLua(component.getAccessor().invoke(value)));
+                } catch (ReflectiveOperationException error) {
+                    throw new IllegalArgumentException(
+                            "Unable to expose Tab snapshot component " + component.getName(), error);
+                }
+            }
+            table.set("teamId", toLua(player.scoreboardTeamId()));
+            table.set("scoreboardPrefix", toLua(player.scoreboardPrefix()));
             return table;
         }
         if (value.getClass().isRecord()) {

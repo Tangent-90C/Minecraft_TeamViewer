@@ -588,7 +588,19 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     private void refreshPlayerRelations() {
         if (playerRelationCoordinator != null) {
-            playerRelationCoordinator.refresh(cachedTabPlayers);
+            Map<UUID, TabPlayerSnapshot> merged = new LinkedHashMap<>();
+            for (TabPlayerSnapshot player : networkManager.getTabHistoryPlayers()) {
+                if (player != null && player.playerId() != null) {
+                    try { merged.put(UUID.fromString(player.playerId()), player); } catch (IllegalArgumentException ignored) { }
+                }
+            }
+            // A live Tab observation is always more authoritative than history.
+            for (TabPlayerSnapshot player : cachedTabPlayers) {
+                if (player != null && player.playerId() != null) {
+                    try { merged.put(UUID.fromString(player.playerId()), player); } catch (IllegalArgumentException ignored) { }
+                }
+            }
+            playerRelationCoordinator.refresh(List.copyOf(merged.values()));
         }
     }
 

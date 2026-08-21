@@ -20,4 +20,8 @@ public interface ConfigGateway {
     boolean isEnableCompression();
 
     int getUpdateIntervalTicks();
+
+    default String getTabHistorySyncMode() {
+        return "on_demand";
+    }
 }

@@ -36,6 +36,34 @@ public final class ProtocolPackets {
 		public Integer playerTimeoutSec;
 		public Integer entityTimeoutSec;
 		public Integer battleChunkTimeoutSec;
+		public Map<String, Object> tabHistory;
+	}
+
+	public static class TabHistoryDigestInboundPacket extends BaseInboundPacket {
+		public Map<String, Object> head;
+	}
+
+	public static class TabHistorySyncChunkInboundPacket extends BaseInboundPacket {
+		public String requestId;
+		public String mode;
+		public Map<String, Object> head;
+		public List<Map<String, Object>> upsert;
+		public List<String> deleteUuids;
+		public Integer chunkIndex;
+		public Integer chunkCount;
+		public Boolean finalChunk;
+		public String resetReason;
+		public String errorCode;
+	}
+
+	public static class TabHistoryLookupChunkInboundPacket extends BaseInboundPacket {
+		public String requestId;
+		public Map<String, Object> head;
+		public List<Map<String, Object>> results;
+		public Integer chunkIndex;
+		public Integer chunkCount;
+		public Boolean finalChunk;
+		public String errorCode;
 	}
 
 	public static class SnapshotFullInboundPacket extends BaseInboundPacket {
@@ -171,5 +199,30 @@ public final class ProtocolPackets {
 		public final String type = "resync_req";
 		public String reason;
 		public byte[] submitPlayerId;
+	}
+
+	public static class TabHistorySubscribePacket {
+		public final String type = "tab_history_subscribe";
+		public boolean enabled;
+		public Long knownRevision;
+		public byte[] knownDigestSha256;
+	}
+
+	public static class TabHistorySyncRequestPacket {
+		public final String type = "tab_history_sync_request";
+		public String requestId;
+		public String preferredMode;
+		public Long baseRevision;
+		public byte[] baseDigestSha256;
+		public Integer maxChunkEntries;
+		public boolean allowFullFallback;
+	}
+
+	public static class TabHistoryLookupRequestPacket {
+		public final String type = "tab_history_lookup_request";
+		public String requestId;
+		public List<String> uuids;
+		public List<String> names;
+		public Integer maxChunkEntries;
 	}
 }
