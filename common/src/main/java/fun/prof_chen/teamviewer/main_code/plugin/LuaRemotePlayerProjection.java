@@ -64,13 +64,22 @@ final class LuaRemotePlayerProjection implements RemotePlayerProjection {
         else RemotePlayerProjection.super.clear();
     }
 
-    @Override
-    public void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
-        if (syncLastSeen != null && syncLastSeen.isfunction()) {
-            runtime.invoke("remote.sync_last_seen." + id, syncLastSeen,
-                    LuaValueConverters.toLua(players), LuaValue.valueOf(enabled));
-        }
-    }
+	@Override
+	public void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
+		syncLastSeenResolved(players, Map.of(), enabled);
+	}
+
+	@Override
+	public void syncLastSeenResolved(
+			Map<UUID, LastSeenPlayerInfo> players,
+			Map<UUID, PlayerRelationView> relations,
+			boolean enabled) {
+		if (syncLastSeen != null && syncLastSeen.isfunction()) {
+			runtime.invoke("remote.sync_last_seen." + id, syncLastSeen,
+					LuaValueConverters.toLua(players), LuaValue.valueOf(enabled),
+					LuaValueConverters.toLua(relations));
+		}
+	}
 
     @Override
     public boolean needsReconcile() {

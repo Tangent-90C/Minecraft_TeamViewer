@@ -55,6 +55,13 @@ object, and saves the world. Delete and clear touch only entries recorded by thi
 的名称，避免中继回环。`upsert_remote` 把 common 路标命令转换成 Xaero 六参数
 `Waypoint`，替换旧 managed 对象并保存世界；删除与清理只处理本插件记录的对象。
 
+Offline records use separately owned `[TV Last]` waypoints. A resolved local relation controls
+their color; an unclassified record keeps the legacy orange color. Xaero World Map receives the
+same offline positions through its tracker but has no stable tracker color or label API.
+
+离线记录使用独立管理的 `[TV Last]` 路标。已解析的本地关系决定其颜色；未分类记录保留原有橙色。Xaero
+World Map 也会通过 tracker 接收同一离线位置，但其稳定 tracker API 没有颜色或标签接口。
+
 When adapting a new Xaero release, update class names, session traversal and constructor shape
 inside the handle/context sections. Do not move player filtering, shared-waypoint conflict policy
 or synchronization timing out of common.

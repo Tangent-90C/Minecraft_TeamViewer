@@ -15,6 +15,7 @@ import fun.prof_chen.teamviewer.main_code.battlemap.ScoreboardSnapshot;
 import fun.prof_chen.teamviewer.main_code.battlemap.BattleMapCoordinator;
 import fun.prof_chen.teamviewer.main_code.bridge.NetworkManager;
 import fun.prof_chen.teamviewer.main_code.client.model.ClientWorldSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
 import fun.prof_chen.teamviewer.main_code.client.model.SystemChatMessageSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.sdk.PlayerRelationClassifier;
@@ -24,6 +25,7 @@ import fun.prof_chen.teamviewer.main_code.mapbridge.implementor.SharedWaypointMa
 import fun.prof_chen.teamviewer.main_code.mapbridge.model.MapWaypointCommand;
 import fun.prof_chen.teamviewer.main_code.mapbridge.model.NativeMapWaypointSnapshot;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.TransportProcess;
@@ -1020,6 +1022,18 @@ class IntegrationPluginManagerTest {
                 .forEach(value -> value.sync(players, true));
         assertEquals(1, api.waypoints().size(),
                 "the merged API family must project each player to one native waypoint");
+        LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(remoteId, new Position3D(10.8, 70.2, -3.1),
+                "minecraft:overworld", "Remote", 1_700_000_004_000L,
+                1_700_000_000_000L, 1_700_000_005_000L);
+        PlayerRelationView offlineEnemy = new PlayerRelationView(PlayerRelation.ENEMY, 0xFF662244, true);
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.syncLastSeenResolved(
+                        Map.of(remoteId, lastSeen), Map.of(remoteId, offlineEnemy), true));
+        assertEquals(2, api.waypoints().size());
+        assertEquals(offlineEnemy.color(), api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("[TV Last]"))
+                .findFirst().orElseThrow().getColor());
 
         SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
                 .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
@@ -1084,6 +1098,16 @@ class IntegrationPluginManagerTest {
                         new RemotePlayerInfo(remoteId, new Position3D(8, 70, -4),
                                 "minecraft:overworld", "V1 Remote")), true));
         assertEquals(1, api.waypoints().size());
+        PlayerRelationView offlineFriendly = new PlayerRelationView(PlayerRelation.FRIENDLY, 0xFF226644, true);
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.syncLastSeenResolved(Map.of(remoteId, new LastSeenPlayerInfo(
+                        remoteId, new Position3D(8, 70, -4), "minecraft:overworld", "V1 Remote",
+                        1_700_000_004_000L, 1_700_000_000_000L, 1_700_000_005_000L)),
+                        Map.of(remoteId, offlineFriendly), true));
+        assertEquals(offlineFriendly.color(), api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("[TV Last]"))
+                .findFirst().orElseThrow().getColor());
         assertEquals(List.of("show_remote_players"), manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP)
                 .visibleSettingDefinitions().stream().map(PluginManifest.SettingDefinition::key).toList());
         manager.shutdown();
@@ -1110,6 +1134,16 @@ class IntegrationPluginManagerTest {
                                 "minecraft:overworld", "26.2 Remote")), true));
 
         assertEquals(2, api.waypoints().size());
+        PlayerRelationView offlineNeutral = new PlayerRelationView(PlayerRelation.NEUTRAL, 0xFF445566, true);
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.syncLastSeenResolved(Map.of(remoteId, new LastSeenPlayerInfo(
+                        remoteId, new Position3D(4.5, 70, -8.5), "minecraft:overworld", "26.2 Remote",
+                        1_700_000_004_000L, 1_700_000_000_000L, 1_700_000_005_000L)),
+                        Map.of(remoteId, offlineNeutral), true));
+        assertEquals(offlineNeutral.color(), api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("[TV Last]"))
+                .findFirst().orElseThrow().getColor());
         PluginSnapshot snapshot = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
         assertEquals(Set.of("show_map_markers", "show_beacons"), snapshot.visibleSettingDefinitions().stream()
                 .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
@@ -1203,6 +1237,26 @@ class IntegrationPluginManagerTest {
         assertEquals(remoteId, tracker.getReader().getId(tracked));
         assertEquals(8.5, tracker.getReader().getX(tracked));
 
+        PlayerRelationView offlineFriendly = new PlayerRelationView(PlayerRelation.FRIENDLY, 0xFF2468AC, true);
+        LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(remoteId, new Position3D(8.5, 64, -2.25),
+                "minecraft:overworld", "Xaero Remote", 1_700_000_004_000L,
+                1_700_000_000_000L, 1_700_000_005_000L);
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> "xaero-last-seen-minimap".equals(value.id()))
+                .findFirst().orElseThrow()
+                .syncLastSeenResolved(Map.of(remoteId, lastSeen), Map.of(remoteId, offlineFriendly), true);
+        assertEquals(offlineFriendly.color(), xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().stream()
+                .filter(value -> value.getName().startsWith("[TV Last]"))
+                .findFirst().orElseThrow().getColor());
+        PlayerRelationView offlineEnemy = new PlayerRelationView(PlayerRelation.ENEMY, 0xFFAC6824, true);
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> "xaero-last-seen-minimap".equals(value.id()))
+                .findFirst().orElseThrow()
+                .syncLastSeenResolved(Map.of(remoteId, lastSeen), Map.of(remoteId, offlineEnemy), true);
+        assertEquals(offlineEnemy.color(), xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().stream()
+                .filter(value -> value.getName().startsWith("[TV Last]"))
+                .findFirst().orElseThrow().getColor());
+
         SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
                 .filter(value -> IntegrationIds.XAERO_MINIMAP.equals(value.id()))
                 .findFirst().orElseThrow();
@@ -1212,7 +1266,7 @@ class IntegrationPluginManagerTest {
         adapter.upsertRemoteWaypoint(new MapWaypointCommand(
                 "relay-xaero", "Relay Xaero", "R", 3, 71, 4,
                 "minecraft:overworld", 0x55FF55));
-        assertEquals(2, xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().size());
+        assertEquals(3, xaero.common.XaeroMinimapSession.waypointSet().getWaypoints().size());
         List<NativeMapWaypointSnapshot> listed = adapter.listLocalWaypoints();
         assertEquals(1, listed.size());
         assertEquals("Local Xaero", listed.get(0).name());

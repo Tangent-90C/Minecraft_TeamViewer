@@ -92,6 +92,30 @@ class WorldRenderPlannerTest {
         assertTrue(commands.stream().anyMatch(WorldRenderCommand.Box.class::isInstance));
         assertTrue(commands.stream().filter(WorldRenderCommand.Line.class::isInstance).count() > 2,
                 "tracer plus vectorized name/local time should be present");
+        assertTrue(commands.stream().filter(WorldRenderCommand.Line.class::isInstance)
+                .map(WorldRenderCommand.Line.class::cast)
+                .anyMatch(line -> line.width() == 2.0F),
+                "vectorized labels must not rely on one-pixel strokes");
+    }
+
+    @Test
+    void lastSeenRenderingUsesResolvedRelationColor() {
+        Config config = new Config();
+        config.setShowLastSeenPlayers(true);
+        config.setFriendlyTeamColor(0xFF1A2B3C);
+        LastSeenPlayerInfo player = new LastSeenPlayerInfo(REMOTE, new Position3D(10, 64, 10),
+                "minecraft:overworld", "remote", 1_700_000_004_000L,
+                1_700_000_000_000L, 1_700_000_005_000L);
+        WorldRenderPlanner planner = new WorldRenderPlanner(config,
+                ignored -> new PlayerRelationView(PlayerRelation.FRIENDLY, config.getFriendlyTeamColor(), true), null);
+
+        var commands = planner.plan(true, world(), Map.of(), Map.of(REMOTE, player), Map.of()).commands();
+        assertEquals(config.getFriendlyTeamColor(), commands.stream()
+                .filter(WorldRenderCommand.Box.class::isInstance)
+                .map(WorldRenderCommand.Box.class::cast)
+                .findFirst().orElseThrow().color());
+        assertTrue(commands.stream().filter(WorldRenderCommand.Line.class::isInstance)
+                .allMatch(command -> command.color() == config.getFriendlyTeamColor()));
     }
 
     private static ClientWorldSnapshot world() {

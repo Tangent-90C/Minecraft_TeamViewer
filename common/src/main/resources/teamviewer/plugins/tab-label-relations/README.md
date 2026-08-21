@@ -12,6 +12,13 @@ TeamViewRelay room.
 The default `relation_source_mode` is `automatic_only`, so saved manual tags do not affect
 classification until a mode that includes manual results is selected.
 
+When a protocol 0.7.0 backend advertises Tab history and the client has not disabled history
+sync, common requests the latest label only for current offline-player UUIDs. It merges that
+history with the live Tab snapshot (live wins) before calling this classifier. The plugin sees
+only those normalized snapshots: it cannot query the relay, read its cache, or render directly.
+Its local decisions color offline world markers, JourneyMap and Xaero Minimap; Xaero World Map's
+stable tracker API only accepts position data.
+
 本内置插件根据 Minecraft Tab 缓存快照在本地识别玩家关系。插件默认关闭，且不会向
 TeamViewRelay 房间写入玩家标记。请先在插件页面启用它，进入服务器后手动输入 `/town` 或
 `/t`；插件会在收到完整回复后导入，并通过动作栏提示采集成功。重连、切换服务器或城镇关系
@@ -21,6 +28,11 @@ TeamViewRelay 房间写入玩家标记。请先在插件页面启用它，进入
 写入系统剪贴板；该操作仅发生在本机，不会向 TeamViewRelay 房间发送关系数据。
 默认关系采用策略为“仅自动识别”，因此已保存的手动标签不会参与分类；切换到包含手动结果的
 策略后，手动标签才会生效。
+
+当协议 `0.7.0` 后端声明 Tab 历史能力且客户端未关闭历史同步时，common 只会为当前离线玩家 UUID
+查询最近标签，并在交给本插件前与实时 Tab 合并（实时优先）。插件只能读取这一规范化快照，不能查询中继、
+读取中继缓存或直接渲染；其本地关系结果会着色离线世界标记、JourneyMap 和 Xaero Minimap。Xaero World
+Map 的稳定 tracker API 只接受位置数据。
 
 - `relation_source_mode` supports `automatic_only` (default), `manual_only`, `manual_first`, and
   `automatic_first`. The two priority modes use the other source only when the preferred source

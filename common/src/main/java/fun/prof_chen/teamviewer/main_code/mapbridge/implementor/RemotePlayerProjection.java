@@ -35,6 +35,17 @@ public interface RemotePlayerProjection {
 	default void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
 	}
 
+	/**
+	 * Relationship-aware offline-player projection. Implementations which do not need local
+	 * relation decisions may keep implementing {@link #syncLastSeen(Map, boolean)}.
+	 */
+	default void syncLastSeenResolved(
+			Map<UUID, LastSeenPlayerInfo> players,
+			Map<UUID, PlayerRelationView> relations,
+			boolean enabled) {
+		syncLastSeen(players, enabled);
+	}
+
 	default void clear() {
 		sync(Map.of(), false);
 	}

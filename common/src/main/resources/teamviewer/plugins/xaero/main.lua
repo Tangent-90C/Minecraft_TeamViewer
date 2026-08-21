@@ -207,7 +207,7 @@ local function clear_last_seen_minimap()
   if dirty then save_context(context) end
 end
 
-local function sync_last_seen_minimap(players, enabled)
+local function sync_last_seen_minimap(players, enabled, relations)
   if not enabled then clear_last_seen_minimap(); return end
   local context = current_waypoint_context()
   if context == nil then last_seen_minimap_reconcile = true; return end
@@ -218,14 +218,16 @@ local function sync_last_seen_minimap(players, enabled)
       local id = "last-seen:" .. player.uuid
       local local_time = minimap_handles.LastSeenTimeFormatter:format(player.lastSeenAtUtcMs)
       local name = LAST_SEEN_WAYPOINT_PREFIX .. (player.name or "Player") .. " @ " .. local_time
-      local signature = name .. ":" .. player.position.x .. ":" .. player.position.y .. ":" .. player.position.z
+      local relation = relations ~= nil and relations[player.uuid] or nil
+      local color = relation ~= nil and relation.resolved and relation.color or 0xFF9A26
+      local signature = name .. ":" .. player.position.x .. ":" .. player.position.y .. ":" .. player.position.z .. ":" .. color
       active[id] = true
       local state = managed_last_seen[id]
       if state == nil or state.signature ~= signature then
         if state ~= nil then context.set:remove(state.object) end
         local object = java["new"](minimap_handles.Waypoint,
             math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-            name, "L", 0xFF9A26)
+            name, "L", color)
         pcall(function() object:setYIncluded(true) end)
         context.set:add(object)
         managed_last_seen[id] = {object = object, signature = signature}

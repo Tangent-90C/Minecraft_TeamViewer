@@ -61,13 +61,10 @@ public final class RemotePlayerProjectionCoordinator {
 		Map<UUID, RemotePlayerInfo> filtered = filter(players, world);
 		Map<UUID, LastSeenPlayerInfo> filteredLastSeen = filterLastSeen(
 				lastSeenRepository == null ? Map.of() : lastSeenRepository.snapshot(), filtered, world);
-		Map<UUID, PlayerRelationView> relations = new LinkedHashMap<>();
-		for (UUID playerId : filtered.keySet()) {
-			PlayerRelationView relation = relationResolver.apply(playerId);
-			if (relation != null) relations.put(playerId, relation);
-		}
-		relations = Map.copyOf(relations);
-		ProjectionState state = new ProjectionState(filtered, filteredLastSeen, relations, enabled, lastSeenEnabled,
+		Map<UUID, PlayerRelationView> relations = resolveRelations(filtered.keySet());
+		Map<UUID, PlayerRelationView> lastSeenRelations = resolveRelations(filteredLastSeen.keySet());
+		ProjectionState state = new ProjectionState(filtered, filteredLastSeen, relations, lastSeenRelations,
+				enabled, lastSeenEnabled,
 				world != null && world.available(), world == null ? null : world.dimension(),
 				world == null ? null : world.localPlayerId());
 		boolean stateChanged = !state.equals(lastState);
@@ -83,7 +80,7 @@ public final class RemotePlayerProjectionCoordinator {
 			}
 			if (!stateChanged && !projection.needsReconcile()) continue;
 			projection.syncResolved(filtered, relations, enabled);
-			projection.syncLastSeen(filteredLastSeen, enabled && lastSeenEnabled);
+			projection.syncLastSeenResolved(filteredLastSeen, lastSeenRelations, enabled && lastSeenEnabled);
 			if (!stateChanged) retried = true;
 		}
 		if (stateChanged || retried) lastReconcileRetryNanos = now;
@@ -107,6 +104,15 @@ public final class RemotePlayerProjectionCoordinator {
 		return Map.copyOf(result);
 	}
 
+	private Map<UUID, PlayerRelationView> resolveRelations(Iterable<UUID> playerIds) {
+		Map<UUID, PlayerRelationView> result = new LinkedHashMap<>();
+		for (UUID playerId : playerIds) {
+			PlayerRelationView relation = relationResolver.apply(playerId);
+			if (relation != null) result.put(playerId, relation);
+		}
+		return Map.copyOf(result);
+	}
+
 	private Map<UUID, RemotePlayerInfo> filter(
 			Map<UUID, RemotePlayerInfo> players, ClientWorldSnapshot world) {
 		if (!world.available() || players == null || players.isEmpty()) return Map.of();
@@ -125,7 +131,7 @@ public final class RemotePlayerProjectionCoordinator {
 	public void clear() {
 		for (RemotePlayerProjection projection : projections()) {
 			projection.clear();
-			projection.syncLastSeen(Map.of(), false);
+			projection.syncLastSeenResolved(Map.of(), Map.of(), false);
 		}
 		invalidate();
 	}
@@ -146,7 +152,7 @@ public final class RemotePlayerProjectionCoordinator {
 			for (RemotePlayerProjection projection : previous) {
 				if (!current.contains(projection)) {
 					projection.clear();
-					projection.syncLastSeen(Map.of(), false);
+					projection.syncLastSeenResolved(Map.of(), Map.of(), false);
 				}
 			}
 			cachedProjections = current;
@@ -160,6 +166,7 @@ public final class RemotePlayerProjectionCoordinator {
 			Map<UUID, RemotePlayerInfo> players,
 			Map<UUID, LastSeenPlayerInfo> lastSeenPlayers,
 			Map<UUID, PlayerRelationView> relations,
+			Map<UUID, PlayerRelationView> lastSeenRelations,
 			boolean enabled,
 			boolean lastSeenEnabled,
 			boolean worldAvailable,
@@ -169,6 +176,7 @@ public final class RemotePlayerProjectionCoordinator {
 			players = Map.copyOf(players);
 			lastSeenPlayers = Map.copyOf(lastSeenPlayers);
 			relations = Map.copyOf(relations);
+			lastSeenRelations = Map.copyOf(lastSeenRelations);
 		}
 	}
 

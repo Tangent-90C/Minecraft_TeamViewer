@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -131,6 +132,34 @@ class RemotePlayerProjectionCoordinatorTest {
         assertTrue(!projection.lastSeenEnabled);
     }
 
+    @Test
+    void suppliesLastSeenRelationsAndResyncsWhenTheyChange() {
+        UUID localId = UUID.randomUUID();
+        UUID remoteId = UUID.randomUUID();
+        Map<UUID, LastSeenPlayerInfo> history = Map.of(remoteId, lastSeen(remoteId, "Remote"));
+        PlayerRelationView friendly = new PlayerRelationView(PlayerRelation.FRIENDLY, 0xFF123456, true);
+        PlayerRelationView enemy = new PlayerRelationView(PlayerRelation.ENEMY, 0xFF654321, true);
+        AtomicReference<PlayerRelationView> relation = new AtomicReference<>(friendly);
+        IntegrationRegistry registry = new IntegrationRegistry();
+        ResolvedLastSeenProjection projection = new ResolvedLastSeenProjection();
+        register(registry, projection.id(), "plugin.last-seen-relations", projection);
+        RemotePlayerProjectionCoordinator coordinator = new RemotePlayerProjectionCoordinator(registry, ignored -> relation.get());
+        ClientWorldSnapshot world = new ClientWorldSnapshot(localId, "Local", true,
+                "minecraft:overworld", -64, new Position3D(0, 64, 0), new Position3D(0, 65.6, 0),
+                new Position3D(0, 0, 1), new Position3D(0, 1, 0), List.of(), List.of());
+
+        coordinator.tick(new MapBackedRemotePlayerRepository(new HashMap<>()),
+                new MapBackedLastSeenPlayerRepository(history), true, true, world);
+        assertEquals(friendly, projection.relations.get(remoteId));
+        int initialSyncCount = projection.syncCount;
+
+        relation.set(enemy);
+        coordinator.tick(new MapBackedRemotePlayerRepository(new HashMap<>()),
+                new MapBackedLastSeenPlayerRepository(history), true, true, world);
+        assertEquals(initialSyncCount + 1, projection.syncCount);
+        assertEquals(enemy, projection.relations.get(remoteId));
+    }
+
     private static LastSeenPlayerInfo lastSeen(UUID id, String name) {
         return new LastSeenPlayerInfo(id, new Position3D(4, 65, 8),
                 "minecraft:overworld", name, 1_700_000_004_000L,
@@ -209,6 +238,22 @@ class RemotePlayerProjectionCoordinatorTest {
         @Override public void syncLastSeen(Map<UUID, LastSeenPlayerInfo> players, boolean enabled) {
             lastSeen = Map.copyOf(players);
             lastSeenEnabled = enabled;
+        }
+    }
+
+    private static final class ResolvedLastSeenProjection implements RemotePlayerProjection {
+        private Map<UUID, PlayerRelationView> relations = Map.of();
+        private int syncCount;
+
+        @Override public String id() { return "last-seen-resolved"; }
+        @Override public boolean isAvailable() { return true; }
+        @Override public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) { }
+        @Override public void syncLastSeenResolved(
+                Map<UUID, LastSeenPlayerInfo> players,
+                Map<UUID, PlayerRelationView> relations,
+                boolean enabled) {
+            this.relations = Map.copyOf(relations);
+            syncCount++;
         }
     }
 }

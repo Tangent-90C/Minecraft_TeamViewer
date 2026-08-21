@@ -137,7 +137,7 @@ local function sync_players(players, enabled, relations)
   for _, id in ipairs(stale) do remove(managed_players, id) end
 end
 
-local function sync_last_seen(players, enabled)
+local function sync_last_seen(players, enabled, relations)
   if not enabled or probe().status ~= "AVAILABLE" then clear(managed_last_seen); return end
   local world, active = snapshots.world(), {}
   for _, player in pairs(players or {}) do
@@ -145,9 +145,11 @@ local function sync_last_seen(players, enabled)
         or player.dimension == world.dimension) then
       local id = "last-seen:" .. player.uuid; active[id] = true
       local local_time = handles.LastSeenTimeFormatter:format(player.lastSeenAtUtcMs)
+      local relation = relations ~= nil and relations[player.uuid] or nil
+      local color = relation ~= nil and relation.resolved and relation.color or 0xFF9A26
       upsert(managed_last_seen, id, "[TV Last] " .. (player.name or "Player") .. " @ " .. local_time,
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
-          world.dimension, 0xFF9A26)
+          world.dimension, color)
     end
   end
   local stale = {}; for id, _ in pairs(managed_last_seen) do

@@ -80,29 +80,32 @@ public final class WorldRenderPlanner {
                     || !sameDimension(world.dimension(), player.dimension())
                     || distance(world.localPlayerPosition(), player.position()) > config.getRenderDistance()) {
                 continue;
-            }
-            Position3D position = player.position();
-            double playerDistance = distance(world.localPlayerPosition(), position);
-            if (config.isShowLastSeenBoxes()) {
-                commands.add(new WorldRenderCommand.Box(new AxisAlignedBox3D(
-                        position.x() - 0.35, position.y(), position.z() - 0.35,
-                        position.x() + 0.35, position.y() + 1.8, position.z() + 0.35),
-                        LAST_SEEN_BOX_COLOR, depthTest));
+			}
+			Position3D position = player.position();
+			double playerDistance = distance(world.localPlayerPosition(), position);
+			PlayerRelationView relation = relationResolver.apply(player.uuid());
+			int boxColor = relationColor(relation, LAST_SEEN_BOX_COLOR);
+			int lineColor = relationColor(relation, LAST_SEEN_LINE_COLOR);
+			if (config.isShowLastSeenBoxes()) {
+				commands.add(new WorldRenderCommand.Box(new AxisAlignedBox3D(
+						position.x() - 0.35, position.y(), position.z() - 0.35,
+						position.x() + 0.35, position.y() + 1.8, position.z() + 0.35),
+						boxColor, depthTest));
             }
             if (config.isShowLastSeenLines()) {
                 Position3D start = add(world.cameraPosition(), multiply(normalize(world.lookDirection()), 0.6));
                 if (config.isTracerStartTop()) {
                     start = add(start, multiply(normalize(world.cameraUpDirection()), config.getTracerTopOffset()));
-                }
-                commands.add(new WorldRenderCommand.Line(start,
-                        add(position, new Position3D(0, 1, 0)), LAST_SEEN_LINE_COLOR, depthTest, 1.0F));
+				}
+				commands.add(new WorldRenderCommand.Line(start,
+						add(position, new Position3D(0, 1, 0)), lineColor, depthTest, 1.0F));
             }
             if (playerDistance <= LAST_SEEN_LABEL_DISTANCE) {
                 String name = player.name().length() > 16 ? player.name().substring(0, 16) : player.name();
-                String time = LastSeenTimeFormatter.format(player.lastSeenAtUtcMs());
-                WorldLabelVectorizer.append(commands, name + "\n" + time,
-                        add(position, new Position3D(0, 2.15, 0)), world.lookDirection(),
-                        world.cameraUpDirection(), playerDistance, LAST_SEEN_LINE_COLOR, depthTest);
+				String time = LastSeenTimeFormatter.format(player.lastSeenAtUtcMs());
+				WorldLabelVectorizer.append(commands, name + "\n" + time,
+						add(position, new Position3D(0, 2.15, 0)), world.lookDirection(),
+						world.cameraUpDirection(), playerDistance, lineColor, depthTest);
             }
         }
     }

@@ -58,6 +58,13 @@ object. Their UI shows only `show_remote_players`; map/world visibility follows 
 `player:<uuid>` 原生路标；两个稳定能力 ID 仍保留，但只有一个 projection 拥有对象。
 UI 也只显示 `show_remote_players`，地图/世界可见性遵循 JourneyMap 全局设置。
 
+Offline records use independent transient `[TV Last]` waypoints. When common has a resolved
+local relation for the offline UUID, their waypoint color follows that relation; otherwise the
+existing orange last-seen color remains.
+
+离线记录使用独立的临时 `[TV Last]` 路标。当 common 已为离线 UUID 解析出本地关系时，路标颜色采用该关系；
+未解析时保留原有橙色的最后位置颜色。
+
 ## Shared-waypoint conversion / 共享路标转换
 
 `list_local()` reads JourneyMap's current waypoints and excludes objects whose `modId` is

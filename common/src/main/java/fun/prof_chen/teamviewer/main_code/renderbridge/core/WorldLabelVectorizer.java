@@ -10,7 +10,8 @@ import java.util.Map;
 
 /** Small camera-facing 3x5 vector font compiled into the existing line batch. */
 final class WorldLabelVectorizer {
-    private static final Map<Character, Integer> GLYPHS = glyphs();
+	private static final float LABEL_STROKE_WIDTH = 2.0F;
+	private static final Map<Character, Integer> GLYPHS = glyphs();
 
     private WorldLabelVectorizer() {
     }
@@ -63,7 +64,7 @@ final class WorldLabelVectorizer {
                             (characterOffset + start) * scale, (4 - row) * scale);
                     Position3D to = point(origin, right, up,
                             (characterOffset + column + 0.8D) * scale, (4 - row) * scale);
-                    commands.add(new WorldRenderCommand.Line(from, to, color, depthTest, 1.0F));
+					commands.add(new WorldRenderCommand.Line(from, to, color, depthTest, LABEL_STROKE_WIDTH));
                     column++;
                 }
             }
