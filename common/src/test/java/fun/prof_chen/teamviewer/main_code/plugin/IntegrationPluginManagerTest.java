@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.plugin;
 
+import com.google.gson.JsonParser;
 import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSource;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSourceSnapshot;
@@ -287,8 +288,8 @@ class IntegrationPluginManagerTest {
         manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 盟友: 罗马", false));
         assertTrue(manager.onSystemChatMessage(new SystemChatMessageSnapshot("输入 \"/town help\" 查看指令", false)));
         PluginSnapshot imported = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS);
-        assertEquals(1, imported.runtimeActions().size());
-        assertTrue(imported.runtimeActions().get(0).enabled());
+        assertEquals(2, imported.runtimeActions().size());
+        assertTrue(imported.runtimeActions().stream().allMatch(PluginRuntimeAction::enabled));
         assertTrue(imported.runtimeState().stream().anyMatch(state ->
                 "source.collected_at".equals(state.key()) && state.observedAtMillis() != null));
         assertTrue(manager.invokeRuntimeAction(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS,
@@ -296,8 +297,48 @@ class IntegrationPluginManagerTest {
         PluginSnapshot cleared = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS);
         assertTrue(cleared.runtimeState().stream().anyMatch(state ->
                 "未采集".equals(state.value()) && "source.collected_at".equals(state.key())));
-        assertFalse(cleared.runtimeActions().get(0).enabled());
+        assertTrue(cleared.runtimeActions().stream().noneMatch(PluginRuntimeAction::enabled));
         assertEquals("automatic_only", cleared.settings().get("relation_source_mode"));
+        manager.shutdown();
+    }
+
+    @Test
+    void tabRelationsExportVersionedProfileToNativeClipboard() {
+        AtomicReference<String> clipboard = new AtomicReference<>();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new ClipboardRuntime(temporary, clipboard), completeRegistry(),
+                Config.load(temporary.resolve("config.json")), PluginHostAccess.empty(), () -> 1_234_567L);
+        assertTrue(manager.setEnabled(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, true));
+        PluginRuntimeAction unavailable = manager.snapshot(IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS)
+                .runtimeActions().stream().filter(action -> "copy_relation_export".equals(action.id()))
+                .findFirst().orElseThrow();
+        assertFalse(unavailable.enabled());
+
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("城镇 马德里:", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 关系: [你]", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 盟友: 罗马, 赫尔辛基", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 敌对: 汉城", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 正在交战: 东京", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 领袖: Leader", false));
+        manager.onSystemChatMessage(new SystemChatMessageSnapshot("- 居民[2]: Alice, Bob", false));
+        assertTrue(manager.onSystemChatMessage(new SystemChatMessageSnapshot(
+                "输入 \"/town help\" 查看指令", false)));
+
+        assertFalse(manager.invokeRuntimeAction(
+                IntegrationIds.PLUGIN_TAB_LABEL_RELATIONS, "copy_relation_export"));
+        var exported = JsonParser.parseString(clipboard.get()).getAsJsonObject();
+        assertEquals("team_view_relay_relation_profile", exported.get("kind").getAsString());
+        assertEquals(1, exported.get("schemaVersion").getAsInt());
+        assertEquals("teamviewer.tab-label-relations", exported.get("sourcePlugin").getAsString());
+        assertEquals(1_234_567L, exported.get("exportedAtUtcMs").getAsLong());
+        assertEquals(1_234_567L, exported.get("collectedAtUtcMs").getAsLong());
+        assertEquals("马德里", exported.get("localTown").getAsString());
+        assertEquals(Set.of("赫尔辛基", "罗马", "马德里"), exported.getAsJsonArray("friendlyTowns")
+                .asList().stream().map(value -> value.getAsString()).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(Set.of("东京", "汉城"), exported.getAsJsonArray("enemyTowns")
+                .asList().stream().map(value -> value.getAsString()).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(Set.of("alice", "bob", "leader"), exported.getAsJsonArray("friendlyPlayerNames")
+                .asList().stream().map(value -> value.getAsString()).collect(java.util.stream.Collectors.toSet()));
         manager.shutdown();
     }
 
@@ -584,7 +625,7 @@ class IntegrationPluginManagerTest {
                 "tv.log.error", "tv.register_remote_player_projection",
                 "tv.register_shared_waypoint_adapter", "tv.register_battle_map_source",
                 "tv.register_player_relation_classifier",
-                "tv.notify", "tv.set_runtime_state",
+                "tv.notify", "tv.copy_json_to_clipboard", "tv.set_runtime_state",
                 "tv.register_unavailable_capability", "tv.use_native_capability", "tv.on_enable",
                 "tv.on_disable", "tv.on_settings_changed", "tv.on_system_chat",
                 "tv.on_play_session_started", "tv.on_play_session_ended", "probe")) {
@@ -1439,6 +1480,20 @@ class IntegrationPluginManagerTest {
                 case "optional.mod.HiddenCallback" -> HiddenOptionalCallback.class;
                 default -> RuntimeGateway.super.resolvePluginClass(binaryName);
             };
+        }
+    }
+
+    private record ClipboardRuntime(Path root, AtomicReference<String> clipboard) implements RuntimeGateway {
+        @Override public String getCurrentDimensionId() { return "minecraft:overworld"; }
+        @Override public UUID getLocalPlayerId() { return UUID.randomUUID(); }
+        @Override public String getClientProgramVersion() { return "test"; }
+        @Override public String getMinecraftVersion() { return "1.21.8"; }
+        @Override public String getLoaderId() { return "fabric"; }
+        @Override public Path getLogsDirectory() { return root.resolve("logs"); }
+        @Override public Path getConfigDirectory() { return root; }
+        @Override public boolean copyTextToClipboard(String text) {
+            clipboard.set(text);
+            return true;
         }
     }
 

@@ -32,6 +32,14 @@ public interface RuntimeGateway {
 
     default Object getPluginService(String serviceId) { return null; }
 
+    /**
+     * Copy trusted local UI text through the native Minecraft clipboard implementation.
+     * Calls are made from the client UI thread; external adapters may leave this unsupported.
+     */
+    default boolean copyTextToClipboard(String text) {
+        return false;
+    }
+
     /** Resolve a trusted plugin class through the loader that owns the concrete platform adapter. */
     default Class<?> resolvePluginClass(String binaryName) throws ClassNotFoundException {
         ClassLoader platformLoader = getClass().getClassLoader();

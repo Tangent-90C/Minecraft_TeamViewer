@@ -32,4 +32,14 @@ public final class FabricRuntimeGateway extends AbstractFabricRuntimeGateway {
         return client.player == null ? null : client.player.getUUID();
     }
 
+    @Override
+    public boolean copyTextToClipboard(String text) {
+        try {
+            Minecraft.getInstance().keyboardHandler.setClipboard(text == null ? "" : text);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
 }

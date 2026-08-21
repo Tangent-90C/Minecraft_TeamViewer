@@ -16,6 +16,10 @@ compile errors rather than runtime casts.
 - `RuntimeGateway` supplies protocol/program metadata, the local identity and dimension, the
   log directory and config directory. Calls may originate on the network thread unless a method
   explicitly documents otherwise; returned paths are absolute or stable process-relative paths.
+  `copyTextToClipboard(String)` is the narrow native clipboard boundary used by trusted local UI
+  actions. It runs on the client UI thread, returns `false` when unavailable, and adapters must use
+  Minecraft's clipboard wrapper rather than AWT so headless and cross-platform behavior stays owned
+  by the game runtime.
 - `GameClientBridge` is read on the Minecraft client thread. Coordinates are world block
   coordinates in doubles, velocities are blocks/tick, dimensions are canonical IDs such as
   `minecraft:overworld`, and absent worlds/players return the relevant `unavailable()` snapshot.
@@ -56,6 +60,10 @@ compile errors rather than runtime casts.
 - Platform factories do not link optional JourneyMap, Xaero or SimMC API classes. Lua adapters
   resolve them after probing the installed Mods. A high-frequency native provider may register a
   Java implementation and expose it through `tv.use_native_capability`.
+- Lua plugins may call `tv.copy_json_to_clipboard(table)` for explicit local export actions. The
+  host accepts JSON-compatible scalar/table values only and rejects mixed-key or sparse arrays,
+  nesting deeper than 8 levels, more than 4096 entries, oversized strings and serialized payloads
+  above 256 KiB. This API does not send data to the relay or grant arbitrary clipboard reads.
 
 There is no self-declared user feature list. Common-owned behavior is present once in the runtime;
 mandatory native abilities are represented by non-null typed bundle fields, while optional

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.1-proto0.7.0 - 2026-08-21
+
+- “Tab 标签敌我识别”插件可将本城、友城、敌对/交战城镇、友方成员和原始采集时间复制为
+  版本化 JSON 关系档案，供 Web 在本机导入；档案不会写入 TeamViewRelay 房间。
+- Lua 插件 API 新增受大小、深度和条目数限制的 `tv.copy_json_to_clipboard(table)`，各 Fabric 与
+  NeoForge Adapter 通过对应 Minecraft 原生剪贴板实现该能力。
+- Mod 版本升级为 `v0.8.1`；网络协议仍为 `0.7.0`，后端和协议仓库无需升级。
+
 ## v0.7.0-proto0.6.5 - 2026-08-20
 
 - 公共 API 增加远程玩家坐标来源、来源类型、显示名称和位置分辨率。

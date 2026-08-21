@@ -55,6 +55,7 @@ local function inspect_host_api()
   tv.log.warn("warning message")
   tv.log.error("error message")
   -- tv.notify("local action-bar message") -- returns false when the host has no notifier.
+  -- tv.copy_json_to_clipboard({kind = "example", schemaVersion = 1, values = {"a", "b"}})
   return loader, minecraft, mod_version, installed, entrypoint_object,
       world, players, waypoints, scoreboard, tab_players
 end

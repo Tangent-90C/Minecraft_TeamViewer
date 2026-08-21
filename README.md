@@ -1,7 +1,7 @@
 # TeamViewRelay Mod
 
 TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。
-当前发布版本为 `v0.8.0-proto0.7.0`。实际验证的运行范围如下：
+当前发布版本为 `v0.8.1-proto0.7.0`。实际验证的运行范围如下：
 
 | 安装产物 | Loader | 可运行的 Minecraft 版本 |
 | --- | --- | --- |
@@ -57,6 +57,15 @@ Fabric 和 NeoForge 玩家都可选择对应 Loader 的 All-in-One，或选择�
 3. 把 `Server URL` 改成你的后端地址，例如 `ws://127.0.0.1:8765/mc-client`。
 4. 设置同一房间号（`roomCode`），点击保存并连接。
 5. 进入同房间后，验证是否能看到队友、报点或共享路标。
+
+### 将个人城镇敌友关系导入 Web
+
+1. 在 Mod 的插件页启用“Tab 标签敌我识别”，进入服务器后运行 `/town` 或 `/t`。
+2. 等待插件显示完整采集结果，然后点击“复制关系档案到 Web”。
+3. 回到网页地图设置的“敌友关系”页，从剪贴板导入并确认预览。
+
+关系档案包含本城、友城、敌对/交战城镇、友方成员和采集时间，只通过本机系统剪贴板流转，
+不会发送到 TeamViewRelay 房间。网页端保存、优先级和覆盖规则以 Web 脚本页面说明为准。
 
 ## 安装 / 运行
 
@@ -292,7 +301,7 @@ task check-fabric-runtime RUNTIME=1.21
 
 - Minecraft 支持范围以 `gradle/minecraft-versions.properties` 为唯一来源；运行
   `python3 scripts/minecraft_targets.py list-fabric`、`list-neoforge` 或 `list-official` 查询
-- Mod：`v0.8.0-proto0.7.0`
+- Mod：`v0.8.1-proto0.7.0`
 - 协议版本：`0.7.0`
 - 最低兼容协议版本：`0.6.1`
 
@@ -311,7 +320,7 @@ git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-版本号采用“双版本号”约定，例如当前的 `v0.8.0-proto0.7.0`：
+版本号采用“双版本号”约定，例如当前的 `v0.8.1-proto0.7.0`：
 
 - 前半段是程序版本号，用于表示 Mod 自身功能迭代
 - 后半段是网络协议版本号，用于表示可与哪些配套组件互通

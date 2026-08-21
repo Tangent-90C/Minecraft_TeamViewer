@@ -36,6 +36,16 @@ public final class NeoForgeRuntimeGateway extends AbstractNeoForgeRuntimeGateway
     }
 
     @Override
+    public boolean copyTextToClipboard(String text) {
+        try {
+            Minecraft.getInstance().keyboardHandler.setClipboard(text == null ? "" : text);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    @Override
     public String getMinecraftVersion() {
         return NeoForgeRuntimeCompat.minecraftVersion();
     }

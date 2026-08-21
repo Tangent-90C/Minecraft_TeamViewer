@@ -744,6 +744,12 @@ public final class IntegrationPluginManager {
                 return LuaValue.TRUE;
             }
         });
+        tv.set("copy_json_to_clipboard", new OneArgFunction() {
+            @Override public LuaValue call(LuaValue value) {
+                String json = boundedClipboardJson(value);
+                return LuaValue.valueOf(platform.copyTextToClipboard(json));
+            }
+        });
         tv.set("now_millis", new ZeroArgFunction() {
             @Override public LuaValue call() {
                 return LuaValue.valueOf(wallClock.getAsLong());
@@ -1154,6 +1160,88 @@ public final class IntegrationPluginManager {
         return result;
     }
 
+    private static String boundedClipboardJson(LuaValue value) {
+        if (value == null || !value.istable()) {
+            throw new IllegalArgumentException("Clipboard JSON root must be a table");
+        }
+        ClipboardJsonBudget budget = new ClipboardJsonBudget();
+        Object converted = clipboardJsonValue(value, 0, budget);
+        String json = GSON.toJson(converted);
+        if (json.getBytes(StandardCharsets.UTF_8).length > 262_144) {
+            throw new IllegalArgumentException("Clipboard JSON exceeds 256 KiB");
+        }
+        return json;
+    }
+
+    private static Object clipboardJsonValue(LuaValue value, int depth, ClipboardJsonBudget budget) {
+        if (depth > 8) throw new IllegalArgumentException("Clipboard JSON is nested too deeply");
+        if (value == null || value.isnil()) return null;
+        if (value.isboolean()) return value.toboolean();
+        if (value.isint()) return value.toint();
+        if (value.isnumber()) {
+            double number = value.todouble();
+            if (!Double.isFinite(number)) {
+                throw new IllegalArgumentException("Clipboard JSON contains a non-finite number");
+            }
+            return number;
+        }
+        if (value.isstring()) {
+            String text = value.tojstring();
+            if (text.length() > 16_384) {
+                throw new IllegalArgumentException("Clipboard JSON string exceeds 16384 characters");
+            }
+            budget.characters += text.length();
+            budget.check();
+            return text;
+        }
+        if (!value.istable()) {
+            throw new IllegalArgumentException("Clipboard JSON supports only tables and scalar values");
+        }
+
+        Map<Integer, Object> arrayValues = new LinkedHashMap<>();
+        Map<String, Object> objectValues = new LinkedHashMap<>();
+        boolean sawArrayKey = false;
+        boolean sawObjectKey = false;
+        int maximumIndex = 0;
+        LuaValue key = LuaValue.NIL;
+        while (true) {
+            Varargs next = value.next(key);
+            key = next.arg1();
+            if (key.isnil()) break;
+            budget.entries++;
+            budget.check();
+            Object converted = clipboardJsonValue(next.arg(2), depth + 1, budget);
+            if (key.isint() && key.toint() > 0) {
+                sawArrayKey = true;
+                int index = key.toint();
+                maximumIndex = Math.max(maximumIndex, index);
+                arrayValues.put(index, converted);
+            } else if (key.isstring()) {
+                sawObjectKey = true;
+                String textKey = key.tojstring();
+                if (textKey.isBlank() || textKey.length() > 128) {
+                    throw new IllegalArgumentException("Clipboard JSON keys must contain 1-128 characters");
+                }
+                budget.characters += textKey.length();
+                budget.check();
+                objectValues.put(textKey, converted);
+            } else {
+                throw new IllegalArgumentException("Clipboard JSON keys must be strings or positive integers");
+            }
+        }
+        if (sawArrayKey && sawObjectKey) {
+            throw new IllegalArgumentException("Clipboard JSON tables cannot mix array and object keys");
+        }
+        if (sawObjectKey) return objectValues;
+        if (!sawArrayKey) return List.of();
+        if (arrayValues.size() != maximumIndex) {
+            throw new IllegalArgumentException("Clipboard JSON arrays must use contiguous 1-based indexes");
+        }
+        List<Object> result = new ArrayList<>(maximumIndex);
+        for (int index = 1; index <= maximumIndex; index++) result.add(arrayValues.get(index));
+        return result;
+    }
+
     private static final class PersistentStateBudget {
         private int entries;
         private int characters;
@@ -1161,6 +1249,17 @@ public final class IntegrationPluginManager {
         private void check() {
             if (entries > 2048 || characters > 65_536) {
                 throw new IllegalArgumentException("Persistent plugin state exceeds its size limit");
+            }
+        }
+    }
+
+    private static final class ClipboardJsonBudget {
+        private int entries;
+        private int characters;
+
+        private void check() {
+            if (entries > 4096 || characters > 196_608) {
+                throw new IllegalArgumentException("Clipboard JSON exceeds its size limit");
             }
         }
     }

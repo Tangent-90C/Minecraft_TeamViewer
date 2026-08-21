@@ -6,6 +6,9 @@ after joining a server manually run `/town` or `/t`. The plugin imports the comp
 shows an action-bar confirmation when it succeeds. The latest complete result and its original
 collection time are stored globally and restored after reconnecting or restarting. They are not
 scoped by server and do not expire automatically.
+After a complete import, **Copy relation profile to Web** writes the local town relationship
+profile to the system clipboard. The profile stays on this computer and is never sent to the
+TeamViewRelay room.
 The default `relation_source_mode` is `automatic_only`, so saved manual tags do not affect
 classification until a mode that includes manual results is selected.
 
@@ -14,6 +17,8 @@ TeamViewRelay 房间写入玩家标记。请先在插件页面启用它，进入
 `/t`；插件会在收到完整回复后导入，并通过动作栏提示采集成功。重连、切换服务器或城镇关系
 变化后，插件会继续恢复并采用最近一次完整结果；这份结果全局保存、不区分服务器且不会自动
 过期。插件页会显示采集距今时间，可通过“清空自动识别”删除。
+完整导入后可点击“复制关系档案到 Web”，把本城、友城、敌对/交战城镇、友方成员及采集时间
+写入系统剪贴板；该操作仅发生在本机，不会向 TeamViewRelay 房间发送关系数据。
 默认关系采用策略为“仅自动识别”，因此已保存的手动标签不会参与分类；切换到包含手动结果的
 策略后，手动标签才会生效。
 
@@ -34,6 +39,8 @@ TeamViewRelay 房间写入玩家标记。请先在插件页面启用它，进入
 - Within manual tags, friendly wins when both sides match. Visible unmatched players are neutral.
 - The plugin page exposes a confirmed clear action. It removes only automatic town/member data,
   the pending parser and collection time; manual tags and `relation_source_mode` remain unchanged.
+- The Web export uses the versioned `team_view_relay_relation_profile` JSON format and includes
+  friendly towns, enemy or warring towns, friendly member names and the original collection time.
 - `relation_source_mode` 支持“仅自动识别”（默认）、“仅手动标签”、“手动优先，自动补全”和
   “自动优先，手动补全”。两种优先模式只在首选来源没有识别结果时采用另一来源。
 - `friendly_tags` 与 `enemy_tags` 支持中英文逗号、分号或空白分隔，每侧最多 12 项。
@@ -48,3 +55,5 @@ TeamViewRelay 房间写入玩家标记。请先在插件页面启用它，进入
 - 当前 Tab 中未命中的玩家会被明确判为中立。
 - 插件页的“清空自动识别”需要二次确认，只清除自动城镇/成员数据、待完成解析和采集时间；
   手动友军/敌军标签及 `relation_source_mode` 均保留。
+- Web 导出使用版本化的 `team_view_relay_relation_profile` JSON，包含友方城镇、敌对/交战城镇、
+  友方成员和原始采集时间。

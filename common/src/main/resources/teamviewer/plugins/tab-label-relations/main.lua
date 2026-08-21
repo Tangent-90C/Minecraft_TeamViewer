@@ -14,6 +14,7 @@ local pending_enemy = {}
 local pending_members = {}
 local pending_is_local = false
 local clear_automatic_relations = nil
+local copy_relation_export = nil
 
 tv.configure_setting({
   key = "relation_source_mode",
@@ -152,13 +153,22 @@ local function restore_automatic_state()
 end
 
 local function publish_runtime_actions()
-  local enabled = has_automatic_state() or pending_town ~= nil
+  local can_export = collected_at_millis ~= nil and local_town ~= nil
+  local can_clear = has_automatic_state() or pending_town ~= nil
   tv.set_runtime_actions({
+    {
+      id = "copy_relation_export",
+      label = "复制关系档案到 Web",
+      tooltip = "把本城、友城、敌对/交战城镇和友方成员复制到系统剪贴板；不会上传到 TeamViewRelay 房间。",
+      enabled = can_export,
+      danger = false,
+      callback = function() return copy_relation_export() end
+    },
     {
       id = "clear_automatic_relations",
       label = "清空自动识别",
       tooltip = "清除自动导入的城镇、成员关系和采集时间；不会修改手动标签或关系采用策略。",
-      enabled = enabled,
+      enabled = can_clear,
       danger = true,
       confirmation = "确定清空当前自动识别结果吗？手动友军/敌军标签和关系采用策略会保留。",
       callback = function() return clear_automatic_relations() end
@@ -206,6 +216,35 @@ clear_automatic_relations = function()
   publish_runtime_state("未导入")
   tv.notify("[TV] 已清空自动识别关系；手动标签和采用策略未修改")
   return changed
+end
+
+copy_relation_export = function()
+  if collected_at_millis == nil or local_town == nil then
+    tv.notify("[TV] 尚无完整关系档案，请先运行 /town 或 /t")
+    return false
+  end
+  local friendly_towns = sorted_values(town_friendly)
+  local enemy_towns = sorted_values(town_enemy)
+  local friendly_players = sorted_values(member_friendly)
+  local copied = tv.copy_json_to_clipboard({
+    kind = "team_view_relay_relation_profile",
+    schemaVersion = 1,
+    sourcePlugin = "teamviewer.tab-label-relations",
+    exportedAtUtcMs = tv.now_millis(),
+    collectedAtUtcMs = collected_at_millis,
+    localTown = local_town,
+    friendlyTowns = friendly_towns,
+    enemyTowns = enemy_towns,
+    friendlyPlayerNames = friendly_players
+  })
+  if not copied then
+    tv.notify("[TV] 复制失败：当前 Minecraft 版本未提供剪贴板能力")
+    return false
+  end
+  tv.notify("[TV] 已复制关系档案：友方城镇 " .. #friendly_towns
+      .. "，敌方城镇 " .. #enemy_towns .. "，成员 " .. #friendly_players
+      .. "；请在 Web「敌友关系」中导入")
+  return false
 end
 
 local function commit_pending()

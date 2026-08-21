@@ -56,6 +56,8 @@ The example declares all setting types: `boolean`, `integer`, `number`, `string`
   when the callback changed a player-relation classifier's state and needs an immediate refresh.
 - `tv.notify(message)` shows a local action-bar message when the host exposes notifications. It
   returns `false` when notifications are unavailable.
+- `tv.copy_json_to_clipboard(table)` serializes a bounded JSON-compatible table and copies it
+  through Minecraft's native clipboard. It returns `false` when the adapter cannot copy text.
 - `tv.on_play_session_started/ended(callback)` delimit multiplayer-session state.
 - `tv.log.info/warn/error(message)` writes plugin-scoped diagnostics.
 
@@ -70,6 +72,8 @@ The example declares all setting types: `boolean`, `integer`, `number`, `string`
 - `tv.on_system_chat(callback)` 接收系统消息 `{text, overlay}`；关系分类状态改变时返回
   `true`，宿主会立即重算当前 Tab。
 - `tv.notify(message)` 会在宿主提供通知能力时显示本地动作栏消息；通知不可用时返回 `false`。
+- `tv.copy_json_to_clipboard(table)` 会把受限的 JSON 兼容表序列化后通过 Minecraft 原生
+  剪贴板复制；适配器不支持复制时返回 `false`。
 - `tv.on_play_session_started/ended(callback)` 用于划分多人会话状态。
 - `tv.log.info/warn/error(message)` 输出带插件范围的诊断日志。
 
