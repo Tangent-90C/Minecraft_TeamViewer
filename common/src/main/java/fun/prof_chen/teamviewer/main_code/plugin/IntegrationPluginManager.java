@@ -875,6 +875,11 @@ public final class IntegrationPluginManager {
                 return LuaValue.valueOf(platform.getModVersion(value.checkjstring()));
             }
         });
+        environment.set("play_session_ready", new ZeroArgFunction() {
+            @Override public LuaValue call() {
+                return LuaValue.valueOf(platform.getLocalPlayerId() != null);
+            }
+        });
         globals.set("environment", environment);
         LuaTable services = new LuaTable();
         services.set("get", new OneArgFunction() {

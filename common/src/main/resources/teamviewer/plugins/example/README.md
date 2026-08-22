@@ -44,7 +44,8 @@ The example declares all setting types: `boolean`, `integer`, `number`, `string`
 
 ## 3. Host discovery APIs / 宿主探测接口
 
-- `environment.loader_id()`, `minecraft_version()`, `mod_version(id)` describe the runtime.
+- `environment.loader_id()`, `minecraft_version()`, `mod_version(id)` describe the runtime;
+  `play_session_ready()` cheaply reports whether a local play session exists without capturing a world snapshot.
 - `mods.is_loaded(id)` distinguishes a missing optional Mod before touching its classes.
 - `services.get(id)` obtains an object published by a thin Java entrypoint. Fetch dynamic
   services inside `probe()` or each operation; do not assume they exist when Lua first loads.
@@ -61,7 +62,8 @@ The example declares all setting types: `boolean`, `integer`, `number`, `string`
 - `tv.on_play_session_started/ended(callback)` delimit multiplayer-session state.
 - `tv.log.info/warn/error(message)` writes plugin-scoped diagnostics.
 
-- `environment.loader_id()`、`minecraft_version()`、`mod_version(id)` 描述当前环境。
+- `environment.loader_id()`、`minecraft_version()`、`mod_version(id)` 描述当前环境；
+  `play_session_ready()` 可低成本判断本地游戏会话是否存在，无需抓取完整世界快照。
 - 先用 `mods.is_loaded(id)` 区分 Mod 缺失，再访问外部类。
 - `services.get(id)` 获取薄 Java 入口发布的对象。动态服务应在 `probe()` 或每次操作中获取，
   不能假定 Lua 加载时入口已经就绪。

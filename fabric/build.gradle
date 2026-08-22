@@ -911,6 +911,17 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
                     || descriptor.depends?.java != ">=${gameJavaVersion}") {
                 throw new GradleException("Standalone metadata does not match target ${minecraftTargetVersion}")
             }
+            def expectedMixinConfigs = [
+                    [config: "teamviewer.client.mixins.json", environment: "client"],
+                    [config: "teamviewer.journeymap.mixins.json", environment: "client"]
+            ]
+            def actualMixinConfigs = descriptor.mixins?.collect {
+                [config: String.valueOf(it.config), environment: String.valueOf(it.environment)]
+            }
+            if (actualMixinConfigs != expectedMixinConfigs) {
+                throw new GradleException("Standalone Mixin configs ${actualMixinConfigs} "
+                        + "do not match ${expectedMixinConfigs}")
+            }
             def nested = entryNames.findAll { it.startsWith("META-INF/jars/") && it.endsWith(".jar") }
             def requiredNestedPrefixes = [
                     "TeamViewRelay-common-", "TeamViewRelay-common-sdk-",
@@ -973,6 +984,9 @@ def verifyStandaloneArtifact = tasks.register("verifyStandaloneArtifact") {
             }
             if (!entries.contains("teamviewer.client.mixins.json")) {
                 throw new GradleException("Standalone is missing its target Mixin config")
+            }
+            if (!entries.contains("teamviewer.journeymap.mixins.json")) {
+                throw new GradleException("Standalone is missing its JourneyMap Mixin config")
             }
             def mixin = new groovy.json.JsonSlurper().parse(
                     zip.getInputStream(zip.getEntry("teamviewer.client.mixins.json")))

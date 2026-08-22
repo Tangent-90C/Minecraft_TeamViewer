@@ -33,6 +33,7 @@ local function inspect_host_api()
   local loader = environment.loader_id()
   local minecraft = environment.minecraft_version()
   local mod_version = environment.mod_version("replace-with-external-mod-id")
+  local play_session_ready = environment.play_session_ready()
   local installed = mods.is_loaded("replace-with-external-mod-id")
   local entrypoint_object = services.get("replace-with-service-id")
   local minecraft_objects = services.get("minecraft.client_objects")
@@ -56,7 +57,7 @@ local function inspect_host_api()
   tv.log.error("error message")
   -- tv.notify("local action-bar message") -- returns false when the host has no notifier.
   -- tv.copy_json_to_clipboard({kind = "example", schemaVersion = 1, values = {"a", "b"}})
-  return loader, minecraft, mod_version, installed, entrypoint_object,
+  return loader, minecraft, mod_version, play_session_ready, installed, entrypoint_object,
       world, players, waypoints, scoreboard, tab_players
 end
 

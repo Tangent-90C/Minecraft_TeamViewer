@@ -8,14 +8,14 @@ local managed_last_seen_markers, managed_last_seen_beacons, managed_waypoints = 
 local client_objects = services.get("minecraft.client_objects")
 local GROUP_ROLE_KEY = "teamviewer.group.role"
 local group_definitions = {
-  online = {name = "TeamViewRelay Online Players", tag = "[TV] Online"},
-  offline = {name = "TeamViewRelay Offline Players", tag = "[TV] Offline"},
-  player_reports = {name = "TeamViewRelay Player Reports", tag = "[TV] Reports"},
-  web_reports = {name = "TeamViewRelay Web & Admin Reports", tag = "[TV] Web"},
-  other_shared = {name = "TeamViewRelay Other Shared Waypoints", tag = "[TV] Other"}
+  online = {guid = "teamviewer_relay_online_players", name = "TeamViewRelay Online Players", tag = "[TV] Online"},
+  offline = {guid = "teamviewer_relay_offline_players", name = "TeamViewRelay Offline Players", tag = "[TV] Offline"},
+  player_reports = {guid = "teamviewer_relay_player_reports", name = "TeamViewRelay Player Reports", tag = "[TV] Reports"},
+  web_reports = {guid = "teamviewer_relay_web_reports", name = "TeamViewRelay Web & Admin Reports", tag = "[TV] Web"},
+  other_shared = {guid = "teamviewer_relay_other_shared", name = "TeamViewRelay Other Shared Waypoints", tag = "[TV] Other"}
 }
 local group_order = {"online", "offline", "player_reports", "web_reports", "other_shared"}
-local managed_groups, group_support, group_world_id = {}, nil, nil
+local managed_groups, group_support = {}, nil
 local policy_bridge, applied_group_policies = nil, {}
 
 local function policy_supported()
@@ -100,7 +100,7 @@ local function clear_native_policies()
 end
 
 local function reset_group_scope()
-  managed_groups, group_support, group_world_id = {}, nil, nil
+  managed_groups, group_support = {}, nil
   clear_native_policies()
 end
 
@@ -125,13 +125,14 @@ local function same_text(left, right)
 end
 
 local function select_group(groups, definition, role, used)
-  local priorities = {{}, {}, {}}
+  local priorities = {{}, {}, {}, {}}
   for _, group in ipairs(groups) do
     local guid = group_guid(group)
     if not used[guid] and tostring(group:getModId()) == JM_MOD_ID then
-      if group_role(group) == role then table.insert(priorities[1], group)
-      elseif same_text(group:getName(), definition.name) then table.insert(priorities[2], group)
-      elseif same_text(group:getTag(), definition.tag) then table.insert(priorities[3], group) end
+      if guid == definition.guid then table.insert(priorities[1], group)
+      elseif group_role(group) == role then table.insert(priorities[2], group)
+      elseif same_text(group:getName(), definition.name) then table.insert(priorities[3], group)
+      elseif same_text(group:getTag(), definition.tag) then table.insert(priorities[4], group) end
     end
   end
   for _, candidates in ipairs(priorities) do
@@ -139,6 +140,28 @@ local function select_group(groups, definition, role, used)
     if #candidates > 0 then return candidates[1] end
   end
   return nil
+end
+
+local function stable_group_json(definition)
+  return '{"version":"1","guid":"' .. definition.guid
+      .. '","settings":{"locked":false,"overrideIconImage":false,"overrideIconColor":false,'
+      .. '"overrideBeaconColor":false,"overrideLabelColor":false,"overrideSettings":false,'
+      .. '"displaySettings":{},"enable":true,"showDeviation":false,"persistent":true,'
+      .. '"beaconEnabled":true,"showOnMap":true,"showInWorld":true,"showLabel":true,'
+      .. '"showIcon":true,"showOnLocatorBar":false},"name":"' .. definition.name
+      .. '","modId":"' .. JM_MOD_ID
+      .. '","icon":{"id":"journeymap:textures/waypoint/icon/waypoint-icon.png",'
+      .. '"opacity":1.0,"textureWidth":16,"textureHeight":16,"rotation":0},"locked":false}'
+end
+
+local function create_group(definition)
+  local stable_ok, stable = pcall(function()
+    return handles.WaypointFactory:fromGroupJsonString(stable_group_json(definition))
+  end)
+  if stable_ok and stable ~= nil and group_guid(stable) == definition.guid then return stable end
+  tv.log.warn("JourneyMap stable group factory is unavailable; falling back to generated group id: "
+      .. tostring(stable))
+  return handles.WaypointFactory:createWaypointGroup(JM_MOD_ID, definition.name)
 end
 
 local function setting(role, suffix) return settings[role .. "_" .. suffix] end
@@ -162,12 +185,9 @@ ensure_groups = function()
   if group_support == false then return false, "waypoint groups are unavailable" end
   local client = api()
   if client == nil or handles == nil then return false, "JourneyMap API is unavailable" end
-  local resolved, value, world_id = pcall(function()
-    local current_world_id = client:getWorldId()
-    if current_world_id == nil or tostring(current_world_id) == "" then return nil, nil end
-    local groups = java_values(client:getAllWaypointGroups())
-    if #groups == 0 then return nil, tostring(current_world_id) end
-    return groups, tostring(current_world_id)
+  local resolved, value = pcall(function()
+    if not environment.play_session_ready() then return nil end
+    return java_values(client:getAllWaypointGroups())
   end)
   if not resolved then
     disable_groups(value)
@@ -176,11 +196,7 @@ ensure_groups = function()
   local groups = value
   if groups == nil then
     managed_groups = {}
-    return false, "JourneyMap waypoint-group store is not ready"
-  end
-  if group_world_id ~= world_id then
-    managed_groups, group_support, group_world_id = {}, nil, world_id
-    clear_native_policies()
+    return false, "Minecraft play session is not ready"
   end
   local current = {}
   for _, group in ipairs(groups) do current[group_guid(group)] = group end
@@ -192,7 +208,7 @@ ensure_groups = function()
     if group == nil then group = select_group(groups, definition, role, used) end
     local created = false
     if group == nil then
-      group = handles.WaypointFactory:createWaypointGroup(JM_MOD_ID, definition.name)
+      group = create_group(definition)
       if group == nil then
         disable_groups("JourneyMap did not create " .. definition.name)
         return false, "JourneyMap did not create " .. definition.name

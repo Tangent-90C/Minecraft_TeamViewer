@@ -628,6 +628,7 @@ class IntegrationPluginManagerTest {
         }
         for (String token : List.of(
                 "environment.loader_id", "environment.minecraft_version", "environment.mod_version",
+                "environment.play_session_ready",
                 "services.get", "mods.is_loaded", "snapshots.world", "snapshots.players",
                 "snapshots.waypoints", "snapshots.scoreboard", "snapshots.tab_players",
                 "java.type", "java.method",
@@ -1092,27 +1093,41 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
-    void journeyMapWaitsForPersistedGroupStoreBeforeCreatingRelayGroups() {
+    void journeyMapUsesPlaySessionAndStableIdsWhenWorldIdAndGroupStoreAreEmpty() {
         JourneyMapApiStub api = new JourneyMapApiStub();
+        api.setWorldId(null);
         api.clearWaypointGroups();
         PluginHostAccess host = new PluginHostAccess(
-                () -> new TestJourneyWorld(UUID.randomUUID(), "minecraft:overworld"), null, null, null,
+                () -> { throw new AssertionError("capability probing must not capture the full world snapshot"); },
+                null, null, null,
                 Map.of("journeymap.client_api", () -> api));
         IntegrationPluginManager manager = new IntegrationPluginManager(
                 new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
                 completeRegistry(), Config.load(temporary.resolve("empty-group-store.json")), host);
 
         assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
-                .allMatch(value -> value.status() == IntegrationSupportStatus.ENTRYPOINT_NOT_READY));
-        assertTrue(api.waypointGroups().isEmpty(),
-                "an empty store is a JourneyMap startup state, not permission to create duplicate groups");
+                .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        Set<String> expectedIds = Set.of(
+                "teamviewer_relay_online_players",
+                "teamviewer_relay_offline_players",
+                "teamviewer_relay_player_reports",
+                "teamviewer_relay_web_reports",
+                "teamviewer_relay_other_shared");
+        assertEquals(expectedIds, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId()))
+                .map(journeymap.api.v2.common.waypoint.WaypointGroup::getGuid)
+                .collect(java.util.stream.Collectors.toSet()));
 
+        api.clearWaypointGroups();
         api.addWaypointGroup(new journeymap.api.v2.common.waypoint.WaypointGroup(
                 "journeymap", "Default", "journeymap_default"));
         assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
-        assertEquals(5, api.waypointGroups().stream()
-                .filter(group -> "teamviewer".equals(group.getModId())).count());
+        assertEquals(expectedIds, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId()))
+                .map(journeymap.api.v2.common.waypoint.WaypointGroup::getGuid)
+                .collect(java.util.stream.Collectors.toSet()),
+                "a JourneyMap store reset must restore the same group ids instead of generating duplicates");
         manager.shutdown();
     }
 

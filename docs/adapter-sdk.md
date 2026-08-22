@@ -64,6 +64,10 @@ compile errors rather than runtime casts.
   host accepts JSON-compatible scalar/table values only and rejects mixed-key or sparse arrays,
   nesting deeper than 8 levels, more than 4096 entries, oversized strings and serialized payloads
   above 256 KiB. This API does not send data to the relay or grant arbitrary clipboard reads.
+- Lua capability probes use `environment.play_session_ready()` when they only need to distinguish
+  title-screen lifecycle gaps from an active play session. They must not call `snapshots.world()`
+  for readiness checks because that snapshot intentionally exposes world/player/entity data and is
+  too expensive for support probes that may run while a configuration screen is rendered.
 
 There is no self-declared user feature list. Common-owned behavior is present once in the runtime;
 mandatory native abilities are represented by non-null typed bundle fields, while optional

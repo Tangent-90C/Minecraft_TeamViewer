@@ -125,7 +125,10 @@ def generateUniversalMetadata = tasks.register("generateUniversalMetadata") {
                         journeymap: ["fun.prof_chen.teamviewer.main_code.mapbridge.provider.journey.JourneyMapClientPlugin"],
                         modmenu: ["fun.prof_chen.teamviewer.client.TeamviewerModMenuApi"]
                 ],
-                mixins: [[config: "teamviewer.client.mixins.json", environment: "client"]],
+                mixins: [
+                        [config: "teamviewer.client.mixins.json", environment: "client"],
+                        [config: "teamviewer.journeymap.mixins.json", environment: "client"]
+                ],
                 depends: [
                         fabricloader: ">=${minimumLoaderVersion}",
                         java: ">=${sharedJavaRelease}",
@@ -249,6 +252,17 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
             if (rootMod.id != "team-view-relay" || rootMod.depends?.get("team-view-relay-adapter") != "*") {
                 throw new GradleException("Invalid universal root Fabric metadata")
             }
+            def expectedMixinConfigs = [
+                    [config: "teamviewer.client.mixins.json", environment: "client"],
+                    [config: "teamviewer.journeymap.mixins.json", environment: "client"]
+            ]
+            def actualMixinConfigs = rootMod.mixins?.collect {
+                [config: String.valueOf(it.config), environment: String.valueOf(it.environment)]
+            }
+            if (actualMixinConfigs != expectedMixinConfigs) {
+                throw new GradleException("Universal root Mixin configs ${actualMixinConfigs} "
+                        + "do not match ${expectedMixinConfigs}")
+            }
             def targetInfo = multiVersionPackaging.readZipJson(
                     zip, "META-INF/teamviewer/targets.json")
             if ((targetInfo.targets*.minecraft as Set) != supportedTargets.collect {
@@ -280,6 +294,32 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
                             .readLines().collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith("#") }
                     if (providers.size() != 1) {
                         throw new GradleException("Adapter ${target.minecraft} must expose exactly one Factory")
+                    }
+                    ["teamviewer.client.mixins.json", "teamviewer.journeymap.mixins.json"].each { configName ->
+                        if (adapterZip.getEntry(configName) == null) {
+                            throw new GradleException("Adapter ${target.minecraft} is missing ${configName}")
+                        }
+                    }
+                    def journeyMixin = multiVersionPackaging.readZipJson(
+                            adapterZip, "teamviewer.journeymap.mixins.json")
+                    if (!(journeyMixin.client instanceof List)) {
+                        throw new GradleException(
+                                "Adapter ${target.minecraft} JourneyMap Mixin config has no client list")
+                    }
+                    if (!journeyMixin.client.isEmpty()) {
+                        def pluginClass = String.valueOf(journeyMixin.plugin).replace('.', '/') + ".class"
+                        if (adapterZip.getEntry(pluginClass) == null) {
+                            throw new GradleException(
+                                    "Adapter ${target.minecraft} is missing JourneyMap Mixin plugin ${pluginClass}")
+                        }
+                        def mixinPath = String.valueOf(journeyMixin.package).replace('.', '/')
+                        journeyMixin.client.each { mixinName ->
+                            def mixinClass = "${mixinPath}/${mixinName}.class".toString()
+                            if (adapterZip.getEntry(mixinClass) == null) {
+                                throw new GradleException(
+                                        "Adapter ${target.minecraft} is missing JourneyMap Mixin ${mixinClass}")
+                            }
+                        }
                     }
                 } finally {
                     adapterZip.close()
