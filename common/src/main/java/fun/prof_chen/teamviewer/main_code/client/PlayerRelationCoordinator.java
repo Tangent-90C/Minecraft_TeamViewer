@@ -32,12 +32,14 @@ public final class PlayerRelationCoordinator {
         this.integrations = Objects.requireNonNull(integrations, "integrations");
     }
 
-    public void refresh(List<TabPlayerSnapshot> tabPlayers) {
+    /** @return true when the effective relation map changed. */
+    public boolean refresh(List<TabPlayerSnapshot> tabPlayers) {
         List<TabPlayerSnapshot> snapshot = List.copyOf(tabPlayers == null ? List.of() : tabPlayers);
         Set<UUID> visiblePlayers = visiblePlayerIds(snapshot);
         if (visiblePlayers.isEmpty()) {
+            boolean changed = !relations.isEmpty();
             relations = Map.of();
-            return;
+            return changed;
         }
 
         Map<UUID, PlayerRelation> merged = new LinkedHashMap<>();
@@ -62,8 +64,11 @@ public final class PlayerRelationCoordinator {
                 }
             }
         }
-        relations = Map.copyOf(merged);
+        Map<UUID, PlayerRelation> next = Map.copyOf(merged);
+        boolean changed = !next.equals(relations);
+        if (changed) relations = next;
         warnConflicts(conflicts);
+        return changed;
     }
 
     public PlayerRelation relation(UUID playerId) {

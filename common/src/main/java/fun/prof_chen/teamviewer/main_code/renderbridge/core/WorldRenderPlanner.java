@@ -27,10 +27,14 @@ public final class WorldRenderPlanner {
     private static final int LAST_SEEN_BOX_COLOR = 0xBFFF9A26;
     private static final int LAST_SEEN_LINE_COLOR = 0xFFFFB347;
     private static final double LAST_SEEN_LABEL_DISTANCE = 512D;
+    private static final int LAST_SEEN_INDEX_CELL_SIZE = 64;
     private final Config config;
     private final Function<UUID, PlayerRelationView> relationResolver;
     private final WaypointSyncGateway waypointGateway;
     private final Map<String, Position3D> trackedEntityWaypointLastPositions = new HashMap<>();
+    private Map<UUID, LastSeenPlayerInfo> indexedLastSeenPlayers = Map.of();
+    private Map<String, Map<Long, List<LastSeenPlayerInfo>>> lastSeenSpatialIndex = Map.of();
+    private Map<UUID, String> lastSeenLabels = Map.of();
 
     public WorldRenderPlanner(
             Config config,
@@ -74,15 +78,15 @@ public final class WorldRenderPlanner {
             boolean depthTest,
             List<WorldRenderCommand> commands) {
         if (!config.isShowLastSeenPlayers() || lastSeenPlayers.isEmpty()) return;
-        for (LastSeenPlayerInfo player : lastSeenPlayers.values()) {
+        for (LastSeenPlayerInfo player : nearbyLastSeenPlayers(world, lastSeenPlayers)) {
             if (player == null || player.position() == null || player.uuid() == null
                     || player.uuid().equals(world.localPlayerId()) || remotePlayers.containsKey(player.uuid())
-                    || !sameDimension(world.dimension(), player.dimension())
-                    || distance(world.localPlayerPosition(), player.position()) > config.getRenderDistance()) {
+                    || !sameDimension(world.dimension(), player.dimension())) {
                 continue;
 			}
 			Position3D position = player.position();
 			double playerDistance = distance(world.localPlayerPosition(), position);
+			if (playerDistance > config.getRenderDistance()) continue;
 			PlayerRelationView relation = relationResolver.apply(player.uuid());
 			int boxColor = relationColor(relation, LAST_SEEN_BOX_COLOR);
 			int lineColor = relationColor(relation, LAST_SEEN_LINE_COLOR);
@@ -101,9 +105,7 @@ public final class WorldRenderPlanner {
 						add(position, new Position3D(0, 1, 0)), lineColor, depthTest, 1.0F));
             }
             if (playerDistance <= LAST_SEEN_LABEL_DISTANCE) {
-                String name = player.name().length() > 16 ? player.name().substring(0, 16) : player.name();
-				String time = LastSeenTimeFormatter.format(player.lastSeenAtUtcMs());
-				WorldLabelVectorizer.append(commands, name + "\n" + time,
+				WorldLabelVectorizer.append(commands, lastSeenLabels.getOrDefault(player.uuid(), lastSeenLabel(player)),
 						add(position, new Position3D(0, 2.15, 0)), world.lookDirection(),
 						world.cameraUpDirection(), playerDistance, lineColor, depthTest);
             }
@@ -112,12 +114,16 @@ public final class WorldRenderPlanner {
 
     public void clear() {
         trackedEntityWaypointLastPositions.clear();
+        indexedLastSeenPlayers = Map.of();
+        lastSeenSpatialIndex = Map.of();
+        lastSeenLabels = Map.of();
     }
 
     private void planPlayers(ClientWorldSnapshot world, Map<UUID, RemotePlayerInfo> remotePlayers,
                              boolean depthTest, List<WorldRenderCommand> commands) {
-        Map<UUID, RemotePlayerInfo> resolved = new HashMap<>(remotePlayers);
+        Map<UUID, RemotePlayerInfo> resolved = remotePlayers;
         if (config.isPreferLocalDataForRender()) {
+            resolved = new HashMap<>(remotePlayers);
             for (PlayerSnapshot player : world.players()) {
                 if (!player.id().equals(world.localPlayerId())) {
                     resolved.put(player.id(), new RemotePlayerInfo(player.id(), player.position(), player.dimension(), player.name()));
@@ -126,10 +132,11 @@ public final class WorldRenderPlanner {
         }
         for (RemotePlayerInfo remote : resolved.values()) {
             if (remote == null || remote.uuid() == null || remote.position() == null
-                    || remote.uuid().equals(world.localPlayerId()) || !sameDimension(world.dimension(), remote.dimension())
-                    || distance(world.localPlayerPosition(), remote.position()) > config.getRenderDistance()) {
+                    || remote.uuid().equals(world.localPlayerId()) || !sameDimension(world.dimension(), remote.dimension())) {
                 continue;
             }
+            double remoteDistance = distance(world.localPlayerPosition(), remote.position());
+            if (remoteDistance > config.getRenderDistance()) continue;
             PlayerRelationView relation = relationResolver.apply(remote.uuid());
             int boxColor = relationColor(relation, config.getBoxColor());
             int lineColor = relationColor(relation, config.getLineColor());
@@ -286,6 +293,81 @@ public final class WorldRenderPlanner {
 
     private static boolean sameDimension(String expected, String actual) {
         return isBlank(actual) || actual.equals(expected);
+    }
+
+    private List<LastSeenPlayerInfo> nearbyLastSeenPlayers(
+            ClientWorldSnapshot world, Map<UUID, LastSeenPlayerInfo> players) {
+        if (players != indexedLastSeenPlayers) rebuildLastSeenIndex(players);
+        Map<Long, List<LastSeenPlayerInfo>> dimensionBuckets = lastSeenSpatialIndex.get(world.dimension());
+        Map<Long, List<LastSeenPlayerInfo>> wildcardBuckets = lastSeenSpatialIndex.get("");
+        if ((dimensionBuckets == null || dimensionBuckets.isEmpty())
+                && (wildcardBuckets == null || wildcardBuckets.isEmpty())) return List.of();
+        List<LastSeenPlayerInfo> result = new ArrayList<>();
+        collectNearby(result, dimensionBuckets, world.localPlayerPosition(), config.getRenderDistance());
+        if (wildcardBuckets != dimensionBuckets) {
+            collectNearby(result, wildcardBuckets, world.localPlayerPosition(), config.getRenderDistance());
+        }
+        return result;
+    }
+
+    private void rebuildLastSeenIndex(Map<UUID, LastSeenPlayerInfo> players) {
+        Map<String, Map<Long, List<LastSeenPlayerInfo>>> mutableIndex = new HashMap<>();
+        Map<UUID, String> labels = new HashMap<>();
+        for (LastSeenPlayerInfo player : players.values()) {
+            if (player == null || player.uuid() == null || player.position() == null) continue;
+            String dimension = player.dimension() == null ? "" : player.dimension();
+            long cell = cellKey(cellCoordinate(player.position().x()), cellCoordinate(player.position().z()));
+            mutableIndex.computeIfAbsent(dimension, ignored -> new HashMap<>())
+                    .computeIfAbsent(cell, ignored -> new ArrayList<>()).add(player);
+            labels.put(player.uuid(), lastSeenLabel(player));
+        }
+        Map<String, Map<Long, List<LastSeenPlayerInfo>>> frozenIndex = new HashMap<>();
+        for (Map.Entry<String, Map<Long, List<LastSeenPlayerInfo>>> entry : mutableIndex.entrySet()) {
+            Map<Long, List<LastSeenPlayerInfo>> buckets = new HashMap<>();
+            entry.getValue().forEach((key, value) -> buckets.put(key, List.copyOf(value)));
+            frozenIndex.put(entry.getKey(), Map.copyOf(buckets));
+        }
+        indexedLastSeenPlayers = players;
+        lastSeenSpatialIndex = Map.copyOf(frozenIndex);
+        lastSeenLabels = Map.copyOf(labels);
+    }
+
+    private static void collectNearby(
+            List<LastSeenPlayerInfo> target,
+            Map<Long, List<LastSeenPlayerInfo>> buckets,
+            Position3D origin,
+            double radius) {
+        if (buckets == null || buckets.isEmpty() || origin == null || radius < 0) return;
+        int minX = cellCoordinate(origin.x() - radius);
+        int maxX = cellCoordinate(origin.x() + radius);
+        int minZ = cellCoordinate(origin.z() - radius);
+        int maxZ = cellCoordinate(origin.z() + radius);
+        long spanX = (long) maxX - minX + 1L;
+        long spanZ = (long) maxZ - minZ + 1L;
+        if (spanX > 0 && spanZ > 0 && spanX <= Long.MAX_VALUE / spanZ
+                && spanX * spanZ <= (long) buckets.size() * 2L) {
+            for (long x = minX; x <= maxX; x++) {
+                for (long z = minZ; z <= maxZ; z++) {
+                    List<LastSeenPlayerInfo> bucket = buckets.get(cellKey((int) x, (int) z));
+                    if (bucket != null) target.addAll(bucket);
+                }
+            }
+            return;
+        }
+        for (List<LastSeenPlayerInfo> bucket : buckets.values()) target.addAll(bucket);
+    }
+
+    private static int cellCoordinate(double coordinate) {
+        return (int) Math.floor(coordinate / LAST_SEEN_INDEX_CELL_SIZE);
+    }
+
+    private static long cellKey(int x, int z) {
+        return ((long) x << 32) ^ (z & 0xFFFFFFFFL);
+    }
+
+    private static String lastSeenLabel(LastSeenPlayerInfo player) {
+        String name = player.name().length() > 16 ? player.name().substring(0, 16) : player.name();
+        return name + "\n" + LastSeenTimeFormatter.format(player.lastSeenAtUtcMs());
     }
 
     private static int withAlpha(int color, int alpha) {

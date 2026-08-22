@@ -159,8 +159,12 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color, presentat
     state = {object = object, name = name}; managed[id] = state
   end
   if state.group ~= group_key and assign_group(state.object, group_key) then state.group = group_key end
+  local fingerprint = tostring(x) .. "|" .. tostring(y) .. "|" .. tostring(z)
+      .. "|" .. tostring(color)
   state.pending_delete = false
+  if state.fingerprint == fingerprint then return end
   state.object:setPos(x, y, z); state.object:setColor(color); state.object:setEnabled(true)
+  state.fingerprint = fingerprint
 end
 local function sync_players(managed, prefix, presentation, players, enabled, setting_enabled, relations)
   if not enabled or not setting_enabled or probe().status ~= "AVAILABLE" then clear(managed); return end

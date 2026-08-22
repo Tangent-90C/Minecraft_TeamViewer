@@ -104,6 +104,11 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
     if not remove(managed, id) then return end
     state = nil
   end
+  local fingerprint = tostring(x) .. "|" .. tostring(y) .. "|" .. tostring(z)
+      .. "|" .. tostring(color)
+  if state ~= nil and state.fingerprint == fingerprint then
+    state.pending_delete = false; return
+  end
   local position = client_objects:blockPosition(x, y, z)
   if state == nil then
     local object = java["new"]("journeymap.client.api.display.Waypoint",
@@ -116,7 +121,7 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color)
     state.object:setPosition(dimension_id, position)
     state.object:setColor(color); state.object:setEnabled(true); state.object:setDirty()
   end
-  state.pending_delete = false
+  state.pending_delete = false; state.fingerprint = fingerprint
 end
 
 local function sync_players(players, enabled, relations)

@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.plugin;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import fun.prof_chen.teamviewer.api.PlayerRelation;
 import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSource;
@@ -335,13 +336,17 @@ class IntegrationPluginManagerTest {
         assertEquals(1_234_567L, exported.get("exportedAtUtcMs").getAsLong());
         assertEquals(1_234_567L, exported.get("collectedAtUtcMs").getAsLong());
         assertEquals("马德里", exported.get("localTown").getAsString());
-        assertEquals(Set.of("赫尔辛基", "罗马", "马德里"), exported.getAsJsonArray("friendlyTowns")
-                .asList().stream().map(value -> value.getAsString()).collect(java.util.stream.Collectors.toSet()));
-        assertEquals(Set.of("东京", "汉城"), exported.getAsJsonArray("enemyTowns")
-                .asList().stream().map(value -> value.getAsString()).collect(java.util.stream.Collectors.toSet()));
-        assertEquals(Set.of("alice", "bob", "leader"), exported.getAsJsonArray("friendlyPlayerNames")
-                .asList().stream().map(value -> value.getAsString()).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(Set.of("赫尔辛基", "罗马", "马德里"), jsonStringSet(exported.getAsJsonArray("friendlyTowns")));
+        assertEquals(Set.of("东京", "汉城"), jsonStringSet(exported.getAsJsonArray("enemyTowns")));
+        assertEquals(Set.of("alice", "bob", "leader"), jsonStringSet(exported.getAsJsonArray("friendlyPlayerNames")));
         manager.shutdown();
+    }
+
+    private static Set<String> jsonStringSet(JsonArray values) {
+        Set<String> result = new java.util.HashSet<>();
+        if (values == null) return result;
+        values.forEach(value -> result.add(value.getAsString()));
+        return result;
     }
 
     @Test
@@ -1036,6 +1041,12 @@ class IntegrationPluginManagerTest {
                 .forEach(value -> value.sync(players, true));
         assertEquals(1, api.waypoints().size(),
                 "the merged API family must project each player to one native waypoint");
+        int initialPlayerMutations = api.waypoints().get(0).getMutationCount();
+        registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .forEach(value -> value.sync(players, true));
+        assertEquals(initialPlayerMutations, api.waypoints().get(0).getMutationCount(),
+                "unchanged players must not produce duplicate native JourneyMap updates");
         assertEquals(onlineGroup.getGuid(), api.waypoints().get(0).getGroupId());
         LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(remoteId, new Position3D(10.8, 70.2, -3.1),
                 "minecraft:overworld", "Remote", 1_700_000_004_000L,

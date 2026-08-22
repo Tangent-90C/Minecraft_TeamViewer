@@ -1,6 +1,8 @@
 package fun.prof_chen.teamviewer.main_code.bridge;
 
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.config.Config;
+import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.SocketProcess;
 import fun.prof_chen.teamviewer.main_code.network.protocol.ProtocolPackets;
@@ -176,6 +178,46 @@ class NetworkManagerTabDiffTest {
         assertEquals(3, socket.payloads.size());
         assertEquals(0, lastTabPatch(socket).getUpsertCount());
         assertEquals(1, lastTabPatch(socket).getDeleteCount());
+    }
+
+    @Test
+    void completedEmptyTabHistoryLookupIsNotRepeatedDuringTheSameConnection() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        NetworkManager manager = new NetworkManager(
+                new HashMap<UUID, RemotePlayerInfo>(), runtime(), (uri, options, listener) -> socket);
+        Field configField = NetworkManager.class.getDeclaredField("configGateway");
+        configField.setAccessible(true);
+        ConfigGateway previousConfig = (ConfigGateway) configField.get(null);
+        try {
+            NetworkManager.setConfigGateway(new Config());
+            setField(manager, "socket", socket);
+            setField(manager, "isConnected", true);
+            setField(manager, "tabHistorySupported", true);
+            UUID playerId = UUID.randomUUID();
+
+            manager.requestTabHistoryByUuids(List.of(playerId));
+            assertEquals(1, socket.payloads.size());
+            Field requestsField = NetworkManager.class.getDeclaredField("tabHistoryLookupRequests");
+            requestsField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<String, ?> requests = (Map<String, ?>) requestsField.get(manager);
+            String requestId = requests.keySet().iterator().next();
+
+            ProtocolPackets.TabHistoryLookupChunkInboundPacket result =
+                    new ProtocolPackets.TabHistoryLookupChunkInboundPacket();
+            result.requestId = requestId;
+            result.results = List.of();
+            result.finalChunk = true;
+            invoke(manager, "handleTabHistoryLookupChunk",
+                    ProtocolPackets.TabHistoryLookupChunkInboundPacket.class, result);
+
+            manager.requestTabHistoryByUuids(List.of(playerId));
+            assertEquals(1, socket.payloads.size(),
+                    "a completed empty lookup must not be reissued until reconnect");
+            assertEquals(0L, manager.getTabHistoryStateGeneration());
+        } finally {
+            NetworkManager.setConfigGateway(previousConfig);
+        }
     }
 
     private static fun.prof_chen.teamviewer.main_code.network.proto.TabPlayersPatchScope lastTabPatch(

@@ -44,7 +44,9 @@ public class Config implements ConfigGateway {
 
     private String serverURL = "ws://localhost:8080/mc-client";
     private String roomCode = "default";
-    private int renderDistance = 128000;
+    // New installs should not turn every retained offline record into a per-frame render candidate.
+    // Existing saved values are intentionally preserved by Gson loading.
+    private int renderDistance = 512;
     private boolean showLines = false;
     private boolean showBoxes = false;
     private boolean showLastSeenPlayers = false;

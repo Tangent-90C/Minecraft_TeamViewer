@@ -118,6 +118,33 @@ class WorldRenderPlannerTest {
                 .allMatch(command -> command.color() == config.getFriendlyTeamColor()));
     }
 
+    @Test
+    void indexesLargeLastSeenCollectionsWithoutRenderingOtherDimensionsOrDistantRecords() {
+        Config config = new Config();
+        assertEquals(512, config.getRenderDistance(), "new installations retain the documented safe default");
+        config.setShowLastSeenPlayers(true);
+        config.setShowLastSeenBoxes(true);
+        config.setShowLastSeenLines(false);
+        UUID far = UUID.fromString("00000000-0000-0000-0000-000000000003");
+        UUID otherDimension = UUID.fromString("00000000-0000-0000-0000-000000000004");
+        Map<UUID, LastSeenPlayerInfo> history = Map.of(
+                REMOTE, lastSeen(REMOTE, new Position3D(10, 64, 10), "minecraft:overworld", "near"),
+                far, lastSeen(far, new Position3D(900, 64, 0), "minecraft:overworld", "far"),
+                otherDimension, lastSeen(otherDimension, new Position3D(10, 64, 10), "minecraft:the_nether", "nether"));
+        WorldRenderPlanner planner = new WorldRenderPlanner(config, ignored -> null, null);
+
+        assertEquals(1L, planner.plan(true, world(), Map.of(), history, Map.of()).commands().stream()
+                .filter(WorldRenderCommand.Box.class::isInstance).count());
+        assertEquals(1L, planner.plan(true, world(), Map.of(), history, Map.of()).commands().stream()
+                .filter(WorldRenderCommand.Box.class::isInstance).count(),
+                "reusing the immutable state keeps the spatial index valid");
+    }
+
+    private static LastSeenPlayerInfo lastSeen(UUID id, Position3D position, String dimension, String name) {
+        return new LastSeenPlayerInfo(id, position, dimension, name,
+                1_700_000_004_000L, 1_700_000_000_000L, 1_700_000_005_000L);
+    }
+
     private static ClientWorldSnapshot world() {
         return new ClientWorldSnapshot(LOCAL, "local", true, "minecraft:overworld", -64,
                 new Position3D(0, 64, 0), new Position3D(0, 65.6, 0), new Position3D(0, 0, 1),

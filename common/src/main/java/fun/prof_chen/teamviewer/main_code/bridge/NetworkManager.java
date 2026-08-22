@@ -233,10 +233,19 @@ public class NetworkManager {
 	// Immutable external view, published only after a complete inbound update.
 	private volatile List<RemotePlayerSnapshot> publishedRemotePlayerSnapshots = List.of();
 	private volatile List<LastSeenPlayerSnapshot> publishedLastSeenPlayerSnapshots = List.of();
+	/** Immutable state used by the common client hot paths; it is replaced only on semantic change. */
+	private volatile Map<UUID, RemotePlayerInfo> publishedRemotePlayerState = Map.of();
+	private volatile Map<UUID, LastSeenPlayerInfo> publishedLastSeenPlayerState = Map.of();
+	private volatile long remotePlayerStateGeneration;
+	private volatile long lastSeenPlayerStateGeneration;
 	private final Map<String, Map<String, Object>> lastSeenPlayerDataCache = new HashMap<>();
 	private final Map<UUID, Map<String, Object>> tabHistoryCache = new HashMap<>();
 	private final Map<String, TabHistorySyncAccumulator> tabHistorySyncs = new HashMap<>();
 	private final Map<String, Set<UUID>> tabHistoryLookupRequests = new HashMap<>();
+	private final Set<UUID> completedTabHistoryLookups = new HashSet<>();
+	private final Set<String> dirtyTabHistoryLookupRequests = new HashSet<>();
+	private volatile List<TabPlayerSnapshot> publishedTabHistoryPlayers = List.of();
+	private volatile long tabHistoryStateGeneration;
 	private long tabHistoryRevision;
 	private byte[] tabHistoryDigest = new byte[0];
 	private long tabHistoryRequestSequence;
@@ -396,6 +405,10 @@ public class NetworkManager {
 			this.revision = revision;
 			this.digest = digest == null ? new byte[0] : digest.clone();
 		}
+	}
+
+	private record PlayerPatchChange(boolean remotePlayersChanged, boolean lastSeenPlayersChanged) {
+		private static final PlayerPatchChange NONE = new PlayerPatchChange(false, false);
 	}
 
 	/** Immutable normalized backend mark, including its precedence-bearing source. */
@@ -1422,10 +1435,15 @@ public class NetworkManager {
 		if (packet == null) {
 			return;
 		}
+		boolean remotePlayersChanged = false;
+		boolean lastSeenPlayersChanged = false;
 
 		Map<String, Object> players = objectMap(packet.players);
 		if (packet.players != null) {
+			Map<UUID, Map<String, Object>> previousPlayerData = Map.copyOf(remotePlayerDataCache);
 			Map<UUID, RemotePlayerInfo> latestRemotePlayers = parseRemotePlayers(players, true);
+			remotePlayersChanged = !remotePlayers.equals(latestRemotePlayers)
+					|| !previousPlayerData.equals(remotePlayerDataCache);
 			reconcileRemotePlayers(latestRemotePlayers);
 		}
 
@@ -1455,11 +1473,11 @@ public class NetworkManager {
 		}
 
 		if (packet.lastSeenPlayers != null) {
-			replaceLastSeenPlayers(objectMap(packet.lastSeenPlayers));
+			lastSeenPlayersChanged = replaceLastSeenPlayers(objectMap(packet.lastSeenPlayers));
 		}
 
-		publishRemotePlayerSnapshots();
-		publishLastSeenPlayerSnapshots();
+		if (remotePlayersChanged) publishRemotePlayerSnapshots();
+		if (lastSeenPlayersChanged) publishLastSeenPlayerSnapshots();
 	}
 
 	/**
@@ -1518,6 +1536,8 @@ public class NetworkManager {
 		if (packet == null) {
 			return;
 		}
+		boolean remotePlayersChanged = false;
+		boolean lastSeenPlayersChanged = false;
 
 		Map<String, Object> playersPatch = objectMap(packet.players);
 		if (!playersPatch.isEmpty()) {
@@ -1525,14 +1545,16 @@ public class NetworkManager {
 				try {
 					String playerIdRaw = String.valueOf(idValue);
 					UUID playerId = UUID.fromString(playerIdRaw);
-					remotePlayers.remove(playerId);
+					remotePlayersChanged |= remotePlayers.remove(playerId) != null;
 					remotePlayerDataCache.remove(playerId);
 				} catch (Exception ignored) {
 				}
 			}
 			Map<String, Object> upsert = objectMap(playersPatch.get("upsert"));
 			if (!upsert.isEmpty()) {
-				applyPlayerPatchUpserts(upsert);
+				PlayerPatchChange change = applyPlayerPatchUpserts(upsert);
+				remotePlayersChanged |= change.remotePlayersChanged();
+				lastSeenPlayersChanged |= change.lastSeenPlayersChanged();
 			}
 		}
 
@@ -1588,11 +1610,11 @@ public class NetworkManager {
 
 		Map<String, Object> lastSeenPatch = objectMap(packet.lastSeenPlayers);
 		if (!lastSeenPatch.isEmpty()) {
-			applyLastSeenPlayerPatch(lastSeenPatch);
+			lastSeenPlayersChanged |= applyLastSeenPlayerPatch(lastSeenPatch);
 		}
 
-		publishRemotePlayerSnapshots();
-		publishLastSeenPlayerSnapshots();
+		if (remotePlayersChanged) publishRemotePlayerSnapshots();
+		if (lastSeenPlayersChanged) publishLastSeenPlayerSnapshots();
 	}
 
 	private void replacePlayerMarks(Map<String, Object> marks) {
@@ -2305,14 +2327,37 @@ public class NetworkManager {
 		return publishedRemotePlayerSnapshots;
 	}
 
+	/** Immutable online-player state for common rendering and integration scheduling. */
+	public Map<UUID, RemotePlayerInfo> getRemotePlayerState() {
+		return publishedRemotePlayerState;
+	}
+
+	public long getRemotePlayerStateGeneration() {
+		return remotePlayerStateGeneration;
+	}
+
 	/** Returns the latest immutable authoritative offline-player snapshot. */
 	public List<LastSeenPlayerSnapshot> getLastSeenPlayerSnapshots() {
 		return publishedLastSeenPlayerSnapshots;
 	}
 
+	/** Immutable offline-player state for common rendering and integration scheduling. */
+	public Map<UUID, LastSeenPlayerInfo> getLastSeenPlayerState() {
+		return publishedLastSeenPlayerState;
+	}
+
+	public long getLastSeenPlayerStateGeneration() {
+		return lastSeenPlayerStateGeneration;
+	}
+
 	private void publishRemotePlayerSnapshots() {
+		Map<UUID, RemotePlayerInfo> state = Map.copyOf(remotePlayers);
+		if (!state.equals(publishedRemotePlayerState)) {
+			publishedRemotePlayerState = state;
+			remotePlayerStateGeneration++;
+		}
 		List<RemotePlayerSnapshot> snapshots = new ArrayList<>();
-		for (Map.Entry<UUID, RemotePlayerInfo> entry : remotePlayers.entrySet()) {
+		for (Map.Entry<UUID, RemotePlayerInfo> entry : state.entrySet()) {
 			UUID playerId = entry.getKey();
 			RemotePlayerInfo info = entry.getValue();
 			Map<String, Object> data = remotePlayerDataCache.get(playerId);
@@ -2322,13 +2367,20 @@ public class NetworkManager {
 			}
 		}
 		snapshots.sort(Comparator.comparing(snapshot -> snapshot.uuid().toString()));
-		publishedRemotePlayerSnapshots = List.copyOf(snapshots);
+		List<RemotePlayerSnapshot> nextSnapshots = List.copyOf(snapshots);
+		if (!nextSnapshots.equals(publishedRemotePlayerSnapshots)) {
+			publishedRemotePlayerSnapshots = nextSnapshots;
+		}
 	}
 
 	private void publishLastSeenPlayerSnapshots() {
+		Map<UUID, LastSeenPlayerInfo> state = Map.copyOf(lastSeenPlayers);
+		if (state.equals(publishedLastSeenPlayerState)) return;
+		publishedLastSeenPlayerState = state;
+		lastSeenPlayerStateGeneration++;
 		List<LastSeenPlayerSnapshot> snapshots = new ArrayList<>();
-		for (LastSeenPlayerInfo player : lastSeenPlayers.values()) {
-			if (player == null || remotePlayers.containsKey(player.uuid())) continue;
+		for (LastSeenPlayerInfo player : state.values()) {
+			if (player == null || publishedRemotePlayerState.containsKey(player.uuid())) continue;
 			Position3D position = player.position();
 			snapshots.add(new LastSeenPlayerSnapshot(
 					player.uuid(), player.name(), player.dimension(),
@@ -2337,7 +2389,7 @@ public class NetworkManager {
 		}
 		snapshots.sort(Comparator.comparing(snapshot -> snapshot.uuid().toString()));
 		publishedLastSeenPlayerSnapshots = List.copyOf(snapshots);
-		requestMissingTabHistory(snapshots.stream().map(LastSeenPlayerSnapshot::uuid).toList());
+		requestMissingTabHistory(state.keySet());
 	}
 
 	private RemotePlayerSnapshot buildRemotePlayerSnapshot(UUID playerId, RemotePlayerInfo info,
@@ -2716,7 +2768,8 @@ public class NetworkManager {
 		for (Set<UUID> pending : tabHistoryLookupRequests.values()) alreadyPending.addAll(pending);
 		List<UUID> missing = playerIds.stream()
 				.filter(Objects::nonNull)
-				.filter(id -> !tabHistoryCache.containsKey(id) && !alreadyPending.contains(id))
+				.filter(id -> !tabHistoryCache.containsKey(id) && !alreadyPending.contains(id)
+						&& !completedTabHistoryLookups.contains(id))
 				.sorted(Comparator.comparing(UUID::toString))
 				.toList();
 		for (int offset = 0; offset < missing.size(); offset += tabHistoryMaxLookupSelectors) {
@@ -2734,15 +2787,25 @@ public class NetworkManager {
 
 	private void handleTabHistoryLookupChunk(ProtocolPackets.TabHistoryLookupChunkInboundPacket packet) {
 		if (packet == null || packet.errorCode != null) {
-			if (packet != null) tabHistoryLookupRequests.remove(packet.requestId);
+			if (packet != null) {
+				Set<UUID> completed = tabHistoryLookupRequests.remove(packet.requestId);
+				if (completed != null) completedTabHistoryLookups.addAll(completed);
+				dirtyTabHistoryLookupRequests.remove(packet.requestId);
+			}
 			return;
 		}
+		boolean changed = false;
 		for (Map<String, Object> result : packet.results == null ? List.<Map<String, Object>>of() : packet.results) {
 			Object entries = result.get("entries");
 			if (!(entries instanceof Collection<?> collection)) continue;
-			for (Object entry : collection) applyTabHistoryEntry(entry, tabHistoryCache);
+			for (Object entry : collection) changed |= applyTabHistoryEntry(entry, tabHistoryCache);
 		}
-		if (Boolean.TRUE.equals(packet.finalChunk)) tabHistoryLookupRequests.remove(packet.requestId);
+		if (changed && packet.requestId != null) dirtyTabHistoryLookupRequests.add(packet.requestId);
+		if (Boolean.TRUE.equals(packet.finalChunk)) {
+			Set<UUID> completed = tabHistoryLookupRequests.remove(packet.requestId);
+			if (completed != null) completedTabHistoryLookups.addAll(completed);
+			if (dirtyTabHistoryLookupRequests.remove(packet.requestId)) publishTabHistoryPlayers();
+		}
 	}
 
 	private void handleTabHistorySyncChunk(ProtocolPackets.TabHistorySyncChunkInboundPacket packet) {
@@ -2780,18 +2843,21 @@ public class NetworkManager {
 		tabHistoryCache.putAll(candidate);
 		tabHistoryRevision = revision;
 		tabHistoryDigest = digest.clone();
+		publishTabHistoryPlayers();
 	}
 
-	private void applyTabHistoryEntry(Object raw, Map<UUID, Map<String, Object>> target) {
+	private boolean applyTabHistoryEntry(Object raw, Map<UUID, Map<String, Object>> target) {
 		Map<String, Object> entry = objectMap(raw);
 		Map<String, Object> player = objectMap(entry.get("player"));
 		String uuid = normalizeUuidText(player.get("uuid"));
-		if (uuid == null) return;
+		if (uuid == null) return false;
 		try {
 			Map<String, Object> stored = new HashMap<>(entry);
 			stored.put("player", new HashMap<>(player));
-			target.put(UUID.fromString(uuid), stored);
-		} catch (IllegalArgumentException ignored) { }
+			return !Objects.equals(target.put(UUID.fromString(uuid), stored), stored);
+		} catch (IllegalArgumentException ignored) {
+			return false;
+		}
 	}
 
 	private byte[] computeTabHistoryDigest(Map<UUID, Map<String, Object>> entries) {
@@ -2812,6 +2878,14 @@ public class NetworkManager {
 	}
 
 	public List<TabPlayerSnapshot> getTabHistoryPlayers() {
+		return publishedTabHistoryPlayers;
+	}
+
+	public long getTabHistoryStateGeneration() {
+		return tabHistoryStateGeneration;
+	}
+
+	private void publishTabHistoryPlayers() {
 		List<TabPlayerSnapshot> result = new ArrayList<>();
 		for (Map.Entry<UUID, Map<String, Object>> cached : tabHistoryCache.entrySet()) {
 			Map<String, Object> player = objectMap(cached.getValue().get("player"));
@@ -2825,7 +2899,10 @@ public class NetworkManager {
 					normalizeNullableText(player.get("displayName")), null, null, null));
 		}
 		result.sort(Comparator.comparing(TabPlayerSnapshot::playerId));
-		return List.copyOf(result);
+		List<TabPlayerSnapshot> next = List.copyOf(result);
+		if (next.equals(publishedTabHistoryPlayers)) return;
+		publishedTabHistoryPlayers = next;
+		tabHistoryStateGeneration++;
 	}
 
 	private long calculateKeepaliveIntervalMs(int timeoutSec) {
@@ -3002,8 +3079,10 @@ public class NetworkManager {
 		return newRemotePlayers;
 	}
 
-	private void applyPlayerPatchUpserts(Map<String, Object> upserts) {
+	private PlayerPatchChange applyPlayerPatchUpserts(Map<String, Object> upserts) {
 		String fallbackDimension = getCurrentDimension();
+		boolean remoteChanged = false;
+		boolean lastSeenChanged = false;
 
 		for (Map.Entry<String, Object> entry : upserts.entrySet()) {
 			try {
@@ -3026,14 +3105,18 @@ public class NetworkManager {
 					continue;
 				}
 
+				boolean rawDataChanged = !Objects.equals(existing, mergedData);
 				remotePlayerDataCache.put(playerId, mergedData);
-				remotePlayers.put(playerId, info);
-				lastSeenPlayers.remove(playerId);
+				RemotePlayerInfo previous = remotePlayers.put(playerId, info);
+				remoteChanged |= rawDataChanged || !Objects.equals(previous, info);
+				lastSeenChanged |= lastSeenPlayers.remove(playerId) != null;
 				lastSeenPlayerDataCache.remove(playerId.toString());
 			} catch (Exception e) {
 				LOGGER.error("TeamViewRelay Network - Error applying player patch: {}", e.getMessage());
 			}
 		}
+		return remoteChanged || lastSeenChanged
+				? new PlayerPatchChange(remoteChanged, lastSeenChanged) : PlayerPatchChange.NONE;
 	}
 
 	private void applyDeltaFields(Map<String, Object> target, Map<String, Object> delta) {
@@ -3049,39 +3132,45 @@ public class NetworkManager {
 		}
 	}
 
-	private void replaceLastSeenPlayers(Map<String, Object> players) {
+	private boolean replaceLastSeenPlayers(Map<String, Object> players) {
+		Map<UUID, LastSeenPlayerInfo> before = Map.copyOf(lastSeenPlayers);
 		lastSeenPlayers.clear();
 		lastSeenPlayerDataCache.clear();
 		for (Map.Entry<String, Object> entry : players.entrySet()) {
 			upsertLastSeenPlayer(entry.getKey(), entry.getValue());
 		}
+		return !before.equals(lastSeenPlayers);
 	}
 
-	private void applyLastSeenPlayerPatch(Map<String, Object> patch) {
+	private boolean applyLastSeenPlayerPatch(Map<String, Object> patch) {
+		boolean changed = false;
 		for (Object rawId : objectList(patch.get("delete"))) {
 			try {
 				UUID playerId = UUID.fromString(String.valueOf(rawId));
-				lastSeenPlayers.remove(playerId);
+				changed |= lastSeenPlayers.remove(playerId) != null;
 				lastSeenPlayerDataCache.remove(playerId.toString());
 			} catch (IllegalArgumentException ignored) {
 			}
 		}
 		for (Map.Entry<String, Object> entry : objectMap(patch.get("upsert")).entrySet()) {
-			upsertLastSeenPlayer(entry.getKey(), entry.getValue());
+			changed |= upsertLastSeenPlayer(entry.getKey(), entry.getValue());
 		}
+		return changed;
 	}
 
-	private void upsertLastSeenPlayer(String rawId, Object rawValue) {
+	private boolean upsertLastSeenPlayer(String rawId, Object rawValue) {
 		try {
 			UUID playerId = UUID.fromString(rawId);
-			if (remotePlayers.containsKey(playerId)) return;
+			if (remotePlayers.containsKey(playerId)) return false;
 			Map<String, Object> data = extractDataMap(objectMap(rawValue));
 			LastSeenPlayerInfo player = parseLastSeenPlayer(playerId, data);
-			if (player == null) return;
-			lastSeenPlayers.put(playerId, player);
+			if (player == null) return false;
+			LastSeenPlayerInfo previous = lastSeenPlayers.put(playerId, player);
 			lastSeenPlayerDataCache.put(playerId.toString(), new HashMap<>(data));
+			return !Objects.equals(previous, player);
 		} catch (IllegalArgumentException error) {
 			LOGGER.debug("Ignoring invalid last-seen player {}: {}", rawId, error.getMessage());
+			return false;
 		}
 	}
 
@@ -3822,6 +3911,8 @@ public class NetworkManager {
 		lastEntitiesPacketSentMs = 0L;
 		tabHistorySyncs.clear();
 		tabHistoryLookupRequests.clear();
+		completedTabHistoryLookups.clear();
+		dirtyTabHistoryLookupRequests.clear();
 		tabHistorySupported = false;
 	}
 
@@ -3887,6 +3978,20 @@ public class NetworkManager {
 		tabHistoryDigest = new byte[0];
 		tabHistorySyncs.clear();
 		tabHistoryLookupRequests.clear();
+		completedTabHistoryLookups.clear();
+		dirtyTabHistoryLookupRequests.clear();
+		if (!publishedRemotePlayerState.isEmpty()) {
+			publishedRemotePlayerState = Map.of();
+			remotePlayerStateGeneration++;
+		}
+		if (!publishedLastSeenPlayerState.isEmpty()) {
+			publishedLastSeenPlayerState = Map.of();
+			lastSeenPlayerStateGeneration++;
+		}
+		if (!publishedTabHistoryPlayers.isEmpty()) {
+			publishedTabHistoryPlayers = List.of();
+			tabHistoryStateGeneration++;
+		}
 		publishedRemotePlayerSnapshots = List.of();
 		publishedLastSeenPlayerSnapshots = List.of();
 		if (!removedWaypointIds.isEmpty()) {

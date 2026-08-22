@@ -112,17 +112,17 @@ class ClientCoordinatorTest {
         assertEquals(100, game.worldCaptureCount, "tick consumers share one lightweight world snapshot");
         assertEquals(0, game.worldEntityCaptureCount);
         assertEquals(5, game.tabCaptureCount, "initial capture plus one capture every 20 ticks");
-        assertEquals(5, network.tabReports.size());
+		assertEquals(1, network.tabReports.size(), "unchanged Tab snapshots are not resubmitted");
         assertTrue(network.tabReports.stream().allMatch(value -> value.size() == 800));
 
         network.connected = false;
         coordinator.onEndClientTick();
         assertEquals(6, game.tabCaptureCount, "Tab capture continues while disconnected");
-        assertEquals(5, network.tabReports.size(), "disconnected snapshots stay local");
+		assertEquals(1, network.tabReports.size(), "disconnected snapshots stay local");
         network.connected = true;
         coordinator.onEndClientTick();
         assertEquals(6, game.tabCaptureCount, "reconnection reuses the current cached Tab snapshot");
-        assertEquals(6, network.tabReports.size());
+		assertEquals(2, network.tabReports.size(), "reconnection establishes one fresh Tab baseline");
     }
 
     @Test

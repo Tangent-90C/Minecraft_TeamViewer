@@ -15,6 +15,7 @@ public class Waypoint {
     private int color;
     private boolean enabled;
     private boolean persistent;
+    private int mutationCount;
 
     public Waypoint(String modId, BlockPos position, String name, String primaryDimension) {
         this.modId = modId;
@@ -30,9 +31,10 @@ public class Waypoint {
     public String getPrimaryDimension() { return primaryDimension; }
     public String getGroupId() { return groupId; }
     public int getColor() { return color; }
-    public void setPos(int x, int y, int z) { position = new BlockPos(x, y, z); }
-    public void setColor(int value) { color = value; }
-    public void setEnabled(boolean value) { enabled = value; }
-    public void setPersistent(boolean value) { persistent = value; }
-    public void setGroupId(String value) { groupId = value; }
+    public int getMutationCount() { return mutationCount; }
+    public void setPos(int x, int y, int z) { position = new BlockPos(x, y, z); mutationCount++; }
+    public void setColor(int value) { color = value; mutationCount++; }
+    public void setEnabled(boolean value) { enabled = value; mutationCount++; }
+    public void setPersistent(boolean value) { persistent = value; mutationCount++; }
+    public void setGroupId(String value) { groupId = value; mutationCount++; }
 }

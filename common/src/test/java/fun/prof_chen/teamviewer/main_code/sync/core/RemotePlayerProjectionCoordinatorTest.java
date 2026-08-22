@@ -160,6 +160,43 @@ class RemotePlayerProjectionCoordinatorTest {
         assertEquals(enemy, projection.relations.get(remoteId));
     }
 
+    @Test
+    void onlineGenerationsDoNotResyncOfflineProjectionState() {
+        UUID localId = UUID.randomUUID();
+        UUID remoteId = UUID.randomUUID();
+        UUID offlineId = UUID.randomUUID();
+        IntegrationRegistry registry = new IntegrationRegistry();
+        ChannelProjection projection = new ChannelProjection();
+        register(registry, projection.id(), "plugin.channel", projection);
+        RemotePlayerProjectionCoordinator coordinator = new RemotePlayerProjectionCoordinator(registry);
+        ClientWorldSnapshot world = new ClientWorldSnapshot(localId, "Local", true,
+                "minecraft:overworld", -64, new Position3D(0, 64, 0), new Position3D(0, 65.6, 0),
+                new Position3D(0, 0, 1), new Position3D(0, 1, 0), List.of(), List.of());
+        Map<UUID, LastSeenPlayerInfo> history = Map.of(offlineId, lastSeen(offlineId, "Offline"));
+
+        coordinator.tick(Map.of(remoteId, new RemotePlayerInfo(remoteId, new Position3D(4, 65, 8),
+                        "minecraft:overworld", "Remote")), 1L,
+                history, 1L, true, true, world);
+        assertEquals(1, projection.onlineSyncCount);
+        assertEquals(1, projection.offlineSyncCount);
+
+        coordinator.tick(Map.of(remoteId, new RemotePlayerInfo(remoteId, new Position3D(5, 65, 8),
+                        "minecraft:overworld", "Remote")), 2L,
+                history, 1L, true, true, world);
+        assertEquals(2, projection.onlineSyncCount);
+        assertEquals(1, projection.offlineSyncCount,
+                "online movement must not recreate every offline native marker");
+
+        coordinator.tick(Map.of(remoteId, new RemotePlayerInfo(remoteId, new Position3D(5, 65, 8),
+                        "minecraft:overworld", "Remote")), 2L,
+                Map.of(offlineId, new LastSeenPlayerInfo(offlineId, new Position3D(6, 65, 8),
+                        "minecraft:overworld", "Offline", 1_700_000_006_000L,
+                        1_700_000_001_000L, 1_700_000_007_000L)),
+                2L, true, true, world);
+        assertEquals(2, projection.onlineSyncCount);
+        assertEquals(2, projection.offlineSyncCount);
+    }
+
     private static LastSeenPlayerInfo lastSeen(UUID id, String name) {
         return new LastSeenPlayerInfo(id, new Position3D(4, 65, 8),
                 "minecraft:overworld", name, 1_700_000_004_000L,
@@ -254,6 +291,25 @@ class RemotePlayerProjectionCoordinatorTest {
                 boolean enabled) {
             this.relations = Map.copyOf(relations);
             syncCount++;
+        }
+    }
+
+    private static final class ChannelProjection implements RemotePlayerProjection {
+        private int onlineSyncCount;
+        private int offlineSyncCount;
+
+        @Override public String id() { return "channel"; }
+        @Override public boolean isAvailable() { return true; }
+        @Override public void sync(Map<UUID, RemotePlayerInfo> players, boolean enabled) { }
+        @Override public void syncResolved(Map<UUID, RemotePlayerInfo> players,
+                                            Map<UUID, PlayerRelationView> relations,
+                                            boolean enabled) {
+            onlineSyncCount++;
+        }
+        @Override public void syncLastSeenResolved(Map<UUID, LastSeenPlayerInfo> players,
+                                                    Map<UUID, PlayerRelationView> relations,
+                                                    boolean enabled) {
+            offlineSyncCount++;
         }
     }
 }

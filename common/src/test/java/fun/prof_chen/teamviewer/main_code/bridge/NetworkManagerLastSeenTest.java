@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NetworkManagerLastSeenTest {
@@ -50,6 +51,43 @@ class NetworkManagerLastSeenTest {
                 "upsert", Map.of(PLAYER.toString(), lastSeenData()), "delete", List.of());
         invoke(manager, "applyPatch", ProtocolPackets.PatchInboundPacket.class, offlinePatch);
         assertEquals(1, manager.getLastSeenPlayerSnapshots().size());
+    }
+
+    @Test
+    void publishesIndependentVersionedStateOnlyForChangedScope() throws Exception {
+        Map<UUID, RemotePlayerInfo> online = new HashMap<>();
+        Map<UUID, LastSeenPlayerInfo> history = new HashMap<>();
+        NetworkManager manager = new NetworkManager(online, history, runtime(),
+                (uri, options, listener) -> null);
+
+        ProtocolPackets.SnapshotFullInboundPacket snapshot = new ProtocolPackets.SnapshotFullInboundPacket();
+        snapshot.lastSeenPlayers = Map.of(PLAYER.toString(), lastSeenData());
+        invoke(manager, "applySnapshot", ProtocolPackets.SnapshotFullInboundPacket.class, snapshot);
+        long initialHistoryGeneration = manager.getLastSeenPlayerStateGeneration();
+        Map<UUID, LastSeenPlayerInfo> initialHistory = manager.getLastSeenPlayerState();
+
+        ProtocolPackets.PatchInboundPacket unrelated = new ProtocolPackets.PatchInboundPacket();
+        unrelated.entities = Map.of("upsert", Map.of("entity", Map.of("type", "minecraft:zombie")),
+                "delete", List.of());
+        invoke(manager, "applyPatch", ProtocolPackets.PatchInboundPacket.class, unrelated);
+        assertEquals(initialHistoryGeneration, manager.getLastSeenPlayerStateGeneration());
+        assertSame(initialHistory, manager.getLastSeenPlayerState());
+
+        ProtocolPackets.PatchInboundPacket duplicateHistory = new ProtocolPackets.PatchInboundPacket();
+        duplicateHistory.lastSeenPlayers = Map.of("upsert", Map.of(PLAYER.toString(), lastSeenData()),
+                "delete", List.of());
+        invoke(manager, "applyPatch", ProtocolPackets.PatchInboundPacket.class, duplicateHistory);
+        assertEquals(initialHistoryGeneration, manager.getLastSeenPlayerStateGeneration());
+        assertSame(initialHistory, manager.getLastSeenPlayerState());
+
+        ProtocolPackets.PatchInboundPacket onlinePatch = new ProtocolPackets.PatchInboundPacket();
+        onlinePatch.players = Map.of("upsert", Map.of(PLAYER.toString(), Map.of(
+                "x", 4D, "y", 65D, "z", 9D, "dimension", "minecraft:overworld",
+                "playerName", "Remote", "playerUUID", PLAYER.toString())), "delete", List.of());
+        invoke(manager, "applyPatch", ProtocolPackets.PatchInboundPacket.class, onlinePatch);
+        assertTrue(manager.getRemotePlayerStateGeneration() > 0L);
+        assertEquals(initialHistoryGeneration + 1L, manager.getLastSeenPlayerStateGeneration(),
+                "only the removal from history advances the offline generation");
     }
 
     private static Map<String, Object> lastSeenData() {

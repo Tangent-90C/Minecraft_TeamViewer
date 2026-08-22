@@ -1,6 +1,10 @@
 package fun.prof_chen.teamviewer.main_code.plugin;
 
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
+import fun.prof_chen.teamviewer.main_code.client.model.PlayerRelationView;
+import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.Position3D;
+import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.lib.jse.CoerceJavaToLua;
@@ -21,6 +25,10 @@ final class LuaValueConverters {
         if (value instanceof String string) return LuaValue.valueOf(string);
         if (value instanceof UUID uuid) return LuaValue.valueOf(uuid.toString());
         if (value instanceof Enum<?> enumeration) return LuaValue.valueOf(enumeration.name());
+		if (value instanceof Position3D position) return position(position);
+		if (value instanceof RemotePlayerInfo player) return remotePlayer(player);
+		if (value instanceof LastSeenPlayerInfo player) return lastSeenPlayer(player);
+		if (value instanceof PlayerRelationView relation) return relation(relation);
         if (value instanceof Map<?, ?> map) {
             LuaTable table = new LuaTable();
             map.forEach((key, item) -> table.set(String.valueOf(key), toLua(item)));
@@ -42,14 +50,17 @@ final class LuaValueConverters {
         }
         if (value instanceof TabPlayerSnapshot player) {
             LuaTable table = new LuaTable();
-            for (java.lang.reflect.RecordComponent component : value.getClass().getRecordComponents()) {
-                try {
-                    table.set(component.getName(), toLua(component.getAccessor().invoke(value)));
-                } catch (ReflectiveOperationException error) {
-                    throw new IllegalArgumentException(
-                            "Unable to expose Tab snapshot component " + component.getName(), error);
-                }
-            }
+            table.set("playerId", toLua(player.playerId()));
+            table.set("name", toLua(player.name()));
+            table.set("prefixText", toLua(player.prefixText()));
+            table.set("prefixColored", toLua(player.prefixColored()));
+            table.set("scoreboardTeamId", toLua(player.scoreboardTeamId()));
+            table.set("scoreboardSuffix", toLua(player.scoreboardSuffix()));
+            table.set("scoreboardColorRgb", toLua(player.scoreboardColorRgb()));
+            table.set("displayName", toLua(player.displayName()));
+            table.set("formattedDisplayName", toLua(player.formattedDisplayName()));
+            table.set("formattedScoreboardPrefix", toLua(player.formattedScoreboardPrefix()));
+            table.set("formattedScoreboardSuffix", toLua(player.formattedScoreboardSuffix()));
             table.set("teamId", toLua(player.scoreboardTeamId()));
             table.set("scoreboardPrefix", toLua(player.scoreboardPrefix()));
             return table;
@@ -68,6 +79,43 @@ final class LuaValueConverters {
         }
         return CoerceJavaToLua.coerce(value);
     }
+
+	private static LuaTable position(Position3D value) {
+		LuaTable table = new LuaTable();
+		table.set("x", LuaValue.valueOf(value.x()));
+		table.set("y", LuaValue.valueOf(value.y()));
+		table.set("z", LuaValue.valueOf(value.z()));
+		return table;
+	}
+
+	private static LuaTable remotePlayer(RemotePlayerInfo value) {
+		LuaTable table = new LuaTable();
+		table.set("uuid", toLua(value.uuid()));
+		table.set("position", toLua(value.position()));
+		table.set("dimension", toLua(value.dimension()));
+		table.set("name", toLua(value.name()));
+		return table;
+	}
+
+	private static LuaTable lastSeenPlayer(LastSeenPlayerInfo value) {
+		LuaTable table = new LuaTable();
+		table.set("uuid", toLua(value.uuid()));
+		table.set("position", toLua(value.position()));
+		table.set("dimension", toLua(value.dimension()));
+		table.set("name", toLua(value.name()));
+		table.set("lastSeenAtUtcMs", LuaValue.valueOf(value.lastSeenAtUtcMs()));
+		table.set("positionObservedAtUtcMs", LuaValue.valueOf(value.positionObservedAtUtcMs()));
+		table.set("offlineDetectedAtUtcMs", LuaValue.valueOf(value.offlineDetectedAtUtcMs()));
+		return table;
+	}
+
+	private static LuaTable relation(PlayerRelationView value) {
+		LuaTable table = new LuaTable();
+		table.set("relation", toLua(value.relation()));
+		table.set("color", LuaValue.valueOf(value.color()));
+		table.set("resolved", LuaValue.valueOf(value.resolved()));
+		return table;
+	}
 
     static LuaTable settings(Map<String, Object> values) {
         LuaTable table = new LuaTable();
