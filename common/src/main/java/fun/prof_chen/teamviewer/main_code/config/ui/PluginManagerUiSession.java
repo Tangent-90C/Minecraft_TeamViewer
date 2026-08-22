@@ -803,12 +803,7 @@ public final class PluginManagerUiSession implements PluginManagerUiController {
 
     private static UiText settingName(PluginSnapshot plugin, PluginManifest.SettingDefinition setting) {
         if (IntegrationIds.PLUGIN_JOURNEYMAP.equals(plugin.id())) {
-            return switch (setting.key()) {
-                case "show_remote_players", "show_last_seen_players", "show_online_map_markers",
-                        "show_online_world_beacons", "show_offline_map_markers", "show_offline_world_beacons" ->
-                        tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_" + setting.key());
-                default -> UiText.literal(setting.name());
-            };
+            return tr("screen.mc_teamviewer.integration_plugin.setting.journeymap_" + setting.key());
         }
         if (IntegrationIds.PLUGIN_XAERO.equals(plugin.id())) {
             return switch (setting.key()) {

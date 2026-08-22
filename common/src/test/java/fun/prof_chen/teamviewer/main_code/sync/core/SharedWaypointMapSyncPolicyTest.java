@@ -48,6 +48,9 @@ class SharedWaypointMapSyncPolicyTest {
         policy.tick(List.of(adapter), Map.of(remote.waypointId(), remote), true, world);
         assertEquals(1, adapter.upserts.size());
         assertEquals("[TV] Alice: Target", adapter.upserts.get(0).name());
+        assertEquals("quick", adapter.upserts.get(0).waypointKind());
+        assertEquals(remote.tacticalType(), adapter.upserts.get(0).tacticalType());
+        assertEquals(remote.sourceType(), adapter.upserts.get(0).sourceType());
         assertEquals(0, gateway.upsertCount); // first local scan establishes the no-upload baseline
 
         adapter.local = List.of();

@@ -4,6 +4,11 @@ for _, key in ipairs({"show_remote_players", "show_last_seen_players", "show_onl
     "show_online_world_beacons", "show_offline_map_markers", "show_offline_world_beacons"}) do
   tv.configure_setting({key = key, visible = false, enabled = false})
 end
+for _, role in ipairs({"online", "offline", "player_reports", "web_reports", "other_shared"}) do
+  for _, suffix in ipairs({"render_world", "rotating_beam", "static_beam", "max_distance"}) do
+    tv.configure_setting({key = role .. "_" .. suffix, visible = false, enabled = false})
+  end
+end
 for _, capability in ipairs({
   "journeymap-players", "journeymap-player-beacons", "journeymap-shared-waypoints"
 }) do

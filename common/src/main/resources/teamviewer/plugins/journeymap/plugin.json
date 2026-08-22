@@ -3,7 +3,7 @@
   "apiVersion": "1",
   "id": "teamviewer.journeymap",
   "name": "JourneyMap Integration",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "entry": "main.lua",
   "documentation": "README.md",
   "entrypoints": [
@@ -30,6 +30,26 @@
     {"key": "show_online_map_markers", "type": "boolean", "name": "Show online Relay player map markers", "defaultValue": true, "restartRequired": false},
     {"key": "show_online_world_beacons", "type": "boolean", "name": "Show online Relay player world beacons", "defaultValue": true, "restartRequired": false},
     {"key": "show_offline_map_markers", "type": "boolean", "name": "Show offline Relay player map markers", "defaultValue": true, "restartRequired": false},
-    {"key": "show_offline_world_beacons", "type": "boolean", "name": "Show offline Relay player world beacons", "defaultValue": true, "restartRequired": false}
+    {"key": "show_offline_world_beacons", "type": "boolean", "name": "Show offline Relay player world beacons", "defaultValue": true, "restartRequired": false},
+    {"key": "online_render_world", "type": "boolean", "name": "Online players: render world waypoints", "defaultValue": false, "restartRequired": false},
+    {"key": "online_rotating_beam", "type": "boolean", "name": "Online players: rotating beam", "defaultValue": false, "restartRequired": false},
+    {"key": "online_static_beam", "type": "boolean", "name": "Online players: static beam", "defaultValue": false, "restartRequired": false},
+    {"key": "online_max_distance", "type": "integer", "name": "Online players: maximum distance", "defaultValue": 512, "min": 0, "max": 10000, "restartRequired": false},
+    {"key": "offline_render_world", "type": "boolean", "name": "Offline players: render world waypoints", "defaultValue": false, "restartRequired": false},
+    {"key": "offline_rotating_beam", "type": "boolean", "name": "Offline players: rotating beam", "defaultValue": false, "restartRequired": false},
+    {"key": "offline_static_beam", "type": "boolean", "name": "Offline players: static beam", "defaultValue": false, "restartRequired": false},
+    {"key": "offline_max_distance", "type": "integer", "name": "Offline players: maximum distance", "defaultValue": 512, "min": 0, "max": 10000, "restartRequired": false},
+    {"key": "player_reports_render_world", "type": "boolean", "name": "Player reports: render world waypoints", "defaultValue": false, "restartRequired": false},
+    {"key": "player_reports_rotating_beam", "type": "boolean", "name": "Player reports: rotating beam", "defaultValue": false, "restartRequired": false},
+    {"key": "player_reports_static_beam", "type": "boolean", "name": "Player reports: static beam", "defaultValue": false, "restartRequired": false},
+    {"key": "player_reports_max_distance", "type": "integer", "name": "Player reports: maximum distance", "defaultValue": 512, "min": 0, "max": 10000, "restartRequired": false},
+    {"key": "web_reports_render_world", "type": "boolean", "name": "Web/admin reports: render world waypoints", "defaultValue": false, "restartRequired": false},
+    {"key": "web_reports_rotating_beam", "type": "boolean", "name": "Web/admin reports: rotating beam", "defaultValue": false, "restartRequired": false},
+    {"key": "web_reports_static_beam", "type": "boolean", "name": "Web/admin reports: static beam", "defaultValue": false, "restartRequired": false},
+    {"key": "web_reports_max_distance", "type": "integer", "name": "Web/admin reports: maximum distance", "defaultValue": 512, "min": 0, "max": 10000, "restartRequired": false},
+    {"key": "other_shared_render_world", "type": "boolean", "name": "Other shared waypoints: render in world", "defaultValue": false, "restartRequired": false},
+    {"key": "other_shared_rotating_beam", "type": "boolean", "name": "Other shared waypoints: rotating beam", "defaultValue": false, "restartRequired": false},
+    {"key": "other_shared_static_beam", "type": "boolean", "name": "Other shared waypoints: static beam", "defaultValue": false, "restartRequired": false},
+    {"key": "other_shared_max_distance", "type": "integer", "name": "Other shared waypoints: maximum distance", "defaultValue": 512, "min": 0, "max": 10000, "restartRequired": false}
   ]
 }

@@ -393,11 +393,30 @@ def verifyMapPluginContracts = tasks.register("verifyMapPluginContracts") {
                     def group = requireClass(jar, "journeymap/api/v2/common/waypoint/WaypointGroup.class")
                     requireTokens(requireClass(jar, "journeymap/api/v2/client/IClientAPI.class"),
                             "JourneyMap ${minecraftTargetVersion} waypoint groups",
-                            ["getWaypointGroupByName", "addWaypointGroup"])
+                            ["getWaypointGroupByName", "getAllWaypointGroups", "getWorldId", "addWaypointGroup"])
                     requireTokens(factory, "JourneyMap ${minecraftTargetVersion} WaypointFactory groups",
                             ["createWaypointGroup"])
                     requireTokens(group, "JourneyMap ${minecraftTargetVersion} WaypointGroup",
-                            ["setTag", "setPersistent", "addWaypoint"])
+                            ["getGuid", "getModId", "setTag", "setPersistent", "getCustomData",
+                             "setCustomData", "addWaypoint"])
+                }
+                if (minecraftTargetVersion == "26.1.2") {
+                    requireTokens(requireClass(jar,
+                            "journeymap/client/event/handlers/WaypointBeaconHandler.class"),
+                            "JourneyMap 26.1.2 beacon handler", ["onRenderWaypoints", "renderWaypointsWorld"])
+                    requireTokens(requireClass(jar, "journeymap/client/ui/UIManager.class"),
+                            "JourneyMap 26.1.2 UI manager", ["drawWaypointDecorations", "renderWaypointsWorld"])
+                    requireTokens(requireClass(jar,
+                            "journeymap/client/render/ingame/WaypointRenderer.class"),
+                            "JourneyMap 26.1.2 waypoint renderer",
+                            ["canDrawWaypoint", "renderWaypoint", "beaconEnabled", "maxDistance"])
+                    requireTokens(requireClass(jar,
+                            "journeymap/client/render/ingame/WaypointBeaconRenderer.class"),
+                            "JourneyMap 26.1.2 beacon renderer", ["showRotatingBeam", "showStaticBeam"])
+                    requireTokens(requireClass(jar,
+                            "journeymap/client/render/ingame/WaypointDecorationRenderer.class"),
+                            "JourneyMap 26.1.2 decoration renderer",
+                            ["waypointsToDraw", "showRotatingBeam", "showStaticBeam"])
                 }
             }
         }
@@ -477,7 +496,7 @@ tasks.named("processClientResources") {
     inputs.property "java_version", targetJavaVersion
     filteringCharset = "UTF-8"
 
-    filesMatching("teamviewer.client.mixins.json") {
+    filesMatching(["teamviewer.client.mixins.json", "teamviewer.journeymap.mixins.json"]) {
         expand "java_version": targetJavaVersion
     }
 }
@@ -754,6 +773,7 @@ def remapAdapterJar = tasks.register("remapAdapterJar", Jar) {
         exclude "fun/prof_chen/teamviewer/client/TeamviewerClient.class"
         include "META-INF/services/**"
         include "teamviewer.client.mixins.json"
+        include "teamviewer.journeymap.mixins.json"
     }
     from(generatedAdapterMetadataDirectory)
 }
@@ -773,7 +793,8 @@ def verifyAdapterArtifact = tasks.register("verifyAdapterArtifact") {
                     "fabric.mod.json",
                     "META-INF/teamviewer/adapter.json",
                     "META-INF/services/fun.prof_chen.teamviewer.main_code.client.sdk.ClientAdapterFactory",
-                    "teamviewer.client.mixins.json"
+                    "teamviewer.client.mixins.json",
+                    "teamviewer.journeymap.mixins.json"
             ]
             def missing = requiredEntries.findAll { !entryNames.contains(it) }
             if (!missing.isEmpty()) {
@@ -814,6 +835,32 @@ def verifyAdapterArtifact = tasks.register("verifyAdapterArtifact") {
             if (mixin.compatibilityLevel != "JAVA_${targetJavaVersion}") {
                 throw new GradleException(
                         "Slim adapter Mixin compatibility ${mixin.compatibilityLevel} does not match Java ${targetJavaVersion}")
+            }
+            def journeyMapMixin = new groovy.json.JsonSlurper().parse(
+                    zip.getInputStream(zip.getEntry("teamviewer.journeymap.mixins.json")))
+            if (journeyMapMixin.compatibilityLevel != "JAVA_${targetJavaVersion}") {
+                throw new GradleException("JourneyMap Mixin compatibility ${journeyMapMixin.compatibilityLevel} "
+                        + "does not match Java ${targetJavaVersion}")
+            }
+            if (!(journeyMapMixin.client instanceof List)) {
+                throw new GradleException("JourneyMap Mixin config must declare a client list")
+            }
+            if (!journeyMapMixin.client.isEmpty()) {
+                def expectedPlugin = "fun.prof_chen.teamviewer.integration.journeymap.JourneyMapMixinConfigPlugin"
+                if (journeyMapMixin.plugin != expectedPlugin) {
+                    throw new GradleException("JourneyMap Mixin config must use ${expectedPlugin}")
+                }
+                def mixinPackagePath = String.valueOf(journeyMapMixin.package).replace('.', '/')
+                journeyMapMixin.client.each { mixinName ->
+                    def mixinClass = "${mixinPackagePath}/${mixinName}.class".toString()
+                    if (!entryNames.contains(mixinClass)) {
+                        throw new GradleException("JourneyMap Mixin config references missing ${mixinClass}")
+                    }
+                }
+                def pluginClass = expectedPlugin.replace('.', '/') + ".class"
+                if (!entryNames.contains(pluginClass)) {
+                    throw new GradleException("JourneyMap Mixin config references missing ${pluginClass}")
+                }
             }
             int expectedMajor = targetJavaVersion + 44
             int maximumMajor = 0

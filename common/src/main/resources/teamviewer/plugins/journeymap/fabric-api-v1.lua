@@ -15,6 +15,11 @@ local function configure_settings(available)
   tv.configure_setting({key = "show_online_world_beacons", visible = false, enabled = false})
   tv.configure_setting({key = "show_offline_map_markers", visible = false, enabled = false})
   tv.configure_setting({key = "show_offline_world_beacons", visible = false, enabled = false})
+  for _, role in ipairs({"online", "offline", "player_reports", "web_reports", "other_shared"}) do
+    for _, suffix in ipairs({"render_world", "rotating_beam", "static_beam", "max_distance"}) do
+      tv.configure_setting({key = role .. "_" .. suffix, visible = false, enabled = false})
+    end
+  end
 end
 
 configure_settings(mods.is_loaded(MOD_ID))

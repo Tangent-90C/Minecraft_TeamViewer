@@ -35,6 +35,10 @@
     {
       "config": "teamviewer.client.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "teamviewer.journeymap.mixins.json",
+      "environment": "client"
     }
   ],
 

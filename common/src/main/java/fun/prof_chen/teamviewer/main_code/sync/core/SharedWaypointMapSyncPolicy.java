@@ -140,7 +140,8 @@ final class SharedWaypointMapSyncPolicy {
             Position3D position = resolvePosition(adapter.id(), world, waypoint);
             adapter.upsertRemoteWaypoint(new MapWaypointCommand(entry.getKey(), decorateName(waypoint),
                     safeSymbol(waypoint.symbol()), (int) Math.floor(position.x()), (int) Math.floor(position.y()),
-                    (int) Math.floor(position.z()), world.dimension(), waypoint.color()));
+                    (int) Math.floor(position.z()), world.dimension(), waypoint.color(), waypoint.waypointKind(),
+                    waypoint.tacticalType(), waypoint.sourceType()));
         }
         for (String id : new ArrayList<>(state.renderedRemoteIds)) {
             if (!active.contains(id)) adapter.deleteRemoteWaypoint(id);

@@ -1020,7 +1020,8 @@ class IntegrationPluginManagerTest {
         service.set(api);
         assertTrue(pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
-        assertEquals(2, api.waypointGroups().size());
+        assertEquals(5, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId())).count());
         journeymap.api.v2.common.waypoint.WaypointGroup onlineGroup = api.getWaypointGroupByName(
                 "teamviewer", "TeamViewRelay Online Players");
         journeymap.api.v2.common.waypoint.WaypointGroup offlineGroup = api.getWaypointGroupByName(
@@ -1070,6 +1071,9 @@ class IntegrationPluginManagerTest {
         adapter.upsertRemoteWaypoint(new MapWaypointCommand(
                 "relay-waypoint", "Relay", "R", 4, 65, 8,
                 "minecraft:overworld", 0x55FF55));
+        assertEquals(api.getWaypointGroupByName("teamviewer", "TeamViewRelay Other Shared Waypoints").getGuid(),
+                api.waypoints().stream().filter(value -> "Relay".equals(value.getName()))
+                        .findFirst().orElseThrow().getGroupId());
         journeymap.api.v2.common.waypoint.Waypoint local =
                 new journeymap.api.v2.common.waypoint.Waypoint(
                         "other-mod", new net.minecraft.util.math.BlockPos(1, 2, 3),
@@ -1082,7 +1086,115 @@ class IntegrationPluginManagerTest {
 
         pluginManager.shutdown();
         assertEquals(1, api.waypoints().size(), "disable must leave the user's local waypoint alone");
-        assertEquals(2, api.waypointGroups().size(), "persistent Relay groups retain their user settings");
+        assertEquals(5, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId())).count(),
+                "persistent Relay groups retain their user settings");
+    }
+
+    @Test
+    void journeyMapWaitsForPersistedGroupStoreBeforeCreatingRelayGroups() {
+        JourneyMapApiStub api = new JourneyMapApiStub();
+        api.clearWaypointGroups();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(UUID.randomUUID(), "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                completeRegistry(), Config.load(temporary.resolve("empty-group-store.json")), host);
+
+        assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                .allMatch(value -> value.status() == IntegrationSupportStatus.ENTRYPOINT_NOT_READY));
+        assertTrue(api.waypointGroups().isEmpty(),
+                "an empty store is a JourneyMap startup state, not permission to create duplicate groups");
+
+        api.addWaypointGroup(new journeymap.api.v2.common.waypoint.WaypointGroup(
+                "journeymap", "Default", "journeymap_default"));
+        assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        assertEquals(5, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId())).count());
+        manager.shutdown();
+    }
+
+    @Test
+    void journeyMapAdoptsOneDeterministicLegacyGroupAndReusesItAfterRestart() {
+        JourneyMapApiStub api = new JourneyMapApiStub();
+        var laterDuplicate = new journeymap.api.v2.common.waypoint.WaypointGroup(
+                "teamviewer", "TeamViewRelay Online Players", "relay-online-z");
+        var selectedLegacy = new journeymap.api.v2.common.waypoint.WaypointGroup(
+                "teamviewer", "TeamViewRelay Online Players", "relay-online-a");
+        api.addWaypointGroup(laterDuplicate);
+        api.addWaypointGroup(selectedLegacy);
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(UUID.randomUUID(), "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+
+        IntegrationPluginManager first = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                completeRegistry(), Config.load(temporary.resolve("group-reuse-first.json")), host);
+        assertTrue(first.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        assertEquals("online", selectedLegacy.getCustomData("teamviewer.group.role"));
+        assertNull(laterDuplicate.getCustomData("teamviewer.group.role"),
+                "duplicate groups are deliberately left for the user to remove");
+        assertEquals(6, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId())).count());
+        first.shutdown();
+
+        IntegrationPluginManager restarted = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                completeRegistry(), Config.load(temporary.resolve("group-reuse-second.json")), host);
+        assertTrue(restarted.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
+                .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
+        assertEquals(6, api.waypointGroups().stream()
+                .filter(group -> "teamviewer".equals(group.getModId())).count(),
+                "restart must reuse the role-marked groups instead of creating new ones");
+        assertEquals("online", selectedLegacy.getCustomData("teamviewer.group.role"));
+        restarted.shutdown();
+    }
+
+    @Test
+    void journeyMapClassifiesRelaySharedWaypointsIntoIndependentGroups() {
+        JourneyMapApiStub api = new JourneyMapApiStub();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(UUID.randomUUID(), "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("waypoint-groups.json")), host);
+        SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
+                .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
+                .findFirst().orElseThrow();
+
+        adapter.upsertRemoteWaypoint(new MapWaypointCommand("quick", "Quick", "Q", 1, 64, 1,
+                "minecraft:overworld", 0x11AA11, "quick", null, null));
+        adapter.upsertRemoteWaypoint(new MapWaypointCommand("manual", "Manual", "M", 2, 64, 2,
+                "minecraft:overworld", 0x22AA22, "manual", null, null));
+        adapter.upsertRemoteWaypoint(new MapWaypointCommand("web", "Web", "W", 3, 64, 3,
+                "minecraft:overworld", 0x33AA33, null, "web_map_tactical", null));
+        adapter.upsertRemoteWaypoint(new MapWaypointCommand("admin", "Admin", "A", 4, 64, 4,
+                "minecraft:overworld", 0x44AA44, null, null, "admin_tactical"));
+        adapter.upsertRemoteWaypoint(new MapWaypointCommand("legacy", "Legacy", "L", 5, 64, 5,
+                "minecraft:overworld", 0x55AA55, null, null, null));
+
+        String playerReports = api.getWaypointGroupByName(
+                "teamviewer", "TeamViewRelay Player Reports").getGuid();
+        String webReports = api.getWaypointGroupByName(
+                "teamviewer", "TeamViewRelay Web & Admin Reports").getGuid();
+        String otherShared = api.getWaypointGroupByName(
+                "teamviewer", "TeamViewRelay Other Shared Waypoints").getGuid();
+        assertEquals(playerReports, api.waypoints().stream()
+                .filter(value -> "Quick".equals(value.getName())).findFirst().orElseThrow().getGroupId());
+        assertEquals(playerReports, api.waypoints().stream()
+                .filter(value -> "Manual".equals(value.getName())).findFirst().orElseThrow().getGroupId());
+        assertEquals(webReports, api.waypoints().stream()
+                .filter(value -> "Web".equals(value.getName())).findFirst().orElseThrow().getGroupId());
+        assertEquals(webReports, api.waypoints().stream()
+                .filter(value -> "Admin".equals(value.getName())).findFirst().orElseThrow().getGroupId());
+        assertEquals(otherShared, api.waypoints().stream()
+                .filter(value -> "Legacy".equals(value.getName())).findFirst().orElseThrow().getGroupId());
+        manager.shutdown();
     }
 
     @Test
@@ -1099,10 +1211,14 @@ class IntegrationPluginManagerTest {
 
         assertTrue(manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
-        assertEquals(Set.of("show_online_map_markers", "show_online_world_beacons",
-                        "show_offline_map_markers", "show_offline_world_beacons"),
-                manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP).visibleSettingDefinitions().stream()
-                        .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
+        PluginSnapshot fallbackSnapshot = manager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
+        Set<String> fallbackSettings = fallbackSnapshot.visibleSettingDefinitions().stream()
+                .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet());
+        assertTrue(fallbackSettings.containsAll(Set.of("show_online_map_markers", "show_online_world_beacons",
+                "show_offline_map_markers", "show_offline_world_beacons", "online_render_world",
+                "other_shared_max_distance")));
+        assertEquals(24, fallbackSettings.size());
+        assertFalse(fallbackSnapshot.settingState("online_render_world").enabled());
         UUID remoteId = UUID.randomUUID();
         registry.activeRemotePlayerProjections().stream()
                 .filter(value -> value.id().startsWith("journeymap-"))
@@ -1222,9 +1338,13 @@ class IntegrationPluginManagerTest {
                 .filter(value -> value.getName().startsWith("[TV Last]"))
                 .findFirst().orElseThrow().getColor());
         PluginSnapshot snapshot = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
-        assertEquals(Set.of("show_online_map_markers", "show_online_world_beacons",
-                        "show_offline_map_markers", "show_offline_world_beacons"), snapshot.visibleSettingDefinitions().stream()
-                .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet()));
+        Set<String> visibleSettings = snapshot.visibleSettingDefinitions().stream()
+                .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet());
+        assertTrue(visibleSettings.containsAll(Set.of("show_online_map_markers", "show_online_world_beacons",
+                "show_offline_map_markers", "show_offline_world_beacons", "online_render_world",
+                "other_shared_max_distance")));
+        assertEquals(24, visibleSettings.size());
+        assertFalse(snapshot.settingState("online_render_world").enabled());
         assertTrue(snapshot.capabilities().stream()
                 .allMatch(value -> value.status() == IntegrationSupportStatus.AVAILABLE));
         pluginManager.shutdown();

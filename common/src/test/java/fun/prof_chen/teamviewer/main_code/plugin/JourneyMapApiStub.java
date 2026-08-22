@@ -11,6 +11,11 @@ public final class JourneyMapApiStub {
     private final List<Waypoint> waypoints = new ArrayList<>();
     private final List<WaypointGroup> waypointGroups = new ArrayList<>();
     private int suppressedRemovals;
+    private String worldId = "test-world";
+
+    public JourneyMapApiStub() {
+        waypointGroups.add(new WaypointGroup("journeymap", "Default", "journeymap_default"));
+    }
 
     public void addWaypoint(String modId, Waypoint value) { waypoints.add(value); }
     public void removeWaypoint(String modId, Waypoint value) {
@@ -31,7 +36,14 @@ public final class JourneyMapApiStub {
                 .filter(value -> modId.equals(value.getModId()) && name.equals(value.getName()))
                 .findFirst().orElse(null);
     }
-    public void addWaypointGroup(WaypointGroup value) { waypointGroups.add(value); }
+    public void addWaypointGroup(WaypointGroup value) {
+        waypointGroups.removeIf(group -> group.getGuid().equals(value.getGuid()));
+        waypointGroups.add(value);
+    }
+    public List<WaypointGroup> getAllWaypointGroups() { return List.copyOf(waypointGroups); }
+    public String getWorldId() { return worldId; }
+    public void setWorldId(String value) { worldId = value; }
+    public void clearWaypointGroups() { waypointGroups.clear(); }
     public List<Waypoint> getAllWaypoints() { return waypoints; }
     public List<Waypoint> waypoints() { return List.copyOf(waypoints); }
     public List<WaypointGroup> waypointGroups() { return List.copyOf(waypointGroups); }

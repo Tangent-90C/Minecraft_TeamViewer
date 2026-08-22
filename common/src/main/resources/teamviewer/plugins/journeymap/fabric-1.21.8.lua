@@ -5,11 +5,16 @@ local MOD_ID, JM_MOD_ID = "journeymap", "teamviewer"
 local handles, handle_error = nil, nil
 local managed_players, managed_last_seen, managed_waypoints = {}, {}, {}
 local client_objects = services.get("minecraft.client_objects")
+local GROUP_ROLE_KEY = "teamviewer.group.role"
 local group_definitions = {
   online = {name = "TeamViewRelay Online Players", tag = "[TV] Online"},
-  offline = {name = "TeamViewRelay Offline Players", tag = "[TV] Offline"}
+  offline = {name = "TeamViewRelay Offline Players", tag = "[TV] Offline"},
+  player_reports = {name = "TeamViewRelay Player Reports", tag = "[TV] Reports"},
+  web_reports = {name = "TeamViewRelay Web & Admin Reports", tag = "[TV] Web"},
+  other_shared = {name = "TeamViewRelay Other Shared Waypoints", tag = "[TV] Other"}
 }
-local managed_groups, group_support = {}, nil
+local group_order = {"online", "offline", "player_reports", "web_reports", "other_shared"}
+local managed_groups, group_support, group_world_id = {}, nil, nil
 
 local function configure_settings(available)
   tv.configure_setting({key = "show_remote_players", visible = available, enabled = available,
@@ -20,6 +25,12 @@ local function configure_settings(available)
   tv.configure_setting({key = "show_online_world_beacons", visible = false, enabled = false})
   tv.configure_setting({key = "show_offline_map_markers", visible = false, enabled = false})
   tv.configure_setting({key = "show_offline_world_beacons", visible = false, enabled = false})
+  for _, role in ipairs(group_order) do
+    for _, suffix in ipairs({"render_world", "rotating_beam", "static_beam", "max_distance"}) do
+      tv.configure_setting({key = role .. "_" .. suffix, visible = false, enabled = false,
+        detail = "This JourneyMap build uses global waypoint beacon settings"})
+    end
+  end
 end
 
 configure_settings(mods.is_loaded(MOD_ID))
@@ -52,8 +63,9 @@ local function probe()
     return {status = "UNSUPPORTED_VERSION", detail = handle_error}
   end
   if api() == nil then return {status = "ENTRYPOINT_NOT_READY", detail = "JourneyMap IClientAPI is not initialized"} end
-  ensure_groups()
-  return {status = "AVAILABLE", detail = ""}
+  local ready, detail = ensure_groups()
+  if not ready and group_support ~= false then return {status = "ENTRYPOINT_NOT_READY", detail = detail} end
+  return {status = "AVAILABLE", detail = group_support == false and detail or ""}
 end
 
 local function dimension(id)
@@ -66,41 +78,135 @@ local function disable_groups(detail)
   tv.log.warn("JourneyMap waypoint groups are unavailable; using default waypoints: " .. tostring(detail))
 end
 
-ensure_groups = function()
-  if group_support == false then return end
-  local client = api()
-  if client == nil or handles == nil then return end
-  for key, definition in pairs(group_definitions) do
-    if managed_groups[key] == nil then
-      local created, value = pcall(function()
-        local group = client:getWaypointGroupByName(JM_MOD_ID, definition.name)
-        if group == nil then
-          group = handles.WaypointFactory:createWaypointGroup(JM_MOD_ID, definition.name)
-          if group == nil then error("JourneyMap did not create " .. definition.name) end
-          group:setTag(definition.tag)
-          group:setPersistent(true)
-          client:addWaypointGroup(group)
-        end
-        return group
-      end)
-      if not created then
-        disable_groups(value)
-        return
+local function reset_group_scope()
+  managed_groups, group_support, group_world_id = {}, nil, nil
+end
+
+local function java_values(iterable)
+  local result = {}
+  local iterator = handles.iterableIterator:invoke(iterable, nil)
+  while handles.iteratorHasNext:invoke(iterator, nil) == true do
+    table.insert(result, handles.iteratorNext:invoke(iterator, nil))
+  end
+  return result
+end
+
+local function group_guid(group)
+  return tostring(group:getGuid())
+end
+
+local function group_role(group)
+  local ok, value = pcall(function() return group:getCustomData(GROUP_ROLE_KEY) end)
+  return ok and value ~= nil and tostring(value) or nil
+end
+
+local function same_text(left, right)
+  return left ~= nil and right ~= nil and string.lower(tostring(left)) == string.lower(tostring(right))
+end
+
+local function select_group(groups, definition, role, used)
+  local priorities = {{}, {}, {}}
+  for _, group in ipairs(groups) do
+    local guid = group_guid(group)
+    if not used[guid] and tostring(group:getModId()) == JM_MOD_ID then
+      if group_role(group) == role then
+        table.insert(priorities[1], group)
+      elseif same_text(group:getName(), definition.name) then
+        table.insert(priorities[2], group)
+      elseif same_text(group:getTag(), definition.tag) then
+        table.insert(priorities[3], group)
       end
-      managed_groups[key] = value
     end
   end
+  for _, candidates in ipairs(priorities) do
+    table.sort(candidates, function(left, right) return group_guid(left) < group_guid(right) end)
+    if #candidates > 0 then return candidates[1] end
+  end
+  return nil
+end
+
+ensure_groups = function()
+  if group_support == false then return false, "waypoint groups are unavailable" end
+  local client = api()
+  if client == nil or handles == nil then return false, "JourneyMap API is unavailable" end
+  local resolved, value, world_id = pcall(function()
+    local current_world_id = client:getWorldId()
+    if current_world_id == nil or tostring(current_world_id) == "" then
+      return nil, nil
+    end
+    local groups = java_values(client:getAllWaypointGroups())
+    if #groups == 0 then return nil, tostring(current_world_id) end
+    return groups, tostring(current_world_id)
+  end)
+  if not resolved then
+    disable_groups(value)
+    return false, tostring(value)
+  end
+  local groups = value
+  if groups == nil then
+    managed_groups = {}
+    return false, "JourneyMap waypoint-group store is not ready"
+  end
+  if group_world_id ~= world_id then
+    managed_groups, group_support, group_world_id = {}, nil, world_id
+  end
+  local current = {}
+  for _, group in ipairs(groups) do current[group_guid(group)] = group end
+  for role, cached in pairs(managed_groups) do
+    managed_groups[role] = current[group_guid(cached)]
+  end
+  local used = {}
+  for _, role in ipairs(group_order) do
+    local definition = group_definitions[role]
+    local group = managed_groups[role]
+    if group == nil then group = select_group(groups, definition, role, used) end
+    local created = false
+    if group == nil then
+      group = handles.WaypointFactory:createWaypointGroup(JM_MOD_ID, definition.name)
+      if group == nil then
+        disable_groups("JourneyMap did not create " .. definition.name)
+        return false, "JourneyMap did not create " .. definition.name
+      end
+      group:setTag(definition.tag)
+      created = true
+    end
+    local persistent = false
+    pcall(function() persistent = group:isPersistent() end)
+    local marker_changed = false
+    if group_role(group) ~= role then
+      marker_changed = pcall(function() group:setCustomData(GROUP_ROLE_KEY, role) end)
+    end
+    if not persistent then group:setPersistent(true) end
+    if created or marker_changed or not persistent then client:addWaypointGroup(group) end
+    managed_groups[role] = group
+    used[group_guid(group)] = true
+    if created then table.insert(groups, group) end
+  end
   group_support = true
+  return true, ""
 end
 
 local function assign_group(object, key)
   if key == nil then return true end
-  ensure_groups()
+  if not ensure_groups() then return false end
   local group = group_support == true and managed_groups[key] or nil
   if group == nil then return false end
   local assigned, assignment_error = pcall(function() group:addWaypoint(object) end)
   if not assigned then disable_groups(assignment_error) end
   return assigned
+end
+
+local function shared_group(command)
+  for _, key in ipairs({"waypointKind", "tacticalType", "sourceType"}) do
+    local value = command[key]
+    if value ~= nil then
+      local normalized = string.lower(tostring(value))
+      if normalized == "web_map_tactical" or normalized == "admin_tactical" then return "web_reports" end
+    end
+  end
+  local kind = command.waypointKind ~= nil and string.lower(tostring(command.waypointKind)) or ""
+  if kind == "quick" or kind == "manual" then return "player_reports" end
+  return "other_shared"
 end
 
 local function deletion_failed(state, id, detail)
@@ -235,13 +341,19 @@ tv.register_remote_player_projection({id = "journeymap-player-beacons",
 tv.register_shared_waypoint_adapter({id = "journeymap-shared-waypoints", probe = probe,
   list_local = list_local,
   upsert_remote = function(command) upsert(managed_waypoints, command.waypointId, command.name,
-      command.x, command.y, command.z, command.dimension, command.color, nil) end,
+      command.x, command.y, command.z, command.dimension, command.color, shared_group(command)) end,
   delete_remote = function(id) remove(managed_waypoints, id) end,
   clear_remote = function() clear(managed_waypoints) end,
   needs_reconcile = function() return has_pending(managed_waypoints) end})
 -- 4. Lifecycle cleanup / 生命周期清理
-tv.on_enable(function() if initialize() then ensure_groups() end end)
-tv.on_disable(function() clear(managed_players); clear(managed_last_seen); clear(managed_waypoints) end)
+tv.on_enable(function() initialize() end)
+tv.on_disable(function()
+  clear(managed_players); clear(managed_last_seen); clear(managed_waypoints); reset_group_scope()
+end)
+tv.on_play_session_started(function() reset_group_scope() end)
+tv.on_play_session_ended(function()
+  clear(managed_players); clear(managed_last_seen); clear(managed_waypoints); reset_group_scope()
+end)
 tv.on_settings_changed(function(key, value)
   if key == "show_remote_players" and not value then clear(managed_players) end
   if key == "show_last_seen_players" and not value then clear(managed_last_seen) end

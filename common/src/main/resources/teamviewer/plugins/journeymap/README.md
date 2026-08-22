@@ -33,13 +33,17 @@ as `UNSUPPORTED_VERSION`.
 JourneyMap 26.1/26.1.1 beta lacks per-waypoint presentation controls and therefore uses the merged
 API 2.x entry. JourneyMap 26.1.2 restores those controls, while 26.2 removes
 `createClientWaypoint`; the full-control entry selects `createWaypoint` on 26.2 and
-`createClientWaypoint` on 26.1.2. These are real API compatibility branches rather than
-metadata-only version widening.
+`createClientWaypoint` on 26.1.2. The group renderer override is officially supported only on
+Minecraft 26.1.2 with JourneyMap 6.0.5. Its optional Mixin companion validates JourneyMap's
+renderer bytecode before applying; other or incompatible builds retain the public-API waypoint
+integration and report that group renderer controls are unsupported.
 
 JourneyMap 26.1/26.1.1 beta 没有逐路标显示控制，因此使用合并 API 2.x 入口；26.1.2
 恢复了这些控制。26.2 又删除了 `createClientWaypoint`，完整控制入口会在 26.2 调用
 `createWaypoint`，在 26.1.2 调用 `createClientWaypoint`。这些都是真实 API 兼容分支，
-不是只放宽元数据。
+不是只放宽元数据。组级渲染覆盖目前正式支持 Minecraft 26.1.2 + JourneyMap 6.0.5；可选
+Mixin 伴随层会在应用前校验 JourneyMap 渲染器字节码。其他版本或结构不兼容时仍保留公开
+API 路标联动，并明确提示组级渲染控制不受支持。
 
 ## Remote-player conversion / 远程玩家转换
 
@@ -48,11 +52,14 @@ On full-control families, common invokes two projections with UUID-keyed TeamVie
 dimension string, and creates transient `[TV] <name>` JourneyMap waypoints. Marker mode shows on
 the 2D map but not as a beacon; beacon mode shows in-world but not on the 2D map. The game UI has
 four independent settings: online map markers, online world beacons, offline map markers, and
-offline world beacons. Disabling any setting immediately removes only its owned objects. API 2.x additionally creates persistent TeamViewRelay groups
-`TeamViewRelay Online Players` (`[TV] Online`) and `TeamViewRelay Offline Players` (`[TV] Offline`):
-all online marker/beacon objects belong to the former, while `[TV Last]` marker/beacon objects belong to the
-latter. Group creation and assignment use only public API calls; an API mismatch falls back to
-the default ungrouped waypoints without disabling the integration. API 1.x instead creates one
+offline world beacons. Disabling any setting immediately removes only its owned objects. API 2.x
+uses five persistent TeamViewRelay groups: online players, offline players, player reports,
+web/admin reports, and other/legacy shared waypoints. The adapter waits for a nonblank JourneyMap
+world ID and a nonempty loaded group store, then deterministically adopts one existing group by its
+Relay role marker, legacy name, or legacy tag. It never deletes duplicate groups. New groups receive
+a stable `teamviewer.group.role` marker, so later starts and world changes reuse them. Group creation
+and assignment use only public API calls; an API mismatch falls back to the default ungrouped
+waypoints without disabling the integration. API 1.x instead creates one
 `player:<uuid>` native waypoint. Both stable capability IDs remain registered, but only one
 projection owns the object. Reduced API families show only online and offline waypoint switches;
 map/world visibility follows JourneyMap's global settings.
@@ -61,10 +68,12 @@ map/world visibility follows JourneyMap's global settings.
 `player-marker:<uuid>`、`player-beacon:<uuid>`，向下取整方块坐标，转换 common 维度字符串，
 并创建临时 `[TV] <name>` JourneyMap 路标。marker 模式只显示在二维地图，beacon 模式只
 显示在世界中；游戏内分别提供在线地图标记、在线世界信标、离线地图标记和离线世界信标四个开关，
-关闭任一项会立即删除它管理的对象。API 2.x 还会新建持久化 TeamViewRelay 分组
-`TeamViewRelay Online Players`（`[TV] Online`）和 `TeamViewRelay Offline Players`（`[TV] Offline`）：
-在线标记与信标归入前者，`[TV Last]` 标记与信标归入后者。分组只调用公开 API；API 不匹配时会
-回退为默认未分组路标，联动仍保持可用。API 1.x 则只创建一个 `player:<uuid>` 原生路标；
+关闭任一项会立即删除它管理的对象。API 2.x 使用五个持久化 TeamViewRelay 分组：在线玩家、
+离线玩家、玩家报点、网页/管理报点和其他/旧版共享路径点。适配器会等待 JourneyMap 提供非空
+世界 ID 且已加载的分组仓库非空，然后依次按 Relay 角色标记、旧名称、旧标签确定性地复用一个
+已有分组；不会删除重复分组。新分组会写入稳定的 `teamviewer.group.role` 标记，后续启动和切换
+世界时会继续复用。分组只调用公开 API；API 不匹配时会回退为默认未分组路标，联动仍保持可用。
+API 1.x 则只创建一个 `player:<uuid>` 原生路标；
 两个稳定能力 ID 仍保留，但只有一个 projection 拥有对象。受限 API 只显示在线与离线路标两个开关，
 地图/世界可见性遵循 JourneyMap 全局设置。
 
@@ -81,24 +90,41 @@ existing orange last-seen color remains.
 `teamviewer`, preventing objects written by the relay from returning as new local marks. It maps
 JourneyMap GUID, name, position, primary dimension and color into the common local-waypoint table.
 `upsert_remote` performs the reverse conversion for a common command and records the object by
-`waypointId`; delete/clear use that ownership table only.
+`waypointId`; delete/clear use that ownership table only. `quick` and `manual` kinds enter the
+player-report group; `web_map_tactical` and `admin_tactical` provenance enter the web/admin group;
+unknown and legacy provenance enter the other shared-waypoint group.
 
 `list_local()` 读取 JourneyMap 当前路标，并排除 `modId=teamviewer` 的对象，避免中继写入
 对象再次作为本地新标点返回。它把 JourneyMap GUID、名称、位置、主维度和颜色转换为
 common 本地路标表。`upsert_remote` 对 common 命令执行反向转换，并按 `waypointId` 记录
-对象；删除与清理只使用该所有权表。
+对象；删除与清理只使用该所有权表。`quick`、`manual` 类型进入玩家报点组；来源为
+`web_map_tactical`、`admin_tactical` 的路径点进入网页/管理报点组；未知和旧版来源进入其他组。
+
+## Group beacon policy / 分组信标策略
+
+On the supported 26.1.2 renderer, each Relay group independently controls world waypoint rendering,
+rotating beam, static beam, and maximum distance. Defaults are `false`, `false`, `false`, and 512
+blocks. These values fully replace the four matching JourneyMap globals for Relay-owned groups only;
+unmanaged JourneyMap waypoints continue to use the user's global settings. Policies live in the
+plugin companion for the current play session and do not rewrite JourneyMap's global or per-group
+user configuration.
+
+在受支持的 26.1.2 渲染器中，每个 Relay 分组分别控制“渲染世界路径点”“旋转光束”
+“静止光束”和“最大距离”，默认值依次为关闭、关闭、关闭和 512 方块。这些值只对 Relay
+创建的分组完整覆盖 JourneyMap 对应的四项全局设置；其他 JourneyMap 路标仍遵循用户的全局
+设置。策略只在当前游玩会话中由插件伴随层保存，不会重写 JourneyMap 的全局或分组用户配置。
 
 ## Lifecycle and adapting another API / 生命周期与新版适配
 
 `on_disable` clears all relay waypoint ownership maps and removes their JourneyMap objects, but
-retains the two persistent Relay groups so JourneyMap keeps the user's group visibility settings.
+retains the five persistent Relay groups and all duplicate groups for the user to manage.
 Setting changes immediately clear the newly disabled presentation. To support a new
 JourneyMap/Minecraft release, copy the closest version entry, update only mapped class names and
 changed API calls, add a manifest entrypoint, and keep capability IDs, common fields, ownership
 rules and probe semantics unchanged.
 
-`on_disable` 会清空全部中继路标所有权表并移除对应 JourneyMap 对象，但保留两个持久化 Relay
-分组，以保留用户在 JourneyMap 中设置的分组显示状态；设置关闭时立即清理相应展示。适配新的
+`on_disable` 会清空全部中继路标所有权表并移除对应 JourneyMap 对象，但保留五个持久化 Relay
+分组以及所有重复分组，由用户自行管理；设置关闭时立即清理相应展示。适配新的
 JourneyMap/Minecraft 版本时，应复制最接近的版本入口，只更新变化的 JourneyMap API 调用，
 再新增清单入口；Minecraft 映射对象继续使用稳定服务，能力 ID、common 字段、所有权规则和
 probe 语义必须保持不变。

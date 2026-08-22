@@ -1,0 +1,17 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "fun.prof_chen.teamviewer.integration.journeymap.mixin",
+  "plugin": "fun.prof_chen.teamviewer.integration.journeymap.JourneyMapMixinConfigPlugin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "WaypointBeaconHandlerMixin",
+    "UIManagerMixin",
+    "WaypointRendererMixin",
+    "WaypointBeaconRendererMixin",
+    "WaypointDecorationRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
