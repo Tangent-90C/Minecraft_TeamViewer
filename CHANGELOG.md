@@ -9,6 +9,8 @@
   和最大显示距离，不修改 JourneyMap 的全局客户端设置；不支持该接口的版本会提示并回退到原有实现。
 - 修复 Fabric All-in-One 根元数据遗漏 JourneyMap Mixin 配置，导致组级信标选项全部禁用的问题；构建现在会校验
   Mixin 配置插件和目标类均存在于对应内嵌 Adapter。
+- 修复普通 `./gradlew build` 误触发 Fabric/NeoForge All-in-One 发布组装，并因尚未收集全矩阵 Jar 而失败的问题；
+  AIO 完整组装与校验仍由显式项目任务和正式 `task build` 发布流程执行。
 - 修复 JourneyMap 在有效游戏会话中返回空 `worldId` 或空路径点组列表时，三个联动能力被错误标记为
   “外部入口未就绪”的问题；路径点组存储重建后仍会恢复相同稳定 GUID。
 - 修复打开集成插件页面时，JourneyMap 能力探测每帧抓取并反射展开完整世界、玩家和实体快照而卡死渲染线程的问题。

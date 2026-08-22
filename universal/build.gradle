@@ -386,6 +386,12 @@ def verifyUniversalJar = tasks.register("verifyUniversalJar") {
     }
 }
 
+// An unqualified root `gradlew build` selects every subproject task named `build`.
+// Universal packaging consumes adapters staged by the separate all-target build, so only attach
+// it when callers explicitly address this project. The release Taskfile uses that qualified path.
+def explicitUniversalBuild = gradle.startParameter.taskNames.collect { requested ->
+    requested.startsWith(":") ? requested : ":${requested}"
+}.contains("${project.path}:build".toString())
 tasks.named("build") {
-    dependsOn(verifyUniversalJar)
+    if (explicitUniversalBuild) dependsOn(verifyUniversalJar)
 }

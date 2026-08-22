@@ -425,6 +425,13 @@ def verifyNeoForgeAio = tasks.register("verifyNeoForgeAio") {
     }
 }
 
+// An unqualified root `gradlew build` selects every subproject task named `build`.
+// AIO packaging consumes adapters staged by the separate all-target build, so only attach it to
+// this lifecycle task when callers explicitly address the NeoForge AIO project. `task build` and
+// `task build-neoforge-aio` both use the qualified path and retain the full verification chain.
+def explicitNeoForgeAioBuild = gradle.startParameter.taskNames.collect { requested ->
+    requested.startsWith(":") ? requested : ":${requested}"
+}.contains("${project.path}:build".toString())
 tasks.named("build") {
-    dependsOn(verifyNeoForgeAio)
+    if (explicitNeoForgeAioBuild) dependsOn(verifyNeoForgeAio)
 }
