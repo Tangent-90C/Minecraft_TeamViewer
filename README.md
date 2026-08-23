@@ -1,7 +1,7 @@
 # TeamViewRelay Mod
 
 TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。
-当前发布版本为 `v0.8.4-proto0.7.0`。实际验证的运行范围如下：
+当前发布版本为 `v0.8.5-proto0.7.1`。实际验证的运行范围如下：
 
 | 安装产物 | Loader | 可运行的 Minecraft 版本 |
 | --- | --- | --- |
@@ -305,8 +305,8 @@ task check-fabric-runtime RUNTIME=1.21
 
 - Minecraft 支持范围以 `gradle/minecraft-versions.properties` 为唯一来源；运行
   `python3 scripts/minecraft_targets.py list-fabric`、`list-neoforge` 或 `list-official` 查询
-- Mod：`v0.8.4-proto0.7.0`
-- 协议版本：`0.7.0`
+- Mod：`v0.8.5-proto0.7.1`
+- 协议版本：`0.7.1`
 - 最低兼容协议版本：`0.6.1`
 
 子模块与协议仓库：
@@ -319,12 +319,12 @@ task check-fabric-runtime RUNTIME=1.21
 
 ```bash
 git -C third_party/TeamViewRelay-Protocol fetch --tags
-git -C third_party/TeamViewRelay-Protocol checkout proto/v0.7.0
+git -C third_party/TeamViewRelay-Protocol checkout proto/v0.7.1
 git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-版本号采用“双版本号”约定，例如当前的 `v0.8.4-proto0.7.0`：
+版本号采用“双版本号”约定，例如当前的 `v0.8.5-proto0.7.1`：
 
 - 前半段是程序版本号，用于表示 Mod 自身功能迭代
 - 后半段是网络协议版本号，用于表示可与哪些配套组件互通

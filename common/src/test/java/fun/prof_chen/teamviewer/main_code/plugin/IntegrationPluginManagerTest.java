@@ -1043,6 +1043,8 @@ class IntegrationPluginManagerTest {
                 .forEach(value -> value.sync(players, true));
         assertEquals(1, api.waypoints().size(),
                 "the merged API family must project each player to one native waypoint");
+        assertEquals("Remote", api.waypoints().get(0).getName(),
+                "the online group tag must be the only TeamViewRelay name prefix");
         int initialPlayerMutations = api.waypoints().get(0).getMutationCount();
         registry.activeRemotePlayerProjections().stream()
                 .filter(value -> value.id().startsWith("journeymap-"))
@@ -1059,12 +1061,11 @@ class IntegrationPluginManagerTest {
                 .forEach(value -> value.syncLastSeenResolved(
                         Map.of(remoteId, lastSeen), Map.of(remoteId, offlineEnemy), true));
         assertEquals(2, api.waypoints().size());
-        assertEquals(offlineEnemy.color(), api.waypoints().stream()
-                .filter(value -> value.getName().startsWith("[TV Last]"))
-                .findFirst().orElseThrow().getColor());
-        assertEquals(offlineGroup.getGuid(), api.waypoints().stream()
-                .filter(value -> value.getName().startsWith("[TV Last]"))
-                .findFirst().orElseThrow().getGroupId());
+        var offlineWaypoint = api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("Remote @ "))
+                .findFirst().orElseThrow();
+        assertEquals(offlineEnemy.color(), offlineWaypoint.getColor());
+        assertEquals(offlineGroup.getGuid(), offlineWaypoint.getGroupId());
 
         SharedWaypointMapAdapter adapter = registry.activeSharedWaypointAdapters().stream()
                 .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
@@ -1342,6 +1343,8 @@ class IntegrationPluginManagerTest {
                                 "minecraft:overworld", "26.2 Remote")), true));
 
         assertEquals(2, api.waypoints().size());
+        assertTrue(api.waypoints().stream().allMatch(value -> "26.2 Remote".equals(value.getName())),
+                "the online group tag must be the only TeamViewRelay name prefix");
         PlayerRelationView offlineNeutral = new PlayerRelationView(PlayerRelation.NEUTRAL, 0xFF445566, true);
         registry.activeRemotePlayerProjections().stream()
                 .filter(value -> value.id().startsWith("journeymap-"))
@@ -1349,9 +1352,11 @@ class IntegrationPluginManagerTest {
                         remoteId, new Position3D(4.5, 70, -8.5), "minecraft:overworld", "26.2 Remote",
                         1_700_000_004_000L, 1_700_000_000_000L, 1_700_000_005_000L)),
                         Map.of(remoteId, offlineNeutral), true));
-        assertEquals(offlineNeutral.color(), api.waypoints().stream()
-                .filter(value -> value.getName().startsWith("[TV Last]"))
-                .findFirst().orElseThrow().getColor());
+        var offlineWaypoints = api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("26.2 Remote @ "))
+                .toList();
+        assertEquals(2, offlineWaypoints.size());
+        assertTrue(offlineWaypoints.stream().allMatch(value -> value.getColor() == offlineNeutral.color()));
         PluginSnapshot snapshot = pluginManager.snapshot(IntegrationIds.PLUGIN_JOURNEYMAP);
         Set<String> visibleSettings = snapshot.visibleSettingDefinitions().stream()
                 .map(PluginManifest.SettingDefinition::key).collect(java.util.stream.Collectors.toSet());

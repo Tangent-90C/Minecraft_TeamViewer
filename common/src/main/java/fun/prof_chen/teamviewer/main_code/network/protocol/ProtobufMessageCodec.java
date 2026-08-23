@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.network.protocol;
 
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
 import fun.prof_chen.teamviewer.main_code.network.proto.*;
 
 import java.util.ArrayList;
@@ -637,7 +638,7 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.type = "refresh_req";
 		packet.players = new ArrayList<>(message.getPlayersList());
 		packet.entities = new ArrayList<>(message.getEntitiesList());
-		packet.battleChunks = decodeBattleChunkDeleteRefs(message.getBattleChunksList());
+		packet.battleChunks = decodeBattleChunkRefs(message.getBattleChunksList());
 		packet.reason = message.getReason();
 		return packet;
 	}
@@ -739,21 +740,23 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		return patch;
 	}
 
-	private Map<String, Object> decodeBattleChunkPatchScope(BattleChunkPatchScope scope) {
-		Map<String, Object> patch = new LinkedHashMap<>();
-		Map<String, Object> upsert = new LinkedHashMap<>();
+	private ProtocolPackets.BattleChunkPatchData decodeBattleChunkPatchScope(BattleChunkPatchScope scope) {
+		List<ProtocolPackets.BattleChunkUpsertData> upsert = new ArrayList<>();
 		for (BattleChunkUpsert item : scope.getUpsertList()) {
-			String chunkId = buildBattleChunkSyntheticId(item.getRef().getDimension(), item.getRef().getCoord().getChunkX(), item.getRef().getCoord().getChunkZ());
-			if (chunkId == null) {
+			BattleChunkRefData ref = battleChunkRefData(item.getRef());
+			if (ref == null) {
 				continue;
 			}
-			Map<String, Object> data = battleChunkValueToMap(item.getData(), item.getRef());
-			applyClearFields(data, item.getClearFieldsList());
-			upsert.put(chunkId, data);
+			upsert.add(new ProtocolPackets.BattleChunkUpsertData(
+					ref,
+					battleChunkValueToMap(item.getData()),
+					new ArrayList<>(item.getClearFieldsList())
+			));
 		}
-		patch.put("upsert", upsert);
-		patch.put("delete", decodeBattleChunkDeleteRefs(scope.getDeleteList()));
-		return patch;
+		return new ProtocolPackets.BattleChunkPatchData(
+				upsert,
+				decodeBattleChunkRefs(scope.getDeleteList())
+		);
 	}
 
 	private Map<String, Object> decodePlayerMarkPatchScope(PlayerMarkPatchScope scope) {
@@ -812,27 +815,30 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		return mapped;
 	}
 
-	private Map<String, Object> decodeBattleChunkSnapshot(List<BattleChunkEntry> entries) {
-		Map<String, Object> mapped = new LinkedHashMap<>();
+	private List<ProtocolPackets.BattleChunkEntryData> decodeBattleChunkSnapshot(List<BattleChunkEntry> entries) {
+		List<ProtocolPackets.BattleChunkEntryData> mapped = new ArrayList<>();
 		for (BattleChunkEntry entry : entries) {
-			String chunkId = buildBattleChunkSyntheticId(entry.getRef().getDimension(), entry.getRef().getCoord().getChunkX(), entry.getRef().getCoord().getChunkZ());
-			if (chunkId == null) {
+			BattleChunkRefData ref = battleChunkRefData(entry.getRef());
+			if (ref == null) {
 				continue;
 			}
-			mapped.put(chunkId, battleChunkValueToMap(entry.getData(), entry.getRef()));
+			mapped.add(new ProtocolPackets.BattleChunkEntryData(
+					ref,
+					battleChunkValueToMap(entry.getData())
+			));
 		}
 		return mapped;
 	}
 
-	private List<String> decodeBattleChunkDeleteRefs(List<BattleChunkRef> refs) {
-		List<String> delete = new ArrayList<>();
+	private List<BattleChunkRefData> decodeBattleChunkRefs(List<BattleChunkRef> refs) {
+		List<BattleChunkRefData> decoded = new ArrayList<>();
 		for (BattleChunkRef ref : refs) {
-			String chunkId = buildBattleChunkSyntheticId(ref.getDimension(), ref.getCoord().getChunkX(), ref.getCoord().getChunkZ());
-			if (chunkId != null) {
-				delete.add(chunkId);
+			BattleChunkRefData value = battleChunkRefData(ref);
+			if (value != null) {
+				decoded.add(value);
 			}
 		}
-		return delete;
+		return decoded;
 	}
 
 	private Map<String, Object> playerDataToMap(PlayerData value) {
@@ -980,11 +986,8 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		return mapped;
 	}
 
-	private Map<String, Object> battleChunkValueToMap(BattleChunkValue value, BattleChunkRef ref) {
+	private Map<String, Object> battleChunkValueToMap(BattleChunkValue value) {
 		Map<String, Object> mapped = new LinkedHashMap<>();
-		mapped.put("dimension", ref.getDimension());
-		mapped.put("chunkX", ref.getCoord().getChunkX());
-		mapped.put("chunkZ", ref.getCoord().getChunkZ());
 		if (value.hasSymbol()) mapped.put("symbol", value.getSymbol());
 		if (value.hasMarkerType()) mapped.put("markerType", value.getMarkerType());
 		mapped.put("colorRaw", value.getColorRaw());
@@ -1000,40 +1003,41 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		return mapped;
 	}
 
-	private List<BattleChunkRef> buildBattleChunkRefs(List<String> chunkIds) {
-		List<BattleChunkRef> refs = new ArrayList<>();
-		for (String chunkId : cleanStringList(chunkIds)) {
-			String[] parts = chunkId.split("\\|");
-			if (parts.length != 3) {
+	private List<BattleChunkRef> buildBattleChunkRefs(List<BattleChunkRefData> references) {
+		List<BattleChunkRef> encoded = new ArrayList<>();
+		if (references == null) {
+			return encoded;
+		}
+		for (BattleChunkRefData ref : references) {
+			if (ref == null) {
 				continue;
 			}
-			Integer chunkX = toIntegerOrNull(parts[1]);
-			Integer chunkZ = toIntegerOrNull(parts[2]);
-			String dimension = normalizeText(parts[0]);
-			if (dimension == null || chunkX == null || chunkZ == null) {
-				continue;
-			}
-			refs.add(
+			encoded.add(
 					BattleChunkRef.newBuilder()
-							.setDimension(dimension)
+							.setDimension(ref.dimension())
 							.setCoord(
 									BattleChunkCoord.newBuilder()
-											.setChunkX(chunkX)
-											.setChunkZ(chunkZ)
+											.setChunkX(ref.chunkX())
+											.setChunkZ(ref.chunkZ())
 											.build()
 							)
 							.build()
 			);
 		}
-		return refs;
+		return encoded;
 	}
 
-	private String buildBattleChunkSyntheticId(String dimension, int chunkX, int chunkZ) {
-		String normalizedDimension = normalizeText(dimension);
-		if (normalizedDimension == null) {
+	private BattleChunkRefData battleChunkRefData(BattleChunkRef ref) {
+		if (ref == null || !ref.hasCoord()) {
 			return null;
 		}
-		return normalizedDimension + "|" + chunkX + "|" + chunkZ;
+		String dimension = normalizeText(ref.getDimension());
+		if (dimension == null) return null;
+		return new BattleChunkRefData(
+				dimension,
+				ref.getCoord().getChunkX(),
+				ref.getCoord().getChunkZ()
+		);
 	}
 
 	private static Map<String, Map<String, Object>> safeMap(Map<String, Map<String, Object>> value) {

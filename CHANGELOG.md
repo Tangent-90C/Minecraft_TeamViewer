@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.5-proto0.7.1 - 2026-08-23
+
+- Battle chunk 的 snapshot、patch、refresh、keepalive 与客户端缓存统一使用结构化
+  `dimension/chunkX/chunkZ` 引用，不再把重复坐标拼进公开 map key 或 data。
+- 协议 0.7.1 摘要改为排序后的 `{ref,data}` 条目合同；连接旧 0.7.0 服务端时仍使用正式 legacy 合同，
+  并兼容 Rust 0.7.0 曾经漏掉坐标字段的缺陷摘要，避免每 10 秒触发全量重同步。
+- 同步 Protobuf Java 生成器与运行库到 `4.36.0`，避免重新生成 binding 后因运行库旧于生成代码而拒绝加载。
+- Mod 版本升级为 `v0.8.5`，网络协议升级为 `0.7.1`；最低兼容协议仍为 `0.6.1`。
+
 ## v0.8.4-proto0.7.0 - 2026-08-22
 
 - JourneyMap 在线玩家、离线玩家、玩家报点、网页/管理端报点和其他共享路标分别使用五个独立路径点组；

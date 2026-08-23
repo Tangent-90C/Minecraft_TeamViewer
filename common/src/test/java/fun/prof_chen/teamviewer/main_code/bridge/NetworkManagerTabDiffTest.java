@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.bridge;
 
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
@@ -73,7 +74,7 @@ class NetworkManagerTabDiffTest {
                 "dimension", "minecraft:overworld", "playerName", "Remote")));
         snapshot.entities = Map.of();
         snapshot.waypoints = Map.of();
-        snapshot.battleChunks = Map.of();
+        snapshot.battleChunks = List.of();
         snapshot.playerMarks = Map.of();
         invoke(manager, "applySnapshot", ProtocolPackets.SnapshotFullInboundPacket.class, snapshot);
 
@@ -105,7 +106,7 @@ class NetworkManagerTabDiffTest {
                 "dimension", "minecraft:overworld", "playerName", "Remote")));
         snapshot.entities = Map.of();
         snapshot.waypoints = Map.of();
-        snapshot.battleChunks = Map.of();
+        snapshot.battleChunks = List.of();
         snapshot.playerMarks = Map.of();
         invoke(manager, "applySnapshot", ProtocolPackets.SnapshotFullInboundPacket.class, snapshot);
         assertEquals(1, remotePlayers.size());
@@ -125,6 +126,37 @@ class NetworkManagerTabDiffTest {
         assertEquals("0cabc8c9afc26756", digest.invoke(
                 new NetworkManager(new HashMap<UUID, RemotePlayerInfo>(), runtime(),
                         (uri, options, listener) -> null), state));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void battleChunkDigestSupportsLegacyBuggyRustAndStructuredContracts() throws Exception {
+        NetworkManager manager = new NetworkManager(
+                new HashMap<UUID, RemotePlayerInfo>(), runtime(), (uri, options, listener) -> null);
+        Field cacheField = NetworkManager.class.getDeclaredField("remoteBattleChunkDataCache");
+        cacheField.setAccessible(true);
+        Map<BattleChunkRefData, Map<String, Object>> cache =
+                (Map<BattleChunkRefData, Map<String, Object>>) cacheField.get(manager);
+        cache.put(new BattleChunkRefData("minecraft:overworld", 1, 2), Map.of(
+                "colorRaw", "#112233",
+                "colorMode", "raw_observed",
+                "mode", "simmc",
+                "roomCode", "default"));
+
+        Field protocolField = NetworkManager.class.getDeclaredField("serverProtocolVersion");
+        protocolField.setAccessible(true);
+        Method compute = NetworkManager.class.getDeclaredMethod("computeBattleChunkDigests");
+        compute.setAccessible(true);
+
+        protocolField.set(manager, "0.7.0");
+        Object legacy = compute.invoke(manager);
+        assertEquals("d6fccb4a1bd18438", recordValue(legacy, "official"));
+        assertEquals("9cecf13aa4592a1c", recordValue(legacy, "compatibility"));
+
+        protocolField.set(manager, "0.7.1");
+        Object structured = compute.invoke(manager);
+        assertEquals("31c63cd6e92bbc39", recordValue(structured, "official"));
+        assertEquals(null, recordValue(structured, "compatibility"));
     }
 
     @Test
@@ -253,6 +285,12 @@ class NetworkManagerTabDiffTest {
         Method method = NetworkManager.class.getDeclaredMethod(name, argumentType);
         method.setAccessible(true);
         method.invoke(manager, argument);
+    }
+
+    private static Object recordValue(Object record, String accessor) throws Exception {
+        Method method = record.getClass().getDeclaredMethod(accessor);
+        method.setAccessible(true);
+        return method.invoke(record);
     }
 
     private static RuntimeGateway runtime() {

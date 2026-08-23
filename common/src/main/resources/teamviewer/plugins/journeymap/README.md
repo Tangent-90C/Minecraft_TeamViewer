@@ -49,7 +49,8 @@ API 路标联动，并明确提示组级渲染控制不受支持。
 
 On full-control families, common invokes two projections with UUID-keyed TeamViewRelay player tables. Lua uses stable IDs
 `player-marker:<uuid>` and `player-beacon:<uuid>`, floors block coordinates, converts the common
-dimension string, and creates transient `[TV] <name>` JourneyMap waypoints. Marker mode shows on
+dimension string, and creates transient JourneyMap waypoints named `<name>`. API 2.x assigns them
+to the online group, whose `[TV] Online` tag supplies the map label prefix. Marker mode shows on
 the 2D map but not as a beacon; beacon mode shows in-world but not on the 2D map. The game UI has
 four independent settings: online map markers, online world beacons, offline map markers, and
 offline world beacons. Disabling any setting immediately removes only its owned objects. API 2.x
@@ -66,8 +67,9 @@ map/world visibility follows JourneyMap's global settings.
 
 在完整控制系列中，common 向两个 projection 传入以 UUID 为键的 TeamViewRelay 玩家表。Lua 使用稳定 ID
 `player-marker:<uuid>`、`player-beacon:<uuid>`，向下取整方块坐标，转换 common 维度字符串，
-并创建临时 `[TV] <name>` JourneyMap 路标。marker 模式只显示在二维地图，beacon 模式只
-显示在世界中；游戏内分别提供在线地图标记、在线世界信标、离线地图标记和离线世界信标四个开关，
+并创建名称为 `<name>` 的临时 JourneyMap 路标。API 2.x 将其放入在线分组，由 `[TV] Online`
+标签提供地图显示前缀。marker 模式只显示在二维地图，beacon 模式只显示在世界中；游戏内分别提供
+在线地图标记、在线世界信标、离线地图标记和离线世界信标四个开关，
 关闭任一项会立即删除它管理的对象。API 2.x 使用五个持久化 TeamViewRelay 分组：在线玩家、
 离线玩家、玩家报点、网页/管理报点和其他/旧版共享路径点。适配器会等待 JourneyMap 提供非空
 世界 ID 且已加载的分组仓库非空，然后依次按 Relay 角色标记、旧名称、旧标签确定性地复用一个
@@ -77,12 +79,14 @@ API 1.x 则只创建一个 `player:<uuid>` 原生路标；
 两个稳定能力 ID 仍保留，但只有一个 projection 拥有对象。受限 API 只显示在线与离线路标两个开关，
 地图/世界可见性遵循 JourneyMap 全局设置。
 
-Offline records use independent transient `[TV Last]` marker and beacon waypoints on full-control APIs. When common has a resolved
-local relation for the offline UUID, their waypoint color follows that relation; otherwise the
-existing orange last-seen color remains.
+Offline records use independent transient marker and beacon waypoints in the offline group on
+full-control APIs. Its `[TV] Offline` tag is the only map label prefix; the waypoint name contains
+the player and last-seen time. When common has a resolved local relation for the offline UUID,
+their waypoint color follows that relation; otherwise the existing orange last-seen color remains.
 
-完整控制 API 的离线记录使用独立的临时 `[TV Last]` 标记与信标路标。当 common 已为离线 UUID 解析出本地关系时，路标颜色采用该关系；
-未解析时保留原有橙色的最后位置颜色。
+完整控制 API 的离线记录在离线分组中使用独立的临时标记与信标路标。`[TV] Offline` 标签是唯一的
+地图显示前缀；路标名称只包含玩家名和最后在线时间。当 common 已为离线 UUID 解析出本地关系时，
+路标颜色采用该关系；未解析时保留原有橙色的最后位置颜色。
 
 ## Shared-waypoint conversion / 共享路标转换
 

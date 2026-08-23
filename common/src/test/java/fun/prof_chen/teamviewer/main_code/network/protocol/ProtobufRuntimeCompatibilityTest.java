@@ -7,9 +7,18 @@ import fun.prof_chen.teamviewer.main_code.network.proto.PlayerUpsert;
 import fun.prof_chen.teamviewer.main_code.network.proto.PlayerPositionSourceKind;
 import fun.prof_chen.teamviewer.main_code.network.proto.Patch;
 import fun.prof_chen.teamviewer.main_code.network.proto.SnapshotFull;
+import fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkCoord;
+import fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkEntry;
+import fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkPatchScope;
+import fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkRef;
+import fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkUpsert;
+import fun.prof_chen.teamviewer.main_code.network.proto.BattleChunkValue;
+import fun.prof_chen.teamviewer.main_code.network.proto.RefreshRequest;
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -73,6 +82,71 @@ class ProtobufRuntimeCompatibilityTest {
         assertEquals(2.0, data.get("x"));
         assertTrue(data.containsKey("positionSourceId"));
         assertEquals(null, data.get("positionSourceId"));
+    }
+
+    @Test
+    void battleChunksStayStructuredAcrossSnapshotPatchRefreshAndKeepalive() throws Exception {
+        BattleChunkRef firstRef = BattleChunkRef.newBuilder()
+                .setDimension("minecraft:overworld")
+                .setCoord(BattleChunkCoord.newBuilder().setChunkX(-12).setChunkZ(34))
+                .build();
+        BattleChunkValue value = BattleChunkValue.newBuilder()
+                .setColorRaw("#112233")
+                .setColorMode("raw_observed")
+                .setMode("simmc")
+                .build();
+        ProtobufMessageCodec codec = new ProtobufMessageCodec();
+
+        WireEnvelope snapshotEnvelope = WireEnvelope.newBuilder()
+                .setSnapshotFull(SnapshotFull.newBuilder().addBattleChunks(
+                        BattleChunkEntry.newBuilder().setRef(firstRef).setData(value)))
+                .build();
+        ProtocolPackets.SnapshotFullInboundPacket snapshot =
+                (ProtocolPackets.SnapshotFullInboundPacket) codec.decode(snapshotEnvelope.toByteArray()).packet;
+        assertEquals(1, snapshot.battleChunks.size());
+        assertEquals(new BattleChunkRefData("minecraft:overworld", -12, 34),
+                snapshot.battleChunks.get(0).ref());
+        assertFalse(snapshot.battleChunks.get(0).data().containsKey("dimension"));
+        assertFalse(snapshot.battleChunks.get(0).data().containsKey("chunkX"));
+        assertFalse(snapshot.battleChunks.get(0).data().containsKey("chunkZ"));
+
+        BattleChunkRef deleteRef = BattleChunkRef.newBuilder()
+                .setDimension("minecraft:the_nether")
+                .setCoord(BattleChunkCoord.newBuilder().setChunkX(7).setChunkZ(-8))
+                .build();
+        WireEnvelope patchEnvelope = WireEnvelope.newBuilder()
+                .setPatch(Patch.newBuilder().setBattleChunks(BattleChunkPatchScope.newBuilder()
+                        .addUpsert(BattleChunkUpsert.newBuilder()
+                                .setRef(firstRef).setData(value).addClearFields("colorNote"))
+                        .addDelete(deleteRef)))
+                .build();
+        ProtocolPackets.PatchInboundPacket patch =
+                (ProtocolPackets.PatchInboundPacket) codec.decode(patchEnvelope.toByteArray()).packet;
+        assertEquals(new BattleChunkRefData("minecraft:overworld", -12, 34),
+                patch.battleChunks.upsert().get(0).ref());
+        assertEquals(List.of("colorNote"), patch.battleChunks.upsert().get(0).clearFields());
+        assertEquals(List.of(new BattleChunkRefData("minecraft:the_nether", 7, -8)),
+                patch.battleChunks.delete());
+
+        WireEnvelope refreshEnvelope = WireEnvelope.newBuilder()
+                .setRefreshRequest(RefreshRequest.newBuilder().addBattleChunks(deleteRef))
+                .build();
+        ProtocolPackets.RefreshReqInboundPacket refresh =
+                (ProtocolPackets.RefreshReqInboundPacket) codec.decode(refreshEnvelope.toByteArray()).packet;
+        assertEquals(List.of(new BattleChunkRefData("minecraft:the_nether", 7, -8)),
+                refresh.battleChunks);
+
+        ProtocolPackets.StateKeepalivePacket keepalive = new ProtocolPackets.StateKeepalivePacket();
+        keepalive.submitPlayerId = UuidBinaryCodec.toBytes(UUID.randomUUID());
+        keepalive.players = List.of();
+        keepalive.entities = List.of();
+        keepalive.battleChunks = List.of(
+                new BattleChunkRefData("minecraft:overworld", -12, 34),
+                new BattleChunkRefData("minecraft:the_nether", 7, -8));
+        WireEnvelope encoded = WireEnvelope.parseFrom(codec.encode(keepalive));
+        assertEquals(2, encoded.getPlayerReportBundle().getStateKeepalive().getBattleChunksCount());
+        assertEquals("minecraft:the_nether", encoded.getPlayerReportBundle()
+                .getStateKeepalive().getBattleChunks(1).getDimension());
     }
 
     @Test

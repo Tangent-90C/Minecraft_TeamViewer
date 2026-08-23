@@ -1,5 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.network.protocol;
 
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
+
 import java.util.List;
 import java.util.Map;
 
@@ -70,7 +72,7 @@ public final class ProtocolPackets {
 		public Map<String, Object> players;
 		public Map<String, Object> entities;
 		public Map<String, Object> waypoints;
-		public Map<String, Object> battleChunks;
+		public List<BattleChunkEntryData> battleChunks;
 		public Map<String, Object> playerMarks;
 		public Map<String, Object> lastSeenPlayers;
 	}
@@ -79,7 +81,7 @@ public final class ProtocolPackets {
 		public Map<String, Object> players;
 		public Map<String, Object> entities;
 		public Map<String, Object> waypoints;
-		public Map<String, Object> battleChunks;
+		public BattleChunkPatchData battleChunks;
 		public Map<String, Object> playerMarks;
 		public Map<String, Object> lastSeenPlayers;
 		public Map<String, Object> meta;
@@ -92,7 +94,7 @@ public final class ProtocolPackets {
 	public static class RefreshReqInboundPacket extends BaseInboundPacket {
 		public List<String> players;
 		public List<String> entities;
-		public List<String> battleChunks;
+		public List<BattleChunkRefData> battleChunks;
 		public String reason;
 	}
 
@@ -141,7 +143,23 @@ public final class ProtocolPackets {
 		public byte[] submitPlayerId;
 		public List<String> players;
 		public List<String> entities;
-		public List<String> battleChunks;
+		public List<BattleChunkRefData> battleChunks;
+	}
+
+	public record BattleChunkEntryData(BattleChunkRefData ref, Map<String, Object> data) {
+	}
+
+	public record BattleChunkUpsertData(
+			BattleChunkRefData ref,
+			Map<String, Object> data,
+			List<String> clearFields
+	) {
+	}
+
+	public record BattleChunkPatchData(
+			List<BattleChunkUpsertData> upsert,
+			List<BattleChunkRefData> delete
+	) {
 	}
 
 	public static class SourceStateClearPacket {

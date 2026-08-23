@@ -16,6 +16,7 @@ import fun.prof_chen.teamviewer.main_code.model.Position3D;
 import fun.prof_chen.teamviewer.main_code.model.RemotePlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.LastSeenPlayerInfo;
 import fun.prof_chen.teamviewer.main_code.model.SharedWaypointInfo;
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
 import fun.prof_chen.teamviewer.main_code.client.model.TabPlayerSnapshot;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.ConfigGateway;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
@@ -259,7 +260,7 @@ public class NetworkManager {
 	private final Map<String, Map<String, Object>> remoteWaypointDataCache = new HashMap<>();
 
 	// 远程战局区块缓存 - 存储服务端裁决后的战局区块数据
-	private final Map<String, Map<String, Object>> remoteBattleChunkDataCache = new HashMap<>();
+	private final Map<BattleChunkRefData, Map<String, Object>> remoteBattleChunkDataCache = new HashMap<>();
 	
 	// 玩家标记状态缓存 - 存储玩家的队伍归属和颜色标记
 	private final Map<String, PlayerMarkState> remotePlayerMarks = new HashMap<>();
@@ -368,7 +369,7 @@ public class NetworkManager {
 	private final Set<String> pendingEntityRefreshIds = new HashSet<>();
 
 	// 待刷新的战局区块ID集合 - 响应服务端刷新请求
-	private final Set<String> pendingBattleChunkRefreshIds = new HashSet<>();
+	private final Set<BattleChunkRefData> pendingBattleChunkRefreshRefs = new HashSet<>();
 	/**
 	 * 主线程任务队列 - 线程安全的任务传递机制
 	 * 
@@ -1073,29 +1074,25 @@ public class NetworkManager {
 		}
 	}
 
-	public void sendBattleChunkKeepalive(UUID submitPlayerId, Set<String> battleChunkIds) {
-		if (socket == null || !isConnected || submitPlayerId == null || battleChunkIds == null || battleChunkIds.isEmpty()) {
+	public void sendBattleChunkKeepalive(UUID submitPlayerId, Set<BattleChunkRefData> battleChunkRefs) {
+		if (socket == null || !isConnected || submitPlayerId == null || battleChunkRefs == null || battleChunkRefs.isEmpty()) {
 			return;
 		}
 
-		List<String> normalizedIds = new ArrayList<>();
-		for (String chunkId : battleChunkIds) {
-			String normalized = normalizeNullableText(chunkId);
-			if (normalized != null) {
-				normalizedIds.add(normalized);
-			}
-		}
-		if (normalizedIds.isEmpty()) {
+		List<BattleChunkRefData> normalizedRefs = battleChunkRefs.stream()
+				.filter(Objects::nonNull)
+				.sorted()
+				.toList();
+		if (normalizedRefs.isEmpty()) {
 			return;
 		}
-		Collections.sort(normalizedIds);
-		for (int start = 0; start < normalizedIds.size(); start += KEEPALIVE_MAX_ITEMS_PER_PACKET) {
-			int end = Math.min(start + KEEPALIVE_MAX_ITEMS_PER_PACKET, normalizedIds.size());
+		for (int start = 0; start < normalizedRefs.size(); start += KEEPALIVE_MAX_ITEMS_PER_PACKET) {
+			int end = Math.min(start + KEEPALIVE_MAX_ITEMS_PER_PACKET, normalizedRefs.size());
 			ProtocolPackets.StateKeepalivePacket packet = new ProtocolPackets.StateKeepalivePacket();
 			packet.submitPlayerId = UuidBinaryCodec.toBytes(submitPlayerId);
 			packet.players = List.of();
 			packet.entities = List.of();
-			packet.battleChunks = new ArrayList<>(normalizedIds.subList(start, end));
+			packet.battleChunks = new ArrayList<>(normalizedRefs.subList(start, end));
 			sendPacket(packet);
 		}
 	}
@@ -1461,10 +1458,9 @@ public class NetworkManager {
 			}
 		}
 
-		Map<String, Object> battleChunks = objectMap(packet.battleChunks);
 		if (packet.battleChunks != null) {
 			remoteBattleChunkDataCache.clear();
-			mergeBattleChunksPatchUpsert(battleChunks);
+			mergeBattleChunkEntries(packet.battleChunks);
 		}
 
 		Map<String, Object> playerMarks = objectMap(packet.playerMarks);
@@ -1594,9 +1590,8 @@ public class NetworkManager {
 			}
 		}
 
-		Map<String, Object> battleChunks = objectMap(packet.battleChunks);
-		if (!battleChunks.isEmpty()) {
-			applyBattleChunkPatch(battleChunks);
+		if (packet.battleChunks != null) {
+			applyBattleChunkPatch(packet.battleChunks);
 		}
 
 		Map<String, Object> playerMarks = objectMap(packet.playerMarks);
@@ -1759,7 +1754,8 @@ public class NetworkManager {
 		String localPlayerHash = computePlayersDigest();
 		String localEntityHash = computeEntitiesDigest();
 		String localWaypointHash = computeWaypointDigest();
-		String localBattleChunkHash = computeBattleChunkDigest();
+		BattleChunkDigestValues battleChunkDigests = computeBattleChunkDigests();
+		String localBattleChunkHash = battleChunkDigests.official();
 		String localLastSeenPlayersHash = computeLastSeenPlayersDigest();
 
 		List<String> mismatchedScopes = new ArrayList<>();
@@ -1772,7 +1768,9 @@ public class NetworkManager {
 		if (!Objects.equals(serverWaypointHash, localWaypointHash)) {
 			mismatchedScopes.add("waypoints");
 		}
-		if (serverBattleChunkHash != null && !Objects.equals(serverBattleChunkHash, localBattleChunkHash)) {
+		if (serverBattleChunkHash != null
+				&& !Objects.equals(serverBattleChunkHash, localBattleChunkHash)
+				&& !Objects.equals(serverBattleChunkHash, battleChunkDigests.compatibility())) {
 			mismatchedScopes.add("battleChunks");
 		}
 		if (serverLastSeenPlayersHash != null
@@ -1785,7 +1783,7 @@ public class NetworkManager {
 		}
 
 		LOGGER.warn(
-				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} battleChunkDigestKey=digest_uses_dimension|chunkX|chunkZ_without_room_prefix",
+				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}, battleChunksCompatibility={}, lastSeenPlayers={}}} battleChunkDigestContract={}",
 				mismatchedScopes,
 				serverPlayerHash,
 				serverEntityHash,
@@ -1796,7 +1794,9 @@ public class NetworkManager {
 				localEntityHash,
 				localWaypointHash,
 				localBattleChunkHash,
-				localLastSeenPlayersHash
+				battleChunkDigests.compatibility(),
+				localLastSeenPlayersHash,
+				battleChunkDigests.contract()
 		);
 
 		long now = System.currentTimeMillis();
@@ -3350,11 +3350,12 @@ public class NetworkManager {
 	private void handleRefreshRequest(ProtocolPackets.RefreshReqInboundPacket packet) {
 		List<String> players = packet != null && packet.players != null ? packet.players : List.of();
 		List<String> entities = packet != null && packet.entities != null ? packet.entities : List.of();
-		List<String> battleChunks = packet != null && packet.battleChunks != null ? packet.battleChunks : List.of();
+		List<BattleChunkRefData> battleChunks = packet != null && packet.battleChunks != null
+				? packet.battleChunks : List.of();
 
 		pendingPlayerRefreshIds.addAll(players);
 		pendingEntityRefreshIds.addAll(entities);
-		pendingBattleChunkRefreshIds.addAll(battleChunks);
+		pendingBattleChunkRefreshRefs.addAll(battleChunks);
 
 		if (!players.isEmpty() || !entities.isEmpty() || !battleChunks.isEmpty()) {
 			LOGGER.debug(
@@ -3527,12 +3528,44 @@ public class NetworkManager {
 		return stateDigest(remoteWaypointDataCache);
 	}
 
-	private String computeBattleChunkDigest() {
-		Map<String, Map<String, Object>> digestState = new HashMap<>();
-		for (Map.Entry<String, Map<String, Object>> entry : remoteBattleChunkDataCache.entrySet()) {
-			digestState.put(entry.getKey(), normalizeBattleChunkCoreData(entry.getValue()));
+	private BattleChunkDigestValues computeBattleChunkDigests() {
+		if (protocolAtLeast(serverProtocolVersion, "0.7.1")) {
+			List<BattleChunkRefData> refs = new ArrayList<>(remoteBattleChunkDataCache.keySet());
+			Collections.sort(refs);
+			List<Object> entries = new ArrayList<>();
+			for (BattleChunkRefData ref : refs) {
+				Map<String, Object> structured = new HashMap<>();
+				structured.put("ref", battleChunkRefMap(ref));
+				structured.put("data", normalizeBattleChunkCoreData(remoteBattleChunkDataCache.get(ref)));
+				entries.add(structured);
+			}
+			return new BattleChunkDigestValues(
+					digestCanonicalValues(entries), null, "structured_v2_ref_data");
 		}
-		return stateDigest(digestState);
+
+		Map<String, Map<String, Object>> official = new HashMap<>();
+		Map<String, Map<String, Object>> buggyRust = new HashMap<>();
+		for (Map.Entry<BattleChunkRefData, Map<String, Object>> entry : remoteBattleChunkDataCache.entrySet()) {
+			BattleChunkRefData ref = entry.getKey();
+			Map<String, Object> data = normalizeBattleChunkCoreData(entry.getValue());
+			buggyRust.put(ref.identityKey(), data);
+			Map<String, Object> flattened = new HashMap<>(data);
+			flattened.putAll(battleChunkRefMap(ref));
+			official.put(ref.identityKey(), flattened);
+		}
+		return new BattleChunkDigestValues(
+				stateDigest(official), stateDigest(buggyRust), "legacy_keyed_with_buggy_rust_compat");
+	}
+
+	private Map<String, Object> battleChunkRefMap(BattleChunkRefData ref) {
+		Map<String, Object> mapped = new HashMap<>();
+		mapped.put("dimension", ref.dimension());
+		mapped.put("chunkX", ref.chunkX());
+		mapped.put("chunkZ", ref.chunkZ());
+		return mapped;
+	}
+
+	private record BattleChunkDigestValues(String official, String compatibility, String contract) {
 	}
 
 	private String computeLastSeenPlayersDigest() {
@@ -3544,9 +3577,6 @@ public class NetworkManager {
 		if (source == null || source.isEmpty()) {
 			return normalized;
 		}
-		copyBattleChunkFieldIfPresent(source, normalized, "chunkX");
-		copyBattleChunkFieldIfPresent(source, normalized, "chunkZ");
-		copyBattleChunkFieldIfPresent(source, normalized, "dimension");
 		copyBattleChunkFieldIfPresent(source, normalized, "symbol");
 		copyBattleChunkFieldIfPresent(source, normalized, "markerType");
 		copyBattleChunkFieldIfPresent(source, normalized, "colorRaw");
@@ -3591,46 +3621,45 @@ public class NetworkManager {
 		}
 	}
 
-	private void mergeBattleChunksPatchUpsert(Map<String, Object> upserts) {
-		for (Map.Entry<String, Object> entry : upserts.entrySet()) {
+	private void mergeBattleChunkEntries(List<ProtocolPackets.BattleChunkEntryData> entries) {
+		if (entries == null) return;
+		for (ProtocolPackets.BattleChunkEntryData entry : entries) {
 			try {
-				Map<String, Object> data = extractDataMap(objectMap(entry.getValue()));
-				if (data.isEmpty()) {
+				if (entry == null || entry.ref() == null || entry.data() == null) {
 					continue;
 				}
-				String chunkId = entry.getKey();
-				Map<String, Object> merged = new HashMap<>();
-				Map<String, Object> existing = remoteBattleChunkDataCache.get(chunkId);
-				if (existing != null) {
-					merged.putAll(normalizeBattleChunkCoreData(existing));
-				}
-				applyDeltaFields(merged, normalizeBattleChunkCoreData(data));
-				if (!merged.isEmpty()) {
-					remoteBattleChunkDataCache.put(chunkId, merged);
-				}
+				remoteBattleChunkDataCache.put(
+						entry.ref(),
+						normalizeBattleChunkCoreData(entry.data())
+				);
 			} catch (Exception e) {
-				LOGGER.error("TeamViewRelay Network - Error applying battle chunk patch: {}", e.getMessage());
+				LOGGER.error("TeamViewRelay Network - Error applying battle chunk snapshot: {}", e.getMessage());
 			}
 		}
 	}
 
-	private void applyBattleChunkPatch(Map<String, Object> battleChunkPatch) {
+	private void applyBattleChunkPatch(ProtocolPackets.BattleChunkPatchData battleChunkPatch) {
 		if (battleChunkPatch == null) {
 			return;
 		}
-		for (Object idValue : objectList(battleChunkPatch.get("delete"))) {
-			String chunkId = idValue == null ? null : String.valueOf(idValue);
-			if (chunkId != null && !chunkId.isBlank()) {
-				remoteBattleChunkDataCache.remove(chunkId);
+		if (battleChunkPatch.delete() != null) {
+			for (BattleChunkRefData ref : battleChunkPatch.delete()) {
+				if (ref != null) remoteBattleChunkDataCache.remove(ref);
 			}
 		}
-		Map<String, Object> upsert = objectMap(battleChunkPatch.get("upsert"));
-		if (!upsert.isEmpty()) {
-			mergeBattleChunksPatchUpsert(upsert);
-			return;
-		}
-		if (!battleChunkPatch.containsKey("delete")) {
-			mergeBattleChunksPatchUpsert(battleChunkPatch);
+		if (battleChunkPatch.upsert() == null) return;
+		for (ProtocolPackets.BattleChunkUpsertData upsert : battleChunkPatch.upsert()) {
+			if (upsert == null || upsert.ref() == null) continue;
+			Map<String, Object> merged = new HashMap<>();
+			Map<String, Object> existing = remoteBattleChunkDataCache.get(upsert.ref());
+			if (existing != null) merged.putAll(normalizeBattleChunkCoreData(existing));
+			if (upsert.clearFields() != null) {
+				for (String field : upsert.clearFields()) {
+					if (field != null) merged.remove(field);
+				}
+			}
+			applyDeltaFields(merged, normalizeBattleChunkCoreData(upsert.data()));
+			remoteBattleChunkDataCache.put(upsert.ref(), merged);
 		}
 	}
 
@@ -3648,6 +3677,24 @@ public class NetworkManager {
 			MessageDigest digest = MessageDigest.getInstance("SHA-1");
 			for (String line : lines) {
 				digest.update(line.getBytes(StandardCharsets.UTF_8));
+				digest.update((byte) '\n');
+			}
+			byte[] bytes = digest.digest();
+			StringBuilder hex = new StringBuilder();
+			for (int i = 0; i < 8 && i < bytes.length; i++) {
+				hex.append(String.format("%02x", bytes[i]));
+			}
+			return hex.toString();
+		} catch (Exception e) {
+			return "hash_error";
+		}
+	}
+
+	private String digestCanonicalValues(List<Object> values) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-1");
+			for (Object value : values) {
+				digest.update(canonicalValue(value).getBytes(StandardCharsets.UTF_8));
 				digest.update((byte) '\n');
 			}
 			byte[] bytes = digest.digest();
@@ -3928,12 +3975,12 @@ public class NetworkManager {
 		return battleChunkKeepaliveIntervalMs;
 	}
 
-	public Set<String> drainPendingBattleChunkRefreshIds() {
-		if (pendingBattleChunkRefreshIds.isEmpty()) {
+	public Set<BattleChunkRefData> drainPendingBattleChunkRefreshRefs() {
+		if (pendingBattleChunkRefreshRefs.isEmpty()) {
 			return Set.of();
 		}
-		Set<String> drained = new HashSet<>(pendingBattleChunkRefreshIds);
-		pendingBattleChunkRefreshIds.clear();
+		Set<BattleChunkRefData> drained = new HashSet<>(pendingBattleChunkRefreshRefs);
+		pendingBattleChunkRefreshRefs.clear();
 		return drained;
 	}
 
@@ -3958,7 +4005,7 @@ public class NetworkManager {
 		lastEntityObjectLivenessMs.clear();
 		pendingPlayerRefreshIds.clear();
 		pendingEntityRefreshIds.clear();
-		pendingBattleChunkRefreshIds.clear();
+		pendingBattleChunkRefreshRefs.clear();
 	}
 
 	private void invalidateInboundRelayState() {

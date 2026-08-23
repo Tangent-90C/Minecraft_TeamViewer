@@ -1,5 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.battlemap;
 
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -13,13 +15,15 @@ public final class BattleMapProjection {
     private BattleMapProjection() { }
 
     public static Result build(String dimension, int baseChunkX, int baseChunkZ, List<Map<String, Object>> cells) {
-        Set<String> ids = new HashSet<>();
+        Set<BattleChunkRefData> refs = new HashSet<>();
         List<String> semantic = new ArrayList<>();
         for (Map<String, Object> cell : cells) {
             int relX = ((Number) cell.get("relChunkX")).intValue();
             int relZ = ((Number) cell.get("relChunkZ")).intValue();
-            String id = dimension + "|" + (baseChunkX + relX) + "|" + (baseChunkZ + relZ);
-            ids.add(id);
+            BattleChunkRefData ref = new BattleChunkRefData(
+                    dimension, baseChunkX + relX, baseChunkZ + relZ);
+            String id = ref.identityKey();
+            refs.add(ref);
             semantic.add(id + "|" + cell.getOrDefault("symbol", "") + "|" + cell.getOrDefault("colorRaw", ""));
         }
         Collections.sort(semantic);
@@ -29,11 +33,11 @@ public final class BattleMapProjection {
             StringBuilder hash = new StringBuilder();
             byte[] bytes = digest.digest();
             for (int i = 0; i < 8; i++) hash.append(String.format("%02x", bytes[i]));
-            return new Result(hash.toString(), ids);
+            return new Result(hash.toString(), refs);
         } catch (Exception ignored) {
-            return new Result("projection_hash_error", ids);
+            return new Result("projection_hash_error", refs);
         }
     }
 
-    public record Result(String semanticHash, Set<String> chunkIds) { }
+    public record Result(String semanticHash, Set<BattleChunkRefData> chunkRefs) { }
 }

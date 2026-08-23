@@ -299,7 +299,7 @@ local function sync_players(players, enabled, relations)
       local id = prefix .. player.uuid; active[id] = true
       local relation = relations ~= nil and relations[player.uuid] or nil
       local color = relation ~= nil and relation.resolved and relation.color or 0xFF5555
-      upsert(managed, id, "[TV] " .. (player.name or "Player"),
+      upsert(managed, id, player.name or "Player",
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
           world.dimension, color, "online")
     end
@@ -318,7 +318,7 @@ local function sync_last_seen(players, enabled, relations)
       local local_time = handles.LastSeenTimeFormatter:format(player.lastSeenAtUtcMs)
       local relation = relations ~= nil and relations[player.uuid] or nil
       local color = relation ~= nil and relation.resolved and relation.color or 0xFF9A26
-      upsert(managed_last_seen, id, "[TV Last] " .. (player.name or "Player") .. " @ " .. local_time,
+      upsert(managed_last_seen, id, (player.name or "Player") .. " @ " .. local_time,
           math.floor(player.position.x), math.floor(player.position.y), math.floor(player.position.z),
           world.dimension, color, "offline")
     end

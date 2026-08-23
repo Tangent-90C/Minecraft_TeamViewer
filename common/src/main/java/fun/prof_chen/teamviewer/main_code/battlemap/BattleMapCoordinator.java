@@ -7,6 +7,7 @@ import fun.prof_chen.teamviewer.main_code.client.sdk.BattleMapSourceSnapshot;
 import fun.prof_chen.teamviewer.main_code.client.sdk.IntegrationRegistry;
 import fun.prof_chen.teamviewer.main_code.config.Config;
 import fun.prof_chen.teamviewer.main_code.model.ReportDataSchemas;
+import fun.prof_chen.teamviewer.main_code.model.BattleChunkRefData;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -85,7 +86,7 @@ public final class BattleMapCoordinator {
                 candidates.get(0).baseChunkX(), candidates.get(0).baseChunkZ(), cells);
         return Optional.of(new Observation(protocolMode(value.sourceId()), value.dimension(), value.mapSize(),
                 value.anchorRow(), value.anchorColumn(), observedAt, System.currentTimeMillis(), candidatePayloads,
-                cells, projection.semanticHash(), projection.chunkIds()));
+                cells, projection.semanticHash(), projection.chunkRefs()));
     }
 
     private Optional<Observation> collectAbsolute(BattleMapSourceSnapshot value) {
@@ -108,17 +109,17 @@ public final class BattleMapCoordinator {
         BattleMapProjection.Result projection = BattleMapProjection.build(value.dimension(), minX, minZ, cells);
         return Optional.of(new Observation(protocolMode(value.sourceId()), value.dimension(),
                 Math.max(maxX - minX + 1, maxZ - minZ + 1), 0, 0, now, System.currentTimeMillis(),
-                candidates, cells, projection.semanticHash(), projection.chunkIds()));
+                candidates, cells, projection.semanticHash(), projection.chunkRefs()));
     }
 
     private void send(ClientWorldSnapshot world, Observation observation) {
-        Set<String> forced = network.drainPendingBattleChunkRefreshIds();
+        Set<BattleChunkRefData> forced = network.drainPendingBattleChunkRefreshRefs();
         long now = System.currentTimeMillis();
         boolean semanticChanged = !Objects.equals(lastSemanticHash, observation.semanticHash());
         boolean keepaliveDue = now - lastKeepaliveAt >= Math.max(1_000L, network.getBattleChunkKeepaliveIntervalMs());
         if (forced.isEmpty() && !observationPending && !semanticChanged) {
-            if (keepaliveDue && !observation.projectedChunkIds().isEmpty()) {
-                network.sendBattleChunkKeepalive(world.localPlayerId(), observation.projectedChunkIds());
+            if (keepaliveDue && !observation.projectedChunkRefs().isEmpty()) {
+                network.sendBattleChunkKeepalive(world.localPlayerId(), observation.projectedChunkRefs());
                 lastKeepaliveAt = now;
             }
             return;
@@ -152,5 +153,6 @@ public final class BattleMapCoordinator {
 
     private record Observation(String mode, String dimension, int mapSize, int anchorRow, int anchorColumn,
                                long observedAt, long parsedAt, List<Map<String, Object>> candidates,
-                               List<Map<String, Object>> cells, String semanticHash, Set<String> projectedChunkIds) { }
+                               List<Map<String, Object>> cells, String semanticHash,
+                               Set<BattleChunkRefData> projectedChunkRefs) { }
 }
