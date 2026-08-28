@@ -1371,6 +1371,69 @@ class IntegrationPluginManagerTest {
     }
 
     @Test
+    void journeyMapTagsOnlyRelayPlayerMapMarkersAndClearsDisabledOnlineMarkers() {
+        JourneyMapApiStub api = new JourneyMapApiStub();
+        UUID localId = UUID.randomUUID();
+        PluginHostAccess host = new PluginHostAccess(
+                () -> new TestJourneyWorld(localId, "minecraft:overworld"), null, null, null,
+                Map.of("journeymap.client_api", () -> api));
+        IntegrationRegistry registry = completeRegistry();
+        IntegrationPluginManager manager = new IntegrationPluginManager(
+                new EnvironmentRuntime(temporary, "fabric", "26.1.2", Set.of("journeymap")),
+                registry, Config.load(temporary.resolve("offscreen-marker-config.json")), host);
+
+        UUID remoteId = UUID.randomUUID();
+        Map<UUID, RemotePlayerInfo> players = Map.of(remoteId,
+                new RemotePlayerInfo(remoteId, new Position3D(8, 70, -4),
+                        "minecraft:overworld", "Remote"));
+        List<RemotePlayerProjection> projections = registry.activeRemotePlayerProjections().stream()
+                .filter(value -> value.id().startsWith("journeymap-"))
+                .toList();
+        projections.forEach(value -> value.sync(players, true));
+
+        LastSeenPlayerInfo lastSeen = new LastSeenPlayerInfo(
+                remoteId, new Position3D(8, 70, -4), "minecraft:overworld", "Remote",
+                1_700_000_004_000L, 1_700_000_000_000L, 1_700_000_005_000L);
+        projections.forEach(value -> value.syncLastSeen(Map.of(remoteId, lastSeen), true));
+        SharedWaypointMapAdapter waypointAdapter = registry.activeSharedWaypointAdapters().stream()
+                .filter(value -> IntegrationIds.JOURNEYMAP_WAYPOINTS.equals(value.id()))
+                .findFirst().orElseThrow();
+        waypointAdapter.upsertRemoteWaypoint(new MapWaypointCommand(
+                "relay-waypoint", "Relay", "R", 4, 65, 8,
+                "minecraft:overworld", 0x55FF55));
+
+        var online = api.waypoints().stream()
+                .filter(value -> "Remote".equals(value.getName()))
+                .toList();
+        assertEquals(2, online.size());
+        assertEquals("online-player-marker", online.stream()
+                .filter(value -> ((journeymap.api.v2.common.waypoint.FullWaypoint) value).showOnMap())
+                .findFirst().orElseThrow().getCustomData("teamviewer.projection.kind"));
+        assertNull(online.stream()
+                .filter(value -> !((journeymap.api.v2.common.waypoint.FullWaypoint) value).showOnMap())
+                .findFirst().orElseThrow().getCustomData("teamviewer.projection.kind"));
+
+        var offline = api.waypoints().stream()
+                .filter(value -> value.getName().startsWith("Remote @ "))
+                .toList();
+        assertEquals(2, offline.size());
+        assertEquals("offline-player-marker", offline.stream()
+                .filter(value -> ((journeymap.api.v2.common.waypoint.FullWaypoint) value).showOnMap())
+                .findFirst().orElseThrow().getCustomData("teamviewer.projection.kind"));
+        assertNull(api.waypoints().stream()
+                .filter(value -> "Relay".equals(value.getName()))
+                .findFirst().orElseThrow().getCustomData("teamviewer.projection.kind"));
+
+        assertTrue(manager.setSetting(
+                IntegrationIds.PLUGIN_JOURNEYMAP, "show_online_map_markers", false));
+        assertTrue(api.waypoints().stream().noneMatch(value ->
+                "online-player-marker".equals(value.getCustomData("teamviewer.projection.kind"))));
+        assertTrue(api.waypoints().stream().anyMatch(value ->
+                "offline-player-marker".equals(value.getCustomData("teamviewer.projection.kind"))));
+        manager.shutdown();
+    }
+
+    @Test
     void journeyMapRetainsSuppressedDeletesForProjectionRetry() {
         JourneyMapApiStub api = new JourneyMapApiStub();
         UUID localId = UUID.randomUUID();

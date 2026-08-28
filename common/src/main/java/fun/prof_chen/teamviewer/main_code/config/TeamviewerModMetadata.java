@@ -13,9 +13,24 @@ public final class TeamviewerModMetadata {
     private TeamviewerModMetadata() {
     }
 
-    public static final String MOD_ID = "teamviewer";
+    public static final String MOD_ID = "team-view-relay";
     public static final String MOD_VERSION_FALLBACK = "team-view-relay-mod-dev";
     public static final String PROGRAM_VERSION_UNKNOWN = "unknown";
+
+    public static String clientProgramVersion(String modVersion, String minecraftVersion) {
+        String normalizedModVersion = normalized(modVersion, MOD_VERSION_FALLBACK);
+        String prefix = "team-view-relay-mod-";
+        if (normalizedModVersion.startsWith(prefix)) {
+            normalizedModVersion = normalizedModVersion.substring(prefix.length());
+        }
+        return prefix + normalizedModVersion + "-mc"
+                + normalized(minecraftVersion, PROGRAM_VERSION_UNKNOWN);
+    }
+
+    private static String normalized(String value, String fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        return value.trim();
+    }
 
     private static Properties loadBuildProperties() {
         Properties properties = new Properties();

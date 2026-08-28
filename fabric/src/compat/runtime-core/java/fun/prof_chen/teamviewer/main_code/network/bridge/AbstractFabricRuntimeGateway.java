@@ -1,6 +1,7 @@
 package fun.prof_chen.teamviewer.main_code.network.bridge;
 
 import fun.prof_chen.teamviewer.main_code.config.FabricModVersionProvider;
+import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.plugin.MinecraftClientObjects;
 import net.fabricmc.loader.api.FabricLoader;
@@ -13,7 +14,8 @@ abstract class AbstractFabricRuntimeGateway implements RuntimeGateway {
 
     @Override
     public final String getClientProgramVersion() {
-        return FabricModVersionProvider.getModVersion();
+        return TeamviewerModMetadata.clientProgramVersion(
+                FabricModVersionProvider.getModVersion(), getMinecraftVersion());
     }
 
     @Override

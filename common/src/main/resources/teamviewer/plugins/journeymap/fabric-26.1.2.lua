@@ -7,6 +7,7 @@ local managed_markers, managed_beacons = {}, {}
 local managed_last_seen_markers, managed_last_seen_beacons, managed_waypoints = {}, {}, {}
 local client_objects = services.get("minecraft.client_objects")
 local GROUP_ROLE_KEY = "teamviewer.group.role"
+local PROJECTION_KIND_KEY = "teamviewer.projection.kind"
 local group_definitions = {
   online = {guid = "teamviewer_relay_online_players", name = "TeamViewRelay Online Players", tag = "[TV] Online"},
   offline = {guid = "teamviewer_relay_offline_players", name = "TeamViewRelay Offline Players", tag = "[TV] Offline"},
@@ -318,6 +319,9 @@ local function upsert(managed, id, name, x, y, z, dimension_id, color, presentat
     object:setPersistent(false); object:setEnabled(true); object:setColor(color)
     if presentation == "marker" then
       object:setShowBeacon(false); object:setShowOnMap(true); object:setShowInWorld(false)
+      if group_key == "online" or group_key == "offline" then
+        object:setCustomData(PROJECTION_KIND_KEY, group_key .. "-player-marker")
+      end
     elseif presentation == "beacon" then
       object:setShowBeacon(true); object:setShowOnMap(false); object:setShowInWorld(true)
     end

@@ -65,6 +65,11 @@ waypoints without disabling the integration. API 1.x instead creates one
 projection owns the object. Reduced API families show only online and offline waypoint switches;
 map/world visibility follows JourneyMap's global settings.
 
+Minecraft 26.1.2 with JourneyMap 6.0.5 suppresses offscreen drawing only for Relay online and
+offline player markers. Players inside the minimap viewport render normally, while the remaining
+Relay player waypoints stay available to the fullscreen map without entering JourneyMap's
+offscreen-label collision layout. Shared Relay waypoints and user-owned waypoints are unchanged.
+
 在完整控制系列中，common 向两个 projection 传入以 UUID 为键的 TeamViewRelay 玩家表。Lua 使用稳定 ID
 `player-marker:<uuid>`、`player-beacon:<uuid>`，向下取整方块坐标，转换 common 维度字符串，
 并创建名称为 `<name>` 的临时 JourneyMap 路标。API 2.x 将其放入在线分组，由 `[TV] Online`
@@ -78,6 +83,10 @@ map/world visibility follows JourneyMap's global settings.
 API 1.x 则只创建一个 `player:<uuid>` 原生路标；
 两个稳定能力 ID 仍保留，但只有一个 projection 拥有对象。受限 API 只显示在线与离线路标两个开关，
 地图/世界可见性遵循 JourneyMap 全局设置。
+
+Minecraft 26.1.2 + JourneyMap 6.0.5 只对 Relay 在线与离线玩家标记禁止离屏绘制。小地图视口内的
+玩家正常显示，其余 Relay 玩家路径点仍可在全屏地图查看，但不会进入 JourneyMap 的离屏标签碰撞布局；
+共享 Relay 路标和用户自有路标不受影响。
 
 Offline records use independent transient marker and beacon waypoints in the offline group on
 full-control APIs. Its `[TV] Offline` tag is the only map label prefix; the waypoint name contains

@@ -1,5 +1,6 @@
 package fun.prof_chen.teamviewer.main_code.network.bridge;
 
+import fun.prof_chen.teamviewer.main_code.config.TeamviewerModMetadata;
 import fun.prof_chen.teamviewer.main_code.network.abstraction.RuntimeGateway;
 import fun.prof_chen.teamviewer.main_code.plugin.MinecraftClientObjects;
 import net.neoforged.fml.ModList;
@@ -13,8 +14,10 @@ abstract class AbstractNeoForgeRuntimeGateway implements RuntimeGateway {
 
     @Override
     public final String getClientProgramVersion() {
-        return ModList.get().getModContainerById("team_view_relay")
-                .map(container -> container.getModInfo().getVersion().toString()).orElse("unknown");
+        String modVersion = ModList.get().getModContainerById("team_view_relay")
+                .map(container -> container.getModInfo().getVersion().toString())
+                .orElse(TeamviewerModMetadata.MOD_VERSION_FALLBACK);
+        return TeamviewerModMetadata.clientProgramVersion(modVersion, getMinecraftVersion());
     }
 
     @Override

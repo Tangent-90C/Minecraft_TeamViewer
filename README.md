@@ -1,7 +1,7 @@
 # TeamViewRelay Mod
 
 TeamViewRelay 的 Minecraft 客户端 Mod，用于在游戏内共享队友视野、实体、战术报点和共享路标。
-当前发布版本为 `v0.8.5-proto0.7.1`。实际验证的运行范围如下：
+当前发布版本为 `v0.8.7-proto0.7.1`。实际验证的运行范围如下：
 
 | 安装产物 | Loader | 可运行的 Minecraft 版本 |
 | --- | --- | --- |
@@ -189,6 +189,10 @@ Loader 公开 Mod ID 分别为：Fabric `team-view-relay`、NeoForge `team_view_
 远距离玩家较多时的渲染开销。开启总开关后，已支持的 JourneyMap、Xaero Minimap 和 Xaero World Map
 也会使用独立标记显示这些记录。玩家重新上线、功能关闭、断线或切换世界时会清理对应历史标记。
 
+Minecraft 26.1.2 + JourneyMap 6.0.5 的小地图只绘制当前视口内的 Relay 玩家标记；视口外玩家不会
+进入 JourneyMap 的离屏标签布局，但仍保留在全屏地图中。在线/离线地图标记、世界信标与 Mod 自身的
+玩家方框和追踪线使用独立开关。
+
 连接支持协议 `0.7.0` 的后端且 Tab 历史同步未关闭时，common 会仅按离线玩家 UUID 查询最近一次 Tab
 标签，并把实时 Tab（优先）与历史记录交给本地“Tab 标签敌我识别”插件。插件的友军、敌军和中立结果会
 着色世界方框、追踪线、标签、JourneyMap 和 Xaero Minimap；Xaero World Map 的稳定 tracker API 只能投影位置。
@@ -305,7 +309,7 @@ task check-fabric-runtime RUNTIME=1.21
 
 - Minecraft 支持范围以 `gradle/minecraft-versions.properties` 为唯一来源；运行
   `python3 scripts/minecraft_targets.py list-fabric`、`list-neoforge` 或 `list-official` 查询
-- Mod：`v0.8.5-proto0.7.1`
+- Mod：`v0.8.7-proto0.7.1`
 - 协议版本：`0.7.1`
 - 最低兼容协议版本：`0.6.1`
 
@@ -324,7 +328,7 @@ git add third_party/TeamViewRelay-Protocol
 ./gradlew build
 ```
 
-版本号采用“双版本号”约定，例如当前的 `v0.8.5-proto0.7.1`：
+版本号采用“双版本号”约定，例如当前的 `v0.8.7-proto0.7.1`：
 
 - 前半段是程序版本号，用于表示 Mod 自身功能迭代
 - 后半段是网络协议版本号，用于表示可与哪些配套组件互通

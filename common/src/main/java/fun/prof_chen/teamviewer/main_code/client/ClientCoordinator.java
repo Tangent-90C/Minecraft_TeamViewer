@@ -69,6 +69,8 @@ public final class ClientCoordinator implements ClientControlGateway {
     private int tabRefreshTickCounter = TAB_REPORT_INTERVAL_TICKS;
     private int entityReportTickCounter;
     private int lastScannedEntityCount;
+    private boolean playerUploadWasActive;
+    private UUID lastPlayerSubmitId;
     private long lastEntityOutboundEpoch = Long.MIN_VALUE;
     private long lastEntityFilterRevision = Long.MIN_VALUE;
     private boolean entityUploadWasActive;
@@ -158,6 +160,8 @@ public final class ClientCoordinator implements ClientControlGateway {
 
     public void resetReportClock() {
         reportTickCounter = 0;
+        playerUploadWasActive = false;
+        lastPlayerSubmitId = null;
         tabRefreshTickCounter = cachedTabPlayers.isEmpty() ? TAB_REPORT_INTERVAL_TICKS : 0;
         tabConnectionObserved = false;
         entityDeathTickCounter = 0;
@@ -486,6 +490,10 @@ public final class ClientCoordinator implements ClientControlGateway {
 
         ClientReportSnapshot snapshot = gameClient.captureReportSnapshot(false);
         if (snapshot.localPlayerId() == null || !snapshot.localPlayerAlive()) {
+            if (playerUploadWasActive && lastPlayerSubmitId != null) {
+                networkManager.clearPlayerSource(lastPlayerSubmitId);
+            }
+            playerUploadWasActive = false;
             return;
         }
 
@@ -495,6 +503,8 @@ public final class ClientCoordinator implements ClientControlGateway {
             players.put(player.id(), player.toProtocolMap());
         }
         networkManager.sendPlayersUpdate(submitPlayerId, players);
+        playerUploadWasActive = true;
+        lastPlayerSubmitId = submitPlayerId;
 
     }
 

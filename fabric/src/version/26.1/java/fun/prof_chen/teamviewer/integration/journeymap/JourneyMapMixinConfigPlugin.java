@@ -19,6 +19,7 @@ public final class JourneyMapMixinConfigPlugin implements IMixinConfigPlugin {
     private static final String WAYPOINT_RENDERER = "journeymap.client.render.ingame.WaypointRenderer";
     private static final String BEACON_RENDERER = "journeymap.client.render.ingame.WaypointBeaconRenderer";
     private static final String DECORATION_RENDERER = "journeymap.client.render.ingame.WaypointDecorationRenderer";
+    private static final String DRAW_WAYPOINT_STEP = "journeymap.client.render.draw.DrawWayPointStep";
     private boolean compatible;
 
     @Override
@@ -55,7 +56,9 @@ public final class JourneyMapMixinConfigPlugin implements IMixinConfigPlugin {
                             + "Ljourneymap/client/waypoint/ClientWaypointImpl;FJ[FFDDDLnet/minecraft/world/phys/Vec3;"
                             + "Lnet/minecraft/world/phys/Vec3;DDD)V", "showRotatingBeam", "showStaticBeam")
                     && hasMethodWithFields(DECORATION_RENDERER, "waypointsToDraw",
-                    "(Ljava/util/Collection;)Ljava/util/List;", "showRotatingBeam", "showStaticBeam");
+                    "(Ljava/util/Collection;)Ljava/util/List;", "showRotatingBeam", "showStaticBeam")
+                    && hasMethodWithFields(DRAW_WAYPOINT_STEP, "drawOffscreen",
+                    "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Ljava/awt/geom/Point2D;D)V");
         } catch (Throwable ignored) {
             return false;
         }

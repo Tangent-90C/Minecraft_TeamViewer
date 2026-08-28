@@ -208,6 +208,30 @@ class ClientCoordinatorTest {
     }
 
     @Test
+    void clearsPlayerSourceOnceWhenLocalPlayerStopsBeingReportable() {
+        Config config = new Config();
+        config.setUploadEntities(false);
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        network.connected = true;
+        network.negotiatedInterval = 1;
+        UUID localId = UUID.randomUUID();
+        FakeGameClientBridge game = new FakeGameClientBridge(snapshot(localId));
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+        coordinator.setEnabled(true);
+
+        coordinator.onEndClientTick();
+        assertEquals(1, network.playerReports.size());
+
+        game.snapshot = new ClientReportSnapshot(
+                localId, false, "minecraft:overworld", List.of(), List.of());
+        coordinator.onEndClientTick();
+        coordinator.onEndClientTick();
+
+        assertEquals(1, network.playerSourceClearCount);
+        assertEquals(localId, network.lastClearedPlayerSource);
+    }
+
+    @Test
     void adaptiveEntityCadenceCapsLargeWorldAtOncePerSecond() {
         Config config = new Config();
         config.setUploadEntities(true);
@@ -306,7 +330,7 @@ class ClientCoordinatorTest {
     }
 
     private static final class FakeGameClientBridge implements GameClientBridge {
-        private final ClientReportSnapshot snapshot;
+        private ClientReportSnapshot snapshot;
         private final EntityTargetSnapshot target;
         private final List<TabPlayerSnapshot> tabPlayers;
         private int captureCount;
@@ -438,7 +462,9 @@ class ClientCoordinatorTest {
         private int negotiatedInterval = 1;
         private int connectCount;
         private int disconnectCount;
+        private int playerSourceClearCount;
         private UUID lastSubmitPlayerId;
+        private UUID lastClearedPlayerSource;
         private final List<Map<UUID, Map<String, Object>>> playerReports = new ArrayList<>();
         private final List<Map<String, Map<String, Object>>> entityReports = new CopyOnWriteArrayList<>();
         private final List<List<Map<String, Object>>> tabReports = new ArrayList<>();
@@ -477,6 +503,12 @@ class ClientCoordinatorTest {
         public void sendPlayersUpdate(UUID submitPlayerId, Map<UUID, Map<String, Object>> players) {
             lastSubmitPlayerId = submitPlayerId;
             playerReports.add(players);
+        }
+
+        @Override
+        public void clearPlayerSource(UUID submitPlayerId) {
+            playerSourceClearCount++;
+            lastClearedPlayerSource = submitPlayerId;
         }
 
         @Override

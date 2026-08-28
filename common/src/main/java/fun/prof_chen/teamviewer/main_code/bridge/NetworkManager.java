@@ -52,6 +52,7 @@ import java.util.UUID;
 import java.util.Queue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -217,6 +218,7 @@ public class NetworkManager {
 	private static final long MAIN_THREAD_TASK_BUDGET_NANOS = 2_000_000L;
 	private static final int MAIN_THREAD_BACKLOG_WARN_THRESHOLD = 40;
 	private static final long MAIN_THREAD_BACKLOG_WARN_INTERVAL_MS = 5_000L;
+	private static final long DIGEST_SLOW_TASK_WARN_NANOS = 50_000_000L;
 
 	// 全局配置网关（由 loader 层注入）
 	private static ConfigGateway configGateway;
@@ -283,6 +285,17 @@ public class NetworkManager {
 	
 	// 重连调度器 - 负责连接失败后的自动重连
 	private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
+	private final ExecutorService digestExecutor = Executors.newSingleThreadExecutor(task -> {
+		Thread thread = new Thread(task, "teamviewrelay-digest");
+		thread.setDaemon(true);
+		return thread;
+	});
+	private final Object digestTaskLock = new Object();
+	private DigestStateSnapshot pendingDigestSnapshot;
+	private boolean digestTaskRunning;
+	private long digestRequestSequence;
+	private long digestMergedRequestCount;
+	private long inboundStateEpoch;
 	
 	// 连接状态标志 - 表示当前是否与服务器保持连接
 	private volatile boolean isConnected = false;
@@ -410,6 +423,33 @@ public class NetworkManager {
 
 	private record PlayerPatchChange(boolean remotePlayersChanged, boolean lastSeenPlayersChanged) {
 		private static final PlayerPatchChange NONE = new PlayerPatchChange(false, false);
+	}
+
+	private record DigestStateSnapshot(
+			long sequence,
+			long inboundStateEpoch,
+			long queuedAtNanos,
+			Map<String, String> serverHashes,
+			Map<UUID, Map<String, Object>> players,
+			Map<String, Map<String, Object>> entities,
+			Map<String, Map<String, Object>> waypoints,
+			Map<BattleChunkRefData, Map<String, Object>> battleChunks,
+			Map<String, Map<String, Object>> lastSeenPlayers,
+			String protocolVersion
+	) {
+	}
+
+	private record DigestComputation(
+			DigestStateSnapshot snapshot,
+			List<String> mismatchedScopes,
+			String localPlayerHash,
+			String localEntityHash,
+			String localWaypointHash,
+			BattleChunkDigestValues battleChunkDigests,
+			String localLastSeenPlayersHash,
+			long queueNanos,
+			long computeNanos
+	) {
 	}
 
 	/** Immutable normalized backend mark, including its precedence-bearing source. */
@@ -939,6 +979,16 @@ public class NetworkManager {
 		synchronized (outboundStateLock) {
 			outboundEpoch++;
 			sendSourceStateClearUnlocked(submitPlayerId, List.of("entities"));
+		}
+	}
+
+	public void clearPlayerSource(UUID submitPlayerId) {
+		synchronized (outboundStateLock) {
+			sendSourceStateClearUnlocked(submitPlayerId, List.of("players"));
+			lastSentPlayersSnapshot.clear();
+			lastPlayerObjectLivenessMs.clear();
+			pendingPlayerRefreshIds.clear();
+			lastPlayersPacketSentMs = 0L;
 		}
 	}
 
@@ -1474,6 +1524,7 @@ public class NetworkManager {
 
 		if (remotePlayersChanged) publishRemotePlayerSnapshots();
 		if (lastSeenPlayersChanged) publishLastSeenPlayerSnapshots();
+		inboundStateEpoch++;
 	}
 
 	/**
@@ -1610,6 +1661,7 @@ public class NetworkManager {
 
 		if (remotePlayersChanged) publishRemotePlayerSnapshots();
 		if (lastSeenPlayersChanged) publishLastSeenPlayerSnapshots();
+		inboundStateEpoch++;
 	}
 
 	private void replacePlayerMarks(Map<String, Object> marks) {
@@ -1745,57 +1797,141 @@ public class NetworkManager {
 			return;
 		}
 
-		String serverPlayerHash = packet.hashes.get("players");
-		String serverEntityHash = packet.hashes.get("entities");
-		String serverWaypointHash = packet.hashes.get("waypoints");
-		String serverBattleChunkHash = packet.hashes.get("battleChunks");
-		String serverLastSeenPlayersHash = packet.hashes.get("lastSeenPlayers");
+		DigestStateSnapshot snapshot = new DigestStateSnapshot(
+				++digestRequestSequence,
+				inboundStateEpoch,
+				System.nanoTime(),
+				new HashMap<>(packet.hashes),
+				new HashMap<>(remotePlayerDataCache),
+				new HashMap<>(remoteEntityDataCache),
+				new HashMap<>(remoteWaypointDataCache),
+				new HashMap<>(remoteBattleChunkDataCache),
+				new HashMap<>(lastSeenPlayerDataCache),
+				serverProtocolVersion
+		);
+		submitDigestSnapshot(snapshot);
+	}
 
-		String localPlayerHash = computePlayersDigest();
-		String localEntityHash = computeEntitiesDigest();
-		String localWaypointHash = computeWaypointDigest();
-		BattleChunkDigestValues battleChunkDigests = computeBattleChunkDigests();
-		String localBattleChunkHash = battleChunkDigests.official();
-		String localLastSeenPlayersHash = computeLastSeenPlayersDigest();
+	private void submitDigestSnapshot(DigestStateSnapshot snapshot) {
+		synchronized (digestTaskLock) {
+			if (digestTaskRunning) {
+				pendingDigestSnapshot = snapshot;
+				digestMergedRequestCount++;
+				return;
+			}
+			digestTaskRunning = true;
+		}
+		try {
+			digestExecutor.execute(() -> drainDigestSnapshots(snapshot));
+		} catch (RejectedExecutionException e) {
+			synchronized (digestTaskLock) {
+				digestTaskRunning = false;
+				pendingDigestSnapshot = null;
+			}
+			LOGGER.warn("Digest executor is unavailable: {}", e.getMessage());
+		}
+	}
 
+	private void drainDigestSnapshots(DigestStateSnapshot first) {
+		DigestStateSnapshot current = first;
+		while (current != null) {
+			DigestComputation computation = computeDigest(current);
+			enqueueMainThreadTask(() -> applyDigestComputation(computation));
+			synchronized (digestTaskLock) {
+				current = pendingDigestSnapshot;
+				pendingDigestSnapshot = null;
+				if (current == null) {
+					digestTaskRunning = false;
+				}
+			}
+		}
+	}
+
+	private DigestComputation computeDigest(DigestStateSnapshot snapshot) {
+		long startedAt = System.nanoTime();
+		String localPlayerHash = computePlayersDigest(snapshot.players());
+		String localEntityHash = stateDigest(snapshot.entities());
+		String localWaypointHash = stateDigest(snapshot.waypoints());
+		BattleChunkDigestValues battleChunkDigests = computeBattleChunkDigests(
+				snapshot.battleChunks(), snapshot.protocolVersion());
+		String localLastSeenPlayersHash = stateDigest(snapshot.lastSeenPlayers());
+		Map<String, String> server = snapshot.serverHashes();
 		List<String> mismatchedScopes = new ArrayList<>();
-		if (!Objects.equals(serverPlayerHash, localPlayerHash)) {
+		if (!Objects.equals(server.get("players"), localPlayerHash)) {
 			mismatchedScopes.add("players");
 		}
-		if (!Objects.equals(serverEntityHash, localEntityHash)) {
+		if (!Objects.equals(server.get("entities"), localEntityHash)) {
 			mismatchedScopes.add("entities");
 		}
-		if (!Objects.equals(serverWaypointHash, localWaypointHash)) {
+		if (!Objects.equals(server.get("waypoints"), localWaypointHash)) {
 			mismatchedScopes.add("waypoints");
 		}
+		String serverBattleChunkHash = server.get("battleChunks");
 		if (serverBattleChunkHash != null
-				&& !Objects.equals(serverBattleChunkHash, localBattleChunkHash)
+				&& !Objects.equals(serverBattleChunkHash, battleChunkDigests.official())
 				&& !Objects.equals(serverBattleChunkHash, battleChunkDigests.compatibility())) {
 			mismatchedScopes.add("battleChunks");
 		}
+		String serverLastSeenPlayersHash = server.get("lastSeenPlayers");
 		if (serverLastSeenPlayersHash != null
 				&& !Objects.equals(serverLastSeenPlayersHash, localLastSeenPlayersHash)) {
 			mismatchedScopes.add("lastSeenPlayers");
 		}
-
-		if (mismatchedScopes.isEmpty()) {
-			return;
-		}
-
-		LOGGER.warn(
-				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}, battleChunksCompatibility={}, lastSeenPlayers={}}} battleChunkDigestContract={}",
-				mismatchedScopes,
-				serverPlayerHash,
-				serverEntityHash,
-				serverWaypointHash,
-				serverBattleChunkHash,
-				serverLastSeenPlayersHash,
+		long finishedAt = System.nanoTime();
+		return new DigestComputation(
+				snapshot,
+				List.copyOf(mismatchedScopes),
 				localPlayerHash,
 				localEntityHash,
 				localWaypointHash,
-				localBattleChunkHash,
-				battleChunkDigests.compatibility(),
+				battleChunkDigests,
 				localLastSeenPlayersHash,
+				startedAt - snapshot.queuedAtNanos(),
+				finishedAt - startedAt
+		);
+	}
+
+	private void applyDigestComputation(DigestComputation computation) {
+		DigestStateSnapshot snapshot = computation.snapshot();
+		if (snapshot.sequence() != digestRequestSequence
+				|| snapshot.inboundStateEpoch() != inboundStateEpoch) {
+			LOGGER.debug("Discarded stale digest result sequence={} currentSequence={} stateEpoch={} currentStateEpoch={}",
+					snapshot.sequence(), digestRequestSequence,
+					snapshot.inboundStateEpoch(), inboundStateEpoch);
+			return;
+		}
+		long merged;
+		synchronized (digestTaskLock) {
+			merged = digestMergedRequestCount;
+		}
+		LOGGER.debug("Digest task completed sequence={} queueMs={} computeMs={} coalescedTotal={}",
+				snapshot.sequence(), computation.queueNanos() / 1_000_000.0,
+				computation.computeNanos() / 1_000_000.0, merged);
+		if (computation.computeNanos() >= DIGEST_SLOW_TASK_WARN_NANOS) {
+			LOGGER.warn("Slow TeamViewRelay digest computation: {} ms (queue={} ms, coalescedTotal={})",
+					computation.computeNanos() / 1_000_000.0,
+					computation.queueNanos() / 1_000_000.0, merged);
+		}
+		if (computation.mismatchedScopes().isEmpty()) {
+			return;
+		}
+
+		Map<String, String> server = snapshot.serverHashes();
+		BattleChunkDigestValues battleChunkDigests = computation.battleChunkDigests();
+		LOGGER.warn(
+				"Digest mismatch detected scopes={} server={{players={}, entities={}, waypoints={}, battleChunks={}, lastSeenPlayers={}}} local={{players={}, entities={}, waypoints={}, battleChunks={}, battleChunksCompatibility={}, lastSeenPlayers={}}} battleChunkDigestContract={}",
+				computation.mismatchedScopes(),
+				server.get("players"),
+				server.get("entities"),
+				server.get("waypoints"),
+				server.get("battleChunks"),
+				server.get("lastSeenPlayers"),
+				computation.localPlayerHash(),
+				computation.localEntityHash(),
+				computation.localWaypointHash(),
+				battleChunkDigests.official(),
+				battleChunkDigests.compatibility(),
+				computation.localLastSeenPlayersHash(),
 				battleChunkDigests.contract()
 		);
 
@@ -1803,7 +1939,6 @@ public class NetworkManager {
 		if (now - lastResyncRequestMs < RESYNC_COOLDOWN_MS) {
 			return;
 		}
-
 		lastResyncRequestMs = now;
 		sendResyncRequest("digest_mismatch");
 	}
@@ -3513,8 +3648,12 @@ public class NetworkManager {
 	}
 
 	private String computePlayersDigest() {
+		return computePlayersDigest(remotePlayerDataCache);
+	}
+
+	private String computePlayersDigest(Map<UUID, Map<String, Object>> playerData) {
 		Map<String, Map<String, Object>> state = new HashMap<>();
-		for (Map.Entry<UUID, Map<String, Object>> entry : remotePlayerDataCache.entrySet()) {
+		for (Map.Entry<UUID, Map<String, Object>> entry : playerData.entrySet()) {
 			state.put(entry.getKey().toString(), entry.getValue());
 		}
 		return stateDigest(state);
@@ -3529,14 +3668,20 @@ public class NetworkManager {
 	}
 
 	private BattleChunkDigestValues computeBattleChunkDigests() {
-		if (protocolAtLeast(serverProtocolVersion, "0.7.1")) {
-			List<BattleChunkRefData> refs = new ArrayList<>(remoteBattleChunkDataCache.keySet());
+		return computeBattleChunkDigests(remoteBattleChunkDataCache, serverProtocolVersion);
+	}
+
+	private BattleChunkDigestValues computeBattleChunkDigests(
+			Map<BattleChunkRefData, Map<String, Object>> battleChunks,
+			String protocolVersion) {
+		if (protocolAtLeast(protocolVersion, "0.7.1")) {
+			List<BattleChunkRefData> refs = new ArrayList<>(battleChunks.keySet());
 			Collections.sort(refs);
 			List<Object> entries = new ArrayList<>();
 			for (BattleChunkRefData ref : refs) {
 				Map<String, Object> structured = new HashMap<>();
 				structured.put("ref", battleChunkRefMap(ref));
-				structured.put("data", normalizeBattleChunkCoreData(remoteBattleChunkDataCache.get(ref)));
+				structured.put("data", normalizeBattleChunkCoreData(battleChunks.get(ref)));
 				entries.add(structured);
 			}
 			return new BattleChunkDigestValues(
@@ -3545,7 +3690,7 @@ public class NetworkManager {
 
 		Map<String, Map<String, Object>> official = new HashMap<>();
 		Map<String, Map<String, Object>> buggyRust = new HashMap<>();
-		for (Map.Entry<BattleChunkRefData, Map<String, Object>> entry : remoteBattleChunkDataCache.entrySet()) {
+		for (Map.Entry<BattleChunkRefData, Map<String, Object>> entry : battleChunks.entrySet()) {
 			BattleChunkRefData ref = entry.getKey();
 			Map<String, Object> data = normalizeBattleChunkCoreData(entry.getValue());
 			buggyRust.put(ref.identityKey(), data);
@@ -4044,5 +4189,6 @@ public class NetworkManager {
 		if (!removedWaypointIds.isEmpty()) {
 			notifyWaypointsDeleted(removedWaypointIds);
 		}
+		inboundStateEpoch++;
 	}
 }

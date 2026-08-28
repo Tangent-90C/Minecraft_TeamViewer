@@ -9,7 +9,8 @@
     "UIManagerMixin",
     "WaypointRendererMixin",
     "WaypointBeaconRendererMixin",
-    "WaypointDecorationRendererMixin"
+    "WaypointDecorationRendererMixin",
+    "DrawWayPointStepMixin"
   ],
   "injectors": {
     "defaultRequire": 0

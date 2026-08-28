@@ -180,6 +180,31 @@ class NetworkManagerTabDiffTest {
     }
 
     @Test
+    void digestComputationReturnsThroughMainThreadQueue() throws Exception {
+        RecordingSocket socket = new RecordingSocket();
+        NetworkManager manager = new NetworkManager(
+                new HashMap<UUID, RemotePlayerInfo>(), runtime(), (uri, options, listener) -> socket);
+        setField(manager, "socket", socket);
+        setField(manager, "isConnected", true);
+        setField(manager, "serverProtocolVersion", "0.7.1");
+        ProtocolPackets.DigestInboundPacket digest = new ProtocolPackets.DigestInboundPacket();
+        digest.hashes = Map.of(
+                "players", "mismatch",
+                "entities", "mismatch",
+                "waypoints", "mismatch");
+
+        invoke(manager, "handleDigest", ProtocolPackets.DigestInboundPacket.class, digest);
+        assertEquals(0, socket.payloads.size(), "digest work must not send from the caller thread");
+
+        for (int attempt = 0; attempt < 100 && socket.payloads.isEmpty(); attempt++) {
+            Thread.sleep(10L);
+            manager.pumpMainThreadTasks();
+        }
+        assertEquals(1, socket.payloads.size());
+        assertTrue(WireEnvelope.parseFrom(socket.payloads.get(0)).hasResyncRequest());
+    }
+
+    @Test
     void largeTabSnapshotSendsOnlyChangesAndDeletes() throws Exception {
         RecordingSocket socket = new RecordingSocket();
         NetworkManager manager = new NetworkManager(
