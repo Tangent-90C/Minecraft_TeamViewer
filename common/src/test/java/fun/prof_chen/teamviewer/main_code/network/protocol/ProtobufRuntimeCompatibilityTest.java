@@ -1,6 +1,13 @@
 package fun.prof_chen.teamviewer.main_code.network.protocol;
 
 import fun.prof_chen.teamviewer.main_code.network.proto.WireEnvelope;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerDirectoryEntry;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerDirectoryLookupChunk;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerDirectoryLookupResult;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerIdentityRecord;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerRelationKind;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerRelationQueryChunk;
+import fun.prof_chen.teamviewer.main_code.network.proto.PlayerRelationResult;
 import fun.prof_chen.teamviewer.main_code.network.proto.PlayerData;
 import fun.prof_chen.teamviewer.main_code.network.proto.PlayerDelta;
 import fun.prof_chen.teamviewer.main_code.network.proto.PlayerUpsert;
@@ -31,6 +38,105 @@ class ProtobufRuntimeCompatibilityTest {
     void generatedMessagesLoadWithPackagedRuntime() {
         WireEnvelope envelope = assertDoesNotThrow(WireEnvelope::getDefaultInstance);
         assertEquals(WireEnvelope.PayloadCase.PAYLOAD_NOT_SET, envelope.getPayloadCase());
+    }
+
+    @Test
+    void roundTripsExternalDirectoryAndRelationQueries() throws Exception {
+        ProtobufMessageCodec codec = new ProtobufMessageCodec();
+        ProtocolPackets.PlayerDirectoryLookupRequestPacket lookupRequest =
+                new ProtocolPackets.PlayerDirectoryLookupRequestPacket();
+        lookupRequest.requestId = "directory-request";
+        lookupRequest.playerIds = List.of("00000000-0000-0000-0000-000000000001");
+        lookupRequest.maxChunkEntries = 64;
+
+        WireEnvelope encodedLookupRequest = WireEnvelope.parseFrom(codec.encode(lookupRequest));
+        assertEquals(WireEnvelope.PayloadCase.PLAYER_DIRECTORY_LOOKUP_REQUEST,
+                encodedLookupRequest.getPayloadCase());
+        assertEquals(64, encodedLookupRequest.getPlayerDirectoryLookupRequest().getMaxChunkEntries());
+        WireEnvelope lookupEnvelope = WireEnvelope.newBuilder()
+                .setPlayerDirectoryLookupChunk(PlayerDirectoryLookupChunk.newBuilder()
+                        .setRequestId("directory-request")
+                        .addResults(PlayerDirectoryLookupResult.newBuilder()
+                                .setSelectorIndex(0)
+                                .addEntries(PlayerDirectoryEntry.newBuilder()
+                                        .setPlayer(PlayerIdentityRecord.newBuilder()
+                                                .setPlayerId("00000000-0000-0000-0000-000000000001")
+                                                .setUuid("00000000-0000-0000-0000-000000000001")
+                                                .setName("Alpha")
+                                                .addAliases("Old")
+                                                .addAffiliationIds("town-a"))
+                                        .setDatasetId("towns")
+                                        .setObservedAtUtcMs(42L)))
+                        .setChunkIndex(0)
+                        .setChunkCount(1)
+                        .setFinal(true))
+                .build();
+        ProtocolPackets.DecodedInboundMessage decodedLookup =
+                codec.decode(lookupEnvelope.toByteArray());
+        assertEquals("player_directory_lookup_chunk", decodedLookup.type);
+        assertEquals("directory-request",
+                ((ProtocolPackets.PlayerDirectoryLookupChunkInboundPacket) decodedLookup.packet).requestId);
+
+        ProtocolPackets.PlayerRelationQueryRequestPacket relationRequest =
+                new ProtocolPackets.PlayerRelationQueryRequestPacket();
+        relationRequest.requestId = "relation-request";
+        relationRequest.subjectPlayerId = "00000000-0000-0000-0000-000000000002";
+        relationRequest.targetPlayerIds = List.of("00000000-0000-0000-0000-000000000001");
+        relationRequest.maxChunkEntries = 64;
+
+        WireEnvelope relationRequestEnvelope = WireEnvelope.parseFrom(codec.encode(relationRequest));
+        assertEquals(WireEnvelope.PayloadCase.PLAYER_RELATION_QUERY_REQUEST,
+                relationRequestEnvelope.getPayloadCase());
+        assertEquals(64, relationRequestEnvelope.getPlayerRelationQueryRequest().getMaxChunkEntries());
+
+        WireEnvelope relationEnvelope = WireEnvelope.newBuilder()
+                .setPlayerRelationQueryChunk(PlayerRelationQueryChunk.newBuilder()
+                        .setRequestId("relation-request")
+                        .addResults(PlayerRelationResult.newBuilder()
+                                .setTarget(PlayerDirectoryEntry.newBuilder()
+                                        .setPlayer(PlayerIdentityRecord.newBuilder()
+                                                .setPlayerId("00000000-0000-0000-0000-000000000001")
+                                                .setUuid("00000000-0000-0000-0000-000000000001")
+                                                .setName("Alpha"))
+                                        .setDatasetId("towns"))
+                                .setRelation(PlayerRelationKind.PLAYER_RELATION_KIND_FRIENDLY))
+                        .setChunkIndex(0)
+                        .setChunkCount(1)
+                        .setFinal(true))
+                .build();
+        ProtocolPackets.DecodedInboundMessage decodedRelation =
+                codec.decode(relationEnvelope.toByteArray());
+        assertEquals("player_relation_query_chunk", decodedRelation.type);
+        Map<?, ?> result = (Map<?, ?>)
+                ((ProtocolPackets.PlayerRelationQueryChunkInboundPacket) decodedRelation.packet).results.get(0);
+        assertEquals("PLAYER_RELATION_KIND_FRIENDLY", result.get("relation"));
+    }
+
+    @Test
+    void decodesHandshakeRelationshipCapabilitiesAndReportPolicy() {
+        WireEnvelope envelope = WireEnvelope.newBuilder()
+                .setHandshakeAck(fun.prof_chen.teamviewer.main_code.network.proto.HandshakeAck.newBuilder()
+                        .setReady(true)
+                        .setRelationshipQuery(fun.prof_chen.teamviewer.main_code.network.proto.RelationshipQueryCapabilities.newBuilder()
+                                .setSupported(true)
+                                .setMaxSelectors(128)
+                                .setMaxChunkEntries(96))
+                        .setReportPolicy(fun.prof_chen.teamviewer.main_code.network.proto.PlayerReportPolicy.newBuilder()
+                                .addRecommendations(fun.prof_chen.teamviewer.main_code.network.proto.ReportRecommendation.newBuilder()
+                                        .setScope(fun.prof_chen.teamviewer.main_code.network.proto.ReportScope.REPORT_SCOPE_TAB)
+                                        .setMode(fun.prof_chen.teamviewer.main_code.network.proto.ReportRecommendationMode.REPORT_RECOMMENDATION_MODE_SUPPRESS))))
+                .build();
+
+        ProtocolPackets.DecodedInboundMessage decoded =
+                new ProtobufMessageCodec().decode(envelope.toByteArray());
+        ProtocolPackets.HandshakeAckInboundPacket handshake =
+                (ProtocolPackets.HandshakeAckInboundPacket) decoded.packet;
+        assertEquals(Boolean.TRUE, handshake.relationshipQuery.get("supported"));
+        assertEquals(128, handshake.relationshipQuery.get("maxSelectors"));
+        assertEquals("REPORT_RECOMMENDATION_MODE_SUPPRESS",
+                ((List<?>) handshake.reportPolicy.get("recommendations")).stream()
+                        .map(value -> ((Map<?, ?>) value).get("mode"))
+                        .findFirst().orElse(null));
     }
 
     @Test

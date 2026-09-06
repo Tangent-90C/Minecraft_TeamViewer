@@ -1,4 +1,5 @@
 plugins {
+    id 'base'
     id 'java-library'
     id 'maven-publish'
 }
@@ -88,7 +89,13 @@ sourceSets {
     }
 }
 
-tasks.register("generateProtoJava", Exec) {
+interface ProtoExecOperations {
+    void exec(Action<ExecSpec> action)
+}
+
+tasks.register("generateProtoJava") {
+    def execOperations = project.objects.newInstance(InternalProtoExecOperations)
+
     group = "build setup"
     description = "Generate Java protobuf sources from the shared protocol module."
 
@@ -96,14 +103,17 @@ tasks.register("generateProtoJava", Exec) {
     inputs.file(bufTemplateFile)
     outputs.dir(generatedProtoJavaDir)
 
-    doFirst {
-        if (!protoInputDir.isDirectory()) {
-            throw new GradleException("Shared protocol module not found at ${protoInputDir}")
+    doLast {
+        def transformedProto = file("${temporaryDir}/teamviewer/v1/teamviewer.proto")
+        transformedProto.parentFile.mkdirs()
+        execOperations.exec {
+            commandLine("sed", "s/ExternalDatasetDescriptor descriptor =/ExternalDatasetDescriptor dataset_descriptor =/", rootProject.file("third_party/TeamViewRelay-Protocol/proto/teamviewer/v1/teamviewer.proto").absolutePath)
+            standardOutput = transformedProto.newOutputStream()
         }
-        delete(generatedProtoJavaDir)
+        execOperations.exec {
+            commandLine(resolvedBufBinary, "generate", temporaryDir.absolutePath, "--template", bufTemplateFile.absolutePath, "-o", generatedProtoJavaDir.absolutePath)
+        }
     }
-
-    commandLine resolvedBufBinary, "generate", protoInputDir.absolutePath, "--template", bufTemplateFile.absolutePath
 }
 
 processResources {
@@ -236,5 +246,14 @@ publishing {
             artifactId = "${project.archives_base_name}-common"
             from components.java
         }
+    }
+}
+
+abstract class InternalProtoExecOperations implements ProtoExecOperations {
+    @javax.inject.Inject
+    abstract ExecOperations getExecOperations()
+
+    void exec(Action<ExecSpec> action) {
+        execOperations.exec(action)
     }
 }

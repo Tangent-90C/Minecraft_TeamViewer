@@ -42,6 +42,7 @@ import fun.prof_chen.teamviewer.main_code.plugin.PluginSnapshot;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,8 @@ import java.util.UUID;
 public final class ClientCoordinator implements ClientControlGateway {
     private static final int AUTO_CONNECT_MAX_RETRIES = 2;
     private static final long AUTO_CONNECT_RETRY_DELAY_MS = 10_000L;
-    private static final long MARK_DOUBLE_CLICK_MS = 300L;
+	private static final long MARK_DOUBLE_CLICK_MS = 300L;
+	private static final long EXTERNAL_RELATION_REFRESH_INTERVAL_MS = 15_000L;
     private static final int TAB_REPORT_INTERVAL_TICKS = 20;
     private static final double MARK_CANCEL_BASE_RADIUS = 1.2D;
     private static final double MARK_CANCEL_RADIUS_PER_BLOCK = 0.02D;
@@ -87,7 +89,9 @@ public final class ClientCoordinator implements ClientControlGateway {
     private WorldRenderPlanner worldRenderPlanner;
     private final HudPlanner hudPlanner = new HudPlanner();
     private boolean middlePressedLastTick;
-    private long lastMiddleClickAt;
+	private long lastMiddleClickAt;
+	private long lastExternalRelationRefreshAt;
+	private long observedExternalRelationGeneration;
     private LocalMarkedState localMarkedState = LocalMarkedState.inactive();
     private String lastMarkedFingerprint = "";
     private BattleMapCoordinator battleMapCoordinator;
@@ -609,7 +613,7 @@ public final class ClientCoordinator implements ClientControlGateway {
         refreshPlayerRelations(false);
     }
 
-    private void refreshPlayerRelations(boolean force) {
+	private void refreshPlayerRelations(boolean force) {
         if (playerRelationCoordinator != null) {
             long historyGeneration = networkManager.getTabHistoryStateGeneration();
             if (historyGeneration != observedTabHistoryStateGeneration) {
@@ -633,9 +637,39 @@ public final class ClientCoordinator implements ClientControlGateway {
             playerRelationsDirty = false;
             if (relationsChanged && remotePlayerProjectionCoordinator != null) {
                 remotePlayerProjectionCoordinator.invalidate();
-            }
-        }
-    }
+			}
+		}
+		refreshExternalRelations();
+	}
+
+	private void refreshExternalRelations() {
+		if (!networkManager.isConnected()) return;
+		long generation = networkManager.getExternalRelationStateGeneration();
+		if (generation != observedExternalRelationGeneration) {
+			observedExternalRelationGeneration = generation;
+			lastExternalRelationRefreshAt = 0L;
+		}
+		long now = System.currentTimeMillis();
+		if (lastExternalRelationRefreshAt > 0L
+				&& now - lastExternalRelationRefreshAt < EXTERNAL_RELATION_REFRESH_INTERVAL_MS) {
+			return;
+		}
+		lastExternalRelationRefreshAt = now;
+		Set<UUID> playerIds = new HashSet<>();
+		UUID localPlayerId = networkManager.getLocalPlayerId();
+		if (localPlayerId != null) {
+			playerIds.add(localPlayerId);
+		}
+		networkManager.getRemotePlayerState().keySet().forEach(playerIds::add);
+		networkManager.getLastSeenPlayerState().keySet().forEach(playerIds::add);
+		cachedTabPlayers.stream().map(TabPlayerSnapshot::playerId).forEach(id -> {
+			try {
+				playerIds.add(UUID.fromString(id));
+			} catch (IllegalArgumentException ignored) {
+			}
+		});
+		networkManager.requestExternalRelationsByUuids(playerIds);
+	}
 
     private void handleMiddleMouseDoubleClick() {
         boolean pressed = gameClient.isGameplayInputAvailable() && gameClient.isMiddleMouseButtonDown();
@@ -798,19 +832,23 @@ public final class ClientCoordinator implements ClientControlGateway {
     }
 
     @Override
-    public PlayerRelationView resolvePlayerRelation(UUID playerId) {
-        NetworkManager.PlayerMarkView backend = networkManager.getPlayerMark(playerId);
-        if (backend != null && !backend.automatic()) {
-            return resolvedRelation(backend.relation());
-        }
-        PlayerRelation local = playerRelationCoordinator == null
-                ? null : playerRelationCoordinator.relation(playerId);
-        if (local != null) {
-            return resolvedRelation(local);
-        }
-        if (backend != null) {
-            return resolvedRelation(backend.relation());
-        }
+	public PlayerRelationView resolvePlayerRelation(UUID playerId) {
+		NetworkManager.PlayerMarkView backend = networkManager.getPlayerMark(playerId);
+		if (backend != null && !backend.automatic()) {
+			return resolvedRelation(backend.relation());
+		}
+		PlayerRelation local = playerRelationCoordinator == null
+				? null : playerRelationCoordinator.relation(playerId);
+		if (local != null) {
+			return resolvedRelation(local);
+		}
+		PlayerRelation external = externalRelation(playerId);
+		if (external != null) {
+			return resolvedRelation(external);
+		}
+		if (backend != null) {
+			return resolvedRelation(backend.relation());
+		}
         return new PlayerRelationView(PlayerRelation.NEUTRAL, config.getNeutralTeamColor(), false);
     }
 
@@ -823,12 +861,16 @@ public final class ClientCoordinator implements ClientControlGateway {
         }
         PlayerRelation local = playerRelationCoordinator == null
                 ? null : playerRelationCoordinator.relation(playerId);
-        if (local != null) {
-            return interaction(local, true, PlayerRelationOrigin.LOCAL_CLASSIFIER);
-        }
-        if (backend != null) {
-            return interaction(backend.relation(), true, PlayerRelationOrigin.RELAY_AUTOMATIC);
-        }
+		if (local != null) {
+			return interaction(local, true, PlayerRelationOrigin.LOCAL_CLASSIFIER);
+		}
+		PlayerRelation external = externalRelation(playerId);
+		if (external != null) {
+			return interaction(external, true, PlayerRelationOrigin.RELAY_AUTOMATIC);
+		}
+		if (backend != null) {
+			return interaction(backend.relation(), true, PlayerRelationOrigin.RELAY_AUTOMATIC);
+		}
         return PlayerInteractionState.unresolved();
     }
 
@@ -842,14 +884,35 @@ public final class ClientCoordinator implements ClientControlGateway {
         return new PlayerInteractionState(relation, resolved, origin, attackability);
     }
 
-    private PlayerRelationView resolvedRelation(PlayerRelation relation) {
+	private PlayerRelationView resolvedRelation(PlayerRelation relation) {
         int color = switch (relation) {
             case FRIENDLY -> config.getFriendlyTeamColor();
             case ENEMY -> config.getEnemyTeamColor();
             case NEUTRAL -> config.getNeutralTeamColor();
         };
-        return new PlayerRelationView(relation, color, true);
-    }
+		return new PlayerRelationView(relation, color, true);
+	}
+
+	private PlayerRelation externalRelation(UUID playerId) {
+		if (playerId == null) return null;
+		return networkManager.getExternalRelations().stream()
+				.filter(entry -> playerId.equals(entry.getKey()))
+				.findFirst()
+				.map(entry -> externalRelation(entry.getValue()))
+				.orElse(null);
+	}
+
+	private PlayerRelation externalRelation(Map<String, Object> relationData) {
+		Object relation = relationData.get("relation");
+		return switch (String.valueOf(relation)) {
+			case "PLAYER_RELATION_KIND_FRIENDLY" -> PlayerRelation.FRIENDLY;
+			case "PLAYER_RELATION_KIND_HOSTILE",
+					"PLAYER_RELATION_KIND_CONFLICT" -> PlayerRelation.ENEMY;
+			case "PLAYER_RELATION_KIND_NEUTRAL",
+					"PLAYER_RELATION_KIND_UNKNOWN" -> PlayerRelation.NEUTRAL;
+			default -> null;
+		};
+	}
 
     private void clearRuntimeState() {
         entityReportPipeline.discardPending();

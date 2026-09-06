@@ -176,6 +176,24 @@ class ClientCoordinatorTest {
     }
 
     @Test
+    void externalRelationsPrecedeAutomaticBackendMarks() {
+        Config config = new Config();
+        RecordingNetworkManager network = new RecordingNetworkManager();
+        UUID localId = UUID.randomUUID();
+        UUID remoteId = UUID.randomUUID();
+        network.externalRelations = List.of(Map.entry(remoteId, Map.of(
+                "relation", "PLAYER_RELATION_KIND_HOSTILE")));
+        network.marks.put(remoteId, new NetworkManager.PlayerMarkView(PlayerRelation.FRIENDLY, "auto"));
+        FakeGameClientBridge game = new FakeGameClientBridge(snapshot(localId));
+        ClientCoordinator coordinator = new ClientCoordinator(config, network, game);
+
+        assertEquals(PlayerRelation.ENEMY, coordinator.resolvePlayerRelation(remoteId).relation());
+
+        network.marks.put(remoteId, new NetworkManager.PlayerMarkView(PlayerRelation.NEUTRAL, "manual"));
+        assertEquals(PlayerRelation.NEUTRAL, coordinator.resolvePlayerRelation(remoteId).relation());
+    }
+
+    @Test
     void sendsVersionNeutralSnapshotsAtNegotiatedInterval() throws Exception {
         Config config = new Config();
         config.setUpdateInterval(20);
@@ -469,6 +487,7 @@ class ClientCoordinatorTest {
         private final List<Map<String, Map<String, Object>>> entityReports = new CopyOnWriteArrayList<>();
         private final List<List<Map<String, Object>>> tabReports = new ArrayList<>();
         private final Map<UUID, PlayerMarkView> marks = new HashMap<>();
+        private List<Map.Entry<UUID, Map<String, Object>>> externalRelations = List.of();
 
         private RecordingNetworkManager() {
             super(new HashMap<UUID, RemotePlayerInfo>(), runtime(), noTransport());
@@ -492,6 +511,21 @@ class ClientCoordinatorTest {
         @Override
         public PlayerMarkView getPlayerMark(UUID playerId) {
             return marks.get(playerId);
+        }
+
+        @Override
+        public List<Map.Entry<UUID, Map<String, Object>>> getExternalRelations() {
+            return externalRelations;
+        }
+
+        @Override
+        public long getExternalRelationStateGeneration() {
+            return externalRelations.hashCode();
+        }
+
+        @Override
+        public UUID getLocalPlayerId() {
+            return null;
         }
 
         @Override

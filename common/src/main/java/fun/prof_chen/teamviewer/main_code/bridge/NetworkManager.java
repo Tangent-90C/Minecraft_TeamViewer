@@ -50,6 +50,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Queue;
+import java.util.stream.Collectors;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
@@ -219,6 +220,7 @@ public class NetworkManager {
 	private static final int MAIN_THREAD_BACKLOG_WARN_THRESHOLD = 40;
 	private static final long MAIN_THREAD_BACKLOG_WARN_INTERVAL_MS = 5_000L;
 	private static final long DIGEST_SLOW_TASK_WARN_NANOS = 50_000_000L;
+	private static final long RELATION_RETRY_MS = 30_000L;
 
 	// 全局配置网关（由 loader 层注入）
 	private static ConfigGateway configGateway;
@@ -254,6 +256,18 @@ public class NetworkManager {
 	private long tabHistoryRequestSequence;
 	private int tabHistoryMaxLookupSelectors = 128;
 	private boolean tabHistorySupported;
+	private final Map<String, Map<String, Object>> externalRelationCache = new HashMap<>();
+	private final Map<String, Set<UUID>> externalRelationRequests = new HashMap<>();
+	private final Set<UUID> pendingExternalRelationIds = new HashSet<>();
+	private final Set<UUID> unavailableExternalRelationIds = new HashSet<>();
+	private final Map<UUID, Long> unavailableExternalRelationAt = new HashMap<>();
+	private volatile List<Map.Entry<UUID, Map<String, Object>>> publishedExternalRelations = List.of();
+	private volatile long externalRelationStateGeneration;
+	private long externalRelationRequestSequence;
+	private int externalRelationMaxSelectors = 256;
+	private int externalRelationMaxChunkEntries = 256;
+	private boolean externalRelationSupported;
+	private boolean suppressTabReports;
 	
 	// 远程实体数据缓存 - 存储世界中实体的位置和属性
 	private final Map<String, Map<String, Object>> remoteEntityDataCache = new HashMap<>();
@@ -1016,6 +1030,7 @@ public class NetworkManager {
 		if (socket == null || !isConnected || submitPlayerId == null || tabPlayers == null) {
 			return;
 		}
+		if (suppressTabReports) return;
 
 		try {
 			Map<String, Map<String, Object>> currentSnapshot = buildTabPlayersSnapshot(tabPlayers);
@@ -1430,6 +1445,18 @@ public class NetworkManager {
 
 			if ("tab_history_lookup_chunk".equals(decoded.type)) {
 				handleTabHistoryLookupChunk((ProtocolPackets.TabHistoryLookupChunkInboundPacket) decoded.packet);
+				return;
+			}
+
+			if ("player_directory_lookup_chunk".equals(decoded.type)) {
+				handlePlayerDirectoryLookupChunk(
+						(ProtocolPackets.PlayerDirectoryLookupChunkInboundPacket) decoded.packet);
+				return;
+			}
+
+			if ("player_relation_query_chunk".equals(decoded.type)) {
+				handlePlayerRelationQueryChunk(
+						(ProtocolPackets.PlayerRelationQueryChunkInboundPacket) decoded.packet);
 				return;
 			}
 
@@ -2810,6 +2837,7 @@ public class NetworkManager {
 		if (packet.reportIntervalTicks != null && packet.reportIntervalTicks > 0) {
 			negotiatedReportIntervalTicks = packet.reportIntervalTicks;
 		}
+		initializeExternalRelations(packet);
 
 		int advertisedPlayerTimeoutSec = packet.playerTimeoutSec != null && packet.playerTimeoutSec > 0
 				? packet.playerTimeoutSec
@@ -2844,6 +2872,48 @@ public class NetworkManager {
 				battleChunkKeepaliveIntervalMs,
 				advertisedBattleChunkTimeoutSec
 		);
+	}
+
+	private void initializeExternalRelations(ProtocolPackets.HandshakeAckInboundPacket packet) {
+		Map<String, Object> capabilities = objectMap(packet.relationshipQuery);
+		externalRelationSupported = protocolAtLeast(serverProtocolVersion, "0.8.0")
+				&& Boolean.TRUE.equals(capabilities.get("supported"))
+				&& configGateway != null
+				&& !"off".equals(configGateway.getExternalRelationSyncMode());
+		externalRelationMaxSelectors = Math.max(1, Math.min(
+				toIntegerOrNull(capabilities.get("maxSelectors")) == null
+						? 256 : toIntegerOrNull(capabilities.get("maxSelectors")), 512));
+		externalRelationMaxChunkEntries = Math.max(1, Math.min(
+				toIntegerOrNull(capabilities.get("maxChunkEntries")) == null
+						? 256 : toIntegerOrNull(capabilities.get("maxChunkEntries")), 512));
+		suppressTabReports = reportPolicySuppressesTab(packet.reportPolicy);
+		LOGGER.info(
+				"External relations initialized: supported={}, maxSelectors={}, maxChunkEntries={}, suppressTab={}",
+				externalRelationSupported,
+				externalRelationMaxSelectors,
+				externalRelationMaxChunkEntries,
+				suppressTabReports
+		);
+	}
+
+	private static boolean reportPolicySuppressesTab(Map<String, Object> policy) {
+		if (policy == null) return false;
+		Object recommendations = policy.get("recommendations");
+		if (!(recommendations instanceof Collection<?> values)) return false;
+		for (Object raw : values) {
+			Map<String, Object> recommendation = objectMap(raw);
+			if (!"REPORT_SCOPE_TAB".equals(recommendation.get("scope"))) continue;
+			return "REPORT_RECOMMENDATION_MODE_SUPPRESS".equals(recommendation.get("mode"));
+		}
+		return false;
+	}
+
+	public boolean isSuppressTabReports() {
+		return suppressTabReports;
+	}
+
+	public UUID getLocalPlayerId() {
+		return runtimeGateway.getLocalPlayerId();
 	}
 
 	private void initializeTabHistory(ProtocolPackets.HandshakeAckInboundPacket packet) {
@@ -3045,6 +3115,162 @@ public class NetworkManager {
 		long candidate = Math.round(timeoutMs * 0.6);
 		long upperBound = Math.max(1_000L, timeoutMs - 1_000L);
 		return Math.max(1_000L, Math.min(candidate, upperBound));
+	}
+
+	public void requestExternalRelationsByUuids(Collection<UUID> playerIds) {
+		requestExternalRelations(playerIds, true);
+	}
+
+	private void requestExternalRelations(Collection<UUID> playerIds, boolean includeRelations) {
+		if (!isConnected || !externalRelationSupported || playerIds == null || playerIds.isEmpty()) return;
+		long now = System.currentTimeMillis();
+		Set<UUID> alreadyPending = new HashSet<>(pendingExternalRelationIds);
+		List<UUID> missing = playerIds.stream()
+				.filter(Objects::nonNull)
+				.filter(id -> !externalRelationCache.containsKey(id.toString()))
+				.filter(id -> !alreadyPending.contains(id))
+				.filter(id -> !unavailableExternalRelationIds.contains(id)
+						|| now - unavailableExternalRelationAt.getOrDefault(id, 0L) >= RELATION_RETRY_MS)
+				.sorted(Comparator.comparing(UUID::toString))
+				.distinct()
+				.toList();
+		if (missing.isEmpty()) return;
+		UUID localPlayerId = runtimeGateway.getLocalPlayerId();
+		for (int offset = 0; offset < missing.size(); offset += externalRelationMaxSelectors) {
+			List<UUID> batch = missing.subList(
+					offset, Math.min(missing.size(), offset + externalRelationMaxSelectors));
+			pendingExternalRelationIds.addAll(batch);
+			if (includeRelations && localPlayerId != null) {
+				sendRelationQuery(localPlayerId, batch);
+			} else {
+				sendDirectoryLookup(batch);
+			}
+		}
+	}
+
+	private void sendRelationQuery(UUID subject, List<UUID> targetIds) {
+		ProtocolPackets.PlayerRelationQueryRequestPacket request =
+				new ProtocolPackets.PlayerRelationQueryRequestPacket();
+		request.requestId = "mod-relation-" + (++externalRelationRequestSequence);
+		request.subjectPlayerId = subject.toString();
+		request.targetPlayerIds = targetIds.stream().map(UUID::toString).toList();
+		request.maxChunkEntries = externalRelationMaxChunkEntries;
+		externalRelationRequests.put(request.requestId, Set.copyOf(targetIds));
+		sendPacket(request);
+	}
+
+	private void sendDirectoryLookup(List<UUID> playerIds) {
+		ProtocolPackets.PlayerDirectoryLookupRequestPacket request =
+				new ProtocolPackets.PlayerDirectoryLookupRequestPacket();
+		request.requestId = "mod-directory-" + (++externalRelationRequestSequence);
+		request.playerIds = playerIds.stream().map(UUID::toString).toList();
+		request.maxChunkEntries = externalRelationMaxChunkEntries;
+		externalRelationRequests.put(request.requestId, Set.copyOf(playerIds));
+		sendPacket(request);
+	}
+
+	private void handlePlayerDirectoryLookupChunk(
+			ProtocolPackets.PlayerDirectoryLookupChunkInboundPacket packet) {
+		if (packet == null || packet.errorCode != null) {
+			markExternalRelationUnavailable(packet == null ? null : packet.requestId);
+			return;
+		}
+		for (Map<String, Object> result : packet.results == null
+				? List.<Map<String, Object>>of() : packet.results) {
+			if (result.get("entries") instanceof Collection<?> entries) {
+				for (Object raw : entries) applyExternalDirectoryEntry(raw);
+			}
+		}
+		finishExternalRelationRequest(packet.requestId, Boolean.TRUE.equals(packet.finalChunk));
+	}
+
+	private void handlePlayerRelationQueryChunk(
+			ProtocolPackets.PlayerRelationQueryChunkInboundPacket packet) {
+		if (packet == null || packet.errorCode != null) {
+			markExternalRelationUnavailable(packet == null ? null : packet.requestId);
+			return;
+		}
+		boolean changed = false;
+		for (Map<String, Object> raw : packet.results == null
+				? List.<Map<String, Object>>of() : packet.results) {
+			Map<String, Object> target = objectMap(raw.get("target"));
+			Map<String, Object> player = objectMap(target.get("player"));
+			UUID playerId = parseExternalRelationUuid(player.get("uuid"), player.get("playerId"));
+			if (playerId == null) continue;
+			Map<String, Object> stored = new HashMap<>(raw);
+			stored.put("stale", target.get("stale"));
+			stored.put("target", new HashMap<>(target));
+			changed |= !Objects.equals(externalRelationCache.put(playerId.toString(), stored), stored);
+			unavailableExternalRelationIds.remove(playerId);
+			unavailableExternalRelationAt.remove(playerId);
+		}
+		if (changed) publishExternalRelations();
+		finishExternalRelationRequest(packet.requestId, Boolean.TRUE.equals(packet.finalChunk));
+	}
+
+	private void applyExternalDirectoryEntry(Object raw) {
+		Map<String, Object> entry = objectMap(raw);
+		Map<String, Object> player = objectMap(entry.get("player"));
+		UUID playerId = parseExternalRelationUuid(player.get("uuid"), player.get("playerId"));
+		if (playerId == null) return;
+		Map<String, Object> stored = new HashMap<>();
+		stored.put("target", new HashMap<>(entry));
+		stored.put("relation", "PLAYER_RELATION_KIND_UNKNOWN");
+		stored.put("stale", entry.get("stale"));
+		if (!Objects.equals(externalRelationCache.put(playerId.toString(), stored), stored)) {
+			publishExternalRelations();
+		}
+	}
+
+	private UUID parseExternalRelationUuid(Object uuidValue, Object playerIdValue) {
+		String uuid = normalizeUuidText(uuidValue);
+		if (uuid == null) uuid = normalizeNullableText(playerIdValue);
+		if (uuid == null) return null;
+		try {
+			return UUID.fromString(uuid);
+		} catch (IllegalArgumentException ignored) {
+			return null;
+		}
+	}
+
+	private void markExternalRelationUnavailable(String requestId) {
+		Set<UUID> requested = requestId == null ? null : externalRelationRequests.remove(requestId);
+		if (requested == null) return;
+		long now = System.currentTimeMillis();
+		requested.forEach(playerId -> {
+			unavailableExternalRelationIds.add(playerId);
+			unavailableExternalRelationAt.put(playerId, now);
+		});
+		pendingExternalRelationIds.removeAll(requested);
+	}
+
+	private void finishExternalRelationRequest(String requestId, boolean complete) {
+		if (requestId == null) return;
+		if (!complete) return;
+		Set<UUID> requested = externalRelationRequests.remove(requestId);
+		if (requested == null) return;
+		pendingExternalRelationIds.removeAll(requested);
+		unavailableExternalRelationIds.removeAll(requested);
+		for (UUID playerId : requested) {
+			unavailableExternalRelationAt.remove(playerId);
+		}
+	}
+
+	public List<Map.Entry<UUID, Map<String, Object>>> getExternalRelations() {
+		return publishedExternalRelations;
+	}
+
+	public long getExternalRelationStateGeneration() {
+		return externalRelationStateGeneration;
+	}
+
+	private void publishExternalRelations() {
+		List<Map.Entry<UUID, Map<String, Object>>> next = externalRelationCache.entrySet().stream()
+				.map(entry -> Map.entry(UUID.fromString(entry.getKey()), Map.copyOf(entry.getValue())))
+				.collect(Collectors.toCollection(ArrayList::new));
+		next.sort(Comparator.comparing(Map.Entry::getKey));
+		publishedExternalRelations = List.copyOf(next);
+		externalRelationStateGeneration++;
 	}
 
 	private void handleReportRateHint(ProtocolPackets.ReportRateHintInboundPacket packet) {
@@ -4106,6 +4332,12 @@ public class NetworkManager {
 		completedTabHistoryLookups.clear();
 		dirtyTabHistoryLookupRequests.clear();
 		tabHistorySupported = false;
+		externalRelationRequests.clear();
+		pendingExternalRelationIds.clear();
+		unavailableExternalRelationIds.clear();
+		unavailableExternalRelationAt.clear();
+		externalRelationSupported = false;
+		suppressTabReports = false;
 	}
 
 	public int getNegotiatedReportIntervalTicks() {
@@ -4172,6 +4404,13 @@ public class NetworkManager {
 		tabHistoryLookupRequests.clear();
 		completedTabHistoryLookups.clear();
 		dirtyTabHistoryLookupRequests.clear();
+		externalRelationCache.clear();
+		externalRelationRequests.clear();
+		pendingExternalRelationIds.clear();
+		unavailableExternalRelationIds.clear();
+		unavailableExternalRelationAt.clear();
+		publishedExternalRelations = List.of();
+		externalRelationStateGeneration++;
 		if (!publishedRemotePlayerState.isEmpty()) {
 			publishedRemotePlayerState = Map.of();
 			remotePlayerStateGeneration++;

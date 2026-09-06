@@ -39,6 +39,8 @@ public final class ProtocolPackets {
 		public Integer entityTimeoutSec;
 		public Integer battleChunkTimeoutSec;
 		public Map<String, Object> tabHistory;
+		public Map<String, Object> relationshipQuery;
+		public Map<String, Object> reportPolicy;
 	}
 
 	public static class TabHistoryDigestInboundPacket extends BaseInboundPacket {
@@ -66,6 +68,40 @@ public final class ProtocolPackets {
 		public Integer chunkCount;
 		public Boolean finalChunk;
 		public String errorCode;
+	}
+
+	public static class PlayerDirectoryLookupChunkInboundPacket extends BaseInboundPacket {
+		public String requestId;
+		public List<Map<String, Object>> results;
+		public Integer chunkIndex;
+		public Integer chunkCount;
+		public Boolean finalChunk;
+		public String errorCode;
+	}
+
+	public static class PlayerRelationQueryChunkInboundPacket extends BaseInboundPacket {
+		public String requestId;
+		public List<Map<String, Object>> subjects;
+		public List<Map<String, Object>> results;
+		public Integer chunkIndex;
+		public Integer chunkCount;
+		public Boolean finalChunk;
+		public String errorCode;
+	}
+
+	public static class PlayerDirectoryLookupRequestPacket {
+		public final String type = "player_directory_lookup_request";
+		public String requestId;
+		public List<String> playerIds = List.of();
+		public Integer maxChunkEntries;
+	}
+
+	public static class PlayerRelationQueryRequestPacket {
+		public final String type = "player_relation_query_request";
+		public String requestId;
+		public String subjectPlayerId;
+		public List<String> targetPlayerIds = List.of();
+		public Integer maxChunkEntries;
 	}
 
 	public static class SnapshotFullInboundPacket extends BaseInboundPacket {

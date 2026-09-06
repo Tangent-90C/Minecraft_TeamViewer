@@ -159,6 +159,29 @@ public final class ProtobufMessageCodec implements MessageCodec {
 				envelope.setTabHistoryLookupRequest(builder.build());
 				return envelope.build().toByteArray();
 			}
+			if (packet instanceof ProtocolPackets.PlayerDirectoryLookupRequestPacket lookup) {
+				PlayerDirectoryLookupRequest.Builder builder = PlayerDirectoryLookupRequest.newBuilder()
+						.setRequestId(defaultString(lookup.requestId));
+				for (String playerId : cleanStringList(lookup.playerIds)) {
+					builder.addSelectors(PlayerSelector.newBuilder().setPlayerId(playerId).build());
+				}
+				setOptionalInt(builder::setMaxChunkEntries, lookup.maxChunkEntries);
+				envelope.setPlayerDirectoryLookupRequest(builder.build());
+				return envelope.build().toByteArray();
+			}
+			if (packet instanceof ProtocolPackets.PlayerRelationQueryRequestPacket relation) {
+				PlayerRelationQueryRequest.Builder builder = PlayerRelationQueryRequest.newBuilder()
+						.setRequestId(defaultString(relation.requestId))
+						.setSubject(PlayerSelector.newBuilder()
+								.setPlayerId(defaultString(relation.subjectPlayerId))
+								.build());
+				for (String playerId : cleanStringList(relation.targetPlayerIds)) {
+					builder.addTargets(PlayerSelector.newBuilder().setPlayerId(playerId).build());
+				}
+				setOptionalInt(builder::setMaxChunkEntries, relation.maxChunkEntries);
+				envelope.setPlayerRelationQueryRequest(builder.build());
+				return envelope.build().toByteArray();
+			}
 			throw new IllegalArgumentException("Unsupported protobuf packet type: " + packet);
 		} catch (Exception e) {
 			throw new IllegalArgumentException("Failed to encode protobuf payload", e);
@@ -248,6 +271,12 @@ public final class ProtobufMessageCodec implements MessageCodec {
 						"tab_history_sync_chunk", decodeTabHistorySyncChunk(envelope.getTabHistorySyncChunk()));
 				case TAB_HISTORY_LOOKUP_CHUNK -> new ProtocolPackets.DecodedInboundMessage(
 						"tab_history_lookup_chunk", decodeTabHistoryLookupChunk(envelope.getTabHistoryLookupChunk()));
+				case PLAYER_DIRECTORY_LOOKUP_CHUNK -> new ProtocolPackets.DecodedInboundMessage(
+						"player_directory_lookup_chunk",
+						decodePlayerDirectoryLookupChunk(envelope.getPlayerDirectoryLookupChunk()));
+				case PLAYER_RELATION_QUERY_CHUNK -> new ProtocolPackets.DecodedInboundMessage(
+						"player_relation_query_chunk",
+						decodePlayerRelationQueryChunk(envelope.getPlayerRelationQueryChunk()));
 				default -> throw new IllegalArgumentException("Unsupported protobuf payload case: " + envelope.getPayloadCase());
 			};
 		} catch (Exception e) {
@@ -494,6 +523,9 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.entityTimeoutSec = message.hasEntityTimeoutSec() ? message.getEntityTimeoutSec() : null;
 		packet.battleChunkTimeoutSec = message.hasBattleChunkTimeoutSec() ? message.getBattleChunkTimeoutSec() : null;
 		packet.tabHistory = message.hasTabHistory() ? tabHistoryCapabilitiesToMap(message.getTabHistory()) : null;
+		packet.relationshipQuery = message.hasRelationshipQuery()
+				? relationshipQueryCapabilitiesToMap(message.getRelationshipQuery()) : null;
+		packet.reportPolicy = message.hasReportPolicy() ? reportPolicyToMap(message.getReportPolicy()) : null;
 		return packet;
 	}
 
@@ -549,6 +581,32 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		result.put("maxLookupSelectors", value.getMaxLookupSelectors());
 		result.put("retentionDays", value.getRetentionDays());
 		result.put("deltaRetentionDays", value.getDeltaRetentionDays());
+		return result;
+	}
+
+	private Map<String, Object> relationshipQueryCapabilitiesToMap(RelationshipQueryCapabilities value) {
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("supported", value.getSupported());
+		result.put("maxSelectors", value.getMaxSelectors());
+		result.put("defaultChunkEntries", value.getDefaultChunkEntries());
+		result.put("maxChunkEntries", value.getMaxChunkEntries());
+		result.put("maxChunkBytes", value.getMaxChunkBytes());
+		result.put("relationKinds", value.getRelationKindsList().stream().map(Enum::name).toList());
+		return result;
+	}
+
+	private Map<String, Object> reportPolicyToMap(PlayerReportPolicy value) {
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("recommendations", value.getRecommendationsList().stream().map(recommendation -> {
+			Map<String, Object> mapped = new LinkedHashMap<>();
+			mapped.put("scope", recommendation.getScope().name());
+			mapped.put("mode", recommendation.getMode().name());
+			mapped.put("reason", recommendation.getReason());
+			if (recommendation.hasReplacementDatasetId()) {
+				mapped.put("replacementDatasetId", recommendation.getReplacementDatasetId());
+			}
+			return mapped;
+		}).toList());
 		return result;
 	}
 
@@ -649,6 +707,35 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		packet.reportIntervalTicks = message.getReportIntervalTicks();
 		packet.broadcastHz = message.getBroadcastHz();
 		packet.reason = message.hasReason() ? message.getReason() : null;
+		return packet;
+	}
+
+	private ProtocolPackets.PlayerDirectoryLookupChunkInboundPacket decodePlayerDirectoryLookupChunk(
+			PlayerDirectoryLookupChunk message) {
+		ProtocolPackets.PlayerDirectoryLookupChunkInboundPacket packet =
+				new ProtocolPackets.PlayerDirectoryLookupChunkInboundPacket();
+		packet.type = "player_directory_lookup_chunk";
+		packet.requestId = message.getRequestId();
+		packet.results = message.getResultsList().stream().map(this::playerDirectoryResultToMap).toList();
+		packet.chunkIndex = message.getChunkIndex();
+		packet.chunkCount = message.getChunkCount();
+		packet.finalChunk = message.getFinal();
+		packet.errorCode = message.hasErrorCode() ? message.getErrorCode().name() : null;
+		return packet;
+	}
+
+	private ProtocolPackets.PlayerRelationQueryChunkInboundPacket decodePlayerRelationQueryChunk(
+			PlayerRelationQueryChunk message) {
+		ProtocolPackets.PlayerRelationQueryChunkInboundPacket packet =
+				new ProtocolPackets.PlayerRelationQueryChunkInboundPacket();
+		packet.type = "player_relation_query_chunk";
+		packet.requestId = message.getRequestId();
+		packet.subjects = message.getSubjectsList().stream().map(this::playerDirectoryEntryToMap).toList();
+		packet.results = message.getResultsList().stream().map(this::playerRelationResultToMap).toList();
+		packet.chunkIndex = message.getChunkIndex();
+		packet.chunkCount = message.getChunkCount();
+		packet.finalChunk = message.getFinal();
+		packet.errorCode = message.hasErrorCode() ? message.getErrorCode().name() : null;
 		return packet;
 	}
 
@@ -812,6 +899,62 @@ public final class ProtobufMessageCodec implements MessageCodec {
 		mapped.put("lastSeenAtUtcMs", value.getLastSeenAtUtcMs());
 		mapped.put("positionObservedAtUtcMs", value.getPositionObservedAtUtcMs());
 		mapped.put("offlineDetectedAtUtcMs", value.getOfflineDetectedAtUtcMs());
+		return mapped;
+	}
+
+	private Map<String, Object> playerDirectoryResultToMap(PlayerDirectoryLookupResult value) {
+		Map<String, Object> mapped = new LinkedHashMap<>();
+		mapped.put("selectorIndex", value.getSelectorIndex());
+		mapped.put("entries", value.getEntriesList().stream().map(this::playerDirectoryEntryToMap).toList());
+		if (value.hasErrorCode()) mapped.put("errorCode", value.getErrorCode().name());
+		return mapped;
+	}
+
+	private Map<String, Object> playerDirectoryEntryToMap(PlayerDirectoryEntry value) {
+		Map<String, Object> mapped = new LinkedHashMap<>();
+		if (value.hasPlayer()) mapped.put("player", playerIdentityToMap(value.getPlayer()));
+		mapped.put("affiliations", value.getAffiliationsList().stream().map(affiliation -> {
+			Map<String, Object> group = new LinkedHashMap<>();
+			group.put("affiliationId", affiliation.getAffiliationId());
+			group.put("kind", affiliation.getKind().name());
+			group.put("name", affiliation.getName());
+			if (affiliation.hasParentAffiliationId()) {
+				group.put("parentAffiliationId", affiliation.getParentAffiliationId());
+			}
+			if (affiliation.hasColorRgb()) group.put("colorRgb", affiliation.getColorRgb());
+			return group;
+		}).toList());
+		mapped.put("datasetId", value.getDatasetId());
+		mapped.put("observedAtUtcMs", value.getObservedAtUtcMs());
+		mapped.put("stale", value.getStale());
+		return mapped;
+	}
+
+	private Map<String, Object> playerIdentityToMap(PlayerIdentityRecord value) {
+		Map<String, Object> mapped = new LinkedHashMap<>();
+		mapped.put("playerId", value.getPlayerId());
+		if (value.hasUuid()) mapped.put("uuid", value.getUuid());
+		mapped.put("name", value.getName());
+		mapped.put("aliases", new ArrayList<>(value.getAliasesList()));
+		mapped.put("affiliationIds", new ArrayList<>(value.getAffiliationIdsList()));
+		return mapped;
+	}
+
+	private Map<String, Object> playerRelationResultToMap(PlayerRelationResult value) {
+		Map<String, Object> mapped = new LinkedHashMap<>();
+		if (value.hasTarget()) mapped.put("target", playerDirectoryEntryToMap(value.getTarget()));
+		mapped.put("relation", value.getRelation().name());
+		mapped.put("evidence", value.getEvidenceList().stream().map(evidence -> {
+			Map<String, Object> mappedEvidence = new LinkedHashMap<>();
+			mappedEvidence.put("relation", evidence.getRelation().name());
+			mappedEvidence.put("sourceAffiliationId", evidence.getSourceAffiliationId());
+			mappedEvidence.put("targetAffiliationId", evidence.getTargetAffiliationId());
+			if (evidence.hasAffiliationRelation()) {
+				mappedEvidence.put("affiliationRelation", evidence.getAffiliationRelation().name());
+			}
+			mappedEvidence.put("reason", evidence.getReason());
+			return mappedEvidence;
+		}).toList());
 		return mapped;
 	}
 

@@ -24,4 +24,8 @@ public interface ConfigGateway {
     default String getTabHistorySyncMode() {
         return "on_demand";
     }
+
+    default String getExternalRelationSyncMode() {
+        return "on_demand";
+    }
 }

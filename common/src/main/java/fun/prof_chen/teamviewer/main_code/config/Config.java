@@ -34,6 +34,8 @@ public class Config implements ConfigGateway {
     public static final String TAB_HISTORY_FULL = "full";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    public static final String EXTERNAL_RELATION_ON_DEMAND = "on_demand";
+    public static final String EXTERNAL_RELATION_OFF = "off";
     private static final int DEFAULT_FRIENDLY_TEAM_COLOR = 0xFF3B82F6;
     private static final int DEFAULT_NEUTRAL_TEAM_COLOR = 0xFFEAB308;
     private static final int DEFAULT_ENEMY_TEAM_COLOR = 0xFFEF4444;
@@ -98,6 +100,7 @@ public class Config implements ConfigGateway {
     private int battleMapCacheRetentionSeconds = 7200;
     private boolean battleMapDebugEnabled = false;
     private String tabHistorySyncMode = TAB_HISTORY_ON_DEMAND;
+    private String externalRelationSyncMode = EXTERNAL_RELATION_ON_DEMAND;
 
     public static Config load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -740,6 +743,18 @@ public class Config implements ConfigGateway {
 
     public void setTabHistorySyncMode(String mode) {
         tabHistorySyncMode = mode;
+    }
+
+    @Override
+    public String getExternalRelationSyncMode() {
+        if (EXTERNAL_RELATION_OFF.equals(externalRelationSyncMode)) {
+            return EXTERNAL_RELATION_OFF;
+        }
+        return EXTERNAL_RELATION_ON_DEMAND;
+    }
+
+    public void setExternalRelationSyncMode(String mode) {
+        externalRelationSyncMode = mode;
     }
 
     public boolean isPreferLocalDataForRender() {
